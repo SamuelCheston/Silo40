@@ -5,12 +5,12 @@ import (
 	"log"
 	"silo40/internal/model"
 
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-func InitDB(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+func InitDB(dbPath string) (*gorm.DB, error) {
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}

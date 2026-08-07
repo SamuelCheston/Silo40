@@ -1,1 +1,53 @@
+# Go
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with Lit
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Wails
+build/bin/
+build/windows/
+build/darwin/
+build/linux/
+frontend/dist/
+frontend/wailsjs/
+wails.log
+
+# Frontend
+frontend/node_modules/
+frontend/.DS_Store
+frontend/dist
+frontend/dist-ssr
+frontend/*.local
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Silo40 Specific
+silo40.db
+
 docs
