@@ -51,6 +51,7 @@ type Silo struct {
 	Rebellion       float64        `gorm:"default:0.0" json:"rebellion"`      // 地堡叛乱值
 	HistoryBurden   float64        `gorm:"default:0.0" json:"history_burden"` // 历史包袱值 (罪恶/荣誉)
 	EventTrigger    float64        `gorm:"default:0.0" json:"event_trigger"`  // 外部事件触发值
+	CurrentYear     int            `gorm:"default:122" json:"current_year"`   // 当前年份
 	CountdownYears  float64        `gorm:"default:500.0" json:"countdown"`    // 500年倒计时 (时间胜利)
 	InfoFragments   int            `gorm:"default:0" json:"info_fragments"`   // 信息碎片 (信息胜利)
 	Resources       []Resource     `gorm:"foreignKey:SiloID" json:"resources"`

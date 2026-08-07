@@ -15,7 +15,7 @@ func NewSiloService(db *gorm.DB) *SiloService {
 }
 
 // InitSilo 根据原著设定初始化一个 144 层地堡
-func (s *SiloService) InitSilo(name string) (*model.Silo, error) {
+func (s *SiloService) InitSilo(name string, initialYear int) (*model.Silo, error) {
 	silo := &model.Silo{
 		Name:            name,
 		TotalPopulation: 10000,
@@ -24,6 +24,7 @@ func (s *SiloService) InitSilo(name string) (*model.Silo, error) {
 		Rebellion:       0.0,
 		HistoryBurden:   0.0,
 		EventTrigger:    0.0,
+		CurrentYear:     initialYear,
 		CountdownYears:  500.0,
 		InfoFragments:   0,
 	}

@@ -6,14 +6,16 @@ import (
 	"log"
 	"silo40/internal/cache"
 	"silo40/internal/repository"
+	"silo40/internal/service"
 
 	"gorm.io/gorm"
 )
 
 // App struct
 type App struct {
-	ctx context.Context
-	db  *gorm.DB
+	ctx         context.Context
+	db          *gorm.DB
+	siloService *service.SiloService
 }
 
 // NewApp creates a new App application struct
@@ -37,11 +39,21 @@ func (a *App) startup(ctx context.Context) {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
 	a.db = db
+	a.siloService = service.NewSiloService(db)
 }
 
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
+}
+
+// InitGame initializes the game with a starting year
+func (a *App) InitGame(name string, initialYear int) string {
+	silo, err := a.siloService.InitSilo(name, initialYear)
+	if err != nil {
+		return fmt.Sprintf("Failed to initialize silo: %v", err)
+	}
+	return fmt.Sprintf("Welcome to %s. The year is %d. Juliette has just joined mechanical (or it's around that time).", silo.Name, silo.CurrentYear)
 }
 
 // SetData sets data in the cache
