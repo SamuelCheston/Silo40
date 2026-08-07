@@ -2,7 +2,6 @@ package service
 
 import (
 	"silo40/internal/model"
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -27,7 +26,6 @@ func (s *SiloService) InitSilo(name string) (*model.Silo, error) {
 		EventTrigger:    0.0,
 		CountdownYears:  500.0,
 		InfoFragments:   0,
-		LastUpdateAt:    time.Now(),
 	}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -54,6 +52,53 @@ func (s *SiloService) InitSilo(name string) (*model.Silo, error) {
 	})
 
 	return silo, err
+}
+
+// InitAgent 为用户初始化一个特工
+func (s *SiloService) InitAgent(userID uint, name string, profession string, traits []string) (*model.Agent, error) {
+	agent := &model.Agent{
+		UserID:     userID,
+		Name:       name,
+		Profession: profession,
+		Traits:     traits,
+	}
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(agent).Error; err != nil {
+			return err
+		}
+
+		// 获取该地堡的所有部门，初始化人脉值
+		var siloID uint
+		if err := tx.Model(&model.User{}).Where("id = ?", userID).Select("silo_id").Scan(&siloID).Error; err != nil {
+			return err
+		}
+
+		var professions []model.Profession
+		if err := tx.Where("silo_id = ?", siloID).Find(&professions).Error; err != nil {
+			return err
+		}
+
+		for _, p := range professions {
+			// 默认初始人脉值，如果职业匹配则更高
+			val := 0.1
+			if p.Name == profession {
+				val = 0.5
+			}
+			conn := model.Connection{
+				AgentID:      agent.ID,
+				ProfessionID: p.ID,
+				Value:        val,
+			}
+			if err := tx.Create(&conn).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return agent, err
 }
 
 func (s *SiloService) initFloors(tx *gorm.DB, siloID uint) error {
