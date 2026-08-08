@@ -51,13 +51,24 @@ export const ACTION_COSTS: Record<AgentActionType, number> = {
   INCITE_REBELLION: 30,
 };
 
+export const ACTION_DURATIONS: Record<AgentActionType, number> = {
+  GATHER_INFO: 0, // 即时操作
+  SHARE_INFO: 0,  // 即时操作
+  BUILD_CONNECTION: 3, // 耗时3个月
+  INCITE_REBELLION: 2, // 耗时2个月
+};
+
 export interface AgentAction {
   type: AgentActionType;
   source_dept?: string;
   target_dept?: string;
-  fragment_id?: string;
-  adulteration_level?: number; // 掺杂信息的程度 (0.0 ~ 1.0)
+  fragment_ids?: string[]; // 传播/造谣时使用的碎片数组
   cost: number;
+}
+
+export interface ActionResult {
+  executed: boolean;
+  message: string;
 }
 
 export interface Connection {
@@ -79,6 +90,7 @@ export interface Silo {
   history_burden: number;
   event_trigger: number;
   current_year: number;
+  current_month: number;
   countdown: number;
   silo1_destroyed: boolean; // 1号地堡是否已覆灭
   victory_status?: VictoryStatus;
@@ -110,8 +122,21 @@ export interface Profession {
   power_level: number;
   zone: string;
   known_fragments: string[]; // 掌握的其他部门信息碎片来源 (部门名称)
+  relations?: Record<string, number>; // NPC部门之间的人脉/关系网
   updated_at: string;
 }
+
+export const ALL_FRAGMENTS: string[] = [
+  'Mayor_1', 'Mayor_2', 'Mayor_3', 'Mayor_4', 'Mayor_5',
+  'Judicial_1', 'Judicial_2', 'Judicial_3', 'Judicial_4', 'Judicial_5',
+  'IT_1', 'IT_2', 'IT_3', 'IT_4', 'IT_5',
+  'Police_1', 'Police_2',
+  'Medical_1', 'Medical_2',
+  'Mechanical_1', 'Mechanical_2',
+  'Supply_1', 'Supply_2',
+  'Mines_1', 'Mines_2',
+  'Agricultural_1'
+];
 
 export interface Floor {
   id: number;

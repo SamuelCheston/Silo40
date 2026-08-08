@@ -1,4 +1,4 @@
-import { Silo, Agent, Profession, Resource, VictoryStatus, VictoryType, GameEvent, AgentAction } from './models';
+import { Silo, Agent, Profession, Resource, VictoryStatus, VictoryType, GameEvent, AgentAction, ALL_FRAGMENTS, ActionResult } from './models';
 import { EventEngine } from './events';
 
 export class GameEngine {
@@ -45,7 +45,7 @@ export class GameEngine {
     // Medical profession passive trait: randomly gain information fragments over time
     if (agent.profession === 'Medical' && silo && addLog) {
       if (Math.random() < 0.2) { // 20% chance per year
-        const availableFragments = silo.professions.map(p => p.name).filter(name => !agent.known_fragments.includes(name));
+        const availableFragments = ALL_FRAGMENTS.filter(f => !agent.known_fragments.includes(f));
         if (availableFragments.length > 0) {
           const randomFragment = availableFragments[Math.floor(Math.random() * availableFragments.length)];
           agent.known_fragments.push(randomFragment);
@@ -101,30 +101,30 @@ export class GameEngine {
   }
 
   // 特工执行动作 (信息获取与传播)
-  public executeAgentAction(silo: Silo, agent: Agent, action: AgentAction): boolean {
+  public executeAgentAction(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
     if (agent.action_points < action.cost) {
-      return false; // AP 不足
+      return { executed: false, message: "Not enough Action Points (AP)." };
     }
 
     const preSuspicion = agent.suspicion_level || 0;
-    let success = false;
+    let result: ActionResult = { executed: false, message: "" };
 
     switch (action.type) {
       case 'GATHER_INFO':
-        success = this.gatherInformation(silo, agent, action);
+        result = this.gatherInformation(silo, agent, action);
         break;
       case 'SHARE_INFO':
-        success = this.shareInformation(silo, agent, action);
+        result = this.shareInformation(silo, agent, action);
         break;
       case 'BUILD_CONNECTION':
-        success = this.buildConnection(silo, agent, action);
+        result = this.buildConnection(silo, agent, action);
         break;
       case 'INCITE_REBELLION':
-        success = this.inciteRebellion(silo, agent, action);
+        result = this.inciteRebellion(silo, agent, action);
         break;
     }
 
-    if (success) {
+    if (result.executed) {
       let gained = (agent.suspicion_level || 0) - preSuspicion;
       
       // 基础行为怀疑度惩罚 (兜底产生)
@@ -160,15 +160,15 @@ export class GameEngine {
       }
     }
 
-    return success;
+    return result;
   }
 
   // 特工建立或强化与目标部门的人脉
-  private buildConnection(silo: Silo, agent: Agent, action: AgentAction): boolean {
-    if (!action.target_dept) return false;
+  private buildConnection(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+    if (!action.target_dept) return { executed: false, message: "Invalid target department." };
 
     const targetProf = silo.professions?.find(p => p.name === action.target_dept);
-    if (!targetProf) return false;
+    if (!targetProf) return { executed: false, message: "Target department not found." };
 
     if (!agent.connections) agent.connections = [];
     
@@ -187,122 +187,117 @@ export class GameEngine {
     if (connection.value > 1.0) connection.value = 1.0; // 人脉上限 1.0
 
     agent.action_points -= action.cost;
-    return true;
+    return { executed: true, message: `Successfully built connections with ${targetProf.name}.` };
   }
 
   // 特工在目标部门煽动叛乱（增加恐慌和排外/亲外极端化）
-  private inciteRebellion(silo: Silo, agent: Agent, action: AgentAction): boolean {
-    if (!action.target_dept) return false;
+  private inciteRebellion(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+    if (!action.target_dept) return { executed: false, message: "Invalid target department." };
 
     const targetProf = silo.professions?.find(p => p.name === action.target_dept);
-    if (!targetProf) return false;
+    if (!targetProf) return { executed: false, message: "Target department not found." };
 
     const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
     const connectionValue = connection ? connection.value : 0;
 
-    // 煽动需要极高的人脉基础 (>= 0.5)
-    if (connectionValue < 0.5) return false;
+    // 煽动效果受人脉值和政治威望影响
+    const baseEffect = 0.05 + (agent.political_prestige * 0.002);
+    const multiplier = 1 + connectionValue;
+    const finalEffect = baseEffect * multiplier;
 
-    // 煽动会导致部门恐慌值大幅上升，且极端化其当前的思潮倾向
-    targetProf.panic_value += 0.2;
-    if (targetProf.panic_value > 1.0) targetProf.panic_value = 1.0;
-
-    if (targetProf.ideology_value > 0.5) {
-      targetProf.ideology_value += 0.1; // 更加亲外
-      if (targetProf.ideology_value > 1.0) targetProf.ideology_value = 1.0;
-    } else {
-      targetProf.ideology_value -= 0.1; // 更加排外
-      if (targetProf.ideology_value < 0) targetProf.ideology_value = 0;
-    }
-
-    // 地堡整体叛乱值上升
-    silo.rebellion += 0.05;
-    if (silo.rebellion > 1.0) silo.rebellion = 1.0;
-
-    // 合法性下降
-    silo.legitimacy -= 0.05;
-    if (silo.legitimacy < 0) silo.legitimacy = 0;
+    targetProf.panic_value += finalEffect;
+    targetProf.ideology_value += finalEffect * 0.5;
 
     agent.action_points -= action.cost;
-    return true;
+    return { executed: true, message: `Incited unrest in ${targetProf.name}.` };
   }
 
-  // 特工从目标部门获取信息碎片
-  private gatherInformation(silo: Silo, agent: Agent, action: AgentAction): boolean {
-    if (!action.target_dept) return false;
-
-    // 检查特工是否在该部门有足够的人脉值
-    const targetProf = silo.professions?.find(p => p.name === action.target_dept);
-    if (!targetProf) return false;
-
-    const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
-    const connectionValue = connection ? connection.value : 0;
-
-    // 获取信息需要一定的人脉基础 (例如 > 0.2)
-    if (connectionValue < 0.2) return false;
-
-    // 部门自身的原始信息碎片默认是它的名字
-    const fragmentToGather = action.target_dept;
+  // 特工搜集其他部门的信息碎片
+  private gatherInformation(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+    if (!action.target_dept) return { executed: false, message: "Invalid target department." };
 
     if (!agent.known_fragments) agent.known_fragments = [];
     
-    if (!agent.known_fragments.includes(fragmentToGather)) {
+    // 随机获取目标部门的一个碎片
+    const targetFragments = ALL_FRAGMENTS.filter(f => f.startsWith(action.target_dept! + '_'));
+    const unknownTargetFragments = targetFragments.filter(f => !agent.known_fragments?.includes(f));
+
+    if (unknownTargetFragments.length > 0) {
+      const fragmentToGather = unknownTargetFragments[Math.floor(Math.random() * unknownTargetFragments.length)];
       agent.known_fragments.push(fragmentToGather);
       agent.action_points -= action.cost;
-      return true;
+      return { executed: true, message: `Gathered intel on ${fragmentToGather}.` };
     }
 
-    return false; // 已经拥有该碎片
+    return { executed: false, message: `Your department already knows everything about ${action.target_dept}.` };
   }
 
   // 特工将自己掌握的信息碎片分享给目标部门
-  private shareInformation(silo: Silo, agent: Agent, action: AgentAction): boolean {
-    if (!action.target_dept || !action.fragment_id) return false;
-
-    // 检查特工是否掌握该碎片
-    if (!agent.known_fragments?.includes(action.fragment_id)) return false;
+  private shareInformation(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+    if (!action.target_dept || !action.fragment_ids || action.fragment_ids.length === 0) {
+      return { executed: false, message: "Invalid target or no fragments selected." };
+    }
 
     const targetProf = silo.professions?.find(p => p.name === action.target_dept);
-    if (!targetProf) return false;
-
-    // 检查掺杂程度 (默认 0)
-    const adulteration = action.adulteration_level || 0;
-    if (adulteration < 0 || adulteration > 1.0) return false;
+    if (!targetProf) return { executed: false, message: "Target department not found." };
 
     const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
     const connectionValue = connection ? connection.value : 0;
 
+    // AP 即使被拒绝也会消耗
+    agent.action_points -= action.cost;
+
+    // 计算实际拥有和凭空掌握的碎片
+    const unexplainedFragments = action.fragment_ids.filter(id => !agent.known_fragments.includes(id));
+    const unexplainedCount = unexplainedFragments.length;
+
+    // 根据凭空掌握的碎片数量计算直接增加的怀疑度 (指数级增长)
+    if (unexplainedCount > 0) {
+      const suspicionPenalty = (unexplainedCount * 0.1) + (Math.pow(unexplainedCount, 1.5) * 0.05);
+      agent.suspicion_level = (agent.suspicion_level || 0) + suspicionPenalty;
+    }
+
+    // 计算对方的接受度 (接受度受亲外度、双方人脉影响)
+    // 如果提供的凭空碎片太多，显得过于可疑，也会降低接受度
+    let acceptanceRate = 0.1 + targetProf.ideology_value + connectionValue;
+    acceptanceRate -= (unexplainedCount * 0.1); 
+    if (acceptanceRate < 0.05) acceptanceRate = 0.05;
+    if (acceptanceRate > 1.0) acceptanceRate = 1.0;
+
+    const roll = Math.random();
+    if (roll > acceptanceRate) {
+        return { 
+            executed: true, // AP 和 suspicion 已经扣除
+            message: `Attempted to share info with ${targetProf.name}, but they rejected it! (Acceptance rate was ${(acceptanceRate*100).toFixed(0)}%)` 
+        };
+    }
+
+    // 接受成功，目标部门获得所有提供的碎片 (包括真实的和伪造的)
     if (!targetProf.known_fragments) targetProf.known_fragments = [];
-
-    if (!targetProf.known_fragments.includes(action.fragment_id)) {
-      targetProf.known_fragments.push(action.fragment_id);
-      
-      // 根据掺杂程度打折 AP 消耗，加速信息传播，但大幅增加特工的怀疑度
-      // 掺杂信息越多（adulteration 越高），所需 AP 越少，但增加的怀疑度呈指数级上升
-      const costDiscount = 1 - (adulteration * 0.5); 
-      agent.action_points -= (action.cost * costDiscount);
-
-      if (adulteration > 0) {
-      agent.suspicion_level = (agent.suspicion_level || 0) + (adulteration * adulteration * 0.3);
+    for (const f of action.fragment_ids) {
+        if (!targetProf.known_fragments.includes(f)) {
+            targetProf.known_fragments.push(f);
+        }
     }
 
-      // 如果人脉不足且强行分享，增加部门恐慌值和亲外度
-      // 掺杂信息可能会加剧这种效果
-      const panicPenalty = connectionValue < 0.3 ? 0.05 : 0;
-      targetProf.panic_value += panicPenalty + (adulteration * 0.05);
-
-      if (connectionValue >= 0.3) {
-        // 人脉高时，平稳地增加亲外度，掺杂信息使亲外度上升更显著（具有煽动性）
-        targetProf.ideology_value += 0.02 + (adulteration * 0.03);
-      }
-      return true;
+    // 目标部门受到信息冲击，恐慌和亲外度上升
+    // 凭空掌握的碎片越多，造成的冲击越大 (煽动性越强)
+    const panicImpact = 0.05 + unexplainedCount * 0.05;
+    targetProf.panic_value = Math.min(1.0, targetProf.panic_value + panicImpact);
+    
+    if (connectionValue >= 0.3) {
+      const ideologyImpact = 0.02 + unexplainedCount * 0.02;
+      targetProf.ideology_value = Math.min(1.0, targetProf.ideology_value + ideologyImpact);
     }
 
-    return false; // 部门已拥有该碎片
+    return { 
+      executed: true, 
+      message: `Successfully shared ${action.fragment_ids.length} fragments with ${targetProf.name}. (Included ${unexplainedCount} pieces of unexplained knowledge)` 
+    };
   }
 
   // 核心逻辑更新引擎
-  public updateSiloState(silo: Silo, deltaYears: number, agent?: Agent): GameEvent[] {
+  public updateSiloState(silo: Silo, deltaYears: number, agent?: Agent, addLog?: (msg: string) => void): GameEvent[] {
     const events: GameEvent[] = [];
     if (deltaYears <= 0) return events;
 
@@ -317,6 +312,11 @@ export class GameEngine {
 
     // 4. 更新思潮演化
     this.updateIdeology(silo, deltaYears);
+
+    // 4.5 模拟其他部门的自主行为 (NPC 意志)
+    if (agent) {
+      this.triggerNPCActions(silo, agent, deltaYears, addLog);
+    }
 
     // 5. 判定胜利路径
     this.checkVictoryConditions(silo, agent);
@@ -333,6 +333,95 @@ export class GameEngine {
     }
 
     return events;
+  }
+
+  // 模拟 NPC 部门的自主行为
+  public triggerNPCActions(silo: Silo, agent: Agent, deltaYears: number, addLog?: (msg: string) => void): void {
+    if (!silo.professions) return;
+
+    silo.professions.forEach(prof => {
+      // 不模拟玩家控制的部门
+      if (prof.name === agent.profession) return;
+
+      // Medical 专属被动：随机获取碎片
+      if (prof.name === 'Medical') {
+          if (Math.random() < 0.2) {
+              const unknownFragments = ALL_FRAGMENTS.filter(f => !prof.known_fragments?.includes(f));
+              if (unknownFragments.length > 0) {
+                  const newFrag = unknownFragments[Math.floor(Math.random() * unknownFragments.length)];
+                  if (!prof.known_fragments) prof.known_fragments = [];
+                  prof.known_fragments.push(newFrag);
+                  if (Math.random() < 0.5 && addLog) {
+                      addLog(`Medical (NPC) overheard rumors and gained intel on ${newFrag}`);
+                  }
+              }
+          }
+      }
+
+      // 只有亲外度(Pro-Foreign)较高的部门，才有意愿去收集或泄露情报
+      // 内部维稳(压制恐慌)不受此限制
+      
+      const ideology = prof.ideology_value;
+      const willToAct = ideology > 0.4 ? ideology : 0.1; // 亲外度小于0.4时行动意愿极低
+
+      // 基础行动概率受亲外度、权力等级和时间流逝影响
+      const actionChance = willToAct * (0.1 + prof.power_level * 0.05) * deltaYears;
+      
+      if (Math.random() < actionChance) {
+        const actionType = Math.random();
+        
+        if (actionType < 0.4 && ideology > 0.4) {
+          // 40% 概率：收集情报 (Gather Info)
+          const unknownFragments = ALL_FRAGMENTS.filter(f => !prof.known_fragments?.includes(f));
+          if (unknownFragments.length > 0) {
+            const newFrag = unknownFragments[Math.floor(Math.random() * unknownFragments.length)];
+            if (!prof.known_fragments) prof.known_fragments = [];
+            prof.known_fragments.push(newFrag);
+            if (Math.random() < 0.4 && addLog) {
+                addLog(`${prof.name} is secretly gathering intel on ${newFrag}`);
+            }
+          }
+        } else if (actionType < 0.8 && ideology > 0.4) {
+          // 40% 概率：分享情报 (Share Info)
+          if (prof.known_fragments && prof.known_fragments.length > 0) {
+            const fragmentToShare = prof.known_fragments[Math.floor(Math.random() * prof.known_fragments.length)];
+            
+            // 挑选目标：NPC 只有与另一个部门的人脉极高 (>= 0.8) 时才会互通有无
+            const targetCandidates = silo.professions!.filter(p => 
+              p.id !== prof.id && 
+              prof.relations && prof.relations[p.name] >= 0.8
+            );
+
+            if (targetCandidates.length > 0) {
+              const targetProf = targetCandidates[Math.floor(Math.random() * targetCandidates.length)];
+              
+              if (!targetProf.known_fragments) targetProf.known_fragments = [];
+              if (!targetProf.known_fragments.includes(fragmentToShare)) {
+                targetProf.known_fragments.push(fragmentToShare);
+                
+                // NPC 分享信息也会引起目标部门的恐慌值和亲外度变化
+                targetProf.panic_value = Math.min(1.0, targetProf.panic_value + 0.05);
+                targetProf.ideology_value = Math.min(1.0, targetProf.ideology_value + 0.02);
+                
+                if (Math.random() < 0.8 && addLog) {
+                    addLog(`${prof.name} confidentially shared ${fragmentToShare} secrets with ${targetProf.name}`);
+                }
+              }
+            }
+          }
+        } else {
+          // 20% 概率 或 亲外度不够时的保底行为：内部管理 (Internal Management)
+          if (prof.panic_value > 0.1) {
+              prof.panic_value = Math.max(0, prof.panic_value - 0.15);
+              if (Math.random() < 0.4 && addLog) {
+                  addLog(`${prof.name} suppressed their internal panic`);
+              }
+          } else {
+              prof.productivity = Math.min(1.0, prof.productivity + 0.05);
+          }
+        }
+      }
+    });
   }
 
   private calculateScore(silo: Silo): any {
@@ -454,7 +543,7 @@ export class GameEngine {
         return;
       }
 
-      // 计算组织人数：各部门人脉值 * 组织度的和
+      // 计算组织人数：(特工个人魅力 + 人脉值) * (亲外度 + 基础值)
       let organizedPopulation = 0;
       if (agent.connections && agent.connections.length > 0) {
         agent.connections.forEach(conn => {
@@ -464,17 +553,25 @@ export class GameEngine {
           }
 
           const targetProf = silo.professions?.find(p => p.id === conn.profession_id);
-          const isAgentCommoner = ['Supply', 'Mechanical', 'Mines', 'Agricultural'].includes(agent.profession);
-          
-          if (isAgentCommoner && targetProf?.class_type === 'COMMONER') {
-             if (agent.profession === 'Mechanical') {
-                 orgFactor *= 2.0; // Mechanical is highest tech commoner, stronger org bonus
-             } else {
-                 orgFactor *= 1.5; // Default commoner organizing commoner bonus
-             }
-          }
+          if (targetProf) {
+            const isAgentCommoner = ['Supply', 'Mechanical', 'Mines', 'Agricultural'].includes(agent.profession);
+            
+            if (isAgentCommoner && targetProf.class_type === 'COMMONER') {
+               if (agent.profession === 'Mechanical') {
+                   orgFactor *= 2.0; // Mechanical is highest tech commoner, stronger org bonus
+               } else {
+                   orgFactor *= 1.5; // Default commoner organizing commoner bonus
+               }
+            }
 
-          organizedPopulation += conn.value * orgFactor;
+            // 新的计算公式：(政治威望系数 + 人脉值) * (亲外度 + 0.1) * 部门人口 * 组织度
+            const prestigeFactor = agent.political_prestige / 100.0; // 威望转化为 0~1 的系数
+            const ideologyFactor = targetProf.ideology_value + 0.1; // 亲外度 (加上0.1基础值，防止亲外度为0时无法组织)
+            
+            // 计算该部门加入组织的实际人数
+            const deptOrganized = (prestigeFactor + conn.value) * ideologyFactor * targetProf.population * orgFactor;
+            organizedPopulation += deptOrganized;
+          }
         });
       }
 

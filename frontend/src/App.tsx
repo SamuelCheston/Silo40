@@ -10,7 +10,8 @@ import { SiloWheel } from './components/SiloWheel';
 import { SetupPanel } from './components/SetupPanel';
 import { createInitialSilo, createInitialAgent } from './logic/initializer';
 import { GameEngine } from './logic/engine';
-import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS } from './logic/models';
+import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS } from './logic/models';
+import { GameEvent } from './logic/models';
 
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
@@ -26,8 +27,11 @@ function App() {
     // Action Form State
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
     const [targetDept, setTargetDept] = useState<string>('');
-    const [fragmentId, setFragmentId] = useState<string>('');
-    const [adulteration, setAdulteration] = useState<number>(0);
+    const [selectedFragments, setSelectedFragments] = useState<string[]>([]);
+
+    const toggleFragment = (f: string) => {
+        setSelectedFragments(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+    };
 
     // We only need one instance of the engine
     const [engine] = useState(() => new GameEngine());
@@ -57,7 +61,7 @@ function App() {
         try {
             setSilo(initialSilo);
             setAgent(initialAgent);
-            updateResultText(`Welcome to ${initialSilo.name}. The year is ${initialSilo.current_year}.`);
+            updateResultText(`Welcome to ${initialSilo.name}. The year is ${initialSilo.current_year}, Month ${initialSilo.current_month}.`);
             setGameStarted(true);
             setShowSetup(false);
         } catch (err) {
@@ -65,28 +69,52 @@ function App() {
         }
     };
 
-    // 模拟时间推移 (跳过1年)
+    // 模拟时间推移 (跳过指定月数)
+    const passMonths = (months: number, currentSilo: Silo, currentAgent: Agent, logs: string[]): GameEvent[] => {
+        const addLog = (msg: string) => logs.push(msg);
+        const events: GameEvent[] = [];
+        
+        for (let i = 0; i < months; i++) {
+            engine.updateAgentState(currentAgent, 1/12, currentSilo, addLog);
+            const monthEvents = engine.updateSiloState(currentSilo, 1/12, currentAgent, addLog);
+            events.push(...monthEvents);
+            
+            currentSilo.current_month = (currentSilo.current_month || 1) + 1;
+            if (currentSilo.current_month > 12) {
+                currentSilo.current_month = 1;
+                currentSilo.current_year += 1;
+            }
+            
+            if (currentSilo.victory_status?.is_won !== undefined) {
+                break; // 游戏结束，不再继续推移
+            }
+        }
+        return events;
+    };
+
     const handlePassTime = () => {
         if (!silo || !agent) return;
         
-        // Deep copy state for React updates
         const nextSilo = JSON.parse(JSON.stringify(silo));
         const nextAgent = JSON.parse(JSON.stringify(agent));
-        
-        engine.updateAgentState(nextAgent, 1, nextSilo, updateResultText);
-        const events = engine.updateSiloState(nextSilo, 1, nextAgent);
-        
-        nextSilo.current_year += 1;
+        const logs: string[] = [];
+
+        const events = passMonths(1, nextSilo, nextAgent, logs); // 每次点击过 1 个月
         
         setSilo(nextSilo);
         setAgent(nextAgent);
 
-        if (events.length > 0) {
-            updateResultText(`Event Occurred: ${events[0].title}`);
-        } else if (nextSilo.victory_status?.is_won !== undefined) {
+        if (nextSilo.victory_status?.is_won !== undefined) {
             updateResultText(`Game Over: ${nextSilo.victory_status.description}`);
+        } else if (events.length > 0) {
+            updateResultText(`Event Occurred: ${events[0].title}`);
         } else {
-            updateResultText(`Year passed. Current Year: ${nextSilo.current_year}`);
+            const prefix = `Year ${nextSilo.current_year} Month ${nextSilo.current_month}. `;
+            if (logs.length > 0) {
+                updateResultText(`${prefix}Rumors: ${logs.join(' | ')}`);
+            } else {
+                updateResultText(`${prefix}The silo was relatively quiet.`);
+            }
         }
     };
 
@@ -97,8 +125,8 @@ function App() {
             updateResultText("Please select a target department.");
             return;
         }
-        if (actionType === 'SHARE_INFO' && !fragmentId) {
-            updateResultText("Please select a fragment to share.");
+        if (actionType === 'SHARE_INFO' && selectedFragments.length === 0) {
+            updateResultText("Please select at least one fragment to share.");
             return;
         }
 
@@ -108,26 +136,49 @@ function App() {
         const action: AgentAction = {
             type: actionType,
             target_dept: targetDept,
-            fragment_id: actionType === 'SHARE_INFO' ? fragmentId : undefined,
-            adulteration_level: actionType === 'SHARE_INFO' ? adulteration / 100 : undefined,
+            fragment_ids: actionType === 'SHARE_INFO' ? selectedFragments : undefined,
             cost: ACTION_COSTS[actionType]
         };
 
-        const success = engine.executeAgentAction(nextSilo, nextAgent, action);
+        const result = engine.executeAgentAction(nextSilo, nextAgent, action);
         
-        if (success) {
-            updateResultText(`Action [${actionType}] executed successfully on ${targetDept}!`);
+        if (result.executed) {
+            const duration = ACTION_DURATIONS[actionType] || 0;
+            const logs: string[] = [];
+            
+            if (duration > 0) {
+                passMonths(duration, nextSilo, nextAgent, logs);
+            } else {
+                // 即时操作，时间不流逝，但触发一次 NPC 判断
+                engine.triggerNPCActions(nextSilo, nextAgent, 1/12, (msg) => logs.push(msg));
+                engine.updateSiloState(nextSilo, 0, nextAgent); // 检测一下是否有特殊状态更新，不过 deltaYears 为 0 时其实返回了
+            }
+            
             setSilo(nextSilo);
             setAgent(nextAgent);
             
-            // Check if game over after action (e.g. Agent Compromised)
-            engine.updateSiloState(nextSilo, 0, nextAgent);
             if (nextSilo.victory_status?.is_won !== undefined) {
                  updateResultText(`Game Over: ${nextSilo.victory_status.description}`);
+            } else {
+                 let msg = result.message;
+                 if (duration > 0) {
+                     msg += ` (Time passed: ${duration} months)`;
+                 }
+                 if (logs.length > 0) {
+                     msg += ` | NPC Activity: ${logs.join(', ')}`;
+                 }
+                 updateResultText(msg);
             }
         } else {
-            updateResultText(`Action failed. (Not enough AP, connections, or redundant operation)`);
+            updateResultText(`Action failed: ${result.message}`);
         }
+    };
+
+    const getIdeologyLabel = (val: number) => {
+        const v = val * 100;
+        if (v <= 10) return "排外";
+        if (v <= 40) return "中立排外";
+        return "亲外";
     };
 
     return (
@@ -250,7 +301,7 @@ function App() {
 
                         {/* Silo State Panel */}
                         <Box w="full" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                            <Heading size="sm" mb={4} color="gray.800">Silo State Overview (Year: {silo?.current_year})</Heading>
+                            <Heading size="sm" mb={4} color="gray.800">Silo State Overview (Year: {silo?.current_year}, Month: {silo?.current_month})</Heading>
                             <HStack justify="space-between" mb={4} p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
                                 <VStack align="start" gap={0}>
                                     <Text fontSize="xs" color="gray.500">Legitimacy</Text>
@@ -295,7 +346,7 @@ function App() {
                                             </HStack>
                                             <SimpleGrid columns={3} gap={2} mb={2}>
                                                 <VStack align="start" gap={0}>
-                                                    <Text fontSize="xs" color="gray.500">Pro-Foreign</Text>
+                                                    <Text fontSize="xs" color="gray.500">Pro-Foreign ({getIdeologyLabel(dept.ideology_value)})</Text>
                                                     <HStack w="full">
                                                         <Text fontSize="xs" w="30px" color="gray.700">{(dept.ideology_value * 100).toFixed(0)}%</Text>
                                                         <ProgressRoot value={dept.ideology_value * 100} max={100} w="full" size="xs" colorPalette="teal">
@@ -323,7 +374,7 @@ function App() {
                                                 </VStack>
                                             </SimpleGrid>
                                             <Box>
-                                                <Text fontSize="xs" color="gray.500" mb={1}>Fragments ({dept.known_fragments?.length || 0}/10):</Text>
+                                                <Text fontSize="xs" color="gray.500" mb={1}>Fragments ({dept.known_fragments?.length || 0}/26):</Text>
                                                 <HStack wrap="wrap" gap={1}>
                                                     {dept.known_fragments?.map(f => (
                                                         <Badge key={f} colorPalette="cyan" size="xs">{f}</Badge>
@@ -366,7 +417,7 @@ function App() {
                                             </HStack>
                                             <SimpleGrid columns={3} gap={2} mb={2}>
                                                 <VStack align="start" gap={0}>
-                                                    <Text fontSize="xs" color="gray.500">Pro-Foreign</Text>
+                                                    <Text fontSize="xs" color="gray.500">Pro-Foreign ({getIdeologyLabel(dept.ideology_value)})</Text>
                                                     <HStack w="full">
                                                         <Text fontSize="xs" w="30px" color="gray.700">{(dept.ideology_value * 100).toFixed(0)}%</Text>
                                                         <ProgressRoot value={dept.ideology_value * 100} max={100} w="full" size="xs" colorPalette="teal">
@@ -394,7 +445,7 @@ function App() {
                                                 </VStack>
                                             </SimpleGrid>
                                             <Box>
-                                                <Text fontSize="xs" color="gray.500" mb={1}>Fragments ({dept.known_fragments?.length || 0}/10):</Text>
+                                                <Text fontSize="xs" color="gray.500" mb={1}>Fragments ({dept.known_fragments?.length || 0}/26):</Text>
                                                 <HStack wrap="wrap" gap={1}>
                                                     {dept.known_fragments?.map(f => (
                                                         <Badge key={f} colorPalette="cyan" size="xs">{f}</Badge>
@@ -414,17 +465,35 @@ function App() {
                         <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
                             <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>Agent Action Interface</Heading>
                             <VStack gap={5} align="stretch">
-                                <VStack align="start" gap={1}>
+                                <VStack align="start" gap={2}>
                                     <Text fontSize="sm" fontWeight="bold" color="gray.700">Action Type:</Text>
-                                    <NativeSelect.Root size="md" w="full" bg="white">
-                                        <NativeSelect.Field value={actionType} onChange={(e) => setActionType(e.target.value as AgentActionType)}>
-                                            <option value="GATHER_INFO">Gather Info (10 AP)</option>
-                                            <option value="SHARE_INFO">Share Info (20 AP)</option>
-                                            <option value="BUILD_CONNECTION">Build Network (15 AP)</option>
-                                            <option value="INCITE_REBELLION">Incite Rebellion (30 AP)</option>
-                                        </NativeSelect.Field>
-                                        <NativeSelect.Indicator />
-                                    </NativeSelect.Root>
+                                    <SimpleGrid columns={2} gap={3} w="full">
+                                        {[
+                                            { value: 'GATHER_INFO', label: 'Gather Info', ap: 10 },
+                                            { value: 'SHARE_INFO', label: 'Share Info', ap: 20 },
+                                            { value: 'BUILD_CONNECTION', label: 'Build Network', ap: 15 },
+                                            { value: 'INCITE_REBELLION', label: 'Incite Rebellion', ap: 30 }
+                                        ].map((action) => (
+                                            <Button
+                                                key={action.value}
+                                                variant={actionType === action.value ? "solid" : "outline"}
+                                                colorPalette={actionType === action.value ? "blue" : "gray"}
+                                                onClick={() => setActionType(action.value as AgentActionType)}
+                                                h="80px"
+                                                display="flex"
+                                                flexDirection="column"
+                                                justifyContent="center"
+                                                alignItems="center"
+                                                whiteSpace="normal"
+                                                lineHeight="1.2"
+                                                bg={actionType === action.value ? "blue.500" : "white"}
+                                                _hover={{ bg: actionType === action.value ? "blue.600" : "gray.50" }}
+                                            >
+                                                <Text fontWeight="bold">{action.label}</Text>
+                                                <Text fontSize="xs" mt={1}>({action.ap} AP)</Text>
+                                            </Button>
+                                        ))}
+                                    </SimpleGrid>
                                 </VStack>
 
                                 <VStack align="start" gap={1}>
@@ -443,34 +512,29 @@ function App() {
                                 {actionType === 'SHARE_INFO' && (
                                     <>
                                         <VStack align="start" gap={1}>
-                                            <Text fontSize="sm" fontWeight="bold" color="gray.700">Fragment to Share:</Text>
-                                            <NativeSelect.Root size="md" w="full" bg="white">
-                                                <NativeSelect.Field value={fragmentId} onChange={(e) => setFragmentId(e.target.value)}>
-                                                    <option value="" disabled>Select Fragment...</option>
-                                                    {agent?.known_fragments?.map(f => (
-                                                        <option key={f} value={f}>{f}</option>
-                                                    ))}
-                                                </NativeSelect.Field>
-                                                <NativeSelect.Indicator />
-                                            </NativeSelect.Root>
-                                        </VStack>
-                                        <VStack align="stretch" gap={2} p={3} bg="orange.50" borderRadius="md" border="1px dashed" borderColor="orange.200">
-                                            <HStack justify="space-between">
-                                                <Text fontSize="sm" fontWeight="bold" color="gray.700">Adulteration Level (Risk):</Text>
-                                                <Text fontSize="md" fontWeight="bold" color={adulteration > 50 ? "red.500" : "orange.500"}>
-                                                    {adulteration}%
-                                                </Text>
+                                            <Text fontSize="sm" fontWeight="bold" color="gray.700">Fragments to Share (Real & Fake):</Text>
+                                            <HStack wrap="wrap" gap={2} maxH="200px" overflowY="auto" p={2} border="1px solid" borderColor="gray.200" borderRadius="md" w="full">
+                                                {ALL_FRAGMENTS.map(f => {
+                                                    const isSelected = selectedFragments.includes(f);
+                                                    const isKnown = agent?.known_fragments?.includes(f);
+                                                    return (
+                                                        <Badge 
+                                                            key={f} 
+                                                            colorPalette={isSelected ? (isKnown ? "blue" : "red") : (isKnown ? "gray" : "orange")}
+                                                            variant={isSelected ? "solid" : "subtle"}
+                                                            cursor="pointer"
+                                                            onClick={() => toggleFragment(f)}
+                                                            title={isKnown ? "Real Fragment" : "Fake Fragment (Increases Suspicion)"}
+                                                        >
+                                                            {f} {!isKnown && "(Fake)"}
+                                                        </Badge>
+                                                    );
+                                                })}
                                             </HStack>
-                                            <Slider 
-                                                value={[adulteration]} 
-                                                onValueChange={(e: any) => setAdulteration(e.value[0])} 
-                                                min={0} max={100} step={5}
-                                                colorPalette={adulteration > 50 ? "red" : "orange"}
-                                            />
-                                            <Text fontSize="xs" color="gray.600">
-                                                Higher adulteration reduces AP cost & boosts ideology spread, but drastically increases Suspicion.
-                                            </Text>
                                         </VStack>
+                                        <Text fontSize="xs" color="gray.600" mt={1}>
+                                            Sharing fake fragments boosts ideology spread but drastically increases Suspicion and lowers acceptance rate.
+                                        </Text>
                                     </>
                                 )}
 
@@ -479,7 +543,7 @@ function App() {
                                         Execute Action
                                     </Button>
                                     <Button colorPalette="teal" variant="outline" w="full" size="md" onClick={handlePassTime} bg="white">
-                                        Pass 1 Year
+                                        Pass 1 Month
                                     </Button>
                                 </VStack>
                             </VStack>

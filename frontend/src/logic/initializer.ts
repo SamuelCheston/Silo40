@@ -1,4 +1,4 @@
-import { Silo, Profession, Resource, Floor, Agent } from './models';
+import { Silo, Profession, Resource, Floor, Agent, ALL_FRAGMENTS } from './models';
 
 export function createInitialSilo(name: string, initialYear: number, traitIds: string[] = []): Silo {
   const silo: Silo = {
@@ -13,6 +13,7 @@ export function createInitialSilo(name: string, initialYear: number, traitIds: s
     history_burden: 0.0,
     event_trigger: 0.0,
     current_year: initialYear,
+    current_month: 1,
     countdown: 500.0,
     silo1_destroyed: false,
     resources: [],
@@ -27,6 +28,43 @@ export function createInitialSilo(name: string, initialYear: number, traitIds: s
 
   // 2. Initialize Core Professions
   silo.professions = initProfessions();
+  
+  // Initialize NPC-NPC relations and traits based on specific logic
+  silo.professions.forEach(prof => {
+      if (!prof.relations) prof.relations = {};
+      
+      // IT: Knows all fragments initially
+      if (prof.name === 'IT') {
+          prof.known_fragments = [...ALL_FRAGMENTS];
+      }
+
+      silo.professions.forEach(otherProf => {
+          if (prof.id !== otherProf.id) {
+              let baseRelation = 0;
+              
+              if (prof.name === 'Mayor' || prof.name === 'Judicial') {
+                  baseRelation = otherProf.class_type === 'ELITE' ? 0.20 : 0.15;
+              } else if (prof.name === 'Police' || prof.name === 'Medical') {
+                  baseRelation = otherProf.class_type === 'ELITE' ? 0.15 : 0.10;
+              } else if (prof.class_type === 'COMMONER') {
+                  if (otherProf.class_type === 'COMMONER') {
+                      baseRelation = 0.15;
+                  }
+              }
+
+              // Specific overrides
+              if (prof.name === 'Mayor' && otherProf.name === 'Police') baseRelation = 1.0;
+              if (prof.name === 'Police' && otherProf.name === 'Mayor') baseRelation = 1.0;
+              
+              if (prof.name === 'IT' && otherProf.name === 'Judicial') baseRelation = 1.0;
+              if (prof.name === 'Judicial' && otherProf.name === 'IT') baseRelation = 1.0;
+
+              if (prof.relations) {
+                  prof.relations[otherProf.name] = baseRelation;
+              }
+          }
+      });
+  });
 
   // 3. Initialize Base Resources
   silo.resources = initResources();
@@ -86,15 +124,15 @@ function initFloors(): Floor[] {
 
 function initProfessions(): Profession[] {
   const professions: Profession[] = [
-    { id: 1, silo_id: 0, name: 'Mayor', class_type: 'ELITE', power_level: 10, zone: 'Upper', population: 1, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
-    { id: 2, silo_id: 0, name: 'Judicial', class_type: 'ELITE', power_level: 9, zone: 'Upper', population: 200, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
-    { id: 3, silo_id: 0, name: 'IT', class_type: 'ELITE', power_level: 9, zone: 'Upper', population: 150, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
-    { id: 4, silo_id: 0, name: 'Police', class_type: 'ELITE', power_level: 8, zone: 'Upper', population: 250, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
-    { id: 5, silo_id: 0, name: 'Medical', class_type: 'ELITE', power_level: 7, zone: 'Mid', population: 400, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
-    { id: 6, silo_id: 0, name: 'Supply', class_type: 'COMMONER', power_level: 6, zone: 'Mid', population: 2500, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
-    { id: 7, silo_id: 0, name: 'Mechanical', class_type: 'COMMONER', power_level: 8, zone: 'Lower', population: 3000, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
-    { id: 8, silo_id: 0, name: 'Mines', class_type: 'COMMONER', power_level: 4, zone: 'Lower', population: 1000, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
-    { id: 9, silo_id: 0, name: 'Agricultural', class_type: 'COMMONER', power_level: 6, zone: 'Mid', population: 2499, ideology_value: 0.5, panic_value: 0.0, productivity: 1.0, known_fragments: [], updated_at: '' },
+    { id: 1, silo_id: 0, name: 'Mayor', class_type: 'ELITE', power_level: 10, zone: 'Upper', population: 1, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['Mayor_1', 'Mayor_2', 'Mayor_3', 'Mayor_4', 'Mayor_5'], relations: {}, updated_at: '' },
+    { id: 2, silo_id: 0, name: 'Judicial', class_type: 'ELITE', power_level: 9, zone: 'Upper', population: 200, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['Judicial_1', 'Judicial_2', 'Judicial_3', 'Judicial_4', 'Judicial_5'], relations: {}, updated_at: '' },
+    { id: 3, silo_id: 0, name: 'IT', class_type: 'ELITE', power_level: 9, zone: 'Upper', population: 150, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['IT_1', 'IT_2', 'IT_3', 'IT_4', 'IT_5'], relations: {}, updated_at: '' },
+    { id: 4, silo_id: 0, name: 'Police', class_type: 'ELITE', power_level: 8, zone: 'Upper', population: 250, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['Police_1', 'Police_2'], relations: {}, updated_at: '' },
+    { id: 5, silo_id: 0, name: 'Medical', class_type: 'ELITE', power_level: 7, zone: 'Mid', population: 400, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['Medical_1', 'Medical_2'], relations: {}, updated_at: '' },
+    { id: 6, silo_id: 0, name: 'Supply', class_type: 'COMMONER', power_level: 6, zone: 'Mid', population: 2500, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['Supply_1', 'Supply_2'], relations: {}, updated_at: '' },
+    { id: 7, silo_id: 0, name: 'Mechanical', class_type: 'COMMONER', power_level: 8, zone: 'Lower', population: 3000, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['Mechanical_1', 'Mechanical_2'], relations: {}, updated_at: '' },
+    { id: 8, silo_id: 0, name: 'Mines', class_type: 'COMMONER', power_level: 4, zone: 'Lower', population: 1000, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['Mines_1', 'Mines_2'], relations: {}, updated_at: '' },
+    { id: 9, silo_id: 0, name: 'Agricultural', class_type: 'COMMONER', power_level: 6, zone: 'Mid', population: 2499, ideology_value: 0.05, panic_value: 0.0, productivity: 1.0, known_fragments: ['Agricultural_1'], relations: {}, updated_at: '' },
   ];
   return professions;
 }
@@ -112,7 +150,7 @@ export function createInitialAgent(name: string, profession: string, traitIds: s
     organization_factor: 1.0,
     suspicion_level: 0.0,
     connections: [], // Will populate based on profession below
-    known_fragments: [profession], // 默认掌握本部门的碎片
+    known_fragments: ALL_FRAGMENTS.filter(f => f.startsWith(profession + '_')), // 默认掌握本部门的碎片
     created_at: '',
     updated_at: ''
   };
@@ -137,7 +175,7 @@ export function createInitialAgent(name: string, profession: string, traitIds: s
           });
       } else if (profession === 'IT') {
           agent.political_prestige = 5; // Almost no political prestige
-          agent.known_fragments = silo.professions.map(p => p.name); // Knows all fragments
+          agent.known_fragments = [...ALL_FRAGMENTS]; // Knows all fragments
           
           const judicialProf = silo.professions.find(p => p.name === 'Judicial');
           if (judicialProf) {
