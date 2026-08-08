@@ -113,7 +113,7 @@ function App() {
 
     return (
         <Center minH="100vh" bg="gray.900" color="white" py={8}>
-            <VStack gap={8} p={8} bg="gray.800" borderRadius="xl" boxShadow="2xl" maxW="800px" w="full">
+            <VStack gap={8} p={8} bg="gray.800" borderRadius="xl" boxShadow="2xl" maxW="1200px" w="full">
                 <Image src={logo} h="80px" alt="logo" />
                 
                 <Heading size="md" textAlign="center" color="blue.300">{resultText}</Heading>
@@ -132,10 +132,12 @@ function App() {
                         <TimeWheel onSelect={handleStartGame} />
                     </VStack>
                 ) : (
-                    <VStack gap={6} w="full">
-                        {/* Agent Status Panel */}
-                        <Box w="full" p={4} bg="gray.700" borderRadius="md" borderLeft="4px solid" borderColor="blue.400">
-                            <Heading size="sm" mb={4}>Agent Profile: {agent?.name}</Heading>
+                    <HStack align="start" gap={6} w="full" wrap="wrap">
+                        {/* Left Side: Values */}
+                        <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
+                            {/* Agent Status Panel */}
+                            <Box w="full" p={4} bg="gray.700" borderRadius="md" borderLeft="4px solid" borderColor="blue.400">
+                                <Heading size="sm" mb={4}>Agent Profile: {agent?.name}</Heading>
                             <SimpleGrid columns={2} gap={4} mb={4}>
                                 <VStack align="start" gap={1}>
                                     <Text fontSize="sm" color="gray.400">Profession</Text>
@@ -250,7 +252,10 @@ function App() {
                                 ))}
                             </SimpleGrid>
                         </Box>
+                        </VStack>
 
+                        {/* Right Side: Operations */}
+                        <VStack gap={6} flex={{ base: "1 1 100%", lg: 1 }} w="full" position="sticky" top="20px">
                         {/* Actions Panel */}
                         <Box w="full" p={4} bg="gray.700" borderRadius="md">
                             <Heading size="sm" mb={4}>Agent Action Interface</Heading>
@@ -315,17 +320,18 @@ function App() {
                                     </>
                                 )}
 
-                                <HStack gap={4} w="full" justify="space-between" mt={4}>
-                                    <Button colorPalette="teal" variant="outline" onClick={handlePassTime} w="full">
+                                <HStack gap={4} justify="space-between" mt={4}>
+                                    <Button colorPalette="teal" variant="outline" onClick={handlePassTime}>
                                         Pass 1 Year
                                     </Button>
-                                    <Button colorPalette="blue" onClick={handleExecuteAction} w="full">
+                                    <Button colorPalette="blue" onClick={handleExecuteAction}>
                                         Execute Action
                                     </Button>
                                 </HStack>
                             </VStack>
                         </Box>
-                    </VStack>
+                        </VStack>
+                    </HStack>
                 )}
 
                 <Box w="full" pt={4} borderTop="1px solid" borderColor="gray.700">
