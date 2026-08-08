@@ -35,6 +35,7 @@ export interface Agent {
   political_points: number;
   action_points: number; // 行动点数 (用于执行信息传播等操作)
   organization_factor: number; // 组织度系数
+  propaganda_level: number; // 宣传力度
   suspicion_level: number; // 怀疑度指数
   connections: Connection[];
   known_fragments: string[]; // 特工个人掌握的信息碎片
@@ -42,13 +43,14 @@ export interface Agent {
   updated_at: string;
 }
 
-export type AgentActionType = 'GATHER_INFO' | 'SHARE_INFO' | 'BUILD_CONNECTION' | 'INCITE_REBELLION';
+export type AgentActionType = 'GATHER_INFO' | 'SHARE_INFO' | 'BUILD_CONNECTION' | 'INCITE_REBELLION' | 'CONDUCT_PROPAGANDA';
 
 export const ACTION_COSTS: Record<AgentActionType, number> = {
   GATHER_INFO: 10,
   SHARE_INFO: 20,
   BUILD_CONNECTION: 15,
   INCITE_REBELLION: 30,
+  CONDUCT_PROPAGANDA: 20,
 };
 
 export const ACTION_DURATIONS: Record<AgentActionType, number> = {
@@ -56,6 +58,7 @@ export const ACTION_DURATIONS: Record<AgentActionType, number> = {
   SHARE_INFO: 0,  // 即时操作
   BUILD_CONNECTION: 3, // 耗时3个月
   INCITE_REBELLION: 2, // 耗时2个月
+  CONDUCT_PROPAGANDA: 1, // 耗时1个月
 };
 
 export interface AgentAction {

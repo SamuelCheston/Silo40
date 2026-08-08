@@ -122,6 +122,9 @@ export class GameEngine {
       case 'INCITE_REBELLION':
         result = this.inciteRebellion(silo, agent, action);
         break;
+      case 'CONDUCT_PROPAGANDA':
+        result = this.conductPropaganda(silo, agent, action);
+        break;
     }
 
     if (result.executed) {
@@ -132,6 +135,7 @@ export class GameEngine {
       else if (action.type === 'SHARE_INFO') gained += 0.01;
       else if (action.type === 'BUILD_CONNECTION') gained += 0.01;
       else if (action.type === 'GATHER_INFO') gained += 0.005;
+      else if (action.type === 'CONDUCT_PROPAGANDA') gained += 0.02;
 
       // 职业修正
       if (agent.profession === 'Mayor') {
@@ -190,26 +194,35 @@ export class GameEngine {
     return { executed: true, message: `Successfully built connections with ${targetProf.name}.` };
   }
 
-  // 特工在目标部门煽动叛乱（增加恐慌和排外/亲外极端化）
+  // 特工煽动底层叛乱（全局增加所有平民阶层的恐慌和排外/亲外极端化）
   private inciteRebellion(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
-    if (!action.target_dept) return { executed: false, message: "Invalid target department." };
+    const commoners = silo.professions?.filter(p => p.class_type === 'COMMONER') || [];
+    if (commoners.length === 0) return { executed: false, message: "No commoner departments found to incite." };
 
-    const targetProf = silo.professions?.find(p => p.name === action.target_dept);
-    if (!targetProf) return { executed: false, message: "Target department not found." };
+    commoners.forEach(prof => {
+        const connection = agent.connections?.find(c => c.profession_id === prof.id);
+        const connectionValue = connection ? connection.value : 0;
 
-    const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
-    const connectionValue = connection ? connection.value : 0;
+        // 煽动效果受人脉值、政治威望和宣传力度影响
+        const baseEffect = 0.05 + (agent.political_prestige * 0.002);
+        const propagandaMultiplier = 1 + (agent.propaganda_level || 0) * 0.2; // 宣传力度额外加成
+        const multiplier = (1 + connectionValue) * propagandaMultiplier;
+        const finalEffect = baseEffect * multiplier;
 
-    // 煽动效果受人脉值和政治威望影响
-    const baseEffect = 0.05 + (agent.political_prestige * 0.002);
-    const multiplier = 1 + connectionValue;
-    const finalEffect = baseEffect * multiplier;
-
-    targetProf.panic_value += finalEffect;
-    targetProf.ideology_value += finalEffect * 0.5;
+        prof.panic_value += finalEffect;
+        prof.ideology_value += finalEffect * 0.5;
+    });
 
     agent.action_points -= action.cost;
-    return { executed: true, message: `Incited unrest in ${targetProf.name}.` };
+    return { executed: true, message: `Incited unrest among all commoner departments.` };
+  }
+
+  // 特工主动进行宣传，提升宣传力度
+  private conductPropaganda(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+    // 每次宣传提升 1.0 的宣传力度
+    agent.propaganda_level = (agent.propaganda_level || 0) + 1.0;
+    agent.action_points -= action.cost;
+    return { executed: true, message: `Conducted propaganda. Propaganda Level increased by 1.0.` };
   }
 
   // 特工搜集其他部门的信息碎片
@@ -333,6 +346,65 @@ export class GameEngine {
     }
 
     return events;
+  }
+
+  public getOrganizedPopulation(silo: Silo, agent: Agent): number {
+    let organizedPopulation = 0;
+    if (agent.connections && agent.connections.length > 0) {
+      agent.connections.forEach(conn => {
+        let orgFactor = agent.organization_factor || 1.0;
+        if (agent.traits?.includes('魅力非凡')) {
+          orgFactor *= 1.2; // 组织化力量额外增益 20%
+        }
+
+        const targetProf = silo.professions?.find(p => p.id === conn.profession_id);
+        if (targetProf) {
+          const isAgentCommoner = ['Supply', 'Mechanical', 'Mines', 'Agricultural'].includes(agent.profession);
+          
+          if (isAgentCommoner && targetProf.class_type === 'COMMONER') {
+             if (agent.profession === 'Mechanical') {
+                 orgFactor *= 2.0; // Mechanical is highest tech commoner, stronger org bonus
+             } else {
+                 orgFactor *= 1.5; // Default commoner organizing commoner bonus
+             }
+          }
+
+          // 计算对该部门的基础号召力 (Appeal)
+          let appeal = 0.1; // 基础号召力
+          
+          // 根据设定，只有机械部出身的特工对机械部有额外的号召力加成
+          if (agent.profession === 'Mechanical' && targetProf.name === 'Mechanical') {
+              appeal += 0.4;
+          }
+
+          // 特质号召力加成
+          if (agent.traits?.includes('魅力非凡')) {
+              appeal += 0.2;
+          }
+
+          // 引入宣传力度作为乘数
+          // 宣传力度默认为 0，所以如果不进行宣传，号召力加成将为 0
+          // 这里使用 (propaganda_level) 作为乘数
+          const propagandaMultiplier = agent.propaganda_level || 0;
+
+          // 最终部门转化率：号召力与人脉的综合体现 (上限控制在合理范围)
+          // 取号召力(带宣传乘数)和人脉的加权，再乘以组织度
+          const appealEffect = appeal * propagandaMultiplier;
+          const conversionRate = (appealEffect * 0.4 + conn.value * 0.6) * orgFactor * targetProf.ideology_value;
+          
+          // 计算该部门加入组织的实际人数，且加入上限限制（最多转化该部门 20% 的人口）
+          const maxConvertible = targetProf.population * 0.20;
+          let deptOrganized = targetProf.population * conversionRate;
+          
+          if (deptOrganized > maxConvertible) {
+              deptOrganized = maxConvertible;
+          }
+          
+          organizedPopulation += deptOrganized;
+        }
+      });
+    }
+    return Math.floor(organizedPopulation);
   }
 
   // 模拟 NPC 部门的自主行为
@@ -543,37 +615,8 @@ export class GameEngine {
         return;
       }
 
-      // 计算组织人数：(特工个人魅力 + 人脉值) * (亲外度 + 基础值)
-      let organizedPopulation = 0;
-      if (agent.connections && agent.connections.length > 0) {
-        agent.connections.forEach(conn => {
-          let orgFactor = agent.organization_factor || 1.0;
-          if (agent.traits?.includes('魅力非凡')) {
-            orgFactor *= 1.2; // 组织化力量额外增益 20%
-          }
-
-          const targetProf = silo.professions?.find(p => p.id === conn.profession_id);
-          if (targetProf) {
-            const isAgentCommoner = ['Supply', 'Mechanical', 'Mines', 'Agricultural'].includes(agent.profession);
-            
-            if (isAgentCommoner && targetProf.class_type === 'COMMONER') {
-               if (agent.profession === 'Mechanical') {
-                   orgFactor *= 2.0; // Mechanical is highest tech commoner, stronger org bonus
-               } else {
-                   orgFactor *= 1.5; // Default commoner organizing commoner bonus
-               }
-            }
-
-            // 新的计算公式：(政治威望系数 + 人脉值) * (亲外度 + 0.1) * 部门人口 * 组织度
-            const prestigeFactor = agent.political_prestige / 100.0; // 威望转化为 0~1 的系数
-            const ideologyFactor = targetProf.ideology_value + 0.1; // 亲外度 (加上0.1基础值，防止亲外度为0时无法组织)
-            
-            // 计算该部门加入组织的实际人数
-            const deptOrganized = (prestigeFactor + conn.value) * ideologyFactor * targetProf.population * orgFactor;
-            organizedPopulation += deptOrganized;
-          }
-        });
-      }
+      // 计算组织人数
+      let organizedPopulation = this.getOrganizedPopulation(silo, agent);
 
       // 叛乱基础条件：组织人数达到总人口 3%
       if (organizedPopulation >= silo.total_population * 0.03) {

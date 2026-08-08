@@ -148,6 +148,7 @@ export function createInitialAgent(name: string, profession: string, traitIds: s
     political_points: 0,
     action_points: 50,
     organization_factor: 1.0,
+    propaganda_level: 0.0,
     suspicion_level: 0.0,
     connections: [], // Will populate based on profession below
     known_fragments: ALL_FRAGMENTS.filter(f => f.startsWith(profession + '_')), // 默认掌握本部门的碎片

@@ -121,7 +121,9 @@ function App() {
     // 表单提交：执行动作
     const handleExecuteAction = () => {
         if (!silo || !agent) return;
-        if (!targetDept) {
+        
+        const isGlobalAction = actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION';
+        if (!isGlobalAction && !targetDept) {
             updateResultText("Please select a target department.");
             return;
         }
@@ -135,7 +137,8 @@ function App() {
         
         const action: AgentAction = {
             type: actionType,
-            target_dept: targetDept,
+            // 针对全局操作，不传递 target_dept，避免引擎校验失败
+            target_dept: isGlobalAction ? undefined : targetDept,
             fragment_ids: actionType === 'SHARE_INFO' ? selectedFragments : undefined,
             cost: ACTION_COSTS[actionType]
         };
@@ -265,6 +268,25 @@ function App() {
                                 <VStack align="start" gap={1}>
                                     <Text fontSize="sm" color="gray.600">Political Prestige</Text>
                                     <Text fontWeight="bold" color="orange.500">{Math.floor(agent?.political_prestige || 0)}</Text>
+                                </VStack>
+                                <VStack align="start" gap={1}>
+                                    <Text fontSize="sm" color="gray.600">Propaganda Level</Text>
+                                    <Text fontWeight="bold" color="pink.500">{(agent?.propaganda_level || 0).toFixed(1)}</Text>
+                                </VStack>
+                                <VStack align="start" gap={1}>
+                                    <Text fontSize="sm" color="gray.600">Organization Factor</Text>
+                                    <Text fontWeight="bold" color="teal.600">{(agent?.organization_factor || 1).toFixed(1)}x</Text>
+                                </VStack>
+                                <VStack align="start" gap={1}>
+                                    <Text fontSize="sm" color="gray.600">Organization Size</Text>
+                                    <HStack w="full">
+                                        <Text fontWeight="bold" color="cyan.700">
+                                            {silo && agent ? engine.getOrganizedPopulation(silo, agent) : 0}
+                                        </Text>
+                                        <Text fontSize="xs" color="gray.500">
+                                            / {silo?.total_population || 0}
+                                        </Text>
+                                    </HStack>
                                 </VStack>
                                 {agent?.profession === 'IT' && (
                                     <VStack align="start" gap={1}>
@@ -466,13 +488,12 @@ function App() {
                             <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>Agent Action Interface</Heading>
                             <VStack gap={5} align="stretch">
                                 <VStack align="start" gap={2}>
-                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">Action Type:</Text>
+                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">Department Actions:</Text>
                                     <SimpleGrid columns={2} gap={3} w="full">
                                         {[
                                             { value: 'GATHER_INFO', label: 'Gather Info', ap: 10 },
                                             { value: 'SHARE_INFO', label: 'Share Info', ap: 20 },
-                                            { value: 'BUILD_CONNECTION', label: 'Build Network', ap: 15 },
-                                            { value: 'INCITE_REBELLION', label: 'Incite Rebellion', ap: 30 }
+                                            { value: 'BUILD_CONNECTION', label: 'Build Network', ap: 15 }
                                         ].map((action) => (
                                             <Button
                                                 key={action.value}
@@ -496,18 +517,49 @@ function App() {
                                     </SimpleGrid>
                                 </VStack>
 
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Dept:</Text>
-                                    <NativeSelect.Root size="md" w="full" bg="white">
-                                        <NativeSelect.Field value={targetDept} onChange={(e) => setTargetDept(e.target.value)}>
-                                            <option value="" disabled>Select Department...</option>
-                                            {silo?.professions?.map(p => (
-                                                <option key={p.id} value={p.name}>{p.name}</option>
-                                            ))}
-                                        </NativeSelect.Field>
-                                        <NativeSelect.Indicator />
-                                    </NativeSelect.Root>
+                                <VStack align="start" gap={2}>
+                                    <Text fontSize="sm" fontWeight="bold" color="red.700">Global Actions:</Text>
+                                    <SimpleGrid columns={2} gap={3} w="full">
+                                        {[
+                                            { value: 'CONDUCT_PROPAGANDA', label: 'Propaganda', ap: 20 },
+                                            { value: 'INCITE_REBELLION', label: 'Incite Rebellion', ap: 30 }
+                                        ].map((action) => (
+                                            <Button
+                                                key={action.value}
+                                                variant={actionType === action.value ? "solid" : "outline"}
+                                                colorPalette={actionType === action.value ? "red" : "gray"}
+                                                onClick={() => setActionType(action.value as AgentActionType)}
+                                                h="80px"
+                                                display="flex"
+                                                flexDirection="column"
+                                                justifyContent="center"
+                                                alignItems="center"
+                                                whiteSpace="normal"
+                                                lineHeight="1.2"
+                                                bg={actionType === action.value ? "red.500" : "white"}
+                                                _hover={{ bg: actionType === action.value ? "red.600" : "gray.50" }}
+                                            >
+                                                <Text fontWeight="bold">{action.label}</Text>
+                                                <Text fontSize="xs" mt={1}>({action.ap} AP)</Text>
+                                            </Button>
+                                        ))}
+                                    </SimpleGrid>
                                 </VStack>
+
+                                {!(actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION') && (
+                                    <VStack align="start" gap={1}>
+                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Dept:</Text>
+                                        <NativeSelect.Root size="md" w="full" bg="white">
+                                            <NativeSelect.Field value={targetDept} onChange={(e) => setTargetDept(e.target.value)}>
+                                                <option value="" disabled>Select Department...</option>
+                                                {silo?.professions?.map(p => (
+                                                    <option key={p.id} value={p.name}>{p.name}</option>
+                                                ))}
+                                            </NativeSelect.Field>
+                                            <NativeSelect.Indicator />
+                                        </NativeSelect.Root>
+                                    </VStack>
+                                )}
 
                                 {actionType === 'SHARE_INFO' && (
                                     <>

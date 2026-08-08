@@ -27,6 +27,7 @@ type Agent struct {
 	Traits            []string       `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
 	PoliticalPrestige float64        `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
 	PoliticalPoints   float64        `gorm:"default:0.0" json:"political_points"`     // 政治点数
+	PropagandaLevel   float64        `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
 	Connections       []Connection   `gorm:"foreignKey:AgentID" json:"connections"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
