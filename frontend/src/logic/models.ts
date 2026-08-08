@@ -44,6 +44,13 @@ export interface Agent {
 
 export type AgentActionType = 'GATHER_INFO' | 'SHARE_INFO' | 'BUILD_CONNECTION' | 'INCITE_REBELLION';
 
+export const ACTION_COSTS: Record<AgentActionType, number> = {
+  GATHER_INFO: 10,
+  SHARE_INFO: 20,
+  BUILD_CONNECTION: 15,
+  INCITE_REBELLION: 30,
+};
+
 export interface AgentAction {
   type: AgentActionType;
   source_dept?: string;

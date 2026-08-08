@@ -42,7 +42,7 @@ export class GameEngine {
   public updateAgentState(agent: Agent, deltaYears: number): void {
     if (deltaYears <= 0) return;
 
-    // 1. 计算平均人脉值
+    // 1. 计算平均人脉值 (0.0 - 1.0)
     let totalConnection = 0;
     const count = agent.connections?.length || 0;
     if (count > 0) {
@@ -62,6 +62,7 @@ export class GameEngine {
     });
 
     // 4. 计算政治威望
+    // 因为 totalConnection 现在是 0.0~1.0，乘以 100 使得基础威望保持在 0~100 范围
     agent.political_prestige = totalConnection * 100 * (1 + profFactor) * (1 + traitFactor);
     if (agent.political_prestige < 0) agent.political_prestige = 0;
 
@@ -123,9 +124,9 @@ export class GameEngine {
     }
 
     // 建立人脉的效率受特工政治威望影响
-    const increaseValue = 5 + (agent.political_prestige * 0.05);
+    const increaseValue = 0.05 + (agent.political_prestige * 0.005);
     connection.value += increaseValue;
-    if (connection.value > 100) connection.value = 100; // 人脉上限
+    if (connection.value > 1.0) connection.value = 1.0; // 人脉上限 1.0
 
     agent.action_points -= action.cost;
     return true;
@@ -141,8 +142,8 @@ export class GameEngine {
     const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
     const connectionValue = connection ? connection.value : 0;
 
-    // 煽动需要极高的人脉基础
-    if (connectionValue < 50) return false;
+    // 煽动需要极高的人脉基础 (>= 0.5)
+    if (connectionValue < 0.5) return false;
 
     // 煽动会导致部门恐慌值大幅上升，且极端化其当前的思潮倾向
     targetProf.panic_value += 0.2;
@@ -179,8 +180,8 @@ export class GameEngine {
     const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
     const connectionValue = connection ? connection.value : 0;
 
-    // 获取信息需要一定的人脉基础 (例如 > 20)
-    if (connectionValue < 20) return false;
+    // 获取信息需要一定的人脉基础 (例如 > 0.2)
+    if (connectionValue < 0.2) return false;
 
     // 部门自身的原始信息碎片默认是它的名字
     const fragmentToGather = action.target_dept;
@@ -229,10 +230,10 @@ export class GameEngine {
 
       // 如果人脉不足且强行分享，增加部门恐慌值和亲外度
       // 掺杂信息可能会加剧这种效果
-      const panicPenalty = connectionValue < 30 ? 0.05 : 0;
+      const panicPenalty = connectionValue < 0.3 ? 0.05 : 0;
       targetProf.panic_value += panicPenalty + (adulteration * 0.05);
 
-      if (connectionValue >= 30) {
+      if (connectionValue >= 0.3) {
         // 人脉高时，平稳地增加亲外度，掺杂信息使亲外度上升更显著（具有煽动性）
         targetProf.ideology_value += 0.02 + (adulteration * 0.03);
       }

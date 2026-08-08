@@ -95,13 +95,15 @@ export function createInitialAgent(name: string): Agent {
     organization_factor: 1.0,
     suspicion_level: 0.0,
     connections: [
-      { id: 1, agent_id: 1, profession_id: 7, value: 50 }, // 对机械部的初始人脉
+      { id: 1, agent_id: 1, profession_id: 6, value: 0.8 }, // 对机械部的初始人脉 (0.0~1.0)
     ],
     known_fragments: ['Mechanical'], // 默认掌握本部门的碎片
     created_at: '',
     updated_at: ''
   };
 }
+
+function initResources(): Resource[] {
   const resources: Resource[] = [
     { id: 0, silo_id: 0, type: 'Food', amount: 1000, net_balance: 0, updated_at: '' },
     { id: 0, silo_id: 0, type: 'Energy', amount: 5000, net_balance: 0, updated_at: '' },
