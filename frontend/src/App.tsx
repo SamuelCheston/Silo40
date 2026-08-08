@@ -1,23 +1,34 @@
 import { useState } from 'react';
 import logo from './assets/images/logo-universal.png';
 import './App.css';
-import { Greet, InitGame } from "../wailsjs/go/main/App";
+import { Greet, CreateSilo, SaveSilo, GetSilo } from "../wailsjs/go/main/App";
 import { Box, Button, Center, Heading, Image, Input, Text, VStack } from "@chakra-ui/react";
 import { TimeWheel } from './components/TimeWheel';
+import { createInitialSilo } from './logic/initializer';
+import { GameEngine } from './logic/engine';
+import { Silo } from './logic/models';
 
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
     const [name, setName] = useState('');
     const [gameStarted, setGameStarted] = useState(false);
+    const [silo, setSilo] = useState<Silo | null>(null);
+
+    const engine = new GameEngine();
 
     const updateName = (e: any) => setName(e.target.value);
     const updateResultText = (result: string) => setResultText(result);
 
-    function handleStartGame(year: number) {
-        InitGame(name || "Juliette", year).then((res: string) => {
-            updateResultText(res);
+    async function handleStartGame(year: number) {
+        const initialSilo = createInitialSilo(name || "Juliette", year);
+        try {
+            const savedSilo = await CreateSilo(initialSilo);
+            setSilo(savedSilo);
+            updateResultText(`Welcome to ${savedSilo.name}. The year is ${savedSilo.current_year}.`);
             setGameStarted(true);
-        });
+        } catch (err) {
+            updateResultText(`Failed to initialize silo: ${err}`);
+        }
     }
 
     return (

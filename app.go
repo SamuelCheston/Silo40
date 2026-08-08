@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"silo40/internal/cache"
+	"silo40/internal/model"
 	"silo40/internal/repository"
 	"silo40/internal/service"
 
@@ -15,7 +16,7 @@ import (
 type App struct {
 	ctx         context.Context
 	db          *gorm.DB
-	siloService *service.SiloService
+	dataService *service.DataService
 }
 
 // NewApp creates a new App application struct
@@ -23,8 +24,7 @@ func NewApp() *App {
 	return &App{}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
+// startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
@@ -39,36 +39,68 @@ func (a *App) startup(ctx context.Context) {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
 	a.db = db
-	a.siloService = service.NewSiloService(db)
+	a.dataService = service.NewDataService(db)
 }
 
-// Greet returns a greeting for the given name
+// --- Abstract Database API ---
+
+// Silo Operations
+func (a *App) GetSilo(id uint) (*model.Silo, error) {
+	var silo model.Silo
+	err := a.db.Preload("Resources").Preload("Professions").Preload("Floors").First(&silo, id).Error
+	return &silo, err
+}
+
+func (a *App) SaveSilo(silo *model.Silo) error {
+	return a.db.Save(silo).Error
+}
+
+func (a *App) CreateSilo(silo *model.Silo) (*model.Silo, error) {
+	err := a.db.Create(silo).Error
+	return silo, err
+}
+
+// Agent Operations
+func (a *App) GetAgent(id uint) (*model.Agent, error) {
+	var agent model.Agent
+	err := a.db.Preload("Connections").First(&agent, id).Error
+	return &agent, err
+}
+
+func (a *App) SaveAgent(agent *model.Agent) error {
+	return a.db.Save(agent).Error
+}
+
+// User Operations
+func (a *App) GetUser(id uint) (*model.User, error) {
+	var user model.User
+	err := a.db.Preload("Agent").First(&user, id).Error
+	return &user, err
+}
+
+// Generic List (Example for Silos)
+func (a *App) ListSilos() ([]model.Silo, error) {
+	var silos []model.Silo
+	err := a.db.Find(&silos).Error
+	return silos, err
+}
+
+// --- Abstract Cache API ---
+
+func (a *App) SetCache(key string, value string, ttl int) error {
+	return a.dataService.SetCache(key, value, ttl)
+}
+
+func (a *App) GetCache(key string) (string, error) {
+	return a.dataService.GetCache(key)
+}
+
+func (a *App) DelCache(key string) {
+	a.dataService.DelCache(key)
+}
+
+// --- Legacy / Helper ---
+
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
-}
-
-// InitGame initializes the game with a starting year
-func (a *App) InitGame(name string, initialYear int) string {
-	silo, err := a.siloService.InitSilo(name, initialYear)
-	if err != nil {
-		return fmt.Sprintf("Failed to initialize silo: %v", err)
-	}
-	return fmt.Sprintf("Welcome to %s. The year is %d. Juliette has just joined mechanical (or it's around that time).", silo.Name, silo.CurrentYear)
-}
-
-// SetData sets data in the cache
-func (a *App) SetData(key string, value string) {
-	err := cache.GlobalCache.Set([]byte(key), []byte(value), 60) // expire in 60s
-	if err != nil {
-		log.Printf("failed to set cache: %v", err)
-	}
-}
-
-// GetData gets data from the cache
-func (a *App) GetData(key string) string {
-	val, err := cache.GlobalCache.Get([]byte(key))
-	if err != nil {
-		return ""
-	}
-	return string(val)
 }
