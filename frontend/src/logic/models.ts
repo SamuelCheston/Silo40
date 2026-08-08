@@ -1,4 +1,4 @@
-export type VictoryType = 'NONE' | 'INFORMATION' | 'TIME' | 'REBELLION' | 'EXCLUSIONIST' | 'DEATH';
+export type VictoryType = 'NONE' | 'INFORMATION' | 'TIME' | 'REBELLION' | 'EXCLUSIONIST' | 'DEATH' | 'AGENT_COMPROMISED';
 
 export interface VictoryStatus {
   is_won: boolean;
@@ -35,6 +35,7 @@ export interface Agent {
   political_points: number;
   action_points: number; // 行动点数 (用于执行信息传播等操作)
   organization_factor: number; // 组织度系数
+  suspicion_level: number; // 怀疑度指数
   connections: Connection[];
   known_fragments: string[]; // 特工个人掌握的信息碎片
   created_at: string;
@@ -48,6 +49,7 @@ export interface AgentAction {
   source_dept?: string;
   target_dept?: string;
   fragment_id?: string;
+  adulteration_level?: number; // 掺杂信息的程度 (0.0 ~ 1.0)
   cost: number;
 }
 

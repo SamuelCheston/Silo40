@@ -1,4 +1,4 @@
-import { Silo, Agent, Profession, Resource, VictoryStatus, VictoryType, GameEvent } from './models';
+import { Silo, Agent, Profession, Resource, VictoryStatus, VictoryType, GameEvent, AgentAction } from './models';
 import { EventEngine } from './events';
 
 export class GameEngine {
@@ -65,9 +65,181 @@ export class GameEngine {
     agent.political_prestige = totalConnection * 100 * (1 + profFactor) * (1 + traitFactor);
     if (agent.political_prestige < 0) agent.political_prestige = 0;
 
-    // 5. 给予政治点数
+    // 5. 给予政治点数和行动点数 (AP)
     const pointGainRate = 0.1;
     agent.political_points += agent.political_prestige * pointGainRate * deltaYears;
+    
+    // 行动点数恢复：基础恢复 10 点/年，受威望和组织度加成
+    const apGainRate = 10 + (agent.political_prestige * 0.05) + (agent.organization_factor * 2);
+    agent.action_points += apGainRate * deltaYears;
+    // 设置 AP 上限
+    const maxAp = 100 + (agent.organization_factor * 10);
+    if (agent.action_points > maxAp) {
+      agent.action_points = maxAp;
+    }
+
+    // 6. 怀疑度随时间衰减
+    // 如果特工保持低调（不执行激进行动），怀疑度会自然下降
+    const suspicionDecayRate = 0.05; // 每年降低5%
+    if (agent.suspicion_level > 0) {
+      agent.suspicion_level -= suspicionDecayRate * deltaYears;
+      if (agent.suspicion_level < 0) agent.suspicion_level = 0;
+    }
+  }
+
+  // 特工执行动作 (信息获取与传播)
+  public executeAgentAction(silo: Silo, agent: Agent, action: AgentAction): boolean {
+    if (agent.action_points < action.cost) {
+      return false; // AP 不足
+    }
+
+    switch (action.type) {
+      case 'GATHER_INFO':
+        return this.gatherInformation(silo, agent, action);
+      case 'SHARE_INFO':
+        return this.shareInformation(silo, agent, action);
+      case 'BUILD_CONNECTION':
+        return this.buildConnection(silo, agent, action);
+      case 'INCITE_REBELLION':
+        return this.inciteRebellion(silo, agent, action);
+      default:
+        return false;
+    }
+  }
+
+  // 特工建立或强化与目标部门的人脉
+  private buildConnection(silo: Silo, agent: Agent, action: AgentAction): boolean {
+    if (!action.target_dept) return false;
+
+    const targetProf = silo.professions?.find(p => p.name === action.target_dept);
+    if (!targetProf) return false;
+
+    if (!agent.connections) agent.connections = [];
+    
+    let connection = agent.connections.find(c => c.profession_id === targetProf.id);
+    if (!connection) {
+      connection = { id: Date.now(), agent_id: agent.id, profession_id: targetProf.id, value: 0 };
+      agent.connections.push(connection);
+    }
+
+    // 建立人脉的效率受特工政治威望影响
+    const increaseValue = 5 + (agent.political_prestige * 0.05);
+    connection.value += increaseValue;
+    if (connection.value > 100) connection.value = 100; // 人脉上限
+
+    agent.action_points -= action.cost;
+    return true;
+  }
+
+  // 特工在目标部门煽动叛乱（增加恐慌和排外/亲外极端化）
+  private inciteRebellion(silo: Silo, agent: Agent, action: AgentAction): boolean {
+    if (!action.target_dept) return false;
+
+    const targetProf = silo.professions?.find(p => p.name === action.target_dept);
+    if (!targetProf) return false;
+
+    const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
+    const connectionValue = connection ? connection.value : 0;
+
+    // 煽动需要极高的人脉基础
+    if (connectionValue < 50) return false;
+
+    // 煽动会导致部门恐慌值大幅上升，且极端化其当前的思潮倾向
+    targetProf.panic_value += 0.2;
+    if (targetProf.panic_value > 1.0) targetProf.panic_value = 1.0;
+
+    if (targetProf.ideology_value > 0.5) {
+      targetProf.ideology_value += 0.1; // 更加亲外
+      if (targetProf.ideology_value > 1.0) targetProf.ideology_value = 1.0;
+    } else {
+      targetProf.ideology_value -= 0.1; // 更加排外
+      if (targetProf.ideology_value < 0) targetProf.ideology_value = 0;
+    }
+
+    // 地堡整体叛乱值上升
+    silo.rebellion += 0.05;
+    if (silo.rebellion > 1.0) silo.rebellion = 1.0;
+
+    // 合法性下降
+    silo.legitimacy -= 0.05;
+    if (silo.legitimacy < 0) silo.legitimacy = 0;
+
+    agent.action_points -= action.cost;
+    return true;
+  }
+
+  // 特工从目标部门获取信息碎片
+  private gatherInformation(silo: Silo, agent: Agent, action: AgentAction): boolean {
+    if (!action.target_dept) return false;
+
+    // 检查特工是否在该部门有足够的人脉值
+    const targetProf = silo.professions?.find(p => p.name === action.target_dept);
+    if (!targetProf) return false;
+
+    const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
+    const connectionValue = connection ? connection.value : 0;
+
+    // 获取信息需要一定的人脉基础 (例如 > 20)
+    if (connectionValue < 20) return false;
+
+    // 部门自身的原始信息碎片默认是它的名字
+    const fragmentToGather = action.target_dept;
+
+    if (!agent.known_fragments) agent.known_fragments = [];
+    
+    if (!agent.known_fragments.includes(fragmentToGather)) {
+      agent.known_fragments.push(fragmentToGather);
+      agent.action_points -= action.cost;
+      return true;
+    }
+
+    return false; // 已经拥有该碎片
+  }
+
+  // 特工将自己掌握的信息碎片分享给目标部门
+  private shareInformation(silo: Silo, agent: Agent, action: AgentAction): boolean {
+    if (!action.target_dept || !action.fragment_id) return false;
+
+    // 检查特工是否掌握该碎片
+    if (!agent.known_fragments?.includes(action.fragment_id)) return false;
+
+    const targetProf = silo.professions?.find(p => p.name === action.target_dept);
+    if (!targetProf) return false;
+
+    // 检查掺杂程度 (默认 0)
+    const adulteration = action.adulteration_level || 0;
+    if (adulteration < 0 || adulteration > 1.0) return false;
+
+    const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
+    const connectionValue = connection ? connection.value : 0;
+
+    if (!targetProf.known_fragments) targetProf.known_fragments = [];
+
+    if (!targetProf.known_fragments.includes(action.fragment_id)) {
+      targetProf.known_fragments.push(action.fragment_id);
+      
+      // 根据掺杂程度打折 AP 消耗，加速信息传播，但大幅增加特工的怀疑度
+      // 掺杂信息越多（adulteration 越高），所需 AP 越少，但增加的怀疑度呈指数级上升
+      const costDiscount = 1 - (adulteration * 0.5); 
+      agent.action_points -= (action.cost * costDiscount);
+
+      if (adulteration > 0) {
+        agent.suspicion_level = (agent.suspicion_level || 0) + (adulteration * adulteration * 0.3);
+      }
+
+      // 如果人脉不足且强行分享，增加部门恐慌值和亲外度
+      // 掺杂信息可能会加剧这种效果
+      const panicPenalty = connectionValue < 30 ? 0.05 : 0;
+      targetProf.panic_value += panicPenalty + (adulteration * 0.05);
+
+      if (connectionValue >= 30) {
+        // 人脉高时，平稳地增加亲外度，掺杂信息使亲外度上升更显著（具有煽动性）
+        targetProf.ideology_value += 0.02 + (adulteration * 0.03);
+      }
+      return true;
+    }
+
+    return false; // 部门已拥有该碎片
   }
 
   // 核心逻辑更新引擎
@@ -123,6 +295,7 @@ export class GameEngine {
       case 'REBELLION': multiplier = 1.2; break;
       case 'EXCLUSIONIST': multiplier = 0.5; break;
       case 'DEATH': multiplier = 0; break;
+      case 'AGENT_COMPROMISED': multiplier = 0; break;
     }
 
     const total = Math.floor((survival_points + diversity_points + heritage_points + ideology_points) * multiplier);
@@ -201,6 +374,17 @@ export class GameEngine {
 
     // 3. 叛乱胜利
     if (agent && silo.total_population > 0) {
+      // 检查特工怀疑度是否超过阈值 (判定为个人失败)
+      const SUSPICION_THRESHOLD = 1.0;
+      if (agent.suspicion_level >= SUSPICION_THRESHOLD) {
+        silo.victory_status = {
+          is_won: false,
+          type: 'AGENT_COMPROMISED',
+          description: '由于传播过多掺杂了个人意图的虚假信息，你的特工身份彻底暴露。司法部已经下达了逮捕令。',
+        };
+        return;
+      }
+
       // 计算组织人数：各部门人脉值 * 组织度的和
       let organizedPopulation = 0;
       if (agent.connections && agent.connections.length > 0) {

@@ -1,4 +1,4 @@
-import { Silo, Profession, Resource, Floor } from './models';
+import { Silo, Profession, Resource, Floor, Agent } from './models';
 
 export function createInitialSilo(name: string, initialYear: number): Silo {
   const silo: Silo = {
@@ -82,7 +82,26 @@ function initProfessions(): Profession[] {
   return professions;
 }
 
-function initResources(): Resource[] {
+export function createInitialAgent(name: string): Agent {
+  return {
+    id: 1,
+    user_id: 1,
+    name: name,
+    profession: 'Mechanical', // 默认机械部
+    traits: ['地堡土著'],
+    political_prestige: 10,
+    political_points: 0,
+    action_points: 50,
+    organization_factor: 1.0,
+    suspicion_level: 0.0,
+    connections: [
+      { id: 1, agent_id: 1, profession_id: 7, value: 50 }, // 对机械部的初始人脉
+    ],
+    known_fragments: ['Mechanical'], // 默认掌握本部门的碎片
+    created_at: '',
+    updated_at: ''
+  };
+}
   const resources: Resource[] = [
     { id: 0, silo_id: 0, type: 'Food', amount: 1000, net_balance: 0, updated_at: '' },
     { id: 0, silo_id: 0, type: 'Energy', amount: 5000, net_balance: 0, updated_at: '' },
