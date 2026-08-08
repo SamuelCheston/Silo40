@@ -1,3 +1,21 @@
+export type VictoryType = 'NONE' | 'INFORMATION' | 'TIME' | 'REBELLION' | 'EXCLUSIONIST' | 'DEATH';
+
+export interface VictoryStatus {
+  is_won: boolean;
+  type: VictoryType;
+  description: string;
+  score?: GameScore;
+}
+
+export interface GameScore {
+  total: number;
+  survival_points: number;
+  diversity_points: number;
+  heritage_points: number;
+  ideology_points: number;
+  multiplier: number;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -15,9 +33,22 @@ export interface Agent {
   traits: string[];
   political_prestige: number;
   political_points: number;
+  action_points: number; // 行动点数 (用于执行信息传播等操作)
+  organization_factor: number; // 组织度系数
   connections: Connection[];
+  known_fragments: string[]; // 特工个人掌握的信息碎片
   created_at: string;
   updated_at: string;
+}
+
+export type AgentActionType = 'GATHER_INFO' | 'SHARE_INFO' | 'BUILD_CONNECTION' | 'INCITE_REBELLION';
+
+export interface AgentAction {
+  type: AgentActionType;
+  source_dept?: string;
+  target_dept?: string;
+  fragment_id?: string;
+  cost: number;
 }
 
 export interface Connection {
@@ -38,7 +69,8 @@ export interface Silo {
   event_trigger: number;
   current_year: number;
   countdown: number;
-  info_fragments: number;
+  silo1_destroyed: boolean; // 1号地堡是否已覆灭
+  victory_status?: VictoryStatus;
   resources: Resource[];
   professions: Profession[];
   floors: Floor[];
@@ -65,6 +97,7 @@ export interface Profession {
   productivity: number;
   power_level: number;
   zone: string;
+  known_fragments: string[]; // 掌握的其他部门信息碎片来源 (部门名称)
   updated_at: string;
 }
 
@@ -77,4 +110,12 @@ export interface Floor {
   stability: number;
   population: number;
   updated_at: string;
+}
+
+export interface GameEvent {
+  id: string;
+  title: string;
+  description: string;
+  type: 'SOCIAL' | 'TECHNICAL' | 'EXTERNAL';
+  effects: (silo: Silo) => void;
 }
