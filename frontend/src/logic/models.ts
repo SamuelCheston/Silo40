@@ -70,6 +70,8 @@ export interface Connection {
 export interface Silo {
   id: number;
   name: string;
+  traits?: string[];
+  safeguard_risk?: number; // IT 专属风险系数
   total_population: number;
   legitimacy: number;
   cohesion: number;
@@ -100,6 +102,7 @@ export interface Profession {
   id: number;
   silo_id: number;
   name: string;
+  class_type: 'ELITE' | 'COMMONER';
   population: number;
   ideology_value: number;
   panic_value: number;

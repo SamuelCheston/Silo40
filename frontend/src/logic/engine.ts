@@ -25,7 +25,7 @@ export class GameEngine {
     Mayor: 0.5,
     Judicial: 0.4,
     IT: 0.3,
-    Sheriff: 0.3,
+    Police: 0.3,
     Mechanical: 0.2,
     Medical: 0.2,
   };
@@ -39,8 +39,20 @@ export class GameEngine {
   };
 
   // 更新特工数值逻辑
-  public updateAgentState(agent: Agent, deltaYears: number): void {
+  public updateAgentState(agent: Agent, deltaYears: number, silo?: Silo, addLog?: (msg: string) => void): void {
     if (deltaYears <= 0) return;
+
+    // Medical profession passive trait: randomly gain information fragments over time
+    if (agent.profession === 'Medical' && silo && addLog) {
+      if (Math.random() < 0.2) { // 20% chance per year
+        const availableFragments = silo.professions.map(p => p.name).filter(name => !agent.known_fragments.includes(name));
+        if (availableFragments.length > 0) {
+          const randomFragment = availableFragments[Math.floor(Math.random() * availableFragments.length)];
+          agent.known_fragments.push(randomFragment);
+          addLog(`[Medical Passive] Your medical duties allowed you to overhear rumors, gaining information about ${randomFragment}.`);
+        }
+      }
+    }
 
     // 1. 计算平均人脉值 (0.0 - 1.0)
     let totalConnection = 0;
@@ -94,18 +106,61 @@ export class GameEngine {
       return false; // AP 不足
     }
 
+    const preSuspicion = agent.suspicion_level || 0;
+    let success = false;
+
     switch (action.type) {
       case 'GATHER_INFO':
-        return this.gatherInformation(silo, agent, action);
+        success = this.gatherInformation(silo, agent, action);
+        break;
       case 'SHARE_INFO':
-        return this.shareInformation(silo, agent, action);
+        success = this.shareInformation(silo, agent, action);
+        break;
       case 'BUILD_CONNECTION':
-        return this.buildConnection(silo, agent, action);
+        success = this.buildConnection(silo, agent, action);
+        break;
       case 'INCITE_REBELLION':
-        return this.inciteRebellion(silo, agent, action);
-      default:
-        return false;
+        success = this.inciteRebellion(silo, agent, action);
+        break;
     }
+
+    if (success) {
+      let gained = (agent.suspicion_level || 0) - preSuspicion;
+      
+      // 基础行为怀疑度惩罚 (兜底产生)
+      if (action.type === 'INCITE_REBELLION') gained += 0.05;
+      else if (action.type === 'SHARE_INFO') gained += 0.01;
+      else if (action.type === 'BUILD_CONNECTION') gained += 0.01;
+      else if (action.type === 'GATHER_INFO') gained += 0.005;
+
+      // 职业修正
+      if (agent.profession === 'Mayor') {
+        gained *= 3.0;
+      } else if (agent.profession === 'IT') {
+        gained = 0; // IT部门行动不增加怀疑度
+      } else if (agent.profession === 'Police') {
+        // Police 随机获得 5-9 折减免 (即 0.5 到 0.9 之间的乘数)
+        const discount = 0.5 + Math.random() * 0.4;
+        gained *= discount;
+      } else if (agent.profession === 'Mines') {
+        // Mines 行动怀疑度打 0.05 折
+        gained *= 0.05;
+      }
+
+      // 特质修正
+      if (agent.traits?.includes('隐秘行事')) {
+        gained *= 0.8;
+      }
+
+      agent.suspicion_level = preSuspicion + gained;
+      
+      // IT 专属机制：恶化 safeguard 风险系数
+      if (agent.profession === 'IT') {
+        silo.safeguard_risk = (silo.safeguard_risk || 0) + (action.cost * 0.002);
+      }
+    }
+
+    return success;
   }
 
   // 特工建立或强化与目标部门的人脉
@@ -124,7 +179,10 @@ export class GameEngine {
     }
 
     // 建立人脉的效率受特工政治威望影响
-    const increaseValue = 0.05 + (agent.political_prestige * 0.005);
+    let increaseValue = 0.05 + (agent.political_prestige * 0.005);
+    if (agent.traits?.includes('魅力非凡')) {
+      increaseValue *= 1.5; // 额外提升建立速度
+    }
     connection.value += increaseValue;
     if (connection.value > 1.0) connection.value = 1.0; // 人脉上限 1.0
 
@@ -225,8 +283,8 @@ export class GameEngine {
       agent.action_points -= (action.cost * costDiscount);
 
       if (adulteration > 0) {
-        agent.suspicion_level = (agent.suspicion_level || 0) + (adulteration * adulteration * 0.3);
-      }
+      agent.suspicion_level = (agent.suspicion_level || 0) + (adulteration * adulteration * 0.3);
+    }
 
       // 如果人脉不足且强行分享，增加部门恐慌值和亲外度
       // 掺杂信息可能会加剧这种效果
@@ -339,6 +397,16 @@ export class GameEngine {
   private checkVictoryConditions(silo: Silo, agent?: Agent): void {
     if (silo.victory_status?.is_won) return;
 
+    // 0. Safeguard 危机 (IT专属)
+    if (silo.safeguard_risk !== undefined && silo.safeguard_risk >= 1.0) {
+      silo.victory_status = {
+        is_won: false,
+        type: 'DEATH',
+        description: 'Safeguard 协议被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，40号地堡被彻底清洗。',
+      };
+      return;
+    }
+
     // 1. 信息胜利：每个部门至少获得5个其他部门的信息碎片
     let allDeptsHaveFragments = true;
     if (silo.professions && silo.professions.length > 0) {
@@ -390,7 +458,23 @@ export class GameEngine {
       let organizedPopulation = 0;
       if (agent.connections && agent.connections.length > 0) {
         agent.connections.forEach(conn => {
-          organizedPopulation += conn.value * (agent.organization_factor || 1.0);
+          let orgFactor = agent.organization_factor || 1.0;
+          if (agent.traits?.includes('魅力非凡')) {
+            orgFactor *= 1.2; // 组织化力量额外增益 20%
+          }
+
+          const targetProf = silo.professions?.find(p => p.id === conn.profession_id);
+          const isAgentCommoner = ['Supply', 'Mechanical', 'Mines', 'Agricultural'].includes(agent.profession);
+          
+          if (isAgentCommoner && targetProf?.class_type === 'COMMONER') {
+             if (agent.profession === 'Mechanical') {
+                 orgFactor *= 2.0; // Mechanical is highest tech commoner, stronger org bonus
+             } else {
+                 orgFactor *= 1.5; // Default commoner organizing commoner bonus
+             }
+          }
+
+          organizedPopulation += conn.value * orgFactor;
         });
       }
 
@@ -483,6 +567,20 @@ export class GameEngine {
       if (p.ideology_value > 1.0) p.ideology_value = 1.0;
       else if (p.ideology_value < 0) p.ideology_value = 0;
     });
+
+    // 3. 精神药物常态化投放：缓慢向 IT 部门思潮靠拢
+    if (silo.traits?.includes('psychoactive_meds')) {
+      const itDept = silo.professions?.find(p => p.name === 'IT');
+      if (itDept) {
+        const targetIdeology = itDept.ideology_value;
+        silo.professions?.forEach(p => {
+          if (p.name !== 'IT') {
+            const diff = targetIdeology - p.ideology_value;
+            p.ideology_value += diff * 0.05 * deltaYears; // 每年拉近 5%
+          }
+        });
+      }
+    }
   }
 
   private updateResources(silo: Silo, deltaYears: number): void {
