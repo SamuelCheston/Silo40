@@ -460,11 +460,26 @@ export class GameEngine {
   private updateIdeology(silo: Silo, deltaYears: number): void {
     silo.professions?.forEach((p) => {
       const stability = silo.cohesion;
+      
+      // 1. 原有的根据恐慌值和不稳定度产生的思潮偏移
       if (p.panic_value > 0.3 && stability < 0.5) {
         const drift = p.panic_value * (1.0 - stability) * deltaYears * 0.01;
         p.ideology_value += drift;
       }
 
+      // 2. 恐慌值转化为亲外度 (Panic -> Pro-Foreign)
+      // 设定转化率：每年将现有恐慌值的 10% 转化为亲外度
+      if (p.panic_value > 0) {
+        const conversionRate = 0.10;
+        const convertedAmount = p.panic_value * conversionRate * deltaYears;
+        
+        p.panic_value -= convertedAmount;
+        if (p.panic_value < 0) p.panic_value = 0;
+
+        p.ideology_value += convertedAmount;
+      }
+
+      // 限制边界
       if (p.ideology_value > 1.0) p.ideology_value = 1.0;
       else if (p.ideology_value < 0) p.ideology_value = 0;
     });
