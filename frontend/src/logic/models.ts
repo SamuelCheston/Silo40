@@ -43,7 +43,7 @@ export interface Agent {
   updated_at: string;
 }
 
-export type AgentActionType = 'GATHER_INFO' | 'SHARE_INFO' | 'BUILD_CONNECTION' | 'INCITE_REBELLION' | 'CONDUCT_PROPAGANDA';
+export type AgentActionType = 'GATHER_INFO' | 'SHARE_INFO' | 'BUILD_CONNECTION' | 'INCITE_REBELLION' | 'CONDUCT_PROPAGANDA' | 'PROFESSION_ACTION';
 
 export const ACTION_COSTS: Record<AgentActionType, number> = {
   GATHER_INFO: 10,
@@ -51,6 +51,7 @@ export const ACTION_COSTS: Record<AgentActionType, number> = {
   BUILD_CONNECTION: 15,
   INCITE_REBELLION: 30,
   CONDUCT_PROPAGANDA: 20,
+  PROFESSION_ACTION: 0, // 实际成本由职业行动注册表 (professionActions.ts) 决定
 };
 
 export const ACTION_DURATIONS: Record<AgentActionType, number> = {
@@ -59,6 +60,7 @@ export const ACTION_DURATIONS: Record<AgentActionType, number> = {
   BUILD_CONNECTION: 3, // 耗时3个月
   INCITE_REBELLION: 2, // 耗时2个月
   CONDUCT_PROPAGANDA: 1, // 耗时1个月
+  PROFESSION_ACTION: 0, // 职业专属行动均为即时操作
 };
 
 export interface AgentAction {
@@ -66,6 +68,10 @@ export interface AgentAction {
   source_dept?: string;
   target_dept?: string;
   fragment_ids?: string[]; // 传播/造谣时使用的碎片数组
+  /** 职业专属行动 id (type === 'PROFESSION_ACTION' 时必填) */
+  profession_action?: string;
+  /** 职业专属行动的资源目标 (如 Supply 的 Ration Allocation) */
+  resource_target?: string;
   cost: number;
 }
 

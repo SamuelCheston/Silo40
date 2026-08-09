@@ -12,6 +12,7 @@ import { createInitialSilo, createInitialAgent } from './logic/initializer';
 import { GameEngine } from './logic/engine';
 import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS } from './logic/models';
 import { StoryEvent } from './logic/models';
+import { getProfessionActions, getProfessionAction } from './logic/professionActions';
 
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
@@ -28,10 +29,21 @@ function App() {
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
     const [targetDept, setTargetDept] = useState<string>('');
     const [selectedFragments, setSelectedFragments] = useState<string[]>([]);
+    // Profession Action State
+    const [professionActionId, setProfessionActionId] = useState<string>('');
+    const [resourceTarget, setResourceTarget] = useState<string>('');
 
     const toggleFragment = (f: string) => {
         setSelectedFragments(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
     };
+
+    // 当前选中的职业专属行动定义 (actionType === 'PROFESSION_ACTION' 时非空)
+    const selectedProfessionAction = actionType === 'PROFESSION_ACTION' ? getProfessionAction(professionActionId) : undefined;
+    // 目标选择器显示条件：职业行动按 targetType 决定；通用行动排除全局操作
+    const showDeptSelector = actionType === 'PROFESSION_ACTION'
+        ? selectedProfessionAction?.targetType === 'DEPT'
+        : !(actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION');
+    const showResourceSelector = actionType === 'PROFESSION_ACTION' && selectedProfessionAction?.targetType === 'RESOURCE';
 
     // We only need one instance of the engine
     const [engine] = useState(() => new GameEngine());
@@ -123,7 +135,21 @@ function App() {
         if (!silo || !agent) return;
         
         const isGlobalAction = actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION';
-        if (!isGlobalAction && !targetDept) {
+        const profDef = selectedProfessionAction;
+
+        // 目标校验：职业行动按 targetType；通用行动必须选目标部门
+        let actionTarget: string | undefined = targetDept;
+        if (profDef) {
+            if (profDef.targetType === 'DEPT' && !targetDept) {
+                updateResultText("Please select a target department.");
+                return;
+            }
+            if (profDef.targetType === 'RESOURCE' && !resourceTarget) {
+                updateResultText("Please select a target resource.");
+                return;
+            }
+            actionTarget = profDef.targetType === 'RESOURCE' ? resourceTarget : targetDept;
+        } else if (!isGlobalAction && !targetDept) {
             updateResultText("Please select a target department.");
             return;
         }
@@ -138,9 +164,11 @@ function App() {
         const action: AgentAction = {
             type: actionType,
             // 针对全局操作，不传递 target_dept，避免引擎校验失败
-            target_dept: isGlobalAction ? undefined : targetDept,
+            target_dept: isGlobalAction ? undefined : actionTarget,
             fragment_ids: actionType === 'SHARE_INFO' ? selectedFragments : undefined,
-            cost: ACTION_COSTS[actionType]
+            profession_action: profDef ? profDef.id : undefined,
+            resource_target: profDef?.targetType === 'RESOURCE' ? resourceTarget : undefined,
+            cost: profDef ? profDef.apCost : ACTION_COSTS[actionType]
         };
 
         const result = engine.executeAgentAction(nextSilo, nextAgent, action);
@@ -483,6 +511,42 @@ function App() {
 
                         {/* Right Side: Operations */}
                         <VStack gap={6} flex={{ base: "1 1 100%", lg: 1 }} w="full" position="sticky" top="20px">
+                        {/* Profession Actions Frame */}
+                        <Box w="full" p={5} bg="purple.50" borderRadius="md" border="1px solid" borderColor="purple.200" boxShadow="sm">
+                            <Heading size="sm" mb={2} color="purple.800" borderBottom="1px solid" borderColor="purple.200" pb={2}>
+                                Profession Actions: {agent?.profession}
+                            </Heading>
+                            <Text fontSize="xs" color="gray.600" mb={3}>
+                                Unique actions of your profession. Hover for details.
+                            </Text>
+                            <SimpleGrid columns={2} gap={3} w="full">
+                                {getProfessionActions(agent?.profession || '').map(def => {
+                                    const isSelected = professionActionId === def.id && actionType === 'PROFESSION_ACTION';
+                                    return (
+                                        <Button
+                                            key={def.id}
+                                            variant={isSelected ? "solid" : "outline"}
+                                            colorPalette={isSelected ? "purple" : "gray"}
+                                            onClick={() => { setActionType('PROFESSION_ACTION'); setProfessionActionId(def.id); }}
+                                            h="80px"
+                                            display="flex"
+                                            flexDirection="column"
+                                            justifyContent="center"
+                                            alignItems="center"
+                                            whiteSpace="normal"
+                                            lineHeight="1.2"
+                                            title={def.description}
+                                            bg={isSelected ? "purple.500" : "white"}
+                                            _hover={{ bg: isSelected ? "purple.600" : "gray.50" }}
+                                        >
+                                            <Text fontWeight="bold">{def.label}</Text>
+                                            <Text fontSize="xs" mt={1}>({def.apCost} AP)</Text>
+                                        </Button>
+                                    );
+                                })}
+                            </SimpleGrid>
+                        </Box>
+
                         {/* Actions Panel */}
                         <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
                             <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>Agent Action Interface</Heading>
@@ -546,7 +610,7 @@ function App() {
                                     </SimpleGrid>
                                 </VStack>
 
-                                {!(actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION') && (
+                                {showDeptSelector && (
                                     <VStack align="start" gap={1}>
                                         <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Dept:</Text>
                                         <NativeSelect.Root size="md" w="full" bg="white">
@@ -554,6 +618,21 @@ function App() {
                                                 <option value="" disabled>Select Department...</option>
                                                 {silo?.professions?.map(p => (
                                                     <option key={p.id} value={p.name}>{p.name}</option>
+                                                ))}
+                                            </NativeSelect.Field>
+                                            <NativeSelect.Indicator />
+                                        </NativeSelect.Root>
+                                    </VStack>
+                                )}
+
+                                {showResourceSelector && (
+                                    <VStack align="start" gap={1}>
+                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Resource:</Text>
+                                        <NativeSelect.Root size="md" w="full" bg="white">
+                                            <NativeSelect.Field value={resourceTarget} onChange={(e) => setResourceTarget(e.target.value)}>
+                                                <option value="" disabled>Select Resource...</option>
+                                                {['Energy', 'Materials', 'Supplies'].map(r => (
+                                                    <option key={r} value={r}>{r}</option>
                                                 ))}
                                             </NativeSelect.Field>
                                             <NativeSelect.Indicator />

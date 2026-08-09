@@ -18,8 +18,8 @@ export class EventEngine {
       description: '底层机械部报告发生严重水管泄漏，部分楼层供水中断。',
       type: 'TECHNICAL',
       effects: (silo: Silo) => {
-        const water = silo.resources.find(r => r.type === 'Water');
-        if (water) water.amount -= 500;
+        const supplies = silo.resources.find(r => r.type === 'Supplies');
+        if (supplies) supplies.amount -= 500;
         silo.cohesion -= 0.05;
       }
     },

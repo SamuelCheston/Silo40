@@ -1,5 +1,6 @@
 import { AgentActionType, ACTION_COSTS, AgentAction, Silo, ALL_FRAGMENTS } from './models';
 import { ActorView } from './actor';
+import { getProfessionActions } from './professionActions';
 
 // ============ NPC 决策层 (文档 M2：效用函数先行) ============
 /**
@@ -103,6 +104,27 @@ export class NpcBrain {
     const hasCommoners = depts.some(d => d.class_type === 'COMMONER');
     if (hasCommoners && avgPanic > 0.4 && view.suspicionLevel < 0.5) {
       add('INCITE_REBELLION', 0.8, `incited unrest among the commoners.`, 0.3);
+    }
+
+    // --- 职业专属行动：按职业注册表挑选，走统一执行管线 (与玩家同规则) ---
+    const RESOURCE_TYPES = ['Energy', 'Materials', 'Supplies'];
+    for (const def of getProfessionActions(view.profession)) {
+      if (def.apCost > ap) continue;
+      let target_dept: string | undefined;
+      let resource_target: string | undefined;
+      if (def.targetType === 'DEPT') {
+        const others = depts.filter(d => d.id !== ownId);
+        if (others.length === 0) continue;
+        target_dept = others[Math.floor(Math.random() * others.length)].name;
+      } else if (def.targetType === 'RESOURCE') {
+        resource_target = RESOURCE_TYPES[Math.floor(Math.random() * RESOURCE_TYPES.length)];
+      }
+      candidates.push({
+        action: { type: 'PROFESSION_ACTION', profession_action: def.id, target_dept, resource_target, cost: def.apCost },
+        weight: 0.8,
+        message: `performed ${def.label}.`,
+        logChance: 0.35,
+      });
     }
 
     return candidates;

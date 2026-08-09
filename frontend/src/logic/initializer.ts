@@ -81,8 +81,8 @@ export function createInitialSilo(name: string, initialYear: number, traitIds: s
 
   // Apply Silo Traits
   if (traitIds.includes('abundant')) {
-    const food = silo.resources.find(r => r.type === 'Food');
-    if (food) food.amount *= 2;
+    const supplies = silo.resources.find(r => r.type === 'Supplies');
+    if (supplies) supplies.amount *= 2;
     const energy = silo.resources.find(r => r.type === 'Energy');
     if (energy) energy.amount *= 2;
   }
@@ -291,10 +291,9 @@ export function createInitialAgent(name: string, profession: string, traitIds: s
 
 function initResources(): Resource[] {
   const resources: Resource[] = [
-    { id: 0, silo_id: 0, type: 'Food', amount: 1000, net_balance: 0, updated_at: '' },
     { id: 0, silo_id: 0, type: 'Energy', amount: 5000, net_balance: 0, updated_at: '' },
-    { id: 0, silo_id: 0, type: 'Water', amount: 2000, net_balance: 0, updated_at: '' },
     { id: 0, silo_id: 0, type: 'Materials', amount: 500, net_balance: 0, updated_at: '' },
+    { id: 0, silo_id: 0, type: 'Supplies', amount: 3000, net_balance: 0, updated_at: '' },
   ];
   return resources;
 }

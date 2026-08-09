@@ -108,6 +108,18 @@ export class ActorView {
     else this.prof!.organization_factor = v;
   }
 
+  /** 生产力：读写 Actor 所属部门的生产力 (玩家/NPC 统一走部门值) */
+  get productivity(): number {
+    if (this.prof) return this.prof.productivity;
+    const p = this.silo.professions?.find(x => x.name === this.agent!.profession);
+    return p ? p.productivity : 1;
+  }
+  set productivity(v: number) {
+    if (this.prof) { this.prof.productivity = v; return; }
+    const p = this.silo.professions?.find(x => x.name === this.agent!.profession);
+    if (p) p.productivity = v;
+  }
+
   /** 政治点数：仅玩家特工拥有 (NPC 恒为 0) */
   get politicalPoints(): number {
     return this.agent ? this.agent.political_points : 0;

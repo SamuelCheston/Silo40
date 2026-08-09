@@ -9,6 +9,7 @@ import { EventBus, Scheduler, ConditionEngine, ScriptEngine, RuleEngine,
 import { GameRule } from './eventbus/RuleEngine';
 import { Trigger } from './eventbus/TriggerEngine';
 import { ActorRef, ActorView, createActorRefForAgent, createActorRefForProfession, createActorView } from './actor';
+import { getProfessionAction } from './professionActions';
 import { NpcBrain } from './npc';
 
 // ============ 统一事件类型 (文档第一层：一切行为都是事件) ============
@@ -178,8 +179,8 @@ export class GameEngine {
   // ============ 规则引擎：条件 / 脚本 / 规则 (文档第五层) ============
   private registerConditions(): void {
     this.conditionEngine.registerMany({
-      water_low: (state) =>
-        (state.silo.resources.find(r => r.type === 'Water')?.amount ?? Infinity) < 200,
+      supplies_low: (state) =>
+        (state.silo.resources.find(r => r.type === 'Supplies')?.amount ?? Infinity) < 200,
       panic_high: (state) =>
         state.silo.professions.some(p => p.panic_value > 0.7),
       rebellion_high: (state) =>
@@ -202,10 +203,10 @@ export class GameEngine {
         state.silo.total_population = Math.max(0, state.silo.total_population - extra);
         state.logs?.push(`[Rule] 叛乱冲突造成约 ${extra} 人伤亡。`);
       },
-      // 缺水 → 凝聚力缓慢下降
-      water_shortage_cohesion: (event, state) => {
+      // 物资短缺 → 凝聚力缓慢下降
+      supplies_shortage_cohesion: (event, state) => {
         state.silo.cohesion = Math.max(0, state.silo.cohesion - 0.02);
-        state.logs?.push('[Rule] 供水短缺削弱了地堡的凝聚力。');
+        state.logs?.push('[Rule] 物资短缺削弱了地堡的凝聚力。');
       },
     });
   }
@@ -213,10 +214,10 @@ export class GameEngine {
   private registerRules(): void {
     const rules: GameRule[] = [
       {
-        id: 'water_shortage_rule',
-        trigger: { eventType: EVENT_TYPES.METRICS_UPDATE, condition: 'water_low' },
+        id: 'supplies_shortage_rule',
+        trigger: { eventType: EVENT_TYPES.METRICS_UPDATE, condition: 'supplies_low' },
         effects: [
-          { type: 'script', script: 'water_shortage_cohesion' },
+          { type: 'script', script: 'supplies_shortage_cohesion' },
           { type: 'script', script: 'panic_to_ideology' },
         ],
       },
@@ -441,6 +442,9 @@ export class GameEngine {
       case 'CONDUCT_PROPAGANDA':
         result = this.conductPropaganda(silo, view, action);
         break;
+      case 'PROFESSION_ACTION':
+        result = this.executeProfessionAction(silo, view, action);
+        break;
     }
 
     if (result.executed) {
@@ -452,6 +456,10 @@ export class GameEngine {
       else if (action.type === 'BUILD_CONNECTION') gained += 0.01;
       else if (action.type === 'GATHER_INFO') gained += 0.005;
       else if (action.type === 'CONDUCT_PROPAGANDA') gained += 0.02;
+      else if (action.type === 'PROFESSION_ACTION') {
+        const def = getProfessionAction(action.profession_action || '');
+        gained += def ? def.suspicionPenalty : 0.02;
+      }
 
       // 职业修正
       if (view.profession === 'Mayor') {
@@ -524,6 +532,31 @@ export class GameEngine {
     view.propagandaLevel = (view.propagandaLevel || 0) + 1.0;
     view.actionPoints -= action.cost;
     return { executed: true, message: `Conducted propaganda. Propaganda Level increased by 1.0.` };
+  }
+
+  // 职业专属行动：从注册表取定义，校验职业归属与目标，执行 effect 并扣除 AP
+  private executeProfessionAction(silo: Silo, view: ActorView, action: AgentAction): ActionResult {
+    const def = getProfessionAction(action.profession_action || '');
+    if (!def) return { executed: false, message: 'Unknown profession action.' };
+    if (def.profession !== view.profession) {
+      return { executed: false, message: `${def.label} is not available to ${view.profession}.` };
+    }
+    if (def.targetType === 'DEPT' && !action.target_dept) {
+      return { executed: false, message: 'Please select a target department.' };
+    }
+    if (def.targetType === 'RESOURCE' && !action.resource_target) {
+      return { executed: false, message: 'Please select a target resource.' };
+    }
+
+    const target = def.targetType === 'DEPT' ? action.target_dept
+      : def.targetType === 'RESOURCE' ? action.resource_target
+      : undefined;
+
+    const result = def.effect(silo, view, target);
+    if (result.executed) {
+      view.actionPoints -= def.apCost;
+    }
+    return result;
   }
 
   // Actor 搜集其他部门的信息碎片
@@ -962,20 +995,18 @@ export class GameEngine {
 
   // ============ 配置常量 ============
 
-  // 每万人每年消耗基数
+  // 每万人每年消耗基数 (资源系统抽象：Energy / Materials / Supplies)
   private readonly perCapitaConsumption: Record<string, number> = {
-    Food: 50.0,
+    Supplies: 130.0, // 合并原 Food + Water
     Energy: 100.0,
-    Water: 80.0,
     Materials: 20.0,
   };
 
-  // 职业对资源的产出贡献
+  // 职业对资源的产出贡献 (抽象：能源=Mechanical, 材料=Mines, 物资=Supply+Agricultural)
   private readonly resourceProducers: Record<string, string[]> = {
-    Food: ['Agricultural'],
-    Energy: ['Mechanical', 'IT'],
-    Water: ['Mechanical', 'Supply'],
-    Materials: ['Mines', 'Mechanical'],
+    Energy: ['Mechanical'],
+    Materials: ['Mines'],
+    Supplies: ['Supply', 'Agricultural'],
   };
 
   // 职业威望加成系数
