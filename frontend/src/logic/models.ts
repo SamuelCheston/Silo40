@@ -126,6 +126,13 @@ export interface Profession {
   zone: string;
   known_fragments: string[]; // 掌握的其他部门信息碎片来源 (部门名称)
   relations?: Record<string, number>; // NPC部门之间的人脉/关系网
+  // ---- 统一 Actor 经济体系 (与 Agent 同构，使 NPC 与玩家共用同一执行管线) ----
+  action_points?: number; // 行动点数 (AP)
+  suspicion_level?: number; // 怀疑度
+  political_prestige?: number; // 政治威望
+  propaganda_level?: number; // 宣传力度
+  organization_factor?: number; // 组织度系数
+  traits?: string[]; // 特质
   updated_at: string;
 }
 

@@ -66,6 +66,16 @@ export function createInitialSilo(name: string, initialYear: number, traitIds: s
       });
   });
 
+  // Initialize NPC Actor 经济体系 (与玩家特工同构，使 NPC 与玩家共用统一执行管线)
+  silo.professions.forEach(prof => {
+      if (prof.action_points === undefined) prof.action_points = 50;
+      if (prof.suspicion_level === undefined) prof.suspicion_level = 0;
+      if (prof.political_prestige === undefined) prof.political_prestige = 0;
+      if (prof.propaganda_level === undefined) prof.propaganda_level = 0;
+      if (prof.organization_factor === undefined) prof.organization_factor = 1.0;
+      if (!prof.traits) prof.traits = [];
+  });
+
   // 3. Initialize Base Resources
   silo.resources = initResources();
 

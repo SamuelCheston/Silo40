@@ -152,8 +152,8 @@ function App() {
             if (duration > 0) {
                 passMonths(duration, nextSilo, nextAgent, logs);
             } else {
-                // 即时操作，时间不流逝，但触发一次 NPC 判断
-                engine.triggerNPCActions(nextSilo, nextAgent, 1/12, (msg) => logs.push(msg));
+                // 即时操作，时间不流逝，但触发一次 NPC 回合 (统一 Actor 管线)
+                engine.runNpcTurn(nextSilo, nextAgent, 1/12, (msg) => logs.push(msg));
                 engine.updateSiloState(nextSilo, 0, nextAgent); // 检测一下是否有特殊状态更新，不过 deltaYears 为 0 时其实返回了
             }
             

@@ -3,12 +3,13 @@ import {
   StoryEvent, AgentAction, ALL_FRAGMENTS, ActionResult,
 } from './models';
 import { EventEngine, STORY_EVENT_TYPE } from './events';
-import {
-  EventBus, Scheduler, ConditionEngine, ScriptEngine, RuleEngine,
+import { EventBus, Scheduler, ConditionEngine, ScriptEngine, RuleEngine,
   TriggerEngine, EventContext, GameTime, GameState, GameEvent, createEvent, advanceTime,
 } from './eventbus';
 import { GameRule } from './eventbus/RuleEngine';
 import { Trigger } from './eventbus/TriggerEngine';
+import { ActorRef, ActorView, createActorRefForAgent, createActorRefForProfession, createActorView } from './actor';
+import { NpcBrain } from './npc';
 
 // ============ 统一事件类型 (文档第一层：一切行为都是事件) ============
 export const EVENT_TYPES = {
@@ -20,7 +21,7 @@ export const EVENT_TYPES = {
   NPC_ACTIONS: 'NPC_ACTIONS',       // NPC 自主行为
   VICTORY_CHECK: 'VICTORY_CHECK',   // 胜利判定
   STORY_EVENT: STORY_EVENT_TYPE,    // 剧情随机事件
-  PLAYER_ACTION: 'PLAYER_ACTION',   // 玩家动作
+  ACTOR_ACTION: 'ACTOR_ACTION',     // 任意 Actor (玩家/NPC) 动作
   GAME_OVER: 'GAME_OVER',           // 游戏结束
 } as const;
 
@@ -138,13 +139,13 @@ export class GameEngine {
       this.updateIdeology(silo, deltaYears);
     });
 
-    // --- NPC 自主行为 ---
+    // --- NPC 自主行为 (统一 Actor 管线：经济结算 + 决策提交) ---
     this.bus.subscribe(EVENT_TYPES.NPC_ACTIONS, (event) => {
       const { silo, agent, deltaYears, addLog } = event.data as {
         silo: Silo; agent?: Agent; deltaYears: number;
         addLog?: (msg: string) => void;
       };
-      if (agent) this.triggerNPCActions(silo, agent, deltaYears, addLog);
+      this.runNpcTurn(silo, agent, deltaYears, addLog);
     });
 
     // --- 胜利判定 + 分数结算 ---
@@ -159,10 +160,12 @@ export class GameEngine {
       }
     });
 
-    // --- 玩家动作执行 ---
-    this.bus.subscribe(EVENT_TYPES.PLAYER_ACTION, (event) => {
-      const { silo, agent, action } = event.data as { silo: Silo; agent: Agent; action: AgentAction };
-      this.actionResult = this.executeActionInternal(silo, agent, action);
+    // --- 任意 Actor 动作执行 (玩家/NPC 共用，不区分来源) ---
+    this.bus.subscribe(EVENT_TYPES.ACTOR_ACTION, (event) => {
+      const { silo, actor, action, agent } = event.data as {
+        silo: Silo; actor: ActorRef; action: AgentAction; agent?: Agent;
+      };
+      this.actionResult = this.executeActionInternal(silo, actor, action, agent);
     });
 
     // --- 剧情随机事件效果应用 ---
@@ -283,6 +286,27 @@ export class GameEngine {
 
   // ============ 对外接口 (兼容原 API，内部事件驱动) ============
 
+  /**
+   * 统一动作入口：玩家与 NPC 共用同一执行管线。
+   * 引擎只识别 ActorRef + AgentAction，不区分动作来源。
+   */
+  public submitAction(actor: ActorRef, silo: Silo, action: AgentAction, agent?: Agent): ActionResult {
+    this.actionResult = null;
+    const ctx = new EventContext();
+    this.ruleEngine.lastState = { silo, agent };
+
+    this.bus.emit(createEvent(`action#${this.nextId()}`, EVENT_TYPES.ACTOR_ACTION, {
+      silo, actor, action, agent,
+    }), ctx);
+
+    return this.actionResult ?? { executed: false, message: 'Unknown error.' };
+  }
+
+  /** 玩家动作入口 (兼容原 API)：包装为 PLAYER Actor 提交 */
+  public executeAgentAction(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+    return this.submitAction(createActorRefForAgent(agent, silo), silo, action, agent);
+  }
+
   /** 推进一个游戏时间片：发布 TIME_TICK 并结算延时/剧情/随机事件 */
   public updateSiloState(silo: Silo, deltaYears: number, agent?: Agent, addLog?: (msg: string) => void): StoryEvent[] {
     this.tickStories = [];
@@ -315,113 +339,112 @@ export class GameEngine {
     return this.tickStories;
   }
 
-  /** 玩家执行动作 (发布 PLAYER_ACTION 事件) */
-  public executeAgentAction(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
-    this.actionResult = null;
-    const ctx = new EventContext();
-    this.ruleEngine.lastState = { silo, agent };
-
-    this.bus.emit(createEvent(`action#${this.nextId()}`, EVENT_TYPES.PLAYER_ACTION, {
-      silo, agent, action,
-    }), ctx);
-
-    return this.actionResult ?? { executed: false, message: 'Unknown error.' };
-  }
-
   /** 注册延时事件到调度器 */
   public scheduleEvent(event: import('./eventbus').GameEvent, at: GameTime): void {
     this.scheduler.schedule(event, at);
   }
 
-  /** 特工状态更新 (保留原公开 API，内部逻辑不变) */
+  /** 特工状态更新 (保留原公开 API)：包装为统一 Actor 状态结算 */
   public updateAgentState(agent: Agent, deltaYears: number, silo?: Silo, addLog?: (msg: string) => void): void {
+    if (!silo) return;
+    const view = createActorView(createActorRefForAgent(agent, silo), silo, agent);
+    this.updateActorState(view, silo, deltaYears, addLog);
+  }
+
+  /** 统一 Actor 状态结算：被动特质 / 威望 / AP 恢复 / 怀疑度衰减 (玩家与 NPC 同规则) */
+  public updateActorState(view: ActorView, silo: Silo, deltaYears: number, addLog?: (msg: string) => void): void {
     if (deltaYears <= 0) return;
 
-    // Medical profession passive trait: randomly gain information fragments over time
-    if (agent.profession === 'Medical' && silo && addLog) {
+    // Medical 被动特质：随时间随机获得信息碎片 (对任意 Actor 生效)
+    if (view.profession === 'Medical') {
       if (Math.random() < 0.2) { // 20% chance per year
-        const availableFragments = ALL_FRAGMENTS.filter(f => !agent.known_fragments.includes(f));
+        const availableFragments = ALL_FRAGMENTS.filter(f => !view.knownFragments.includes(f));
         if (availableFragments.length > 0) {
           const randomFragment = availableFragments[Math.floor(Math.random() * availableFragments.length)];
-          agent.known_fragments.push(randomFragment);
-          addLog(`[Medical Passive] Your medical duties allowed you to overhear rumors, gaining information about ${randomFragment}.`);
+          view.knownFragments.push(randomFragment);
+          if (addLog) {
+            if (view.isPlayer) {
+              addLog(`[Medical Passive] Your medical duties allowed you to overhear rumors, gaining information about ${randomFragment}.`);
+            } else {
+              addLog(`[Medical Passive] ${view.label} overheard rumors and gained intel on ${randomFragment}.`);
+            }
+          }
         }
       }
     }
 
     // 1. 计算平均人脉值 (0.0 - 1.0)
+    const connValues = view.connectionValues();
     let totalConnection = 0;
-    const count = agent.connections?.length || 0;
-    if (count > 0) {
-      agent.connections.forEach((conn) => {
-        totalConnection += conn.value;
-      });
-      totalConnection /= count;
+    if (connValues.length > 0) {
+      connValues.forEach((v) => { totalConnection += v; });
+      totalConnection /= connValues.length;
     }
 
     // 2. 计算职业修正系数
-    const profFactor = this.professionFactors[agent.profession] || 0;
+    const profFactor = this.professionFactors[view.profession] || 0;
 
     // 3. 计算特质修正系数
     let traitFactor = 0;
-    agent.traits?.forEach((trait) => {
+    view.traits.forEach((trait) => {
       traitFactor += this.traitFactors[trait] || 0;
     });
 
     // 4. 计算政治威望
-    agent.political_prestige = totalConnection * 100 * (1 + profFactor) * (1 + traitFactor);
-    if (agent.political_prestige < 0) agent.political_prestige = 0;
+    view.politicalPrestige = totalConnection * 100 * (1 + profFactor) * (1 + traitFactor);
+    if (view.politicalPrestige < 0) view.politicalPrestige = 0;
 
-    // 5. 给予政治点数和行动点数 (AP)
+    // 5. 给予政治点数 (仅玩家特工) 和行动点数 (AP)
     const pointGainRate = 0.1;
-    agent.political_points += agent.political_prestige * pointGainRate * deltaYears;
+    if (view.isPlayer) view.politicalPoints += view.politicalPrestige * pointGainRate * deltaYears;
 
     // 行动点数恢复：基础恢复 10 点/年，受威望和组织度加成
-    const apGainRate = 10 + (agent.political_prestige * 0.05) + (agent.organization_factor * 2);
-    agent.action_points += apGainRate * deltaYears;
+    const apGainRate = 10 + (view.politicalPrestige * 0.05) + (view.organizationFactor * 2);
+    view.actionPoints += apGainRate * deltaYears;
     // 设置 AP 上限
-    const maxAp = 100 + (agent.organization_factor * 10);
-    if (agent.action_points > maxAp) {
-      agent.action_points = maxAp;
+    const maxAp = 100 + (view.organizationFactor * 10);
+    if (view.actionPoints > maxAp) {
+      view.actionPoints = maxAp;
     }
 
     // 6. 怀疑度随时间衰减
     const suspicionDecayRate = 0.05; // 每年降低5%
-    if (agent.suspicion_level > 0) {
-      agent.suspicion_level -= suspicionDecayRate * deltaYears;
-      if (agent.suspicion_level < 0) agent.suspicion_level = 0;
+    if (view.suspicionLevel > 0) {
+      view.suspicionLevel -= suspicionDecayRate * deltaYears;
+      if (view.suspicionLevel < 0) view.suspicionLevel = 0;
     }
   }
 
-  /** 特工执行动作内部实现 (由 PLAYER_ACTION 订阅者调用) */
-  private executeActionInternal(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
-    if (agent.action_points < action.cost) {
+  /** Actor 执行动作内部实现 (由 ACTOR_ACTION 订阅者调用，玩家/NPC 共用) */
+  private executeActionInternal(silo: Silo, actor: ActorRef, action: AgentAction, agent?: Agent): ActionResult {
+    const view = createActorView(actor, silo, agent);
+    if (view.actionPoints < action.cost) {
       return { executed: false, message: "Not enough Action Points (AP)." };
     }
 
-    const preSuspicion = agent.suspicion_level || 0;
+    const preSuspicion = view.suspicionLevel || 0;
     let result: ActionResult = { executed: false, message: "" };
 
     switch (action.type) {
       case 'GATHER_INFO':
-        result = this.gatherInformation(silo, agent, action);
+        result = this.gatherInformation(silo, view, action);
         break;
       case 'SHARE_INFO':
-        result = this.shareInformation(silo, agent, action);
+        result = this.shareInformation(silo, view, action);
         break;
       case 'BUILD_CONNECTION':
-        result = this.buildConnection(silo, agent, action);
+        result = this.buildConnection(silo, view, action);
         break;
       case 'INCITE_REBELLION':
-        result = this.inciteRebellion(silo, agent, action);
+        result = this.inciteRebellion(silo, view, action);
         break;
       case 'CONDUCT_PROPAGANDA':
-        result = this.conductPropaganda(silo, agent, action);
+        result = this.conductPropaganda(silo, view, action);
         break;
     }
 
     if (result.executed) {
-      let gained = (agent.suspicion_level || 0) - preSuspicion;
+      let gained = (view.suspicionLevel || 0) - preSuspicion;
 
       // 基础行为怀疑度惩罚 (兜底产生)
       if (action.type === 'INCITE_REBELLION') gained += 0.05;
@@ -431,26 +454,26 @@ export class GameEngine {
       else if (action.type === 'CONDUCT_PROPAGANDA') gained += 0.02;
 
       // 职业修正
-      if (agent.profession === 'Mayor') {
+      if (view.profession === 'Mayor') {
         gained *= 3.0;
-      } else if (agent.profession === 'IT') {
+      } else if (view.profession === 'IT') {
         gained = 0; // IT部门行动不增加怀疑度
-      } else if (agent.profession === 'Police') {
+      } else if (view.profession === 'Police') {
         const discount = 0.5 + Math.random() * 0.4;
         gained *= discount;
-      } else if (agent.profession === 'Mines') {
+      } else if (view.profession === 'Mines') {
         gained *= 0.05;
       }
 
       // 特质修正
-      if (agent.traits?.includes('隐秘行事')) {
+      if (view.traits.includes('隐秘行事')) {
         gained *= 0.8;
       }
 
-      agent.suspicion_level = preSuspicion + gained;
+      view.suspicionLevel = preSuspicion + gained;
 
       // IT 专属机制：恶化 safeguard 风险系数
-      if (agent.profession === 'IT') {
+      if (view.profession === 'IT') {
         silo.safeguard_risk = (silo.safeguard_risk || 0) + (action.cost * 0.002);
       }
     }
@@ -458,43 +481,33 @@ export class GameEngine {
     return result;
   }
 
-  // 特工建立或强化与目标部门的人脉
-  private buildConnection(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+  // Actor 建立或强化与目标部门的人脉
+  private buildConnection(silo: Silo, view: ActorView, action: AgentAction): ActionResult {
     if (!action.target_dept) return { executed: false, message: "Invalid target department." };
 
     const targetProf = silo.professions?.find(p => p.name === action.target_dept);
     if (!targetProf) return { executed: false, message: "Target department not found." };
 
-    if (!agent.connections) agent.connections = [];
-
-    let connection = agent.connections.find(c => c.profession_id === targetProf.id);
-    if (!connection) {
-      connection = { id: Date.now(), agent_id: agent.id, profession_id: targetProf.id, value: 0 };
-      agent.connections.push(connection);
-    }
-
-    let increaseValue = 0.05 + (agent.political_prestige * 0.005);
-    if (agent.traits?.includes('魅力非凡')) {
+    let increaseValue = 0.05 + (view.politicalPrestige * 0.005);
+    if (view.traits.includes('魅力非凡')) {
       increaseValue *= 1.5;
     }
-    connection.value += increaseValue;
-    if (connection.value > 1.0) connection.value = 1.0;
+    view.addConnection(targetProf.id, increaseValue);
 
-    agent.action_points -= action.cost;
+    view.actionPoints -= action.cost;
     return { executed: true, message: `Successfully built connections with ${targetProf.name}.` };
   }
 
-  // 特工煽动底层叛乱（全局增加所有平民阶层的恐慌和排外/亲外极端化）
-  private inciteRebellion(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+  // Actor 煽动底层叛乱（全局增加所有平民阶层的恐慌和排外/亲外极端化）
+  private inciteRebellion(silo: Silo, view: ActorView, action: AgentAction): ActionResult {
     const commoners = silo.professions?.filter(p => p.class_type === 'COMMONER') || [];
     if (commoners.length === 0) return { executed: false, message: "No commoner departments found to incite." };
 
     commoners.forEach(prof => {
-      const connection = agent.connections?.find(c => c.profession_id === prof.id);
-      const connectionValue = connection ? connection.value : 0;
+      const connectionValue = view.getConnection(prof.id);
 
-      const baseEffect = 0.05 + (agent.political_prestige * 0.002);
-      const propagandaMultiplier = 1 + (agent.propaganda_level || 0) * 0.2;
+      const baseEffect = 0.05 + (view.politicalPrestige * 0.002);
+      const propagandaMultiplier = 1 + (view.propagandaLevel || 0) * 0.2;
       const multiplier = (1 + connectionValue) * propagandaMultiplier;
       const finalEffect = baseEffect * multiplier;
 
@@ -502,38 +515,36 @@ export class GameEngine {
       prof.ideology_value += finalEffect * 0.5;
     });
 
-    agent.action_points -= action.cost;
+    view.actionPoints -= action.cost;
     return { executed: true, message: `Incited unrest among all commoner departments.` };
   }
 
-  // 特工主动进行宣传，提升宣传力度
-  private conductPropaganda(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
-    agent.propaganda_level = (agent.propaganda_level || 0) + 1.0;
-    agent.action_points -= action.cost;
+  // Actor 主动进行宣传，提升宣传力度
+  private conductPropaganda(silo: Silo, view: ActorView, action: AgentAction): ActionResult {
+    view.propagandaLevel = (view.propagandaLevel || 0) + 1.0;
+    view.actionPoints -= action.cost;
     return { executed: true, message: `Conducted propaganda. Propaganda Level increased by 1.0.` };
   }
 
-  // 特工搜集其他部门的信息碎片
-  private gatherInformation(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+  // Actor 搜集其他部门的信息碎片
+  private gatherInformation(silo: Silo, view: ActorView, action: AgentAction): ActionResult {
     if (!action.target_dept) return { executed: false, message: "Invalid target department." };
 
-    if (!agent.known_fragments) agent.known_fragments = [];
-
     const targetFragments = ALL_FRAGMENTS.filter(f => f.startsWith(action.target_dept! + '_'));
-    const unknownTargetFragments = targetFragments.filter(f => !agent.known_fragments?.includes(f));
+    const unknownTargetFragments = targetFragments.filter(f => !view.knownFragments.includes(f));
 
     if (unknownTargetFragments.length > 0) {
       const fragmentToGather = unknownTargetFragments[Math.floor(Math.random() * unknownTargetFragments.length)];
-      agent.known_fragments.push(fragmentToGather);
-      agent.action_points -= action.cost;
+      view.knownFragments.push(fragmentToGather);
+      view.actionPoints -= action.cost;
       return { executed: true, message: `Gathered intel on ${fragmentToGather}.` };
     }
 
     return { executed: false, message: `Your department already knows everything about ${action.target_dept}.` };
   }
 
-  // 特工将自己掌握的信息碎片分享给目标部门
-  private shareInformation(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+  // Actor 将自己掌握的信息碎片分享给目标部门
+  private shareInformation(silo: Silo, view: ActorView, action: AgentAction): ActionResult {
     if (!action.target_dept || !action.fragment_ids || action.fragment_ids.length === 0) {
       return { executed: false, message: "Invalid target or no fragments selected." };
     }
@@ -541,18 +552,17 @@ export class GameEngine {
     const targetProf = silo.professions?.find(p => p.name === action.target_dept);
     if (!targetProf) return { executed: false, message: "Target department not found." };
 
-    const connection = agent.connections?.find(c => c.profession_id === targetProf.id);
-    const connectionValue = connection ? connection.value : 0;
+    const connectionValue = view.getConnection(targetProf.id);
 
     // AP 即使被拒绝也会消耗
-    agent.action_points -= action.cost;
+    view.actionPoints -= action.cost;
 
-    const unexplainedFragments = action.fragment_ids.filter(id => !agent.known_fragments.includes(id));
+    const unexplainedFragments = action.fragment_ids.filter(id => !view.knownFragments.includes(id));
     const unexplainedCount = unexplainedFragments.length;
 
     if (unexplainedCount > 0) {
       const suspicionPenalty = (unexplainedCount * 0.1) + (Math.pow(unexplainedCount, 1.5) * 0.05);
-      agent.suspicion_level = (agent.suspicion_level || 0) + suspicionPenalty;
+      view.suspicionLevel = (view.suspicionLevel || 0) + suspicionPenalty;
     }
 
     let acceptanceRate = 0.1 + targetProf.ideology_value + connectionValue;
@@ -639,82 +649,28 @@ export class GameEngine {
     return Math.floor(organizedPopulation);
   }
 
-  // 模拟 NPC 部门的自主行为
-  public triggerNPCActions(silo: Silo, agent: Agent, deltaYears: number, addLog?: (msg: string) => void): void {
+  // NPC 回合 (统一 Actor 管线)：经济结算 + 决策层提交动作
+  public runNpcTurn(silo: Silo, agent: Agent | undefined, deltaYears: number, addLog?: (msg: string) => void): void {
     if (!silo.professions) return;
 
-    silo.professions.forEach(prof => {
-      if (prof.name === agent.profession) return;
+    const npcProfs = silo.professions.filter(p => !agent || p.name !== agent.profession);
 
-      if (prof.name === 'Medical') {
-        if (Math.random() < 0.2) {
-          const unknownFragments = ALL_FRAGMENTS.filter(f => !prof.known_fragments?.includes(f));
-          if (unknownFragments.length > 0) {
-            const newFrag = unknownFragments[Math.floor(Math.random() * unknownFragments.length)];
-            if (!prof.known_fragments) prof.known_fragments = [];
-            prof.known_fragments.push(newFrag);
-            if (Math.random() < 0.5 && addLog) {
-              addLog(`Medical (NPC) overheard rumors and gained intel on ${newFrag}`);
-            }
-          }
-        }
+    // 1. 统一经济结算 (被动特质 / 威望 / AP 恢复 / 怀疑度衰减)
+    for (const prof of npcProfs) {
+      const view = createActorView(createActorRefForProfession(prof), silo);
+      this.updateActorState(view, silo, deltaYears, addLog);
+    }
+
+    // 2. 决策层：预算内选择动作，走统一执行管线 (与玩家同规则)
+    for (const prof of npcProfs) {
+      const view = createActorView(createActorRefForProfession(prof), silo);
+      const decision = NpcBrain.decide(view, silo, deltaYears);
+      if (!decision) continue;
+      const result = this.submitAction(view.ref, silo, decision.action);
+      if (result.executed && addLog && Math.random() < decision.logChance) {
+        addLog(`${view.label} ${decision.message}`);
       }
-
-      const ideology = prof.ideology_value;
-      const willToAct = ideology > 0.4 ? ideology : 0.1;
-
-      const actionChance = willToAct * (0.1 + prof.power_level * 0.05) * deltaYears;
-
-      if (Math.random() < actionChance) {
-        const actionType = Math.random();
-
-        if (actionType < 0.4 && ideology > 0.4) {
-          const unknownFragments = ALL_FRAGMENTS.filter(f => !prof.known_fragments?.includes(f));
-          if (unknownFragments.length > 0) {
-            const newFrag = unknownFragments[Math.floor(Math.random() * unknownFragments.length)];
-            if (!prof.known_fragments) prof.known_fragments = [];
-            prof.known_fragments.push(newFrag);
-            if (Math.random() < 0.4 && addLog) {
-              addLog(`${prof.name} is secretly gathering intel on ${newFrag}`);
-            }
-          }
-        } else if (actionType < 0.8 && ideology > 0.4) {
-          if (prof.known_fragments && prof.known_fragments.length > 0) {
-            const fragmentToShare = prof.known_fragments[Math.floor(Math.random() * prof.known_fragments.length)];
-
-            const targetCandidates = silo.professions!.filter(p =>
-              p.id !== prof.id &&
-              prof.relations && prof.relations[p.name] >= 0.8
-            );
-
-            if (targetCandidates.length > 0) {
-              const targetProf = targetCandidates[Math.floor(Math.random() * targetCandidates.length)];
-
-              if (!targetProf.known_fragments) targetProf.known_fragments = [];
-              if (!targetProf.known_fragments.includes(fragmentToShare)) {
-                targetProf.known_fragments.push(fragmentToShare);
-
-                targetProf.panic_value = Math.min(1.0, targetProf.panic_value + 0.05);
-                targetProf.ideology_value = Math.min(1.0, targetProf.ideology_value + 0.02);
-
-                if (Math.random() < 0.8 && addLog) {
-                  addLog(`${prof.name} confidentially shared ${fragmentToShare} secrets with ${targetProf.name}`);
-                }
-              }
-            }
-          }
-        } else {
-          if (prof.panic_value > 0.1) {
-            prof.panic_value = Math.max(0, prof.panic_value - 0.15);
-            if (Math.random() < 0.4 && addLog) {
-              addLog(`${prof.name} suppressed their internal panic`);
-            }
-          } else {
-            prof.productivity = Math.min(1.0, prof.productivity + 0.05);
-          }
-        }
-      }
-    });
+    }
   }
 
   private calculateScore(silo: Silo): any {
