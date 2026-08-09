@@ -1,7 +1,17 @@
-import { Silo, GameEvent } from './models';
+import { Silo, StoryEvent } from './models';
+import { EventBus, EventContext, createEvent } from './eventbus';
 
+/** 剧情随机事件类型 (StoryEvent) */
+export const STORY_EVENT_TYPE = 'STORY_EVENT';
+
+/**
+ * 剧情随机事件引擎
+ *
+ * 按文档架构改造：不再直接调用 effects，而是将剧情包装为统一 GameEvent
+ * 发布到 EventBus，由 STORY_EVENT 订阅者 (GameEngine) 应用效果。
+ */
 export class EventEngine {
-  private events: GameEvent[] = [
+  private events: StoryEvent[] = [
     {
       id: 'water_leak',
       title: '供水管线泄漏',
@@ -44,16 +54,21 @@ export class EventEngine {
     }
   ];
 
-  public triggerRandomEvent(silo: Silo): GameEvent | null {
+  /**
+   * 触发随机剧情事件 (在 EventContext 内发布，防事件风暴生效)
+   * @returns 被选中的剧情事件，未触发返回 null
+   */
+  public triggerRandomEvent(silo: Silo, bus: EventBus, ctx: EventContext): StoryEvent | null {
     if (silo.event_trigger < 1.0) return null;
 
     // 重置触发器
     silo.event_trigger = 0;
 
     const randomIndex = Math.floor(Math.random() * this.events.length);
-    const event = this.events[randomIndex];
-    
-    event.effects(silo);
-    return event;
+    const story = this.events[randomIndex];
+
+    // 发布统一事件，效果由总线订阅者应用
+    bus.emit(createEvent(`story_${story.id}@${Date.now()}`, STORY_EVENT_TYPE, { silo, story }), ctx);
+    return story;
   }
 }

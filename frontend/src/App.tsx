@@ -11,7 +11,7 @@ import { SetupPanel } from './components/SetupPanel';
 import { createInitialSilo, createInitialAgent } from './logic/initializer';
 import { GameEngine } from './logic/engine';
 import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS } from './logic/models';
-import { GameEvent } from './logic/models';
+import { StoryEvent } from './logic/models';
 
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
@@ -70,9 +70,9 @@ function App() {
     };
 
     // 模拟时间推移 (跳过指定月数)
-    const passMonths = (months: number, currentSilo: Silo, currentAgent: Agent, logs: string[]): GameEvent[] => {
+    const passMonths = (months: number, currentSilo: Silo, currentAgent: Agent, logs: string[]): StoryEvent[] => {
         const addLog = (msg: string) => logs.push(msg);
-        const events: GameEvent[] = [];
+        const events: StoryEvent[] = [];
         
         for (let i = 0; i < months; i++) {
             engine.updateAgentState(currentAgent, 1/12, currentSilo, addLog);

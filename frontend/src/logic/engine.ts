@@ -1,44 +1,339 @@
-import { Silo, Agent, Profession, Resource, VictoryStatus, VictoryType, GameEvent, AgentAction, ALL_FRAGMENTS, ActionResult } from './models';
-import { EventEngine } from './events';
+import {
+  Silo, Agent,
+  StoryEvent, AgentAction, ALL_FRAGMENTS, ActionResult,
+} from './models';
+import { EventEngine, STORY_EVENT_TYPE } from './events';
+import {
+  EventBus, Scheduler, ConditionEngine, ScriptEngine, RuleEngine,
+  TriggerEngine, EventContext, GameTime, GameState, GameEvent, createEvent, advanceTime,
+} from './eventbus';
+import { GameRule } from './eventbus/RuleEngine';
+import { Trigger } from './eventbus/TriggerEngine';
 
+// ============ 统一事件类型 (文档第一层：一切行为都是事件) ============
+export const EVENT_TYPES = {
+  TIME_TICK: 'TIME_TICK',           // 时间推进基准
+  AGENT_UPDATE: 'AGENT_UPDATE',     // 特工状态更新
+  RESOURCE_UPDATE: 'RESOURCE_UPDATE', // 资源结算
+  METRICS_UPDATE: 'METRICS_UPDATE', // 地堡指标更新
+  IDEOLOGY_UPDATE: 'IDEOLOGY_UPDATE', // 思潮演化
+  NPC_ACTIONS: 'NPC_ACTIONS',       // NPC 自主行为
+  VICTORY_CHECK: 'VICTORY_CHECK',   // 胜利判定
+  STORY_EVENT: STORY_EVENT_TYPE,    // 剧情随机事件
+  PLAYER_ACTION: 'PLAYER_ACTION',   // 玩家动作
+  GAME_OVER: 'GAME_OVER',           // 游戏结束
+} as const;
+
+/**
+ * 事件驱动版 GameEngine (文档第八层：推荐架构)
+ *
+ * 所有系统 (特工/资源/思潮/指标/NPC/胜利/剧情) 全部注册为 EventBus 的订阅者，
+ * 由 TIME_TICK 编排触发；延时事件进入 Scheduler (MinHeap)；
+ * 游戏规则由 RuleEngine 数据驱动；剧情触发由 TriggerEngine 条件驱动；
+ * 防事件风暴由 EventContext (fired set + maxDepth) 保证。
+ */
 export class GameEngine {
-  private eventEngine: EventEngine = new EventEngine();
+  // ============ 事件驱动核心组件 (文档第八层) ============
+  public readonly bus: EventBus;
+  public readonly scheduler: Scheduler;
+  public readonly conditionEngine: ConditionEngine;
+  public readonly scriptEngine: ScriptEngine;
+  public readonly ruleEngine: RuleEngine;
+  public readonly triggerEngine: TriggerEngine;
 
-  // 每万人每年消耗基数
-  private readonly perCapitaConsumption: Record<string, number> = {
-    Food: 50.0,
-    Energy: 100.0,
-    Water: 80.0,
-    Materials: 20.0,
-  };
+  private readonly eventEngine: EventEngine = new EventEngine();
 
-  // 职业对资源的产出贡献
-  private readonly resourceProducers: Record<string, string[]> = {
-    Food: ['Agricultural'],
-    Energy: ['Mechanical', 'IT'],
-    Water: ['Mechanical', 'Supply'],
-    Materials: ['Mines', 'Mechanical'],
-  };
+  // ============ 内部结果收集 (事件驱动下的同步返回) ============
+  private tickStories: StoryEvent[] = [];
+  private actionResult: ActionResult | null = null;
+  private idCounter = 0;
 
-  // 职业威望加成系数
-  private readonly professionFactors: Record<string, number> = {
-    Mayor: 0.5,
-    Judicial: 0.4,
-    IT: 0.3,
-    Police: 0.3,
-    Mechanical: 0.2,
-    Medical: 0.2,
-  };
+  constructor() {
+    this.bus = new EventBus();
+    this.scheduler = new Scheduler();
+    this.conditionEngine = new ConditionEngine();
+    this.scriptEngine = new ScriptEngine();
+    this.ruleEngine = new RuleEngine(this.conditionEngine, this.scriptEngine, this.bus);
+    this.triggerEngine = new TriggerEngine();
 
-  // 特质威望加成系数
-  private readonly traitFactors: Record<string, number> = {
-    地堡土著: 0.1,
-    一号地堡密使: 0.5,
-    煽动者: 0.2,
-    守旧派: -0.1,
-  };
+    // 规则引擎的延时效果 → 进入 Scheduler
+    this.ruleEngine.onSchedule = (event, delayMonths, source) => {
+      const data = source.data as Record<string, unknown> & { silo?: Silo };
+      if (data.silo) {
+        const now: GameTime = { year: data.silo.current_year, month: data.silo.current_month };
+        this.scheduler.schedule(event, advanceTime(now, delayMonths));
+      }
+    };
 
-  // 更新特工数值逻辑
+    this.registerSystems();
+    this.registerConditions();
+    this.registerScripts();
+    this.registerRules();
+    this.registerTriggers();
+  }
+
+  private nextId(): string {
+    return String(++this.idCounter);
+  }
+
+  // ============ 系统注册：一切通过事件总线 (文档第二/八层) ============
+  private registerSystems(): void {
+    // --- 时间推进编排：依次触发各子系统 ---
+    this.bus.subscribe(EVENT_TYPES.TIME_TICK, (event, ctx) => {
+      const { silo, agent, deltaYears, addLog } = event.data as {
+        silo: Silo; agent?: Agent; deltaYears: number;
+        addLog?: (msg: string) => void;
+      };
+
+      this.bus.emit(createEvent(`agent_update#${this.nextId()}`, EVENT_TYPES.AGENT_UPDATE, {
+        silo, agent, deltaYears, addLog,
+      }), ctx);
+
+      this.bus.emit(createEvent(`resource_update#${this.nextId()}`, EVENT_TYPES.RESOURCE_UPDATE, {
+        silo, deltaYears,
+      }), ctx);
+
+      this.bus.emit(createEvent(`metrics_update#${this.nextId()}`, EVENT_TYPES.METRICS_UPDATE, {
+        silo, deltaYears,
+      }), ctx);
+
+      this.bus.emit(createEvent(`ideology_update#${this.nextId()}`, EVENT_TYPES.IDEOLOGY_UPDATE, {
+        silo, deltaYears,
+      }), ctx);
+
+      this.bus.emit(createEvent(`npc_actions#${this.nextId()}`, EVENT_TYPES.NPC_ACTIONS, {
+        silo, agent, deltaYears, addLog,
+      }), ctx);
+
+      this.bus.emit(createEvent(`victory_check#${this.nextId()}`, EVENT_TYPES.VICTORY_CHECK, {
+        silo, agent,
+      }), ctx);
+    });
+
+    // --- 特工状态更新 ---
+    this.bus.subscribe(EVENT_TYPES.AGENT_UPDATE, (event) => {
+      const { silo, agent, deltaYears, addLog } = event.data as {
+        silo?: Silo; agent: Agent; deltaYears: number;
+        addLog?: (msg: string) => void;
+      };
+      this.updateAgentState(agent, deltaYears, silo, addLog);
+    });
+
+    // --- 资源结算 (含运作条件校验) ---
+    this.bus.subscribe(EVENT_TYPES.RESOURCE_UPDATE, (event) => {
+      const { silo, deltaYears } = event.data as { silo: Silo; deltaYears: number };
+      this.checkOperationalConditions(silo, deltaYears);
+      this.updateResources(silo, deltaYears);
+    });
+
+    // --- 地堡指标更新 (倒计时/叛乱/人口) ---
+    this.bus.subscribe(EVENT_TYPES.METRICS_UPDATE, (event) => {
+      const { silo, deltaYears } = event.data as { silo: Silo; deltaYears: number };
+      this.updateSiloMetrics(silo, deltaYears);
+    });
+
+    // --- 思潮演化 ---
+    this.bus.subscribe(EVENT_TYPES.IDEOLOGY_UPDATE, (event) => {
+      const { silo, deltaYears } = event.data as { silo: Silo; deltaYears: number };
+      this.updateIdeology(silo, deltaYears);
+    });
+
+    // --- NPC 自主行为 ---
+    this.bus.subscribe(EVENT_TYPES.NPC_ACTIONS, (event) => {
+      const { silo, agent, deltaYears, addLog } = event.data as {
+        silo: Silo; agent?: Agent; deltaYears: number;
+        addLog?: (msg: string) => void;
+      };
+      if (agent) this.triggerNPCActions(silo, agent, deltaYears, addLog);
+    });
+
+    // --- 胜利判定 + 分数结算 ---
+    this.bus.subscribe(EVENT_TYPES.VICTORY_CHECK, (event) => {
+      const { silo, agent } = event.data as { silo: Silo; agent?: Agent };
+      this.checkVictoryConditions(silo, agent);
+
+      // 游戏结束 → 计算最终评分并发布 GAME_OVER (新因果链)
+      if (silo.victory_status?.is_won !== undefined && !silo.victory_status.score) {
+        silo.victory_status.score = this.calculateScore(silo);
+        this.bus.emit(createEvent(`game_over#${this.nextId()}`, EVENT_TYPES.GAME_OVER, { silo }), new EventContext());
+      }
+    });
+
+    // --- 玩家动作执行 ---
+    this.bus.subscribe(EVENT_TYPES.PLAYER_ACTION, (event) => {
+      const { silo, agent, action } = event.data as { silo: Silo; agent: Agent; action: AgentAction };
+      this.actionResult = this.executeActionInternal(silo, agent, action);
+    });
+
+    // --- 剧情随机事件效果应用 ---
+    this.bus.subscribe(EVENT_TYPES.STORY_EVENT, (event) => {
+      const { silo, story } = event.data as { silo: Silo; story: StoryEvent };
+      story.effects(silo);
+    });
+  }
+
+  // ============ 规则引擎：条件 / 脚本 / 规则 (文档第五层) ============
+  private registerConditions(): void {
+    this.conditionEngine.registerMany({
+      water_low: (state) =>
+        (state.silo.resources.find(r => r.type === 'Water')?.amount ?? Infinity) < 200,
+      panic_high: (state) =>
+        state.silo.professions.some(p => p.panic_value > 0.7),
+      rebellion_high: (state) =>
+        state.silo.rebellion > 0.6,
+    });
+  }
+
+  private registerScripts(): void {
+    this.scriptEngine.registerMany({
+      // 恐慌蔓延 → 亲外度小幅上升 (恐慌→亲外转化)
+      panic_to_ideology: (event, state) => {
+        state.silo.professions.forEach(p => {
+          p.ideology_value = Math.min(1.0, p.ideology_value + 0.02);
+        });
+        state.logs?.push('[Rule] 高恐慌情绪转化为对外部世界的好奇。');
+      },
+      // 高叛乱 → 增加基础死亡率之外的额外死亡
+      rebellion_deaths: (event, state) => {
+        const extra = Math.floor(state.silo.total_population * 0.005);
+        state.silo.total_population = Math.max(0, state.silo.total_population - extra);
+        state.logs?.push(`[Rule] 叛乱冲突造成约 ${extra} 人伤亡。`);
+      },
+      // 缺水 → 凝聚力缓慢下降
+      water_shortage_cohesion: (event, state) => {
+        state.silo.cohesion = Math.max(0, state.silo.cohesion - 0.02);
+        state.logs?.push('[Rule] 供水短缺削弱了地堡的凝聚力。');
+      },
+    });
+  }
+
+  private registerRules(): void {
+    const rules: GameRule[] = [
+      {
+        id: 'water_shortage_rule',
+        trigger: { eventType: EVENT_TYPES.METRICS_UPDATE, condition: 'water_low' },
+        effects: [
+          { type: 'script', script: 'water_shortage_cohesion' },
+          { type: 'script', script: 'panic_to_ideology' },
+        ],
+      },
+      {
+        id: 'rebellion_escalation_rule',
+        trigger: { eventType: EVENT_TYPES.VICTORY_CHECK, condition: 'rebellion_high' },
+        effects: [
+          { type: 'script', script: 'rebellion_deaths' },
+        ],
+      },
+      {
+        // 延时事件示例：恐慌过高时，3 个月后触发 "暴乱爆发" 延时事件
+        id: 'panic_storm_delay_rule',
+        trigger: { eventType: EVENT_TYPES.VICTORY_CHECK, condition: 'panic_high' },
+        effects: [
+          {
+            type: 'schedule_event',
+            delayMonths: 3,
+            event: createEvent('delayed_riot', 'DELAYED_RIOT', {
+              // silo/agent 由规则引擎注入
+            }),
+          },
+        ],
+      },
+    ];
+    this.ruleEngine.registerMany(rules);
+
+    // 延时事件订阅：暴乱爆发 → 恐慌加剧
+    this.bus.subscribe('DELAYED_RIOT', (event) => {
+      const state = event.data as Record<string, unknown> & { silo?: Silo };
+      if (!state.silo) return;
+      state.silo.professions.forEach(p => {
+        p.panic_value = Math.min(1.0, p.panic_value + 0.15);
+      });
+      state.silo.legitimacy = Math.max(0, state.silo.legitimacy - 0.1);
+    });
+  }
+
+  // ============ 剧情触发器 (文档第四层) ============
+  private registerTriggers(): void {
+    const triggers: Trigger[] = [
+      {
+        id: 'silo1_fallout',
+        description: '一号地堡失联后，凝聚力下降、恐慌上升 (剧情链条起点)',
+        condition: (state) => state.silo.silo1_destroyed && state.silo.cohesion > 0.3,
+        effect: (bus, ctx, state) => {
+          state.silo.cohesion = Math.max(0, state.silo.cohesion - 0.05);
+          state.silo.professions.forEach(p => {
+            p.panic_value = Math.min(1.0, p.panic_value + 0.05);
+          });
+          state.logs?.push('[Trigger] 一号地堡失联的传闻在居民中蔓延。');
+        },
+      },
+      {
+        id: 'pro_foreign_awakening',
+        description: '多数部门亲外度超过 50% 时，社会进入觉醒阶段',
+        condition: (state) =>
+          state.silo.professions.filter(p => p.ideology_value > 0.5).length >= 4,
+        effect: (bus, ctx, state) => {
+          state.silo.legitimacy = Math.max(0, state.silo.legitimacy - 0.05);
+          state.logs?.push('[Trigger] 社会思潮觉醒，旧秩序受到挑战。');
+        },
+      },
+    ];
+    this.triggerEngine.registerMany(triggers);
+  }
+
+  // ============ 对外接口 (兼容原 API，内部事件驱动) ============
+
+  /** 推进一个游戏时间片：发布 TIME_TICK 并结算延时/剧情/随机事件 */
+  public updateSiloState(silo: Silo, deltaYears: number, agent?: Agent, addLog?: (msg: string) => void): StoryEvent[] {
+    this.tickStories = [];
+    const ctx = new EventContext();
+
+    // 刷新规则引擎状态视图 (规则/脚本将日志写入 state.logs)
+    const state: GameState = { silo, agent, logs: [] };
+    this.ruleEngine.lastState = state;
+
+    // 1. 时间推进 (各系统订阅响应)
+    this.bus.emit(createEvent(`tick#${this.nextId()}`, EVENT_TYPES.TIME_TICK, {
+      silo, agent, deltaYears, addLog,
+    }), ctx);
+
+    // 2. 调度器：触发到期延时事件
+    this.scheduler.tick({ year: silo.current_year, month: silo.current_month }, this.bus);
+
+    // 3. 剧情触发器：条件检查
+    this.triggerEngine.evaluate(this.bus, ctx, { silo, agent, logs: state.logs });
+
+    // 4. 随机剧情事件
+    const story = this.eventEngine.triggerRandomEvent(silo, this.bus, ctx);
+    if (story) this.tickStories.push(story);
+
+    // 将规则/触发器产生的日志回调给 UI
+    if (addLog && state.logs) {
+      for (const msg of state.logs) addLog(msg);
+    }
+
+    return this.tickStories;
+  }
+
+  /** 玩家执行动作 (发布 PLAYER_ACTION 事件) */
+  public executeAgentAction(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+    this.actionResult = null;
+    const ctx = new EventContext();
+    this.ruleEngine.lastState = { silo, agent };
+
+    this.bus.emit(createEvent(`action#${this.nextId()}`, EVENT_TYPES.PLAYER_ACTION, {
+      silo, agent, action,
+    }), ctx);
+
+    return this.actionResult ?? { executed: false, message: 'Unknown error.' };
+  }
+
+  /** 注册延时事件到调度器 */
+  public scheduleEvent(event: import('./eventbus').GameEvent, at: GameTime): void {
+    this.scheduler.schedule(event, at);
+  }
+
+  /** 特工状态更新 (保留原公开 API，内部逻辑不变) */
   public updateAgentState(agent: Agent, deltaYears: number, silo?: Silo, addLog?: (msg: string) => void): void {
     if (deltaYears <= 0) return;
 
@@ -74,14 +369,13 @@ export class GameEngine {
     });
 
     // 4. 计算政治威望
-    // 因为 totalConnection 现在是 0.0~1.0，乘以 100 使得基础威望保持在 0~100 范围
     agent.political_prestige = totalConnection * 100 * (1 + profFactor) * (1 + traitFactor);
     if (agent.political_prestige < 0) agent.political_prestige = 0;
 
     // 5. 给予政治点数和行动点数 (AP)
     const pointGainRate = 0.1;
     agent.political_points += agent.political_prestige * pointGainRate * deltaYears;
-    
+
     // 行动点数恢复：基础恢复 10 点/年，受威望和组织度加成
     const apGainRate = 10 + (agent.political_prestige * 0.05) + (agent.organization_factor * 2);
     agent.action_points += apGainRate * deltaYears;
@@ -92,7 +386,6 @@ export class GameEngine {
     }
 
     // 6. 怀疑度随时间衰减
-    // 如果特工保持低调（不执行激进行动），怀疑度会自然下降
     const suspicionDecayRate = 0.05; // 每年降低5%
     if (agent.suspicion_level > 0) {
       agent.suspicion_level -= suspicionDecayRate * deltaYears;
@@ -100,8 +393,8 @@ export class GameEngine {
     }
   }
 
-  // 特工执行动作 (信息获取与传播)
-  public executeAgentAction(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
+  /** 特工执行动作内部实现 (由 PLAYER_ACTION 订阅者调用) */
+  private executeActionInternal(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
     if (agent.action_points < action.cost) {
       return { executed: false, message: "Not enough Action Points (AP)." };
     }
@@ -129,7 +422,7 @@ export class GameEngine {
 
     if (result.executed) {
       let gained = (agent.suspicion_level || 0) - preSuspicion;
-      
+
       // 基础行为怀疑度惩罚 (兜底产生)
       if (action.type === 'INCITE_REBELLION') gained += 0.05;
       else if (action.type === 'SHARE_INFO') gained += 0.01;
@@ -143,11 +436,9 @@ export class GameEngine {
       } else if (agent.profession === 'IT') {
         gained = 0; // IT部门行动不增加怀疑度
       } else if (agent.profession === 'Police') {
-        // Police 随机获得 5-9 折减免 (即 0.5 到 0.9 之间的乘数)
         const discount = 0.5 + Math.random() * 0.4;
         gained *= discount;
       } else if (agent.profession === 'Mines') {
-        // Mines 行动怀疑度打 0.05 折
         gained *= 0.05;
       }
 
@@ -157,7 +448,7 @@ export class GameEngine {
       }
 
       agent.suspicion_level = preSuspicion + gained;
-      
+
       // IT 专属机制：恶化 safeguard 风险系数
       if (agent.profession === 'IT') {
         silo.safeguard_risk = (silo.safeguard_risk || 0) + (action.cost * 0.002);
@@ -175,20 +466,19 @@ export class GameEngine {
     if (!targetProf) return { executed: false, message: "Target department not found." };
 
     if (!agent.connections) agent.connections = [];
-    
+
     let connection = agent.connections.find(c => c.profession_id === targetProf.id);
     if (!connection) {
       connection = { id: Date.now(), agent_id: agent.id, profession_id: targetProf.id, value: 0 };
       agent.connections.push(connection);
     }
 
-    // 建立人脉的效率受特工政治威望影响
     let increaseValue = 0.05 + (agent.political_prestige * 0.005);
     if (agent.traits?.includes('魅力非凡')) {
-      increaseValue *= 1.5; // 额外提升建立速度
+      increaseValue *= 1.5;
     }
     connection.value += increaseValue;
-    if (connection.value > 1.0) connection.value = 1.0; // 人脉上限 1.0
+    if (connection.value > 1.0) connection.value = 1.0;
 
     agent.action_points -= action.cost;
     return { executed: true, message: `Successfully built connections with ${targetProf.name}.` };
@@ -200,17 +490,16 @@ export class GameEngine {
     if (commoners.length === 0) return { executed: false, message: "No commoner departments found to incite." };
 
     commoners.forEach(prof => {
-        const connection = agent.connections?.find(c => c.profession_id === prof.id);
-        const connectionValue = connection ? connection.value : 0;
+      const connection = agent.connections?.find(c => c.profession_id === prof.id);
+      const connectionValue = connection ? connection.value : 0;
 
-        // 煽动效果受人脉值、政治威望和宣传力度影响
-        const baseEffect = 0.05 + (agent.political_prestige * 0.002);
-        const propagandaMultiplier = 1 + (agent.propaganda_level || 0) * 0.2; // 宣传力度额外加成
-        const multiplier = (1 + connectionValue) * propagandaMultiplier;
-        const finalEffect = baseEffect * multiplier;
+      const baseEffect = 0.05 + (agent.political_prestige * 0.002);
+      const propagandaMultiplier = 1 + (agent.propaganda_level || 0) * 0.2;
+      const multiplier = (1 + connectionValue) * propagandaMultiplier;
+      const finalEffect = baseEffect * multiplier;
 
-        prof.panic_value += finalEffect;
-        prof.ideology_value += finalEffect * 0.5;
+      prof.panic_value += finalEffect;
+      prof.ideology_value += finalEffect * 0.5;
     });
 
     agent.action_points -= action.cost;
@@ -219,7 +508,6 @@ export class GameEngine {
 
   // 特工主动进行宣传，提升宣传力度
   private conductPropaganda(silo: Silo, agent: Agent, action: AgentAction): ActionResult {
-    // 每次宣传提升 1.0 的宣传力度
     agent.propaganda_level = (agent.propaganda_level || 0) + 1.0;
     agent.action_points -= action.cost;
     return { executed: true, message: `Conducted propaganda. Propaganda Level increased by 1.0.` };
@@ -230,8 +518,7 @@ export class GameEngine {
     if (!action.target_dept) return { executed: false, message: "Invalid target department." };
 
     if (!agent.known_fragments) agent.known_fragments = [];
-    
-    // 随机获取目标部门的一个碎片
+
     const targetFragments = ALL_FRAGMENTS.filter(f => f.startsWith(action.target_dept! + '_'));
     const unknownTargetFragments = targetFragments.filter(f => !agent.known_fragments?.includes(f));
 
@@ -260,92 +547,46 @@ export class GameEngine {
     // AP 即使被拒绝也会消耗
     agent.action_points -= action.cost;
 
-    // 计算实际拥有和凭空掌握的碎片
     const unexplainedFragments = action.fragment_ids.filter(id => !agent.known_fragments.includes(id));
     const unexplainedCount = unexplainedFragments.length;
 
-    // 根据凭空掌握的碎片数量计算直接增加的怀疑度 (指数级增长)
     if (unexplainedCount > 0) {
       const suspicionPenalty = (unexplainedCount * 0.1) + (Math.pow(unexplainedCount, 1.5) * 0.05);
       agent.suspicion_level = (agent.suspicion_level || 0) + suspicionPenalty;
     }
 
-    // 计算对方的接受度 (接受度受亲外度、双方人脉影响)
-    // 如果提供的凭空碎片太多，显得过于可疑，也会降低接受度
     let acceptanceRate = 0.1 + targetProf.ideology_value + connectionValue;
-    acceptanceRate -= (unexplainedCount * 0.1); 
+    acceptanceRate -= (unexplainedCount * 0.1);
     if (acceptanceRate < 0.05) acceptanceRate = 0.05;
     if (acceptanceRate > 1.0) acceptanceRate = 1.0;
 
     const roll = Math.random();
     if (roll > acceptanceRate) {
-        return { 
-            executed: true, // AP 和 suspicion 已经扣除
-            message: `Attempted to share info with ${targetProf.name}, but they rejected it! (Acceptance rate was ${(acceptanceRate*100).toFixed(0)}%)` 
-        };
+      return {
+        executed: true,
+        message: `Attempted to share info with ${targetProf.name}, but they rejected it! (Acceptance rate was ${(acceptanceRate * 100).toFixed(0)}%)`
+      };
     }
 
-    // 接受成功，目标部门获得所有提供的碎片 (包括真实的和伪造的)
     if (!targetProf.known_fragments) targetProf.known_fragments = [];
     for (const f of action.fragment_ids) {
-        if (!targetProf.known_fragments.includes(f)) {
-            targetProf.known_fragments.push(f);
-        }
+      if (!targetProf.known_fragments.includes(f)) {
+        targetProf.known_fragments.push(f);
+      }
     }
 
-    // 目标部门受到信息冲击，恐慌和亲外度上升
-    // 凭空掌握的碎片越多，造成的冲击越大 (煽动性越强)
     const panicImpact = 0.05 + unexplainedCount * 0.05;
     targetProf.panic_value = Math.min(1.0, targetProf.panic_value + panicImpact);
-    
+
     if (connectionValue >= 0.3) {
       const ideologyImpact = 0.02 + unexplainedCount * 0.02;
       targetProf.ideology_value = Math.min(1.0, targetProf.ideology_value + ideologyImpact);
     }
 
-    return { 
-      executed: true, 
-      message: `Successfully shared ${action.fragment_ids.length} fragments with ${targetProf.name}. (Included ${unexplainedCount} pieces of unexplained knowledge)` 
+    return {
+      executed: true,
+      message: `Successfully shared ${action.fragment_ids.length} fragments with ${targetProf.name}. (Included ${unexplainedCount} pieces of unexplained knowledge)`
     };
-  }
-
-  // 核心逻辑更新引擎
-  public updateSiloState(silo: Silo, deltaYears: number, agent?: Agent, addLog?: (msg: string) => void): GameEvent[] {
-    const events: GameEvent[] = [];
-    if (deltaYears <= 0) return events;
-
-    // 1. 运作条件校验 (技术传承)
-    this.checkOperationalConditions(silo, deltaYears);
-
-    // 2. 更新部门生产力与资源结余
-    this.updateResources(silo, deltaYears);
-
-    // 3. 更新地堡状态
-    this.updateSiloMetrics(silo, deltaYears);
-
-    // 4. 更新思潮演化
-    this.updateIdeology(silo, deltaYears);
-
-    // 4.5 模拟其他部门的自主行为 (NPC 意志)
-    if (agent) {
-      this.triggerNPCActions(silo, agent, deltaYears, addLog);
-    }
-
-    // 5. 判定胜利路径
-    this.checkVictoryConditions(silo, agent);
-
-    // 6. 随机事件触发
-    const event = this.eventEngine.triggerRandomEvent(silo);
-    if (event) {
-      events.push(event);
-    }
-
-    // 7. 如果游戏结束，计算最终评分
-    if (silo.victory_status?.is_won !== undefined && !silo.victory_status.score) {
-      silo.victory_status.score = this.calculateScore(silo);
-    }
-
-    return events;
   }
 
   public getOrganizedPopulation(silo: Silo, agent: Agent): number {
@@ -354,52 +595,43 @@ export class GameEngine {
       agent.connections.forEach(conn => {
         let orgFactor = agent.organization_factor || 1.0;
         if (agent.traits?.includes('魅力非凡')) {
-          orgFactor *= 1.2; // 组织化力量额外增益 20%
+          orgFactor *= 1.2;
         }
 
         const targetProf = silo.professions?.find(p => p.id === conn.profession_id);
         if (targetProf) {
           const isAgentCommoner = ['Supply', 'Mechanical', 'Mines', 'Agricultural'].includes(agent.profession);
-          
+
           if (isAgentCommoner && targetProf.class_type === 'COMMONER') {
-             if (agent.profession === 'Mechanical') {
-                 orgFactor *= 2.0; // Mechanical is highest tech commoner, stronger org bonus
-             } else {
-                 orgFactor *= 1.5; // Default commoner organizing commoner bonus
-             }
+            if (agent.profession === 'Mechanical') {
+              orgFactor *= 2.0;
+            } else {
+              orgFactor *= 1.5;
+            }
           }
 
-          // 计算对该部门的基础号召力 (Appeal)
-          let appeal = 0.1; // 基础号召力
-          
-          // 根据设定，只有机械部出身的特工对机械部有额外的号召力加成
+          let appeal = 0.1;
+
           if (agent.profession === 'Mechanical' && targetProf.name === 'Mechanical') {
-              appeal += 0.4;
+            appeal += 0.4;
           }
 
-          // 特质号召力加成
           if (agent.traits?.includes('魅力非凡')) {
-              appeal += 0.2;
+            appeal += 0.2;
           }
 
-          // 引入宣传力度作为乘数
-          // 宣传力度默认为 0，所以如果不进行宣传，号召力加成将为 0
-          // 这里使用 (propaganda_level) 作为乘数
           const propagandaMultiplier = agent.propaganda_level || 0;
 
-          // 最终部门转化率：号召力与人脉的综合体现 (上限控制在合理范围)
-          // 取号召力(带宣传乘数)和人脉的加权，再乘以组织度
           const appealEffect = appeal * propagandaMultiplier;
           const conversionRate = (appealEffect * 0.4 + conn.value * 0.6) * orgFactor * targetProf.ideology_value;
-          
-          // 计算该部门加入组织的实际人数，且加入上限限制（最多转化该部门 20% 的人口）
+
           const maxConvertible = targetProf.population * 0.20;
           let deptOrganized = targetProf.population * conversionRate;
-          
+
           if (deptOrganized > maxConvertible) {
-              deptOrganized = maxConvertible;
+            deptOrganized = maxConvertible;
           }
-          
+
           organizedPopulation += deptOrganized;
         }
       });
@@ -412,84 +644,73 @@ export class GameEngine {
     if (!silo.professions) return;
 
     silo.professions.forEach(prof => {
-      // 不模拟玩家控制的部门
       if (prof.name === agent.profession) return;
 
-      // Medical 专属被动：随机获取碎片
       if (prof.name === 'Medical') {
-          if (Math.random() < 0.2) {
-              const unknownFragments = ALL_FRAGMENTS.filter(f => !prof.known_fragments?.includes(f));
-              if (unknownFragments.length > 0) {
-                  const newFrag = unknownFragments[Math.floor(Math.random() * unknownFragments.length)];
-                  if (!prof.known_fragments) prof.known_fragments = [];
-                  prof.known_fragments.push(newFrag);
-                  if (Math.random() < 0.5 && addLog) {
-                      addLog(`Medical (NPC) overheard rumors and gained intel on ${newFrag}`);
-                  }
-              }
+        if (Math.random() < 0.2) {
+          const unknownFragments = ALL_FRAGMENTS.filter(f => !prof.known_fragments?.includes(f));
+          if (unknownFragments.length > 0) {
+            const newFrag = unknownFragments[Math.floor(Math.random() * unknownFragments.length)];
+            if (!prof.known_fragments) prof.known_fragments = [];
+            prof.known_fragments.push(newFrag);
+            if (Math.random() < 0.5 && addLog) {
+              addLog(`Medical (NPC) overheard rumors and gained intel on ${newFrag}`);
+            }
           }
+        }
       }
 
-      // 只有亲外度(Pro-Foreign)较高的部门，才有意愿去收集或泄露情报
-      // 内部维稳(压制恐慌)不受此限制
-      
       const ideology = prof.ideology_value;
-      const willToAct = ideology > 0.4 ? ideology : 0.1; // 亲外度小于0.4时行动意愿极低
+      const willToAct = ideology > 0.4 ? ideology : 0.1;
 
-      // 基础行动概率受亲外度、权力等级和时间流逝影响
       const actionChance = willToAct * (0.1 + prof.power_level * 0.05) * deltaYears;
-      
+
       if (Math.random() < actionChance) {
         const actionType = Math.random();
-        
+
         if (actionType < 0.4 && ideology > 0.4) {
-          // 40% 概率：收集情报 (Gather Info)
           const unknownFragments = ALL_FRAGMENTS.filter(f => !prof.known_fragments?.includes(f));
           if (unknownFragments.length > 0) {
             const newFrag = unknownFragments[Math.floor(Math.random() * unknownFragments.length)];
             if (!prof.known_fragments) prof.known_fragments = [];
             prof.known_fragments.push(newFrag);
             if (Math.random() < 0.4 && addLog) {
-                addLog(`${prof.name} is secretly gathering intel on ${newFrag}`);
+              addLog(`${prof.name} is secretly gathering intel on ${newFrag}`);
             }
           }
         } else if (actionType < 0.8 && ideology > 0.4) {
-          // 40% 概率：分享情报 (Share Info)
           if (prof.known_fragments && prof.known_fragments.length > 0) {
             const fragmentToShare = prof.known_fragments[Math.floor(Math.random() * prof.known_fragments.length)];
-            
-            // 挑选目标：NPC 只有与另一个部门的人脉极高 (>= 0.8) 时才会互通有无
-            const targetCandidates = silo.professions!.filter(p => 
-              p.id !== prof.id && 
+
+            const targetCandidates = silo.professions!.filter(p =>
+              p.id !== prof.id &&
               prof.relations && prof.relations[p.name] >= 0.8
             );
 
             if (targetCandidates.length > 0) {
               const targetProf = targetCandidates[Math.floor(Math.random() * targetCandidates.length)];
-              
+
               if (!targetProf.known_fragments) targetProf.known_fragments = [];
               if (!targetProf.known_fragments.includes(fragmentToShare)) {
                 targetProf.known_fragments.push(fragmentToShare);
-                
-                // NPC 分享信息也会引起目标部门的恐慌值和亲外度变化
+
                 targetProf.panic_value = Math.min(1.0, targetProf.panic_value + 0.05);
                 targetProf.ideology_value = Math.min(1.0, targetProf.ideology_value + 0.02);
-                
+
                 if (Math.random() < 0.8 && addLog) {
-                    addLog(`${prof.name} confidentially shared ${fragmentToShare} secrets with ${targetProf.name}`);
+                  addLog(`${prof.name} confidentially shared ${fragmentToShare} secrets with ${targetProf.name}`);
                 }
               }
             }
           }
         } else {
-          // 20% 概率 或 亲外度不够时的保底行为：内部管理 (Internal Management)
           if (prof.panic_value > 0.1) {
-              prof.panic_value = Math.max(0, prof.panic_value - 0.15);
-              if (Math.random() < 0.4 && addLog) {
-                  addLog(`${prof.name} suppressed their internal panic`);
-              }
+            prof.panic_value = Math.max(0, prof.panic_value - 0.15);
+            if (Math.random() < 0.4 && addLog) {
+              addLog(`${prof.name} suppressed their internal panic`);
+            }
           } else {
-              prof.productivity = Math.min(1.0, prof.productivity + 0.05);
+            prof.productivity = Math.min(1.0, prof.productivity + 0.05);
           }
         }
       }
@@ -498,11 +719,11 @@ export class GameEngine {
 
   private calculateScore(silo: Silo): any {
     const survival_points = silo.total_population * 1;
-    
+
     const diversity_points = (silo.professions?.filter(p => p.productivity > 0.5).length || 0) * 100;
-    
+
     const heritage_points = Math.floor((1.0 - silo.history_burden) * 500);
-    
+
     let avgIdeology = 0;
     silo.professions?.forEach(p => avgIdeology += p.ideology_value);
     avgIdeology /= (silo.professions?.length || 1);
@@ -535,9 +756,8 @@ export class GameEngine {
 
     let narrative = silo.victory_status.description + "\n\n";
 
-    // 补充社会状态描述
     const proForeignRatio = (silo.professions?.filter(p => p.ideology_value > 0.5).length || 0) / (silo.professions?.length || 1);
-    
+
     if (proForeignRatio > 0.7) {
       narrative += "地堡社会展现出了前所未有的开放性，人们渴望与外界建立联系。";
     } else if (proForeignRatio < 0.2) {
@@ -572,7 +792,6 @@ export class GameEngine {
     let allDeptsHaveFragments = true;
     if (silo.professions && silo.professions.length > 0) {
       for (const prof of silo.professions) {
-        // 去重后检查碎片数量
         const uniqueFragments = new Set(prof.known_fragments || []);
         if (uniqueFragments.size < 5) {
           allDeptsHaveFragments = false;
@@ -592,19 +811,18 @@ export class GameEngine {
       return;
     }
 
-    // 2. 时间胜利判定：由“1号地堡覆灭”事件触发后结算 (后续详细实现)
+    // 2. 时间胜利判定：由"1号地堡覆灭"事件触发后结算 (后续详细实现)
     if (silo.silo1_destroyed) {
-       silo.victory_status = {
-         is_won: true,
-         type: 'TIME',
-         description: '一号地堡已经覆灭，控制网络断开。40号地堡迎来了属于自己的时间。',
-       };
-       return;
+      silo.victory_status = {
+        is_won: true,
+        type: 'TIME',
+        description: '一号地堡已经覆灭，控制网络断开。40号地堡迎来了属于自己的时间。',
+      };
+      return;
     }
 
     // 3. 叛乱胜利
     if (agent && silo.total_population > 0) {
-      // 检查特工怀疑度是否超过阈值 (判定为个人失败)
       const SUSPICION_THRESHOLD = 1.0;
       if (agent.suspicion_level >= SUSPICION_THRESHOLD) {
         silo.victory_status = {
@@ -615,19 +833,14 @@ export class GameEngine {
         return;
       }
 
-      // 计算组织人数
       let organizedPopulation = this.getOrganizedPopulation(silo, agent);
 
-      // 叛乱基础条件：组织人数达到总人口 3%
       if (organizedPopulation >= silo.total_population * 0.03) {
-        
-        // 胜利条件 A：最终有至少 3% 任意人口幸存
-        const hasEnoughSurvivors = silo.total_population >= 10000 * 0.03; // 假设初始10000人，3%即300人
+        const hasEnoughSurvivors = silo.total_population >= 10000 * 0.03;
 
-        // 胜利条件 B：多部门劳动力逃离 (至少3个部门逃离倾向人数 > 10人)
         let escapingDeptsCount = 0;
         silo.professions?.forEach(p => {
-          const escapingPeople = p.population * p.ideology_value; // 亲外度 * 部门总人数
+          const escapingPeople = p.population * p.ideology_value;
           if (escapingPeople > 10) {
             escapingDeptsCount++;
           }
@@ -658,22 +871,18 @@ export class GameEngine {
 
   private checkOperationalConditions(silo: Silo, deltaYears: number): void {
     const proForeignDepts = silo.professions?.filter(p => p.ideology_value >= 0.1).length || 0;
-    
-    // 技术传承判定：至少三个部门保持开放思潮
+
     if (proForeignDepts < 3) {
-      // 历史包袱增加
       silo.history_burden += 0.05 * deltaYears;
-      
-      // 生产力缓慢下降
+
       silo.professions?.forEach(p => {
         p.productivity -= 0.02 * deltaYears;
         if (p.productivity < 0.1) p.productivity = 0.1;
       });
     } else {
-      // 条件满足时，历史包袱缓慢消退，生产力缓慢恢复
       silo.history_burden -= 0.01 * deltaYears;
       if (silo.history_burden < 0) silo.history_burden = 0;
-      
+
       silo.professions?.forEach(p => {
         p.productivity += 0.01 * deltaYears;
         if (p.productivity > 1.0) p.productivity = 1.0;
@@ -684,31 +893,26 @@ export class GameEngine {
   private updateIdeology(silo: Silo, deltaYears: number): void {
     silo.professions?.forEach((p) => {
       const stability = silo.cohesion;
-      
-      // 1. 原有的根据恐慌值和不稳定度产生的思潮偏移
+
       if (p.panic_value > 0.3 && stability < 0.5) {
         const drift = p.panic_value * (1.0 - stability) * deltaYears * 0.01;
         p.ideology_value += drift;
       }
 
-      // 2. 恐慌值转化为亲外度 (Panic -> Pro-Foreign)
-      // 设定转化率：每年将现有恐慌值的 10% 转化为亲外度
       if (p.panic_value > 0) {
         const conversionRate = 0.10;
         const convertedAmount = p.panic_value * conversionRate * deltaYears;
-        
+
         p.panic_value -= convertedAmount;
         if (p.panic_value < 0) p.panic_value = 0;
 
         p.ideology_value += convertedAmount;
       }
 
-      // 限制边界
       if (p.ideology_value > 1.0) p.ideology_value = 1.0;
       else if (p.ideology_value < 0) p.ideology_value = 0;
     });
 
-    // 3. 精神药物常态化投放：缓慢向 IT 部门思潮靠拢
     if (silo.traits?.includes('psychoactive_meds')) {
       const itDept = silo.professions?.find(p => p.name === 'IT');
       if (itDept) {
@@ -716,7 +920,7 @@ export class GameEngine {
         silo.professions?.forEach(p => {
           if (p.name !== 'IT') {
             const diff = targetIdeology - p.ideology_value;
-            p.ideology_value += diff * 0.05 * deltaYears; // 每年拉近 5%
+            p.ideology_value += diff * 0.05 * deltaYears;
           }
         });
       }
@@ -728,30 +932,24 @@ export class GameEngine {
     const isRebelling = silo.rebellion > 0.7;
 
     silo.resources?.forEach((r) => {
-      // 1. 计算总消耗
       const consumption = (this.perCapitaConsumption[r.type] || 0) * populationFactor;
 
-      // 2. 计算总产出
       let production = 0;
       const producers = this.resourceProducers[r.type] || [];
-      
+
       producers.forEach(profName => {
         const prof = silo.professions?.find(p => p.name === profName);
         if (prof) {
-          // 产出受效率影响：(1 - 恐慌值) * 生产力系数
           const efficiency = (1.0 - prof.panic_value) * prof.productivity;
-          // 基础产出设定为消耗的 1.2 倍（理想状态下盈余）
           const baseProd = (this.perCapitaConsumption[r.type] || 0) * 1.2 / producers.length;
           production += baseProd * efficiency;
         }
       });
 
-      // 3. 叛乱惩罚
       if (isRebelling) {
-        production *= 0.3; // 生产停滞
+        production *= 0.3;
       }
 
-      // 4. 结算
       r.net_balance = production - consumption;
       r.amount += r.net_balance * deltaYears;
 
@@ -785,21 +983,18 @@ export class GameEngine {
     if (silo.rebellion > 1.0) silo.rebellion = 1.0;
     else if (silo.rebellion < 0) silo.rebellion = 0;
 
-    // 4. 更新人口 (受资源不足与叛乱影响)
     this.updatePopulation(silo, deltaYears);
   }
 
   private updatePopulation(silo: Silo, deltaYears: number): void {
-    let deathRate = 0.001; // 基础死亡率
+    let deathRate = 0.001;
 
-    // 资源不足增加死亡率
     silo.resources?.forEach(r => {
       if (r.amount <= 0) {
         deathRate += 0.05;
       }
     });
 
-    // 高叛乱增加死亡率
     if (silo.rebellion > 0.8) {
       deathRate += (silo.rebellion - 0.8) * 0.2;
     }
@@ -808,4 +1003,40 @@ export class GameEngine {
     silo.total_population -= Math.floor(deaths);
     if (silo.total_population < 0) silo.total_population = 0;
   }
+
+  // ============ 配置常量 ============
+
+  // 每万人每年消耗基数
+  private readonly perCapitaConsumption: Record<string, number> = {
+    Food: 50.0,
+    Energy: 100.0,
+    Water: 80.0,
+    Materials: 20.0,
+  };
+
+  // 职业对资源的产出贡献
+  private readonly resourceProducers: Record<string, string[]> = {
+    Food: ['Agricultural'],
+    Energy: ['Mechanical', 'IT'],
+    Water: ['Mechanical', 'Supply'],
+    Materials: ['Mines', 'Mechanical'],
+  };
+
+  // 职业威望加成系数
+  private readonly professionFactors: Record<string, number> = {
+    Mayor: 0.5,
+    Judicial: 0.4,
+    IT: 0.3,
+    Police: 0.3,
+    Mechanical: 0.2,
+    Medical: 0.2,
+  };
+
+  // 特质威望加成系数
+  private readonly traitFactors: Record<string, number> = {
+    地堡土著: 0.1,
+    一号地堡密使: 0.5,
+    煽动者: 0.2,
+    守旧派: -0.1,
+  };
 }

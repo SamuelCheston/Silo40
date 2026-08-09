@@ -152,7 +152,11 @@ export interface Floor {
   updated_at: string;
 }
 
-export interface GameEvent {
+/**
+ * 剧情随机事件 (原 GameEvent，为避免与统一事件对象重名而改名)
+ * 注意：统一事件对象为 eventbus/types.ts 中的 GameEvent
+ */
+export interface StoryEvent {
   id: string;
   title: string;
   description: string;
