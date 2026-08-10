@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Box, Button, Text, VStack, SimpleGrid, Badge } from '@chakra-ui/react';
+import { PrizeWheel, type PrizeWheelHandle } from 'react-prize-wheel-advanced';
 
 interface SiloOption {
     label: string;
@@ -21,9 +22,9 @@ interface SiloWheelProps {
 
 export const SiloWheel: React.FC<SiloWheelProps> = ({ onSelect }) => {
     const [isSpinning, setIsSpinning] = useState(false);
-    const [rotation, setRotation] = useState(0);
     const [selectedOption, setSelectedOption] = useState<SiloOption | null>(null);
     const [showManual, setShowManual] = useState(false);
+    const wheelRef = useRef<PrizeWheelHandle>(null);
 
     const spin = () => {
         if (isSpinning) return;
@@ -32,16 +33,13 @@ export const SiloWheel: React.FC<SiloWheelProps> = ({ onSelect }) => {
         setSelectedOption(null);
         setShowManual(false);
 
-        const randomIndex = Math.floor(Math.random() * SILO_OPTIONS.length);
-        const segmentAngle = 360 / SILO_OPTIONS.length;
-        const targetRotation = 1800 + (randomIndex * segmentAngle) + (segmentAngle / 2);
-        
-        setRotation(prev => prev + targetRotation);
+        // Trigger the wheel library's spin animation (winner is picked internally at random)
+        wheelRef.current?.click();
+    };
 
-        setTimeout(() => {
-            setIsSpinning(false);
-            setSelectedOption(SILO_OPTIONS[randomIndex]);
-        }, 3000);
+    const handleFinished = (index: number) => {
+        setIsSpinning(false);
+        setSelectedOption(SILO_OPTIONS[index]);
     };
 
     const handleConfirm = () => {
@@ -52,87 +50,21 @@ export const SiloWheel: React.FC<SiloWheelProps> = ({ onSelect }) => {
 
     const handleManualSelect = (option: SiloOption) => {
         setSelectedOption(option);
-        const index = SILO_OPTIONS.findIndex(o => o.number === option.number);
-        const segmentAngle = 360 / SILO_OPTIONS.length;
-        const targetRotation = (index * segmentAngle) + (segmentAngle / 2);
-        const fullRotations = Math.floor(rotation / 360) * 360;
-        setRotation(fullRotations + targetRotation);
     };
 
     return (
         <VStack gap={6} w="full">
-            <Box position="relative" w="300px" h="300px">
-                {/* Pointer */}
-                <Box
-                    position="absolute"
-                    top="-10px"
-                    left="50%"
-                    transform="translateX(-50%)"
-                    zIndex={2}
-                    w="0"
-                    h="0"
-                    borderLeft="15px solid transparent"
-                    borderRight="15px solid transparent"
-                    borderTop="30px solid white"
-                />
-
-                {/* The Wheel */}
-                <Box
-                    w="full"
-                    h="full"
-                    borderRadius="full"
-                    position="relative"
-                    overflow="hidden"
-                    border="4px solid white"
-                    transition="transform 3s cubic-bezier(0.15, 0, 0.15, 1)"
-                    style={{ transform: `rotate(-${rotation}deg)` }}
-                >
-                    {SILO_OPTIONS.map((option, index) => {
-                        const angle = 360 / SILO_OPTIONS.length;
-                        const rotate = index * angle;
-                        return (
-                            <Box
-                                key={option.label}
-                                position="absolute"
-                                top="0"
-                                left="0"
-                                w="full"
-                                h="full"
-                                style={{
-                                    transform: `rotate(${rotate}deg)`,
-                                    transformOrigin: '50% 50%',
-                                }}
-                            >
-                                <Box
-                                    position="absolute"
-                                    top="0"
-                                    left="50%"
-                                    w="50%"
-                                    h="50%"
-                                    bg={option.color}
-                                    style={{
-                                        transform: `skewY(${90 - angle}deg)`,
-                                        transformOrigin: '0% 100%',
-                                    }}
-                                />
-                                <Box
-                                    position="absolute"
-                                    top="10px"
-                                    left="50%"
-                                    transform="translateX(-50%)"
-                                    textAlign="center"
-                                    w="80px"
-                                    style={{ transformOrigin: '50% 140px' }}
-                                >
-                                    <Text fontSize="10px" fontWeight="bold" color="white" textShadow="0 0 2px rgba(0,0,0,0.8)">
-                                        {option.number}
-                                    </Text>
-                                </Box>
-                            </Box>
-                        );
-                    })}
-                </Box>
-            </Box>
+            <PrizeWheel
+                ref={wheelRef}
+                segments={SILO_OPTIONS.map(o => String(o.number))}
+                segColors={SILO_OPTIONS.map(o => o.color)}
+                onFinished={handleFinished}
+                size={300}
+                primaryColor="#3182CE"
+                contrastColor="#FFFFFF"
+                buttonText="SPIN"
+                spinDuration={4}
+            />
 
             {!selectedOption && !isSpinning && (
                 <Button
