@@ -15,7 +15,7 @@ export const AVAILABLE_TRAITS: TraitOption[] = [
     { id: 'native', name: '地堡土著 (Silo Native)', description: '开局获得自己所在阶层各部门随机 10-15% 的人脉值。', cost: 3, type: 'AGENT' },
     { id: 'abundant', name: '资源充沛 (Abundant Resources)', description: '初始地堡食物与能源资源翻倍。', cost: 3, type: 'SILO' },
     { id: 'leak', name: '信息泄漏 (Information Leak)', description: '平民阶层初始亲外度 (Pro-Foreign) 增加。', cost: 2, type: 'SILO' },
-    { id: 'psychoactive_meds', name: '精神药物常态化投放 (Psychoactive Meds)', description: '获得额外点数。所有部门的思潮会随时间推移缓慢偏向 IT 部门的思潮。', cost: -3, type: 'SILO' },
+    { id: 'psychoactive_meds', name: '精神药物常态化投放 (Psychoactive Meds)', description: '所有部门的思潮会随时间推移缓慢偏向 IT 部门的思潮。', cost: 3, type: 'SILO' },
 ];
 
 export const AVAILABLE_DEPARTMENTS = [
