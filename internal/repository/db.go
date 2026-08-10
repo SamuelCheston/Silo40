@@ -24,6 +24,8 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		&model.Resource{},
 		&model.Profession{},
 		&model.Floor{},
+		&model.Resident{},
+		&model.Faction{},
 		&model.Agent{},
 		&model.Connection{},
 	)

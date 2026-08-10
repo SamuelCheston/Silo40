@@ -91,6 +91,8 @@ func gainFragment(view *ActorView, deptName string, count int) []string {
 		switch v := view.agentOrProf(); {
 		case v.agent != nil:
 			v.agent.KnownFragments = append(v.agent.KnownFragments, frag)
+		case v.resident != nil:
+			v.resident.KnownFragments = append(v.resident.KnownFragments, frag)
 		case v.prof != nil:
 			v.prof.KnownFragments = append(v.prof.KnownFragments, frag)
 		}
@@ -125,13 +127,17 @@ func removeFragments(silo *model.Silo, deptName string, count int) []string {
 }
 
 type actorTarget struct {
-	agent *model.Agent
-	prof  *model.Profession
+	agent    *model.Agent
+	prof     *model.Profession
+	resident *model.Resident
 }
 
 func (v *ActorView) agentOrProf() actorTarget {
 	if v.agent != nil {
 		return actorTarget{agent: v.agent}
+	}
+	if v.resident != nil {
+		return actorTarget{resident: v.resident}
 	}
 	return actorTarget{prof: v.prof}
 }
@@ -141,9 +147,9 @@ func init() {
 		// ================= Mayor (政治领袖) =================
 		{
 			ID: "MAYOR_PUBLIC_ADDRESS", Profession: "Mayor",
-			Label: "Public Address",
+			Label:       "Public Address",
 			Description: "Deliver a rousing speech to the silo. Legitimacy +6%, all departments panic -4%, cohesion +3%.",
-			APCost: 15, TargetType: TargetNone, SuspicionPenalty: 0.01,
+			APCost:      15, TargetType: TargetNone, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				silo.Legitimacy = clamp(silo.Legitimacy+0.06, 0, 1)
 				silo.Cohesion = clamp(silo.Cohesion+0.03, 0, 1)
@@ -155,9 +161,9 @@ func init() {
 		},
 		{
 			ID: "MAYOR_DIRECT_ORDER", Profession: "Mayor",
-			Label: "Direct Order",
+			Label:       "Direct Order",
 			Description: "Issue an executive order to a department. Target productivity +10%, panic -5%.",
-			APCost: 20, TargetType: TargetDept, SuspicionPenalty: 0.02,
+			APCost:      20, TargetType: TargetDept, SuspicionPenalty: 0.02,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -172,9 +178,9 @@ func init() {
 		// ================= Judicial (司法部) =================
 		{
 			ID: "JUDICIAL_SEARCH_WARRANT", Profession: "Judicial",
-			Label: "Search Warrant",
+			Label:       "Search Warrant",
 			Description: "Serve a search warrant on a department to seize intel. Gain 1 fragment; target panic +3%.",
-			APCost: 15, TargetType: TargetDept, SuspicionPenalty: 0.02,
+			APCost:      15, TargetType: TargetDept, SuspicionPenalty: 0.02,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -190,9 +196,9 @@ func init() {
 		},
 		{
 			ID: "JUDICIAL_ARREST", Profession: "Judicial",
-			Label: "Arrest",
+			Label:       "Arrest",
 			Description: "Arrest key figures in a department. Target action points -20, panic +10%, legitimacy +4%.",
-			APCost: 25, TargetType: TargetDept, SuspicionPenalty: 0.03,
+			APCost:      25, TargetType: TargetDept, SuspicionPenalty: 0.03,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -208,9 +214,9 @@ func init() {
 		// ================= IT (IT部门) =================
 		{
 			ID: "IT_SURVEILLANCE", Profession: "IT",
-			Label: "Surveillance",
+			Label:       "Surveillance",
 			Description: "Place a department under full surveillance. Connection +15% with the target (leverage of fear).",
-			APCost: 15, TargetType: TargetDept, SuspicionPenalty: 0,
+			APCost:      15, TargetType: TargetDept, SuspicionPenalty: 0,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -222,9 +228,9 @@ func init() {
 		},
 		{
 			ID: "IT_COVER_UP", Profession: "IT",
-			Label: "Cover-Up",
+			Label:       "Cover-Up",
 			Description: "Erase sensitive records from a department. Remove 1-2 fragments (blocks the information victory); safeguard risk +3%.",
-			APCost: 25, TargetType: TargetDept, SuspicionPenalty: 0,
+			APCost:      25, TargetType: TargetDept, SuspicionPenalty: 0,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -247,9 +253,9 @@ func init() {
 		// ================= Police (警察) =================
 		{
 			ID: "POLICE_INTERROGATE", Profession: "Police",
-			Label: "Interrogate",
+			Label:       "Interrogate",
 			Description: "Interrogate detainees from a department. Gain 1 fragment; target panic +5%.",
-			APCost: 15, TargetType: TargetDept, SuspicionPenalty: 0.02,
+			APCost:      15, TargetType: TargetDept, SuspicionPenalty: 0.02,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -265,9 +271,9 @@ func init() {
 		},
 		{
 			ID: "POLICE_CRACKDOWN", Profession: "Police",
-			Label: "Crackdown",
+			Label:       "Crackdown",
 			Description: "Suppress a department by force. Target panic -15%, ideology -5%, productivity -3%.",
-			APCost: 25, TargetType: TargetDept, SuspicionPenalty: 0.03,
+			APCost:      25, TargetType: TargetDept, SuspicionPenalty: 0.03,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -283,9 +289,9 @@ func init() {
 		// ================= Medical (医疗部) =================
 		{
 			ID: "MEDICAL_TREAT", Profession: "Medical",
-			Label: "Community Treatment",
+			Label:       "Community Treatment",
 			Description: "Deploy medics to a department. Target panic -12%, productivity +5%.",
-			APCost: 15, TargetType: TargetDept, SuspicionPenalty: 0.01,
+			APCost:      15, TargetType: TargetDept, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -298,9 +304,9 @@ func init() {
 		},
 		{
 			ID: "MEDICAL_QUARANTINE", Profession: "Medical",
-			Label: "Quarantine",
+			Label:       "Quarantine",
 			Description: "Quarantine a department \"for its own safety\". Target panic -20%, but productivity -12% and ideology -4%.",
-			APCost: 20, TargetType: TargetDept, SuspicionPenalty: 0.02,
+			APCost:      20, TargetType: TargetDept, SuspicionPenalty: 0.02,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -316,9 +322,9 @@ func init() {
 		// ================= Supply (供给部) =================
 		{
 			ID: "SUPPLY_RATION", Profession: "Supply",
-			Label: "Ration Allocation",
+			Label:       "Ration Allocation",
 			Description: "Reallocate stockpiles. Add +150 to a chosen resource (Energy / Materials / Supplies).",
-			APCost: 15, TargetType: TargetResource, SuspicionPenalty: 0.01,
+			APCost:      15, TargetType: TargetResource, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				if target == "" {
 					return model.ActionResult{Executed: false, Message: "Invalid resource target."}
@@ -329,9 +335,9 @@ func init() {
 		},
 		{
 			ID: "SUPPLY_SHELTER", Profession: "Supply",
-			Label: "Shelter",
+			Label:       "Shelter",
 			Description: "Smuggle a department under your protection. Target panic -10%, connection +15%, productivity +5%.",
-			APCost: 20, TargetType: TargetDept, SuspicionPenalty: 0.01,
+			APCost:      20, TargetType: TargetDept, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -347,9 +353,9 @@ func init() {
 		// ================= Mechanical (机械部) =================
 		{
 			ID: "MECHANICAL_OVERHAUL", Profession: "Mechanical",
-			Label: "Overhaul",
+			Label:       "Overhaul",
 			Description: "Overhaul the silo machinery. Energy +60, Materials +30, own productivity +5%.",
-			APCost: 15, TargetType: TargetNone, SuspicionPenalty: 0.01,
+			APCost:      15, TargetType: TargetNone, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				addResource(silo, "Energy", 60)
 				addResource(silo, "Materials", 30)
@@ -359,9 +365,9 @@ func init() {
 		},
 		{
 			ID: "MECHANICAL_PIPE_TAP", Profession: "Mechanical",
-			Label: "Pipe Tap",
+			Label:       "Pipe Tap",
 			Description: "Eavesdrop through the pipes that carry every whisper. Gain 1 fragment from a department.",
-			APCost: 15, TargetType: TargetDept, SuspicionPenalty: 0.02,
+			APCost:      15, TargetType: TargetDept, SuspicionPenalty: 0.02,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {
@@ -378,9 +384,9 @@ func init() {
 		// ================= Mines (矿工) =================
 		{
 			ID: "MINES_DEEP_EXCAVATION", Profession: "Mines",
-			Label: "Deep Excavation",
+			Label:       "Deep Excavation",
 			Description: "Push the mines deeper. Materials +120, own productivity +5%.",
-			APCost: 15, TargetType: TargetNone, SuspicionPenalty: 0.005,
+			APCost:      15, TargetType: TargetNone, SuspicionPenalty: 0.005,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				addResource(silo, "Materials", 120)
 				view.SetProductivity(clamp(view.Productivity()+0.05, 0, 1))
@@ -389,9 +395,9 @@ func init() {
 		},
 		{
 			ID: "MINES_TUNNEL_NETWORK", Profession: "Mines",
-			Label: "Tunnel Network",
+			Label:       "Tunnel Network",
 			Description: "Spin a network through the lower tunnels. All commoner departments connection +10%, ideology +3%.",
-			APCost: 20, TargetType: TargetNone, SuspicionPenalty: 0.005,
+			APCost:      20, TargetType: TargetNone, SuspicionPenalty: 0.005,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				for i := range silo.Professions {
 					p := &silo.Professions[i]
@@ -407,9 +413,9 @@ func init() {
 		// ================= Agricultural (农业) =================
 		{
 			ID: "AGRICULTURAL_INTENSIVE_HARVEST", Profession: "Agricultural",
-			Label: "Intensive Harvest",
+			Label:       "Intensive Harvest",
 			Description: "Work the hydroponics around the clock. Supplies +200, own productivity +8%.",
-			APCost: 15, TargetType: TargetNone, SuspicionPenalty: 0.01,
+			APCost:      15, TargetType: TargetNone, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				addResource(silo, "Supplies", 200)
 				view.SetProductivity(clamp(view.Productivity()+0.08, 0, 1))
@@ -418,9 +424,9 @@ func init() {
 		},
 		{
 			ID: "AGRICULTURAL_FIELD_GOSSIP", Profession: "Agricultural",
-			Label: "Field Gossip",
+			Label:       "Field Gossip",
 			Description: "Let rumors ripen in the fields. Gain 1 fragment from a department; target ideology +3%.",
-			APCost: 10, TargetType: TargetDept, SuspicionPenalty: 0.015,
+			APCost:      10, TargetType: TargetDept, SuspicionPenalty: 0.015,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				dept := findDept(silo, target)
 				if dept == nil {

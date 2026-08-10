@@ -12,6 +12,18 @@ func TestEngineSmoke(t *testing.T) {
 	silo := CreateInitialSilo("Silo 40", 122, []string{"shadowy"})
 	agent := CreateInitialAgent("Juliette", "Mechanical", []string{"shadowy"}, silo)
 
+	if len(silo.Residents) != silo.TotalPopulation {
+		t.Fatalf("expected %d residents, got %d", silo.TotalPopulation, len(silo.Residents))
+	}
+	if len(silo.Factions) == 0 {
+		t.Fatalf("expected implicit factions to be generated")
+	}
+	for _, faction := range silo.Factions {
+		if faction.RepresentativeResidentID == 0 {
+			t.Fatalf("faction %s has no representative", faction.Name)
+		}
+	}
+
 	// 推进 120 个月 (10 年)
 	for i := 0; i < 120; i++ {
 		logs, stories := e.UpdateSiloState(silo, 1.0/12.0, agent)

@@ -107,6 +107,7 @@ export interface Silo {
   resources: Resource[];
   professions: Profession[];
   floors: Floor[];
+  factions?: Faction[];
   created_at: string;
   updated_at: string;
 }
@@ -163,6 +164,20 @@ export interface Floor {
   zone: string;
   stability: number;
   population: number;
+  updated_at: string;
+}
+
+export interface Faction {
+  id: number;
+  silo_id: number;
+  name: string;
+  signature: string;
+  tags: string[];
+  member_count: number;
+  representative_resident_id: number;
+  representative_name: string;
+  influence: number;
+  cohesion: number;
   updated_at: string;
 }
 

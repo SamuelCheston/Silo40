@@ -99,6 +99,18 @@ func (s *GameService) persist() error {
 	for i := range silo.Floors {
 		silo.Floors[i].SiloID = ActiveSiloID
 	}
+	for i := range silo.Factions {
+		silo.Factions[i].SiloID = ActiveSiloID
+		if silo.Factions[i].ID == 0 {
+			silo.Factions[i].ID = uint(i + 1)
+		}
+	}
+	for i := range silo.Residents {
+		silo.Residents[i].SiloID = ActiveSiloID
+		if silo.Residents[i].ID == 0 {
+			silo.Residents[i].ID = uint(i + 1)
+		}
+	}
 	for i := range agent.Connections {
 		agent.Connections[i].AgentID = ActiveAgentID
 	}
@@ -117,6 +129,22 @@ func (s *GameService) persist() error {
 		_ = tx.Where("silo_id = ?", ActiveSiloID).Find(&oldFloors).Error
 		for _, f := range oldFloors {
 			if err := tx.Delete(&model.Floor{}, f.ID).Error; err != nil {
+				return err
+			}
+		}
+
+		var oldResidents []model.Resident
+		_ = tx.Where("silo_id = ?", ActiveSiloID).Find(&oldResidents).Error
+		for _, resident := range oldResidents {
+			if err := tx.Delete(&model.Resident{}, resident.ID).Error; err != nil {
+				return err
+			}
+		}
+
+		var oldFactions []model.Faction
+		_ = tx.Where("silo_id = ?", ActiveSiloID).Find(&oldFactions).Error
+		for _, faction := range oldFactions {
+			if err := tx.Delete(&model.Faction{}, faction.ID).Error; err != nil {
 				return err
 			}
 		}
@@ -162,6 +190,12 @@ func (s *GameService) persist() error {
 		for i := range silo.Floors {
 			silo.Floors[i].SiloID = ActiveSiloID
 		}
+		for i := range silo.Factions {
+			silo.Factions[i].SiloID = ActiveSiloID
+		}
+		for i := range silo.Residents {
+			silo.Residents[i].SiloID = ActiveSiloID
+		}
 		if err := tx.Create(&silo.Resources).Error; err != nil {
 			return err
 		}
@@ -169,6 +203,12 @@ func (s *GameService) persist() error {
 			return err
 		}
 		if err := tx.Create(&silo.Floors).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&silo.Factions).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&silo.Residents).Error; err != nil {
 			return err
 		}
 		if len(agent.Connections) > 0 {
@@ -199,7 +239,7 @@ func (s *GameService) Resume() error {
 	}
 
 	var silo model.Silo
-	if err := s.db.Preload("Resources").Preload("Professions").Preload("Floors").
+	if err := s.db.Preload("Resources").Preload("Professions").Preload("Floors").Preload("Residents").Preload("Factions").
 		First(&silo, ActiveSiloID).Error; err != nil {
 		return err
 	}
@@ -283,7 +323,7 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 	s.cacheSnapshot()
 
 	return &model.TickResult{
-		Silo:                *s.silo,
+		Silo:                s.publicSiloSnapshot(),
 		Agent:               *s.agent,
 		Logs:                logs,
 		Stories:             stories,
@@ -343,7 +383,7 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 	s.cacheSnapshot()
 
 	return &model.ActionOutcome{
-		Silo:                *s.silo,
+		Silo:                s.publicSiloSnapshot(),
 		Agent:               *s.agent,
 		Result:              result,
 		Logs:                logs,
@@ -380,7 +420,7 @@ func (s *GameService) endingNarrative() string {
 func (s *GameService) buildState() *model.GameState {
 	gameOver := s.gameOver()
 	return &model.GameState{
-		Silo:                *s.silo,
+		Silo:                s.publicSiloSnapshot(),
 		Agent:               *s.agent,
 		OrganizedPopulation: s.organizedPopulation(),
 		GameOver:            gameOver,
@@ -388,4 +428,15 @@ func (s *GameService) buildState() *model.GameState {
 		VictoryStatus:       s.silo.VictoryStatus,
 		ProfessionActions:   engine.GetProfessionActionMeta(s.agent.Profession),
 	}
+}
+
+func (s *GameService) publicSiloSnapshot() model.Silo {
+	if s.silo == nil {
+		return model.Silo{}
+	}
+	snap := *s.silo
+	// Residents stay in the backend/session snapshot for simulation, but we avoid
+	// returning the full population on every UI round-trip.
+	snap.Residents = nil
+	return snap
 }

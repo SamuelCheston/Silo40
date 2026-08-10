@@ -15,14 +15,16 @@ import (
 type ActorKind string
 
 const (
-	ActorPlayer ActorKind = "PLAYER"
-	ActorNPC    ActorKind = "NPC"
+	ActorPlayer   ActorKind = "PLAYER"
+	ActorNPC      ActorKind = "NPC"
+	ActorResident ActorKind = "RESIDENT"
 )
 
 type ActorRef struct {
-	Kind          ActorKind
-	AgentID       uint // PLAYER：特工 id
-	ProfessionID  uint // 被控制的部门 id (NPC 必填；PLAYER 由 profession 推导)
+	Kind         ActorKind
+	AgentID      uint // PLAYER：特工 id
+	ProfessionID uint // 被控制的部门 id (NPC 必填；PLAYER 由 profession 推导)
+	ResidentID   uint // RESIDENT：居民 id
 }
 
 func CreateActorRefForAgent(agent *model.Agent, silo *model.Silo) ActorRef {
@@ -40,12 +42,17 @@ func CreateActorRefForProfession(prof *model.Profession) ActorRef {
 	return ActorRef{Kind: ActorNPC, ProfessionID: prof.ID}
 }
 
+func CreateActorRefForResident(resident *model.Resident) ActorRef {
+	return ActorRef{Kind: ActorResident, ResidentID: resident.ID, ProfessionID: resident.ProfessionID}
+}
+
 // ActorView 统一状态视图：对 Agent / Profession 提供同构读写接口
 type ActorView struct {
-	Ref   ActorRef
-	agent *model.Agent
-	prof  *model.Profession
-	silo  *model.Silo
+	Ref      ActorRef
+	agent    *model.Agent
+	prof     *model.Profession
+	resident *model.Resident
+	silo     *model.Silo
 }
 
 func CreateActorView(ref ActorRef, silo *model.Silo, agent *model.Agent) (*ActorView, error) {
@@ -54,6 +61,14 @@ func CreateActorView(ref ActorRef, silo *model.Silo, agent *model.Agent) (*Actor
 			return nil, fmt.Errorf("PLAYER actor requires agent reference")
 		}
 		return &ActorView{Ref: ref, agent: agent, silo: silo}, nil
+	}
+	if ref.Kind == ActorResident {
+		for i := range silo.Residents {
+			if silo.Residents[i].ID == ref.ResidentID {
+				return &ActorView{Ref: ref, resident: &silo.Residents[i], silo: silo}, nil
+			}
+		}
+		return nil, fmt.Errorf("resident actor not found: %d", ref.ResidentID)
 	}
 	for i := range silo.Professions {
 		if silo.Professions[i].ID == ref.ProfessionID {
@@ -70,6 +85,9 @@ func (v *ActorView) Profession() string {
 	if v.agent != nil {
 		return v.agent.Profession
 	}
+	if v.resident != nil {
+		return v.resident.Profession
+	}
 	return v.prof.Name
 }
 
@@ -81,6 +99,12 @@ func (v *ActorView) Label() string {
 		}
 		return v.agent.Profession
 	}
+	if v.resident != nil {
+		if v.resident.Name != "" {
+			return v.resident.Name
+		}
+		return v.resident.Profession
+	}
 	return v.prof.Name
 }
 
@@ -90,12 +114,17 @@ func (v *ActorView) ActionPoints() float64 {
 	if v.agent != nil {
 		return v.agent.ActionPoints
 	}
+	if v.resident != nil {
+		return v.resident.ActionPoints
+	}
 	return v.prof.ActionPoints
 }
 
 func (v *ActorView) SetActionPoints(val float64) {
 	if v.agent != nil {
 		v.agent.ActionPoints = val
+	} else if v.resident != nil {
+		v.resident.ActionPoints = val
 	} else {
 		v.prof.ActionPoints = val
 	}
@@ -105,12 +134,17 @@ func (v *ActorView) SuspicionLevel() float64 {
 	if v.agent != nil {
 		return v.agent.SuspicionLevel
 	}
+	if v.resident != nil {
+		return v.resident.SuspicionLevel
+	}
 	return v.prof.SuspicionLevel
 }
 
 func (v *ActorView) SetSuspicionLevel(val float64) {
 	if v.agent != nil {
 		v.agent.SuspicionLevel = val
+	} else if v.resident != nil {
+		v.resident.SuspicionLevel = val
 	} else {
 		v.prof.SuspicionLevel = val
 	}
@@ -120,12 +154,17 @@ func (v *ActorView) PoliticalPrestige() float64 {
 	if v.agent != nil {
 		return v.agent.PoliticalPrestige
 	}
+	if v.resident != nil {
+		return v.resident.PoliticalPrestige
+	}
 	return v.prof.PoliticalPrestige
 }
 
 func (v *ActorView) SetPoliticalPrestige(val float64) {
 	if v.agent != nil {
 		v.agent.PoliticalPrestige = val
+	} else if v.resident != nil {
+		v.resident.PoliticalPrestige = val
 	} else {
 		v.prof.PoliticalPrestige = val
 	}
@@ -135,12 +174,17 @@ func (v *ActorView) PropagandaLevel() float64 {
 	if v.agent != nil {
 		return v.agent.PropagandaLevel
 	}
+	if v.resident != nil {
+		return v.resident.PropagandaLevel
+	}
 	return v.prof.PropagandaLevel
 }
 
 func (v *ActorView) SetPropagandaLevel(val float64) {
 	if v.agent != nil {
 		v.agent.PropagandaLevel = val
+	} else if v.resident != nil {
+		v.resident.PropagandaLevel = val
 	} else {
 		v.prof.PropagandaLevel = val
 	}
@@ -149,6 +193,12 @@ func (v *ActorView) SetPropagandaLevel(val float64) {
 func (v *ActorView) OrganizationFactor() float64 {
 	if v.agent != nil {
 		return v.agent.OrganizationFactor
+	}
+	if v.resident != nil {
+		if v.resident.OrganizationFactor == 0 {
+			return 1.0
+		}
+		return v.resident.OrganizationFactor
 	}
 	if v.prof.OrganizationFactor == 0 {
 		return 1.0
@@ -159,6 +209,8 @@ func (v *ActorView) OrganizationFactor() float64 {
 func (v *ActorView) SetOrganizationFactor(val float64) {
 	if v.agent != nil {
 		v.agent.OrganizationFactor = val
+	} else if v.resident != nil {
+		v.resident.OrganizationFactor = val
 	} else {
 		v.prof.OrganizationFactor = val
 	}
@@ -168,6 +220,13 @@ func (v *ActorView) SetOrganizationFactor(val float64) {
 func (v *ActorView) Productivity() float64 {
 	if v.prof != nil {
 		return v.prof.Productivity
+	}
+	if v.resident != nil {
+		for i := range v.silo.Professions {
+			if v.silo.Professions[i].ID == v.resident.ProfessionID {
+				return v.silo.Professions[i].Productivity
+			}
+		}
 	}
 	for i := range v.silo.Professions {
 		if v.silo.Professions[i].Name == v.agent.Profession {
@@ -181,6 +240,14 @@ func (v *ActorView) SetProductivity(val float64) {
 	if v.prof != nil {
 		v.prof.Productivity = val
 		return
+	}
+	if v.resident != nil {
+		for i := range v.silo.Professions {
+			if v.silo.Professions[i].ID == v.resident.ProfessionID {
+				v.silo.Professions[i].Productivity = val
+				return
+			}
+		}
 	}
 	for i := range v.silo.Professions {
 		if v.silo.Professions[i].Name == v.agent.Profession {
@@ -211,6 +278,12 @@ func (v *ActorView) Traits() []string {
 		}
 		return v.agent.Traits
 	}
+	if v.resident != nil {
+		if v.resident.Tags == nil {
+			v.resident.Tags = []string{}
+		}
+		return v.resident.Tags
+	}
 	if v.prof.Traits == nil {
 		v.prof.Traits = []string{}
 	}
@@ -223,6 +296,12 @@ func (v *ActorView) KnownFragments() []string {
 			v.agent.KnownFragments = []string{}
 		}
 		return v.agent.KnownFragments
+	}
+	if v.resident != nil {
+		if v.resident.KnownFragments == nil {
+			v.resident.KnownFragments = []string{}
+		}
+		return v.resident.KnownFragments
 	}
 	if v.prof.KnownFragments == nil {
 		v.prof.KnownFragments = []string{}
@@ -241,6 +320,13 @@ func (v *ActorView) ConnectionValues() []float64 {
 		}
 		return vals
 	}
+	if v.resident != nil {
+		vals := make([]float64, 0, len(v.resident.Relations))
+		for _, val := range v.resident.Relations {
+			vals = append(vals, val)
+		}
+		return vals
+	}
 	vals := make([]float64, 0, len(v.prof.Relations))
 	for _, val := range v.prof.Relations {
 		vals = append(vals, val)
@@ -253,6 +339,14 @@ func (v *ActorView) GetConnection(professionID uint) float64 {
 		for _, c := range v.agent.Connections {
 			if c.ProfessionID == professionID {
 				return c.Value
+			}
+		}
+		return 0
+	}
+	if v.resident != nil {
+		for i := range v.silo.Professions {
+			if v.silo.Professions[i].ID == professionID {
+				return v.resident.Relations[v.silo.Professions[i].Name]
 			}
 		}
 		return 0
@@ -281,6 +375,18 @@ func (v *ActorView) SetConnection(professionID uint, value float64) {
 			ProfessionID: professionID,
 			Value:        value,
 		})
+		return
+	}
+	if v.resident != nil {
+		for i := range v.silo.Professions {
+			if v.silo.Professions[i].ID == professionID {
+				if v.resident.Relations == nil {
+					v.resident.Relations = map[string]float64{}
+				}
+				v.resident.Relations[v.silo.Professions[i].Name] = value
+				return
+			}
+		}
 		return
 	}
 	for i := range v.silo.Professions {

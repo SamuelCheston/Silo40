@@ -27,6 +27,8 @@ func CreateInitialSilo(name string, initialYear int, traitIds []string) *model.S
 		Resources:       []model.Resource{},
 		Professions:     []model.Profession{},
 		Floors:          []model.Floor{},
+		Residents:       []model.Resident{},
+		Factions:        []model.Faction{},
 	}
 
 	// 1. Initialize 144 Floors
@@ -126,6 +128,9 @@ func CreateInitialSilo(name string, initialYear int, traitIds []string) *model.S
 		}
 	}
 
+	// 4. Initialize explicit residents and implicit factions after world traits settle
+	initResidentsAndFactions(silo)
+
 	return silo
 }
 
@@ -195,18 +200,18 @@ func min1(v float64) float64 {
 // CreateInitialAgent 创建初始特工
 func CreateInitialAgent(name, profession string, traitIds []string, silo *model.Silo) *model.Agent {
 	agent := &model.Agent{
-		ID:                1,
-		UserID:            1,
-		Name:              name,
-		Profession:        profession,
-		Traits:            []string{},
-		PoliticalPrestige: 10,
-		PoliticalPoints:   0,
-		ActionPoints:      50,
+		ID:                 1,
+		UserID:             1,
+		Name:               name,
+		Profession:         profession,
+		Traits:             []string{},
+		PoliticalPrestige:  10,
+		PoliticalPoints:    0,
+		ActionPoints:       50,
 		OrganizationFactor: 1.0,
-		PropagandaLevel:   0.0,
-		SuspicionLevel:    0.0,
-		Connections:       []model.Connection{},
+		PropagandaLevel:    0.0,
+		SuspicionLevel:     0.0,
+		Connections:        []model.Connection{},
 	}
 	// 默认掌握本部门的碎片
 	for _, f := range model.ALL_FRAGMENTS {

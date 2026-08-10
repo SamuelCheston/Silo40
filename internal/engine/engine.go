@@ -9,16 +9,16 @@ import (
 
 // ============ 统一事件类型 (一切行为都是事件) ============
 const (
-	EVENT_TIME_TICK        = "TIME_TICK"         // 时间推进基准
-	EVENT_AGENT_UPDATE     = "AGENT_UPDATE"      // 特工状态更新
-	EVENT_RESOURCE_UPDATE  = "RESOURCE_UPDATE"   // 资源结算
-	EVENT_METRICS_UPDATE   = "METRICS_UPDATE"    // 地堡指标更新
-	EVENT_IDEOLOGY_UPDATE  = "IDEOLOGY_UPDATE"   // 思潮演化
-	EVENT_NPC_ACTIONS      = "NPC_ACTIONS"       // NPC 自主行为
-	EVENT_VICTORY_CHECK    = "VICTORY_CHECK"     // 胜利判定
-	EVENT_STORY_EVENT      = STORY_EVENT_TYPE    // 剧情随机事件
-	EVENT_ACTOR_ACTION     = "ACTOR_ACTION"      // 任意 Actor (玩家/NPC) 动作
-	EVENT_GAME_OVER        = "GAME_OVER"         // 游戏结束
+	EVENT_TIME_TICK       = "TIME_TICK"       // 时间推进基准
+	EVENT_AGENT_UPDATE    = "AGENT_UPDATE"    // 特工状态更新
+	EVENT_RESOURCE_UPDATE = "RESOURCE_UPDATE" // 资源结算
+	EVENT_METRICS_UPDATE  = "METRICS_UPDATE"  // 地堡指标更新
+	EVENT_IDEOLOGY_UPDATE = "IDEOLOGY_UPDATE" // 思潮演化
+	EVENT_NPC_ACTIONS     = "NPC_ACTIONS"     // NPC 自主行为
+	EVENT_VICTORY_CHECK   = "VICTORY_CHECK"   // 胜利判定
+	EVENT_STORY_EVENT     = STORY_EVENT_TYPE  // 剧情随机事件
+	EVENT_ACTOR_ACTION    = "ACTOR_ACTION"    // 任意 Actor (玩家/NPC) 动作
+	EVENT_GAME_OVER       = "GAME_OVER"       // 游戏结束
 )
 
 // GameEngine 事件驱动版游戏引擎
@@ -36,10 +36,10 @@ type GameEngine struct {
 	EventEngine     *EventEngine
 
 	// 内部结果收集
-	idCounter  int
-	tickStories []*model.StoryEvent
+	idCounter    int
+	tickStories  []*model.StoryEvent
 	actionResult *model.ActionResult
-	logs        []string
+	logs         []string
 
 	// 配置常量
 	perCapitaConsumption map[string]float64
@@ -57,8 +57,8 @@ func NewGameEngine() *GameEngine {
 		TriggerEngine:   NewTriggerEngine(),
 		EventEngine:     NewEventEngine(),
 		perCapitaConsumption: map[string]float64{
-			"Supplies": 130.0,
-			"Energy":   100.0,
+			"Supplies":  130.0,
+			"Energy":    100.0,
 			"Materials": 20.0,
 		},
 		resourceProducers: map[string][]string{
@@ -75,10 +75,10 @@ func NewGameEngine() *GameEngine {
 			"Medical":    0.2,
 		},
 		traitFactors: map[string]float64{
-			"地堡土著":     0.1,
+			"地堡土著":   0.1,
 			"一号地堡密使": 0.5,
-			"煽动者":       0.2,
-			"守旧派":       -0.1,
+			"煽动者":    0.2,
+			"守旧派":    -0.1,
 		},
 	}
 	e.RuleEngine = NewRuleEngine(e.ConditionEngine, e.ScriptEngine, e.Bus)
@@ -448,6 +448,8 @@ func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYe
 				at := view.agentOrProf()
 				if at.agent != nil {
 					at.agent.KnownFragments = append(at.agent.KnownFragments, randomFragment)
+				} else if at.resident != nil {
+					at.resident.KnownFragments = append(at.resident.KnownFragments, randomFragment)
 				} else if at.prof != nil {
 					at.prof.KnownFragments = append(at.prof.KnownFragments, randomFragment)
 				}
@@ -710,6 +712,8 @@ func (e *GameEngine) gatherInformation(silo *model.Silo, view *ActorView, action
 		at := view.agentOrProf()
 		if at.agent != nil {
 			at.agent.KnownFragments = append(at.agent.KnownFragments, fragmentToGather)
+		} else if at.resident != nil {
+			at.resident.KnownFragments = append(at.resident.KnownFragments, fragmentToGather)
 		} else if at.prof != nil {
 			at.prof.KnownFragments = append(at.prof.KnownFragments, fragmentToGather)
 		}
@@ -879,6 +883,12 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 		return
 	}
 
+	// 1. Keep resident / faction state in sync, but do not drive political
+	// decisions from factions yet. Profession decisions remain the active
+	// NPC production-side behavior.
+	updateResidentPopulationState(silo, deltaYears)
+	RebuildImplicitFactions(silo)
+
 	var npcProfs []*model.Profession
 	for i := range silo.Professions {
 		p := &silo.Professions[i]
@@ -887,7 +897,7 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 		}
 	}
 
-	// 1. 统一经济结算
+	// 2. Profession-side economic settlement
 	for _, prof := range npcProfs {
 		view, err := CreateActorView(CreateActorRefForProfession(prof), silo, nil)
 		if err != nil {
@@ -896,7 +906,7 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 		e.UpdateActorState(view, silo, deltaYears, addLog)
 	}
 
-	// 2. 决策层：预算内选择动作，走统一执行管线
+	// 3. Profession-side decisions remain active for now
 	var brain NpcBrain
 	for _, prof := range npcProfs {
 		view, err := CreateActorView(CreateActorRefForProfession(prof), silo, nil)
