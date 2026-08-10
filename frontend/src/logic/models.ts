@@ -221,7 +221,6 @@ export interface PopulationCohort {
   name: string;
   count: number;
   home_zone: string;
-  loyalty: number;
   influence: number;
   action_points: number;
   political_prestige: number;

@@ -9,6 +9,7 @@ import (
 const (
 	IdeologyProForeign = "pro_foreign"
 	IdeologyDemocracy  = "democracy"
+	IdeologyLoyalty    = "loyalty"
 )
 
 // User 用户基础模型
@@ -61,6 +62,8 @@ type Silo struct {
 	Legitimacy      float64            `gorm:"default:1.0" json:"legitimacy"`                             // 合法性值
 	Cohesion        float64            `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
 	Rebellion       float64            `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
+	DeptTension     float64            `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
+	ClassFragmentation float64         `gorm:"default:0.0" json:"class_fragmentation"`                 // 精英与平民割裂程度 (0-1)
 	HistoryBurden   float64            `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
 	EventTrigger    float64            `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
 	CurrentYear     int                `gorm:"default:122" json:"current_year"`                           // 当前年份
@@ -143,7 +146,7 @@ type Floor struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-// PopulationCohort 聚合人口单元：每个单元一定属于一个 Profession，可选属于一个 Faction。
+// PopulationCohort 聚合人口单元：以职业为首要维度，按意识形态组合划分。
 type PopulationCohort struct {
 	ID                 uint               `gorm:"primarykey" json:"id"`
 	SiloID             uint               `gorm:"index" json:"silo_id"`
@@ -151,6 +154,7 @@ type PopulationCohort struct {
 	FactionID          *uint              `gorm:"index" json:"faction_id,omitempty"`
 	Name               string             `gorm:"size:100" json:"name"`
 	Count              int                `gorm:"default:0" json:"count"`
+	IdeologyProfile    []string           `gorm:"type:text;serializer:json" json:"ideology_profile"` // 核心意识形态组合 (1-2个)
 	HomeZone           string             `gorm:"size:20" json:"home_zone"`
 	Loyalty            float64            `gorm:"default:0.5" json:"loyalty"`
 	Influence          float64            `gorm:"default:0.0" json:"influence"`
@@ -192,18 +196,19 @@ type Resident struct {
 
 // Faction 派系模型：独立于 Profession，由 resident tags 隐式聚类生成
 type Faction struct {
-	ID                       uint      `gorm:"primarykey" json:"id"`
-	SiloID                   uint      `gorm:"index" json:"silo_id"`
-	Name                     string    `gorm:"size:100" json:"name"`
-	Signature                string    `gorm:"size:120" json:"signature"`
-	Tags                     []string  `gorm:"type:text;serializer:json" json:"tags"`
-	MemberCount              int       `gorm:"default:0" json:"member_count"`
-	RepresentativeResidentID uint      `gorm:"default:0" json:"representative_resident_id"`
-	RepresentativeCohortID   *uint     `gorm:"index" json:"representative_cohort_id,omitempty"`
-	RepresentativeName       string    `gorm:"size:80" json:"representative_name"`
-	Influence                float64   `gorm:"default:0.0" json:"influence"`
-	Cohesion                 float64   `gorm:"default:0.0" json:"cohesion"`
-	UpdatedAt                time.Time `json:"updated_at"`
+	ID                       uint           `gorm:"primarykey" json:"id"`
+	SiloID                   uint           `gorm:"index" json:"silo_id"`
+	Name                     string         `gorm:"size:100" json:"name"`
+	Signature                string         `gorm:"size:120" json:"signature"`
+	Tags                     []string       `gorm:"type:text;serializer:json" json:"tags"`
+	TagStats                 map[string]int `gorm:"type:text;serializer:json" json:"tag_stats,omitempty"` // 阵营内部标签分布统计
+	MemberCount              int            `gorm:"default:0" json:"member_count"`
+	RepresentativeResidentID uint           `gorm:"default:0" json:"representative_resident_id"`
+	RepresentativeCohortID   *uint          `gorm:"index" json:"representative_cohort_id,omitempty"`
+	RepresentativeName       string         `gorm:"size:80" json:"representative_name"`
+	Influence                float64        `gorm:"default:0.0" json:"influence"`
+	Cohesion                 float64        `gorm:"default:0.0" json:"cohesion"`
+	UpdatedAt                time.Time      `json:"updated_at"`
 }
 
 // ============ 游戏交互 DTO (前后端通信) ============

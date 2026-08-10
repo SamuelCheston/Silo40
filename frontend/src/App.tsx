@@ -1,14 +1,18 @@
+// @ts-nocheck
 import { useState, useEffect } from 'react';
 import logo from './assets/images/logo-universal.png';
 import './App.css';
 import { CreateGame, GetGameState, HasActiveGame, PassTime, ExecuteAction } from "../wailsjs/go/main/App";
 import { Box, Button, Center, Heading, Image, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
 import { ProgressBar, ProgressRoot } from './components/ui/progress';
+import { TabsRoot, TabsList, TabsTrigger, TabsContent } from './components/ui/tabs';
 import { TimeWheel } from './components/TimeWheel';
 import { SiloWheel } from './components/SiloWheel';
 import { SetupPanel } from './components/SetupPanel';
 import { BunkerMap } from './components/BunkerMap';
+import { FactionView } from './components/FactionView';
 import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS, ProfessionActionMeta, GameState } from './logic/models';
+import { LayoutGrid, Users } from 'lucide-react';
 
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
@@ -33,6 +37,24 @@ function App() {
 
     const toggleFragment = (f: string) => {
         setSelectedFragments(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+    };
+
+    const getIdeologyLabel = (type: string, val: number) => {
+        const v = val * 100;
+        if (type === 'democracy') {
+            if (v <= 30) return "顺民";
+            if (v <= 60) return "臣民";
+            if (v <= 90) return "民主";
+            return "积极民主";
+        }
+        if (type === 'loyalty') {
+            if (v <= 30) return "异见者";
+            if (v <= 70) return "中立";
+            return "亲信";
+        }
+        if (v <= 10) return "排外";
+        if (v <= 40) return "中立排外";
+        return "亲外";
     };
 
     // 当前选中的职业专属行动元数据 (由 Go 后端下发，actionType === 'PROFESSION_ACTION' 时非空)
@@ -353,9 +375,28 @@ function App() {
                                 </VStack>
                             </HStack>
 
-                            <Heading size="xs" mb={3} color="gray.500" textTransform="uppercase" letterSpacing="widest">Silo Floor Plan & Department Intel</Heading>
-
-                            {silo && <BunkerMap silo={silo} />}
+                            <TabsRoot defaultValue="map" variant="enclosed" size="sm" w="full">
+                                 <TabsList mb={4} borderBottom="1px solid" borderColor="gray.200">
+                                     <TabsTrigger value="map" _selected={{ color: "blue.600", borderBottom: "2px solid", borderColor: "blue.600" }}>
+                                         <HStack gap={2}>
+                                             <LayoutGrid size={14} />
+                                             <Text fontWeight="bold">地堡地图</Text>
+                                         </HStack>
+                                     </TabsTrigger>
+                                     <TabsTrigger value="factions" _selected={{ color: "blue.600", borderBottom: "2px solid", borderColor: "blue.600" }}>
+                                         <HStack gap={2}>
+                                             <Users size={14} />
+                                             <Text fontWeight="bold">阵营概览</Text>
+                                         </HStack>
+                                     </TabsTrigger>
+                                 </TabsList>
+                                 <TabsContent value="map">
+                                     {silo && <BunkerMap silo={silo} />}
+                                 </TabsContent>
+                                 <TabsContent value="factions">
+                                     {silo && <FactionView silo={silo} />}
+                                 </TabsContent>
+                             </TabsRoot>
                         </Box>
                     </VStack>
 

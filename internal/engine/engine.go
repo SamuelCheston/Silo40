@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 
@@ -1259,6 +1260,57 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 		silo.Rebellion = 1.0
 	} else if silo.Rebellion < 0 {
 		silo.Rebellion = 0
+	}
+
+	// 计算部门间紧张程度 (DeptTension)
+	totalRel := 0.0
+	relCount := 0
+	for _, p := range silo.Professions {
+		for _, rel := range p.Relations {
+			totalRel += rel
+			relCount++
+		}
+	}
+	if relCount > 0 {
+		silo.DeptTension = 1.0 - (totalRel / float64(relCount))
+	}
+
+	// 计算精英与平民割裂程度 (ClassFragmentation)
+	eliteLoyalty := 0.0
+	commonerLoyalty := 0.0
+	eliteCount := 0
+	commonerCount := 0
+
+	for _, p := range silo.Professions {
+		// 从所属的 cohorts 中计算平均忠诚度
+		avgL := 0.0
+		cCount := 0
+		for _, c := range silo.Cohorts {
+			if c.ProfessionID == p.ID {
+				avgL += c.Ideologies[model.IdeologyLoyalty]
+				cCount++
+			}
+		}
+		if cCount > 0 {
+			avgL /= float64(cCount)
+		}
+
+		if p.ClassType == "ELITE" {
+			eliteLoyalty += avgL
+			eliteCount++
+		} else {
+			commonerLoyalty += avgL
+			commonerCount++
+		}
+	}
+
+	if eliteCount > 0 && commonerCount > 0 {
+		silo.ClassFragmentation = math.Abs((eliteLoyalty / float64(eliteCount)) - (commonerLoyalty / float64(commonerCount)))
+	}
+
+	// 每隔一段时间（如每季度）在日志中反馈宏观指标变化
+	if silo.CurrentMonth%3 == 0 && e.logs != nil {
+		e.logf(fmt.Sprintf("[Metrics] 部门紧张度: %.2f, 阶层割裂度: %.2f", silo.DeptTension, silo.ClassFragmentation))
 	}
 
 	e.updatePopulation(silo, deltaYears)
