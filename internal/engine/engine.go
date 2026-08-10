@@ -243,7 +243,8 @@ func (e *GameEngine) registerScripts() {
 		"panic_to_ideology": func(event *GameEvent, state *State, bus *EventBus, ctx *EventContext) {
 			for i := range state.Silo.Professions {
 				p := &state.Silo.Professions[i]
-				p.IdeologyValue = math.Min(1.0, p.IdeologyValue+0.02)
+				// 恐慌转化为思潮
+				p.Ideologies[model.IdeologyProForeign] = math.Min(1.0, p.Ideologies[model.IdeologyProForeign]+0.02)
 			}
 			state.Logs = append(state.Logs, "[Rule] 高恐慌情绪转化为对外部世界的好奇。")
 		},
@@ -337,7 +338,7 @@ func (e *GameEngine) registerTriggers() {
 			Condition: func(state *State) bool {
 				count := 0
 				for _, p := range state.Silo.Professions {
-					if p.IdeologyValue > 0.5 {
+					if p.Ideologies[model.IdeologyProForeign] > 0.5 {
 						count++
 					}
 				}
@@ -644,7 +645,7 @@ func (e *GameEngine) inciteRebellion(silo *model.Silo, view *ActorView, action m
 		finalEffect := baseEffect * multiplier
 
 		prof.PanicValue += finalEffect
-		prof.IdeologyValue += finalEffect * 0.5
+		prof.Ideologies[model.IdeologyProForeign] += finalEffect * 0.5
 	}
 
 	view.SetActionPoints(view.ActionPoints() - action.Cost)
@@ -756,7 +757,7 @@ func (e *GameEngine) shareInformation(silo *model.Silo, view *ActorView, action 
 		view.SetSuspicionLevel(view.SuspicionLevel() + suspicionPenalty)
 	}
 
-	acceptanceRate := 0.1 + targetProf.IdeologyValue + connectionValue
+	acceptanceRate := 0.1 + targetProf.Ideologies[model.IdeologyProForeign] + connectionValue
 	acceptanceRate -= float64(unexplainedCount) * 0.1
 	if acceptanceRate < 0.05 {
 		acceptanceRate = 0.05
@@ -792,7 +793,7 @@ func (e *GameEngine) shareInformation(silo *model.Silo, view *ActorView, action 
 
 	if connectionValue >= 0.3 {
 		ideologyImpact := 0.02 + float64(unexplainedCount)*0.02
-		targetProf.IdeologyValue = math.Min(1.0, targetProf.IdeologyValue+ideologyImpact)
+		targetProf.Ideologies[model.IdeologyProForeign] = math.Min(1.0, targetProf.Ideologies[model.IdeologyProForeign]+ideologyImpact)
 	}
 
 	return model.ActionResult{
@@ -846,7 +847,7 @@ func (e *GameEngine) GetOrganizedPopulation(silo *model.Silo, agent *model.Agent
 
 			propagandaMultiplier := agent.PropagandaLevel
 			appealEffect := appeal * propagandaMultiplier
-			conversionRate := (appealEffect*0.4 + conn.Value*0.6) * orgFactor * targetProf.IdeologyValue
+			conversionRate := (appealEffect*0.4 + conn.Value*0.6) * orgFactor * targetProf.Ideologies[model.IdeologyProForeign]
 
 			maxConvertible := float64(targetProf.Population) * 0.20
 			deptOrganized := float64(targetProf.Population) * conversionRate
@@ -940,7 +941,7 @@ func (e *GameEngine) CalculateScore(silo *model.Silo) *model.GameScore {
 	avgIdeology := 0.0
 	if len(silo.Professions) > 0 {
 		for _, p := range silo.Professions {
-			avgIdeology += p.IdeologyValue
+			avgIdeology += p.Ideologies[model.IdeologyProForeign]
 		}
 		avgIdeology /= float64(len(silo.Professions))
 	}
@@ -986,7 +987,7 @@ func (e *GameEngine) GetEndingNarrative(silo *model.Silo) string {
 
 	proForeign := 0
 	for _, p := range silo.Professions {
-		if p.IdeologyValue > 0.5 {
+		if p.Ideologies[model.IdeologyProForeign] > 0.5 {
 			proForeign++
 		}
 	}
@@ -1083,7 +1084,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 
 			escapingDeptsCount := 0
 			for _, p := range silo.Professions {
-				escapingPeople := float64(p.Population) * p.IdeologyValue
+				escapingPeople := float64(p.Population) * p.Ideologies[model.IdeologyProForeign]
 				if escapingPeople > 10 {
 					escapingDeptsCount++
 				}
@@ -1115,7 +1116,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 func (e *GameEngine) checkOperationalConditions(silo *model.Silo, deltaYears float64) {
 	proForeignDepts := 0
 	for _, p := range silo.Professions {
-		if p.IdeologyValue >= 0.1 {
+		if p.Ideologies[model.IdeologyProForeign] >= 0.1 {
 			proForeignDepts++
 		}
 	}
@@ -1153,7 +1154,7 @@ func (e *GameEngine) updateIdeology(silo *model.Silo, deltaYears float64) {
 
 		if p.PanicValue > 0.3 && stability < 0.5 {
 			drift := p.PanicValue * (1.0 - stability) * deltaYears * 0.01
-			p.IdeologyValue += drift
+			p.Ideologies[model.IdeologyProForeign] += drift
 		}
 
 		if p.PanicValue > 0 {
@@ -1163,13 +1164,15 @@ func (e *GameEngine) updateIdeology(silo *model.Silo, deltaYears float64) {
 			if p.PanicValue < 0 {
 				p.PanicValue = 0
 			}
-			p.IdeologyValue += convertedAmount
+			p.Ideologies[model.IdeologyProForeign] += convertedAmount
 		}
 
-		if p.IdeologyValue > 1.0 {
-			p.IdeologyValue = 1.0
-		} else if p.IdeologyValue < 0 {
-			p.IdeologyValue = 0
+		for key, val := range p.Ideologies {
+			if val > 1.0 {
+				p.Ideologies[key] = 1.0
+			} else if val < 0 {
+				p.Ideologies[key] = 0
+			}
 		}
 	}
 
@@ -1177,12 +1180,13 @@ func (e *GameEngine) updateIdeology(silo *model.Silo, deltaYears float64) {
 		if trait == "psychoactive_meds" {
 			itDept := findDept(silo, "IT")
 			if itDept != nil {
-				targetIdeology := itDept.IdeologyValue
 				for i := range silo.Professions {
 					p := &silo.Professions[i]
 					if p.Name != "IT" {
-						diff := targetIdeology - p.IdeologyValue
-						p.IdeologyValue += diff * 0.05 * deltaYears
+						for key, targetIdeology := range itDept.Ideologies {
+							diff := targetIdeology - p.Ideologies[key]
+							p.Ideologies[key] += diff * 0.05 * deltaYears
+						}
 					}
 				}
 			}

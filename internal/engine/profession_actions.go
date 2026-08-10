@@ -280,7 +280,7 @@ func init() {
 					return model.ActionResult{Executed: false, Message: "Target department not found."}
 				}
 				dept.PanicValue = clamp(dept.PanicValue-0.15, 0, 1)
-				dept.IdeologyValue = clamp(dept.IdeologyValue-0.05, 0, 1)
+				dept.Ideologies[model.IdeologyProForeign] = clamp(dept.Ideologies[model.IdeologyProForeign]-0.05, 0, 1)
 				dept.Productivity = clamp(dept.Productivity-0.03, 0, 1)
 				return model.ActionResult{Executed: true, Message: "Crackdown executed in " + dept.Name + ". Order restored, at a cost."}
 			},
@@ -314,7 +314,7 @@ func init() {
 				}
 				dept.PanicValue = clamp(dept.PanicValue-0.20, 0, 1)
 				dept.Productivity = clamp(dept.Productivity-0.12, 0, 1)
-				dept.IdeologyValue = clamp(dept.IdeologyValue-0.04, 0, 1)
+				dept.Ideologies[model.IdeologyProForeign] = clamp(dept.Ideologies[model.IdeologyProForeign]-0.04, 0, 1)
 				return model.ActionResult{Executed: true, Message: dept.Name + " placed under quarantine. The silence is oppressive."}
 			},
 		},
@@ -403,7 +403,7 @@ func init() {
 					p := &silo.Professions[i]
 					if p.ClassType == "COMMONER" {
 						view.AddConnection(p.ID, 0.10)
-						p.IdeologyValue = clamp(p.IdeologyValue+0.03, 0, 1)
+						p.Ideologies[model.IdeologyProForeign] = clamp(p.Ideologies[model.IdeologyProForeign]+0.03, 0, 1)
 					}
 				}
 				return model.ActionResult{Executed: true, Message: "The tunnel network hums with new alliances and whispered hopes."}
@@ -433,7 +433,7 @@ func init() {
 					return model.ActionResult{Executed: false, Message: "Target department not found."}
 				}
 				gained := gainFragment(view, dept.Name, 1)
-				dept.IdeologyValue = clamp(dept.IdeologyValue+0.03, 0, 1)
+				dept.Ideologies[model.IdeologyProForeign] = clamp(dept.Ideologies[model.IdeologyProForeign]+0.03, 0, 1)
 				if len(gained) == 0 {
 					return model.ActionResult{Executed: false, Message: "The fields whispered nothing new about " + dept.Name + "."}
 				}

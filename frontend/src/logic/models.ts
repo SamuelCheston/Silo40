@@ -127,7 +127,7 @@ export interface Profession {
   name: string;
   class_type: string; // 'ELITE' | 'COMMONER' (后端返回字符串，与 wailsjs 生成类型兼容)
   population: number;
-  ideology_value: number;
+  ideologies: Record<string, number>;
   panic_value: number;
   productivity: number;
   power_level: number;

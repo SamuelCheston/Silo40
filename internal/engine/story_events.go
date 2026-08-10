@@ -55,7 +55,7 @@ func NewEventEngine() *EventEngine {
 			Type:        "EXTERNAL",
 			Effects: func(silo *model.Silo) {
 				for i := range silo.Professions {
-					silo.Professions[i].IdeologyValue += 0.05
+					silo.Professions[i].Ideologies[model.IdeologyProForeign] += 0.05
 				}
 			},
 		},

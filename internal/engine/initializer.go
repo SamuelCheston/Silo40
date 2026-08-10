@@ -122,7 +122,7 @@ func CreateInitialSilo(name string, initialYear int, traitIds []string) *model.S
 			for i := range silo.Professions {
 				p := &silo.Professions[i]
 				if p.ClassType == "COMMONER" {
-					p.IdeologyValue = min1(p.IdeologyValue + 0.3)
+					p.Ideologies[model.IdeologyProForeign] = min1(p.Ideologies[model.IdeologyProForeign] + 0.3)
 				}
 			}
 		}
@@ -170,15 +170,15 @@ func initFloors() []model.Floor {
 
 func initProfessions() []model.Profession {
 	return []model.Profession{
-		{ID: 1, SiloID: 0, Name: "Mayor", ClassType: "ELITE", PowerLevel: 10, Zone: "Upper", Population: 1, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Mayor_1", "Mayor_2", "Mayor_3", "Mayor_4", "Mayor_5"}, Relations: map[string]float64{}},
-		{ID: 2, SiloID: 0, Name: "Judicial", ClassType: "ELITE", PowerLevel: 9, Zone: "Upper", Population: 200, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Judicial_1", "Judicial_2", "Judicial_3", "Judicial_4", "Judicial_5"}, Relations: map[string]float64{}},
-		{ID: 3, SiloID: 0, Name: "IT", ClassType: "ELITE", PowerLevel: 9, Zone: "Upper", Population: 150, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"IT_1", "IT_2", "IT_3", "IT_4", "IT_5"}, Relations: map[string]float64{}},
-		{ID: 4, SiloID: 0, Name: "Police", ClassType: "ELITE", PowerLevel: 8, Zone: "Upper", Population: 250, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Police_1", "Police_2"}, Relations: map[string]float64{}},
-		{ID: 5, SiloID: 0, Name: "Medical", ClassType: "ELITE", PowerLevel: 7, Zone: "Mid", Population: 400, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Medical_1", "Medical_2"}, Relations: map[string]float64{}},
-		{ID: 6, SiloID: 0, Name: "Supply", ClassType: "COMMONER", PowerLevel: 6, Zone: "Mid", Population: 2500, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Supply_1", "Supply_2"}, Relations: map[string]float64{}},
-		{ID: 7, SiloID: 0, Name: "Mechanical", ClassType: "COMMONER", PowerLevel: 8, Zone: "Lower", Population: 3000, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Mechanical_1", "Mechanical_2"}, Relations: map[string]float64{}},
-		{ID: 8, SiloID: 0, Name: "Mines", ClassType: "COMMONER", PowerLevel: 4, Zone: "Lower", Population: 1000, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Mines_1", "Mines_2"}, Relations: map[string]float64{}},
-		{ID: 9, SiloID: 0, Name: "Agricultural", ClassType: "COMMONER", PowerLevel: 6, Zone: "Mid", Population: 2499, IdeologyValue: 0.05, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Agricultural_1"}, Relations: map[string]float64{}},
+		{ID: 1, SiloID: 0, Name: "Mayor", ClassType: "ELITE", PowerLevel: 10, Zone: "Upper", Population: 1, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.2}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Mayor_1", "Mayor_2", "Mayor_3", "Mayor_4", "Mayor_5"}, Relations: map[string]float64{}},
+		{ID: 2, SiloID: 0, Name: "Judicial", ClassType: "ELITE", PowerLevel: 9, Zone: "Upper", Population: 200, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.1}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Judicial_1", "Judicial_2", "Judicial_3", "Judicial_4", "Judicial_5"}, Relations: map[string]float64{}},
+		{ID: 3, SiloID: 0, Name: "IT", ClassType: "ELITE", PowerLevel: 9, Zone: "Upper", Population: 150, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.1}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"IT_1", "IT_2", "IT_3", "IT_4", "IT_5"}, Relations: map[string]float64{}},
+		{ID: 4, SiloID: 0, Name: "Police", ClassType: "ELITE", PowerLevel: 8, Zone: "Upper", Population: 250, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.05}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Police_1", "Police_2"}, Relations: map[string]float64{}},
+		{ID: 5, SiloID: 0, Name: "Medical", ClassType: "ELITE", PowerLevel: 7, Zone: "Mid", Population: 400, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.1}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Medical_1", "Medical_2"}, Relations: map[string]float64{}},
+		{ID: 6, SiloID: 0, Name: "Supply", ClassType: "COMMONER", PowerLevel: 6, Zone: "Mid", Population: 2500, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.1}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Supply_1", "Supply_2"}, Relations: map[string]float64{}},
+		{ID: 7, SiloID: 0, Name: "Mechanical", ClassType: "COMMONER", PowerLevel: 8, Zone: "Lower", Population: 3000, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.1}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Mechanical_1", "Mechanical_2"}, Relations: map[string]float64{}},
+		{ID: 8, SiloID: 0, Name: "Mines", ClassType: "COMMONER", PowerLevel: 4, Zone: "Lower", Population: 1000, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.1}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Mines_1", "Mines_2"}, Relations: map[string]float64{}},
+		{ID: 9, SiloID: 0, Name: "Agricultural", ClassType: "COMMONER", PowerLevel: 6, Zone: "Mid", Population: 2499, Ideologies: map[string]float64{model.IdeologyProForeign: 0.05, model.IdeologyDemocracy: 0.1}, PanicValue: 0.0, Productivity: 1.0, KnownFragments: []string{"Agricultural_1"}, Relations: map[string]float64{}},
 	}
 }
 

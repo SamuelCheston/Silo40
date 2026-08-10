@@ -25,17 +25,21 @@ func initResidents(silo *model.Silo) []model.Resident {
 		prof := &silo.Professions[i]
 		for idx := 0; idx < prof.Population; idx++ {
 			loyalty := clamp01(0.42 + rand.Float64()*0.36 + classBias(prof.ClassType, 0.08))
-			ideology := clamp01(prof.IdeologyValue + (rand.Float64()-0.5)*0.30)
+			ideologyProForeign := clamp01(prof.Ideologies[model.IdeologyProForeign] + (rand.Float64()-0.5)*0.30)
+			ideologyDemocracy := clamp01(prof.Ideologies[model.IdeologyDemocracy] + (rand.Float64()-0.5)*0.20)
 			influence := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.12) + rand.Float64()*0.18)
 			resident := model.Resident{
-				ID:                 nextID,
-				SiloID:             silo.ID,
-				Name:               fmt.Sprintf("%s Resident %04d", prof.Name, idx+1),
-				ProfessionID:       prof.ID,
-				Profession:         prof.Name,
-				HomeFloor:          randomFloorForZone(prof.Zone),
-				Loyalty:            loyalty,
-				Ideology:           ideology,
+				ID:           nextID,
+				SiloID:       silo.ID,
+				Name:         fmt.Sprintf("%s Resident %04d", prof.Name, idx+1),
+				ProfessionID: prof.ID,
+				Profession:   prof.Name,
+				HomeFloor:    randomFloorForZone(prof.Zone),
+				Loyalty:      loyalty,
+				Ideologies: map[string]float64{
+					model.IdeologyProForeign: ideologyProForeign,
+					model.IdeologyDemocracy:  ideologyDemocracy,
+				},
 				Influence:          influence,
 				ActionPoints:       20 + rand.Float64()*25,
 				SuspicionLevel:     0,
@@ -162,7 +166,7 @@ func buildResidentTags(resident *model.Resident, prof *model.Profession, silo *m
 		"class:" + strings.ToLower(prof.ClassType),
 		"zone:" + strings.ToLower(prof.Zone),
 		skillTagForProfession(prof.Name),
-		stanceTag(resident.Loyalty, resident.Ideology),
+		stanceTag(resident.Loyalty, resident.Ideologies[model.IdeologyProForeign]),
 		driveTag(resident, prof, silo),
 	}
 	if resident.Loyalty >= 0.72 {
@@ -355,11 +359,15 @@ func updateResidentPopulationState(silo *model.Silo, deltaYears float64) {
 		}
 
 		loyaltyTarget := clamp01(silo.Legitimacy - prof.PanicValue*0.35 + classBias(prof.ClassType, 0.08))
-		ideologyTarget := clamp01((resident.Ideology + prof.IdeologyValue + silo.Rebellion*0.15) / 2.15)
 		influenceTarget := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10))
 
 		resident.Loyalty += (loyaltyTarget - resident.Loyalty) * 0.45 * deltaYears
-		resident.Ideology += (ideologyTarget - resident.Ideology) * 0.35 * deltaYears
+		for key := range resident.Ideologies {
+			profVal := prof.Ideologies[key]
+			resVal := resident.Ideologies[key]
+			target := clamp01((resVal + profVal + silo.Rebellion*0.15) / 2.15)
+			resident.Ideologies[key] += (target - resVal) * 0.35 * deltaYears
+		}
 		resident.Influence += (influenceTarget - resident.Influence) * 0.25 * deltaYears
 		resident.ActionPoints = math.Min(70, resident.ActionPoints+6*deltaYears)
 

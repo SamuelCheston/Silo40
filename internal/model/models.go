@@ -6,6 +6,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	IdeologyProForeign = "pro_foreign"
+	IdeologyDemocracy  = "democracy"
+)
+
 // User 用户基础模型
 type User struct {
 	ID        uint           `gorm:"primarykey" json:"id"`
@@ -108,9 +113,9 @@ type Profession struct {
 	Name           string             `gorm:"size:50" json:"name"`
 	ClassType      string             `gorm:"size:20" json:"class_type"` // ELITE / COMMONER
 	Population     int                `gorm:"default:0" json:"population"`
-	IdeologyValue  float64            `gorm:"default:0.5" json:"ideology_value"` // 亲外/排外思潮值 (0-1)
-	PanicValue     float64            `gorm:"default:0.0" json:"panic_value"`    // 恐慌值
-	Productivity   float64            `gorm:"default:1.0" json:"productivity"`   // 生产力值
+	Ideologies     map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"` // 各项思潮值 (0-1)
+	PanicValue     float64            `gorm:"default:0.0" json:"panic_value"`              // 恐慌值
+	Productivity   float64            `gorm:"default:1.0" json:"productivity"`             // 生产力值
 	PowerLevel     int                `gorm:"default:1" json:"power_level"`
 	Zone           string             `gorm:"size:20" json:"zone"`
 	KnownFragments []string           `gorm:"type:text;serializer:json" json:"known_fragments"`     // 掌握的其他部门信息碎片来源
@@ -148,7 +153,7 @@ type Resident struct {
 	HomeFloor          int                `json:"home_floor"`
 	Tags               []string           `gorm:"type:text;serializer:json" json:"tags"`
 	Loyalty            float64            `gorm:"default:0.5" json:"loyalty"`
-	Ideology           float64            `gorm:"default:0.5" json:"ideology"`
+	Ideologies         map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
 	Influence          float64            `gorm:"default:0.0" json:"influence"`
 	ActionPoints       float64            `gorm:"default:0.0" json:"action_points"`
 	SuspicionLevel     float64            `gorm:"default:0.0" json:"suspicion_level"`

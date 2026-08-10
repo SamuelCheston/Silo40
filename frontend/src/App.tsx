@@ -202,8 +202,14 @@ function App() {
         }
     };
 
-    const getIdeologyLabel = (val: number) => {
+    const getIdeologyLabel = (type: string, val: number) => {
         const v = val * 100;
+        if (type === 'democracy') {
+            if (v <= 30) return "顺民";
+            if (v <= 60) return "臣民";
+            if (v <= 90) return "民主";
+            return "积极民主";
+        }
         if (v <= 10) return "排外";
         if (v <= 40) return "中立排外";
         return "亲外";
@@ -372,7 +378,7 @@ function App() {
                                     <Heading size="sm" color="purple.600">Elite Class</Heading>
                                     <HStack>
                                         <Text fontSize="xs" color="gray.500">Avg Ideology: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').reduce((acc, p) => acc + p.ideology_value, 0) || 0) /
+                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').reduce((acc, p) => acc + (p.ideologies?.['pro_foreign'] || 0), 0) || 0) /
                                             (silo?.professions?.filter(p => p.class_type === 'ELITE').length || 1) * 100
                                         ).toFixed(0)}%</Text>
                                         <Text fontSize="xs" color="gray.500">Avg Panic: {(
@@ -392,14 +398,20 @@ function App() {
                                                 </HStack>
                                             </HStack>
                                             <SimpleGrid columns={3} gap={2} mb={2}>
-                                                <VStack align="start" gap={0}>
-                                                    <Text fontSize="xs" color="gray.500">Pro-Foreign ({getIdeologyLabel(dept.ideology_value)})</Text>
-                                                    <HStack w="full">
-                                                        <Text fontSize="xs" w="30px" color="gray.700">{(dept.ideology_value * 100).toFixed(0)}%</Text>
-                                                        <ProgressRoot value={dept.ideology_value * 100} max={100} w="full" size="xs" colorPalette="teal">
-                                                            <ProgressBar />
-                                                        </ProgressRoot>
-                                                    </HStack>
+                                                <VStack align="start" gap={1}>
+                                                    {Object.entries(dept.ideologies || {}).map(([type, val]) => (
+                                                        <VStack key={type} align="start" gap={0} w="full">
+                                                            <Text fontSize="2xs" color="gray.500" textTransform="capitalize">
+                                                                {type.replace('_', ' ')} ({getIdeologyLabel(type, val)})
+                                                            </Text>
+                                                            <HStack w="full">
+                                                                <Text fontSize="2xs" w="25px" color="gray.700">{(val * 100).toFixed(0)}%</Text>
+                                                                 <ProgressRoot value={val * 100} max={100} w="full" size="xs" colorPalette={type === 'pro_foreign' ? "teal" : "blue"}>
+                                                                     <ProgressBar />
+                                                                 </ProgressRoot>
+                                                            </HStack>
+                                                        </VStack>
+                                                    ))}
                                                 </VStack>
                                                 <VStack align="start" gap={0}>
                                                     <Text fontSize="xs" color="gray.500">Panic Level</Text>
@@ -439,7 +451,7 @@ function App() {
                                     <Heading size="sm" color="green.600">Commoner Class</Heading>
                                     <HStack>
                                         <Text fontSize="xs" color="gray.500">Avg Ideology: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').reduce((acc, p) => acc + p.ideology_value, 0) || 0) /
+                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').reduce((acc, p) => acc + (p.ideologies?.['pro_foreign'] || 0), 0) || 0) /
                                             (silo?.professions?.filter(p => p.class_type === 'COMMONER').length || 1) * 100
                                         ).toFixed(0)}%</Text>
                                         <Text fontSize="xs" color="gray.500">Avg Panic: {(
@@ -463,14 +475,20 @@ function App() {
                                                 </HStack>
                                             </HStack>
                                             <SimpleGrid columns={3} gap={2} mb={2}>
-                                                <VStack align="start" gap={0}>
-                                                    <Text fontSize="xs" color="gray.500">Pro-Foreign ({getIdeologyLabel(dept.ideology_value)})</Text>
-                                                    <HStack w="full">
-                                                        <Text fontSize="xs" w="30px" color="gray.700">{(dept.ideology_value * 100).toFixed(0)}%</Text>
-                                                        <ProgressRoot value={dept.ideology_value * 100} max={100} w="full" size="xs" colorPalette="teal">
-                                                            <ProgressBar />
-                                                        </ProgressRoot>
-                                                    </HStack>
+                                                <VStack align="start" gap={1}>
+                                                    {Object.entries(dept.ideologies || {}).map(([type, val]) => (
+                                                        <VStack key={type} align="start" gap={0} w="full">
+                                                            <Text fontSize="2xs" color="gray.500" textTransform="capitalize">
+                                                                {type.replace('_', ' ')} ({getIdeologyLabel(type, val)})
+                                                            </Text>
+                                                            <HStack w="full">
+                                                                <Text fontSize="2xs" w="25px" color="gray.700">{(val * 100).toFixed(0)}%</Text>
+                                                                <ProgressRoot value={val * 100} max={100} w="full" size="xs" colorPalette={type === 'pro_foreign' ? "teal" : "blue"}>
+                                                                    <ProgressBar />
+                                                                </ProgressRoot>
+                                                            </HStack>
+                                                        </VStack>
+                                                    ))}
                                                 </VStack>
                                                 <VStack align="start" gap={0}>
                                                     <Text fontSize="xs" color="gray.500">Panic Level</Text>
