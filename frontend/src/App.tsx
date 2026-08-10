@@ -4,10 +4,10 @@ import './App.css';
 import { CreateGame, GetGameState, HasActiveGame, PassTime, ExecuteAction } from "../wailsjs/go/main/App";
 import { Box, Button, Center, Heading, Image, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
 import { ProgressBar, ProgressRoot } from './components/ui/progress';
-import { Slider } from './components/ui/slider';
 import { TimeWheel } from './components/TimeWheel';
 import { SiloWheel } from './components/SiloWheel';
 import { SetupPanel } from './components/SetupPanel';
+import { BunkerMap } from './components/BunkerMap';
 import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS, ProfessionActionMeta, GameState } from './logic/models';
 
 function App() {
@@ -21,7 +21,6 @@ function App() {
     const [silo, setSilo] = useState<Silo | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
     const [organizedPopulation, setOrganizedPopulation] = useState(0);
-    const [gameOver, setGameOver] = useState(false);
     const [professionActions, setProfessionActions] = useState<ProfessionActionMeta[]>([]);
 
     // Action Form State
@@ -52,7 +51,6 @@ function App() {
         setAgent(state.agent);
         setOrganizedPopulation(state.organized_population);
         setProfessionActions(state.profession_actions || []);
-        setGameOver(state.game_over);
         setGameStarted(true);
         setShowSetup(false);
     };
@@ -117,7 +115,6 @@ function App() {
             setSilo(result.silo);
             setAgent(result.agent);
             setOrganizedPopulation(result.organized_population);
-            setGameOver(result.game_over);
 
             if (result.game_over) {
                 updateResultText(`Game Over: ${result.silo.victory_status?.description || result.ending_narrative}`);
@@ -180,7 +177,6 @@ function App() {
             setSilo(outcome.silo);
             setAgent(outcome.agent);
             setOrganizedPopulation(outcome.organized_population);
-            setGameOver(outcome.game_over);
 
             if (outcome.game_over) {
                 updateResultText(`Game Over: ${outcome.silo.victory_status?.description || outcome.ending_narrative}`);
@@ -200,19 +196,6 @@ function App() {
         } catch (err) {
             updateResultText(`Failed to execute action: ${err}`);
         }
-    };
-
-    const getIdeologyLabel = (type: string, val: number) => {
-        const v = val * 100;
-        if (type === 'democracy') {
-            if (v <= 30) return "顺民";
-            if (v <= 60) return "臣民";
-            if (v <= 90) return "民主";
-            return "积极民主";
-        }
-        if (v <= 10) return "排外";
-        if (v <= 40) return "中立排外";
-        return "亲外";
     };
 
     return (
@@ -370,161 +353,13 @@ function App() {
                                 </VStack>
                             </HStack>
 
-                            <Heading size="xs" mb={3} color="gray.500" textTransform="uppercase">Departments Overview</Heading>
+                            <Heading size="xs" mb={3} color="gray.500" textTransform="uppercase" letterSpacing="widest">Silo Floor Plan & Department Intel</Heading>
 
-                            {/* ELITE Class Section */}
-                            <Box mb={6}>
-                                <HStack justify="space-between" mb={2}>
-                                    <Heading size="sm" color="purple.600">Elite Class</Heading>
-                                    <HStack>
-                                        <Text fontSize="xs" color="gray.500">Avg Ideology: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').reduce((acc, p) => acc + (p.ideologies?.['pro_foreign'] || 0), 0) || 0) /
-                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').length || 1) * 100
-                                        ).toFixed(0)}%</Text>
-                                        <Text fontSize="xs" color="gray.500">Avg Panic: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').reduce((acc, p) => acc + p.panic_value, 0) || 0) /
-                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').length || 1) * 100
-                                        ).toFixed(0)}%</Text>
-                                    </HStack>
-                                </HStack>
-                                <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} pr={2}>
-                                    {silo?.professions?.filter(dept => dept.class_type === 'ELITE').map(dept => (
-                                        <Box key={dept.id + dept.name} p={3} bg="white" borderRadius="md" borderLeft="4px solid" borderColor="purple.500" boxShadow="sm">
-                                            <HStack justify="space-between" mb={2}>
-                                                <Text fontWeight="bold" fontSize="sm" color="gray.800">{dept.name}</Text>
-                                                <HStack gap={2}>
-                                                    <Badge colorPalette="purple" size="sm">ELITE</Badge>
-                                                    <Badge colorPalette="gray" size="sm">Pop: {dept.population}</Badge>
-                                                </HStack>
-                                            </HStack>
-                                            <SimpleGrid columns={3} gap={2} mb={2}>
-                                                <VStack align="start" gap={1}>
-                                                    {Object.entries(dept.ideologies || {}).map(([type, val]) => (
-                                                        <VStack key={type} align="start" gap={0} w="full">
-                                                            <Text fontSize="2xs" color="gray.500" textTransform="capitalize">
-                                                                {type.replace('_', ' ')} ({getIdeologyLabel(type, val)})
-                                                            </Text>
-                                                            <HStack w="full">
-                                                                <Text fontSize="2xs" w="25px" color="gray.700">{(val * 100).toFixed(0)}%</Text>
-                                                                 <ProgressRoot value={val * 100} max={100} w="full" size="xs" colorPalette={type === 'pro_foreign' ? "teal" : "blue"}>
-                                                                     <ProgressBar />
-                                                                 </ProgressRoot>
-                                                            </HStack>
-                                                        </VStack>
-                                                    ))}
-                                                </VStack>
-                                                <VStack align="start" gap={0}>
-                                                    <Text fontSize="xs" color="gray.500">Panic Level</Text>
-                                                    <HStack w="full">
-                                                        <Text fontSize="xs" w="30px" color="gray.700">{(dept.panic_value * 100).toFixed(0)}%</Text>
-                                                        <ProgressRoot value={dept.panic_value * 100} max={100} w="full" size="xs" colorPalette={dept.panic_value > 0.5 ? "red" : "orange"}>
-                                                            <ProgressBar />
-                                                        </ProgressRoot>
-                                                    </HStack>
-                                                </VStack>
-                                                <VStack align="start" gap={0}>
-                                                    <Text fontSize="xs" color="gray.500">Productivity</Text>
-                                                    <HStack w="full">
-                                                        <Text fontSize="xs" w="30px" color="gray.700">{(dept.productivity * 100).toFixed(0)}%</Text>
-                                                        <ProgressRoot value={dept.productivity * 100} max={100} w="full" size="xs" colorPalette="green">
-                                                            <ProgressBar />
-                                                        </ProgressRoot>
-                                                    </HStack>
-                                                </VStack>
-                                            </SimpleGrid>
-                                            <Box>
-                                                <Text fontSize="xs" color="gray.500" mb={1}>Fragments ({dept.known_fragments?.length || 0}/26):</Text>
-                                                <HStack wrap="wrap" gap={1}>
-                                                    {dept.known_fragments?.map(f => (
-                                                        <Badge key={f} colorPalette="cyan" size="xs">{f}</Badge>
-                                                    )) || <Text fontSize="xs" color="gray.400">None</Text>}
-                                                </HStack>
-                                            </Box>
-                                        </Box>
-                                    ))}
-                                </SimpleGrid>
-                            </Box>
-
-                            {/* COMMONER Class Section */}
-                            <Box mb={2}>
-                                <HStack justify="space-between" mb={2}>
-                                    <Heading size="sm" color="green.600">Commoner Class</Heading>
-                                    <HStack>
-                                        <Text fontSize="xs" color="gray.500">Avg Ideology: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').reduce((acc, p) => acc + (p.ideologies?.['pro_foreign'] || 0), 0) || 0) /
-                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').length || 1) * 100
-                                        ).toFixed(0)}%</Text>
-                                        <Text fontSize="xs" color="gray.500">Avg Panic: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').reduce((acc, p) => acc + p.panic_value, 0) || 0) /
-                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').length || 1) * 100
-                                        ).toFixed(0)}%</Text>
-                                    </HStack>
-                                </HStack>
-                                <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} maxH="300px" overflowY="auto" pr={2} css={{
-                                    '&::-webkit-scrollbar': { width: '8px' },
-                                    '&::-webkit-scrollbar-track': { background: 'gray.100', borderRadius: '8px' },
-                                    '&::-webkit-scrollbar-thumb': { background: 'gray.300', borderRadius: '8px' },
-                                }}>
-                                    {silo?.professions?.filter(dept => dept.class_type === 'COMMONER').map(dept => (
-                                        <Box key={dept.id + dept.name} p={3} bg="white" borderRadius="md" borderLeft="4px solid" borderColor="green.500" boxShadow="sm">
-                                            <HStack justify="space-between" mb={2}>
-                                                <Text fontWeight="bold" fontSize="sm" color="gray.800">{dept.name}</Text>
-                                                <HStack gap={2}>
-                                                    <Badge colorPalette="green" size="sm">COMMONER</Badge>
-                                                    <Badge colorPalette="gray" size="sm">Pop: {dept.population}</Badge>
-                                                </HStack>
-                                            </HStack>
-                                            <SimpleGrid columns={3} gap={2} mb={2}>
-                                                <VStack align="start" gap={1}>
-                                                    {Object.entries(dept.ideologies || {}).map(([type, val]) => (
-                                                        <VStack key={type} align="start" gap={0} w="full">
-                                                            <Text fontSize="2xs" color="gray.500" textTransform="capitalize">
-                                                                {type.replace('_', ' ')} ({getIdeologyLabel(type, val)})
-                                                            </Text>
-                                                            <HStack w="full">
-                                                                <Text fontSize="2xs" w="25px" color="gray.700">{(val * 100).toFixed(0)}%</Text>
-                                                                <ProgressRoot value={val * 100} max={100} w="full" size="xs" colorPalette={type === 'pro_foreign' ? "teal" : "blue"}>
-                                                                    <ProgressBar />
-                                                                </ProgressRoot>
-                                                            </HStack>
-                                                        </VStack>
-                                                    ))}
-                                                </VStack>
-                                                <VStack align="start" gap={0}>
-                                                    <Text fontSize="xs" color="gray.500">Panic Level</Text>
-                                                    <HStack w="full">
-                                                        <Text fontSize="xs" w="30px" color="gray.700">{(dept.panic_value * 100).toFixed(0)}%</Text>
-                                                        <ProgressRoot value={dept.panic_value * 100} max={100} w="full" size="xs" colorPalette={dept.panic_value > 0.5 ? "red" : "orange"}>
-                                                            <ProgressBar />
-                                                        </ProgressRoot>
-                                                    </HStack>
-                                                </VStack>
-                                                <VStack align="start" gap={0}>
-                                                    <Text fontSize="xs" color="gray.500">Productivity</Text>
-                                                    <HStack w="full">
-                                                        <Text fontSize="xs" w="30px" color="gray.700">{(dept.productivity * 100).toFixed(0)}%</Text>
-                                                        <ProgressRoot value={dept.productivity * 100} max={100} w="full" size="xs" colorPalette="green">
-                                                            <ProgressBar />
-                                                        </ProgressRoot>
-                                                    </HStack>
-                                                </VStack>
-                                            </SimpleGrid>
-                                            <Box>
-                                                <Text fontSize="xs" color="gray.500" mb={1}>Fragments ({dept.known_fragments?.length || 0}/26):</Text>
-                                                <HStack wrap="wrap" gap={1}>
-                                                    {dept.known_fragments?.map(f => (
-                                                        <Badge key={f} colorPalette="cyan" size="xs">{f}</Badge>
-                                                    )) || <Text fontSize="xs" color="gray.400">None</Text>}
-                                                </HStack>
-                                            </Box>
-                                        </Box>
-                                    ))}
-                                </SimpleGrid>
-                            </Box>
+                            {silo && <BunkerMap silo={silo} />}
                         </Box>
-                        </VStack>
+                    </VStack>
 
-                        {/* Right Side: Operations */}
+                    {/* Right Side: Operations */}
                         <VStack gap={6} flex={{ base: "1 1 100%", lg: 1 }} w="full" position="sticky" top="20px">
                         {/* Profession Actions Frame */}
                         <Box w="full" p={5} bg="purple.50" borderRadius="md" border="1px solid" borderColor="purple.200" boxShadow="sm">

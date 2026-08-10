@@ -1,0 +1,41 @@
+.bunker-map-container {
+    border: 2px solid #2D3748;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.bunker-silo-structure {
+    background: #EDF2F7;
+}
+
+.bunker-zone {
+    transition: all 0.3s ease;
+}
+
+.bunker-zone:last-child {
+    border-bottom: none;
+}
+
+.zone-upper {
+    min-height: 180px;
+}
+
+.zone-mid {
+    min-height: 280px;
+}
+
+.zone-lower {
+    min-height: 220px;
+}
+
+.department-block {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+}
+
+.department-block:hover {
+    z-index: 10;
+}
+
+.department-block:active {
+    transform: scale(0.95) translateY(0);
+}
