@@ -2,7 +2,8 @@ export type VictoryType = 'NONE' | 'INFORMATION' | 'TIME' | 'REBELLION' | 'EXCLU
 
 export interface VictoryStatus {
   is_won: boolean;
-  type: VictoryType;
+  // 后端返回字符串类型 (与 wailsjs 生成类型兼容)
+  type: string;
   description: string;
   score?: GameScore;
 }
@@ -123,7 +124,7 @@ export interface Profession {
   id: number;
   silo_id: number;
   name: string;
-  class_type: 'ELITE' | 'COMMONER';
+  class_type: string; // 'ELITE' | 'COMMONER' (后端返回字符串，与 wailsjs 生成类型兼容)
   population: number;
   ideology_value: number;
   panic_value: number;
@@ -166,13 +167,62 @@ export interface Floor {
 }
 
 /**
- * 剧情随机事件 (原 GameEvent，为避免与统一事件对象重名而改名)
- * 注意：统一事件对象为 eventbus/types.ts 中的 GameEvent
+ * 剧情随机事件 (由 Go 后端引擎生成，仅含展示信息；执行逻辑在 Go)
  */
 export interface StoryEvent {
   id: string;
   title: string;
   description: string;
-  type: 'SOCIAL' | 'TECHNICAL' | 'EXTERNAL';
-  effects: (silo: Silo) => void;
+  type: string; // 'SOCIAL' | 'TECHNICAL' | 'EXTERNAL'
+}
+
+// ============ 后端通信 DTO (镜像 Go model 包 JSON) ============
+
+export interface CreateGameRequest {
+  silo_name: string;
+  start_year: number;
+  trait_ids: string[];
+  agent_name: string;
+  profession: string;
+}
+
+export interface ProfessionActionMeta {
+  id: string;
+  profession: string;
+  label: string;
+  description: string;
+  ap_cost: number;
+  target_type: string; // 'NONE' | 'DEPT' | 'RESOURCE'
+  suspicion_penalty: number;
+}
+
+export interface GameState {
+  silo: Silo;
+  agent: Agent;
+  organized_population: number;
+  game_over: boolean;
+  ending_narrative?: string;
+  victory_status?: VictoryStatus;
+  profession_actions?: ProfessionActionMeta[];
+}
+
+export interface TickResult {
+  silo: Silo;
+  agent: Agent;
+  logs: string[];
+  stories: StoryEvent[];
+  organized_population: number;
+  game_over: boolean;
+  ending_narrative?: string;
+}
+
+export interface ActionOutcome {
+  silo: Silo;
+  agent: Agent;
+  result: ActionResult;
+  logs: string[];
+  stories: StoryEvent[];
+  organized_population: number;
+  game_over: boolean;
+  ending_narrative?: string;
 }

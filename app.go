@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"silo40/internal/cache"
+	"silo40/internal/engine"
 	"silo40/internal/model"
 	"silo40/internal/repository"
 	"silo40/internal/service"
@@ -16,7 +16,7 @@ import (
 type App struct {
 	ctx         context.Context
 	db          *gorm.DB
-	dataService *service.DataService
+	gameService *service.GameService
 }
 
 // NewApp creates a new App application struct
@@ -39,68 +39,64 @@ func (a *App) startup(ctx context.Context) {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
 	a.db = db
-	a.dataService = service.NewDataService(db)
+
+	// 有状态游戏会话服务 (后端为唯一事实来源)
+	a.gameService = service.NewGameService(db)
+	if err := a.gameService.Resume(); err != nil {
+		log.Println("no saved game session to resume:", err)
+	}
 }
 
-// --- Abstract Database API ---
+// ============ 游戏 API (后端驱动：数据存储 + 计算逻辑均在 Go) ============
 
-// Silo Operations
-func (a *App) GetSilo(id uint) (*model.Silo, error) {
-	var silo model.Silo
-	err := a.db.Preload("Resources").Preload("Professions").Preload("Floors").First(&silo, id).Error
-	return &silo, err
+// CreateGame 新建游戏：初始化地堡/特工 → 落库 SQLite → 缓存会话
+func (a *App) CreateGame(req model.CreateGameRequest) (*model.GameState, error) {
+	return a.gameService.CreateGame(req)
 }
 
-func (a *App) SaveSilo(silo *model.Silo) error {
-	return a.db.Save(silo).Error
+// GetGameState 获取当前游戏状态快照
+func (a *App) GetGameState() (*model.GameState, error) {
+	return a.gameService.GetState()
 }
 
-func (a *App) CreateSilo(silo *model.Silo) (*model.Silo, error) {
-	err := a.db.Create(silo).Error
-	return silo, err
+// PassTime 推进时间 months 个月 (tick 结算全部在 Go 完成)
+func (a *App) PassTime(months int) (*model.TickResult, error) {
+	return a.gameService.PassTime(months)
 }
 
-// Agent Operations
-func (a *App) GetAgent(id uint) (*model.Agent, error) {
-	var agent model.Agent
-	err := a.db.Preload("Connections").First(&agent, id).Error
-	return &agent, err
+// ExecuteAction 执行玩家动作；耗时动作自动推进对应月份
+func (a *App) ExecuteAction(action model.AgentAction) (*model.ActionOutcome, error) {
+	return a.gameService.ExecuteAction(action)
 }
 
-func (a *App) SaveAgent(agent *model.Agent) error {
-	return a.db.Save(agent).Error
+// GetEndingNarrative 获取结局叙事文案
+func (a *App) GetEndingNarrative() (string, error) {
+	return a.gameService.GetEndingNarrative(), nil
 }
 
-// User Operations
-func (a *App) GetUser(id uint) (*model.User, error) {
-	var user model.User
-	err := a.db.Preload("Agent").First(&user, id).Error
-	return &user, err
+// HasActiveGame 是否有进行中的游戏会话
+func (a *App) HasActiveGame() (bool, error) {
+	return a.gameService.HasActiveGame(), nil
 }
 
-// Generic List (Example for Silos)
-func (a *App) ListSilos() ([]model.Silo, error) {
-	var silos []model.Silo
-	err := a.db.Find(&silos).Error
-	return silos, err
+// GetProfessionActions 获取职业专属行动元数据 (前端渲染按钮用，不含执行逻辑)
+func (a *App) GetProfessionActions(profession string) ([]model.ProfessionActionMeta, error) {
+	return engine.GetProfessionActionMeta(profession), nil
 }
 
-// --- Abstract Cache API ---
-
-func (a *App) SetCache(key string, value string, ttl int) error {
-	return a.dataService.SetCache(key, value, ttl)
-}
-
-func (a *App) GetCache(key string) (string, error) {
-	return a.dataService.GetCache(key)
-}
-
-func (a *App) DelCache(key string) {
-	a.dataService.DelCache(key)
-}
-
-// --- Legacy / Helper ---
-
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
+// GetProfessionAction 获取单个职业行动元数据
+func (a *App) GetProfessionAction(id string) (*model.ProfessionActionMeta, error) {
+	def := engine.GetProfessionAction(id)
+	if def == nil {
+		return nil, nil
+	}
+	return &model.ProfessionActionMeta{
+		ID:               def.ID,
+		Profession:       def.Profession,
+		Label:            def.Label,
+		Description:      def.Description,
+		APCost:           int(def.APCost),
+		TargetType:       string(def.TargetType),
+		SuspicionPenalty: def.SuspicionPenalty,
+	}, nil
 }

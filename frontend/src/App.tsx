@@ -1,18 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import logo from './assets/images/logo-universal.png';
 import './App.css';
-import { Greet } from "../wailsjs/go/main/App";
+import { CreateGame, GetGameState, HasActiveGame, PassTime, ExecuteAction } from "../wailsjs/go/main/App";
 import { Box, Button, Center, Heading, Image, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
 import { ProgressBar, ProgressRoot } from './components/ui/progress';
 import { Slider } from './components/ui/slider';
 import { TimeWheel } from './components/TimeWheel';
 import { SiloWheel } from './components/SiloWheel';
 import { SetupPanel } from './components/SetupPanel';
-import { createInitialSilo, createInitialAgent } from './logic/initializer';
-import { GameEngine } from './logic/engine';
-import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS } from './logic/models';
-import { StoryEvent } from './logic/models';
-import { getProfessionActions, getProfessionAction } from './logic/professionActions';
+import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS, ProfessionActionMeta, GameState } from './logic/models';
 
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
@@ -24,7 +20,10 @@ function App() {
     const [siloNumber, setSiloNumber] = useState(40);
     const [silo, setSilo] = useState<Silo | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
-    
+    const [organizedPopulation, setOrganizedPopulation] = useState(0);
+    const [gameOver, setGameOver] = useState(false);
+    const [professionActions, setProfessionActions] = useState<ProfessionActionMeta[]>([]);
+
     // Action Form State
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
     const [targetDept, setTargetDept] = useState<string>('');
@@ -37,16 +36,42 @@ function App() {
         setSelectedFragments(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
     };
 
-    // 当前选中的职业专属行动定义 (actionType === 'PROFESSION_ACTION' 时非空)
-    const selectedProfessionAction = actionType === 'PROFESSION_ACTION' ? getProfessionAction(professionActionId) : undefined;
+    // 当前选中的职业专属行动元数据 (由 Go 后端下发，actionType === 'PROFESSION_ACTION' 时非空)
+    const selectedProfessionAction = actionType === 'PROFESSION_ACTION'
+        ? professionActions.find(a => a.id === professionActionId)
+        : undefined;
     // 目标选择器显示条件：职业行动按 targetType 决定；通用行动排除全局操作
     const showDeptSelector = actionType === 'PROFESSION_ACTION'
-        ? selectedProfessionAction?.targetType === 'DEPT'
+        ? selectedProfessionAction?.target_type === 'DEPT'
         : !(actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION');
-    const showResourceSelector = actionType === 'PROFESSION_ACTION' && selectedProfessionAction?.targetType === 'RESOURCE';
+    const showResourceSelector = actionType === 'PROFESSION_ACTION' && selectedProfessionAction?.target_type === 'RESOURCE';
 
-    // We only need one instance of the engine
-    const [engine] = useState(() => new GameEngine());
+    // 应用后端返回的游戏状态快照
+    const applyGameState = (state: GameState) => {
+        setSilo(state.silo);
+        setAgent(state.agent);
+        setOrganizedPopulation(state.organized_population);
+        setProfessionActions(state.profession_actions || []);
+        setGameOver(state.game_over);
+        setGameStarted(true);
+        setShowSetup(false);
+    };
+
+    // 启动时恢复进行中的游戏会话 (后端内存/缓存/SQLite 为唯一事实来源)
+    useEffect(() => {
+        HasActiveGame()
+            .then(active => {
+                if (!active) return;
+                return GetGameState();
+            })
+            .then(state => {
+                if (!state) return;
+                applyGameState(state);
+                setResultText(`Resumed ${state.silo.name}. The year is ${state.silo.current_year}, Month ${state.silo.current_month}.`);
+            })
+            .catch(err => updateResultText(`Failed to load saved game: ${err}`));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const updateName = (e: any) => setName(e.target.value);
     const updateResultText = (result: string) => setResultText(result);
@@ -64,91 +89,72 @@ function App() {
         updateResultText(`Silo ${num} selected. Use Selection Points to customize your Agent and Silo.`);
     };
 
-    const handleSetupComplete = (selectedTraitIds: string[], profession: string) => {
+    // 新建游戏：初始化/落库/缓存全部由 Go 后端完成
+    const handleSetupComplete = async (selectedTraitIds: string[], profession: string) => {
         const agentName = name || "Juliette";
         const siloName = `Silo ${siloNumber}`;
-        const initialSilo = createInitialSilo(siloName, startYear, selectedTraitIds);
-        const initialAgent = createInitialAgent(agentName, profession, selectedTraitIds, initialSilo);
-        
+
         try {
-            setSilo(initialSilo);
-            setAgent(initialAgent);
-            updateResultText(`Welcome to ${initialSilo.name}. The year is ${initialSilo.current_year}, Month ${initialSilo.current_month}.`);
-            setGameStarted(true);
-            setShowSetup(false);
+            const state = await CreateGame({
+                silo_name: siloName,
+                start_year: startYear,
+                trait_ids: selectedTraitIds,
+                agent_name: agentName,
+                profession,
+            });
+            applyGameState(state);
+            updateResultText(`Welcome to ${state.silo.name}. The year is ${state.silo.current_year}, Month ${state.silo.current_month}.`);
         } catch (err) {
             updateResultText(`Failed to initialize silo: ${err}`);
         }
     };
 
-    // 模拟时间推移 (跳过指定月数)
-    const passMonths = (months: number, currentSilo: Silo, currentAgent: Agent, logs: string[]): StoryEvent[] => {
-        const addLog = (msg: string) => logs.push(msg);
-        const events: StoryEvent[] = [];
-        
-        for (let i = 0; i < months; i++) {
-            engine.updateAgentState(currentAgent, 1/12, currentSilo, addLog);
-            const monthEvents = engine.updateSiloState(currentSilo, 1/12, currentAgent, addLog);
-            events.push(...monthEvents);
-            
-            currentSilo.current_month = (currentSilo.current_month || 1) + 1;
-            if (currentSilo.current_month > 12) {
-                currentSilo.current_month = 1;
-                currentSilo.current_year += 1;
-            }
-            
-            if (currentSilo.victory_status?.is_won !== undefined) {
-                break; // 游戏结束，不再继续推移
-            }
-        }
-        return events;
-    };
-
-    const handlePassTime = () => {
+    const handlePassTime = async () => {
         if (!silo || !agent) return;
-        
-        const nextSilo = JSON.parse(JSON.stringify(silo));
-        const nextAgent = JSON.parse(JSON.stringify(agent));
-        const logs: string[] = [];
 
-        const events = passMonths(1, nextSilo, nextAgent, logs); // 每次点击过 1 个月
-        
-        setSilo(nextSilo);
-        setAgent(nextAgent);
+        try {
+            const result = await PassTime(1); // 每次点击过 1 个月，结算在 Go 完成
+            setSilo(result.silo);
+            setAgent(result.agent);
+            setOrganizedPopulation(result.organized_population);
+            setGameOver(result.game_over);
 
-        if (nextSilo.victory_status?.is_won !== undefined) {
-            updateResultText(`Game Over: ${nextSilo.victory_status.description}`);
-        } else if (events.length > 0) {
-            updateResultText(`Event Occurred: ${events[0].title}`);
-        } else {
-            const prefix = `Year ${nextSilo.current_year} Month ${nextSilo.current_month}. `;
-            if (logs.length > 0) {
-                updateResultText(`${prefix}Rumors: ${logs.join(' | ')}`);
+            if (result.game_over) {
+                updateResultText(`Game Over: ${result.silo.victory_status?.description || result.ending_narrative}`);
+            } else if (result.stories.length > 0) {
+                updateResultText(`Event Occurred: ${result.stories[0].title}`);
             } else {
-                updateResultText(`${prefix}The silo was relatively quiet.`);
+                const prefix = `Year ${result.silo.current_year} Month ${result.silo.current_month}. `;
+                if (result.logs.length > 0) {
+                    updateResultText(`${prefix}Rumors: ${result.logs.join(' | ')}`);
+                } else {
+                    updateResultText(`${prefix}The silo was relatively quiet.`);
+                }
             }
+        } catch (err) {
+            updateResultText(`Failed to advance time: ${err}`);
         }
     };
 
-    // 表单提交：执行动作
-    const handleExecuteAction = () => {
+    // 表单提交：执行动作 (执行/结算/NPC 回合均在 Go)
+    const handleExecuteAction = async () => {
         if (!silo || !agent) return;
-        
+
         const isGlobalAction = actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION';
         const profDef = selectedProfessionAction;
 
         // 目标校验：职业行动按 targetType；通用行动必须选目标部门
         let actionTarget: string | undefined = targetDept;
         if (profDef) {
-            if (profDef.targetType === 'DEPT' && !targetDept) {
+            if (profDef.target_type === 'DEPT' && !targetDept) {
                 updateResultText("Please select a target department.");
                 return;
             }
-            if (profDef.targetType === 'RESOURCE' && !resourceTarget) {
+            if (profDef.target_type === 'RESOURCE' && !resourceTarget) {
                 updateResultText("Please select a target resource.");
                 return;
             }
-            actionTarget = profDef.targetType === 'RESOURCE' ? resourceTarget : targetDept;
+            actionTarget = profDef.target_type === 'RESOURCE' ? resourceTarget : targetDept;
         } else if (!isGlobalAction && !targetDept) {
             updateResultText("Please select a target department.");
             return;
@@ -158,50 +164,41 @@ function App() {
             return;
         }
 
-        const nextSilo = JSON.parse(JSON.stringify(silo));
-        const nextAgent = JSON.parse(JSON.stringify(agent));
-        
         const action: AgentAction = {
             type: actionType,
             // 针对全局操作，不传递 target_dept，避免引擎校验失败
             target_dept: isGlobalAction ? undefined : actionTarget,
             fragment_ids: actionType === 'SHARE_INFO' ? selectedFragments : undefined,
             profession_action: profDef ? profDef.id : undefined,
-            resource_target: profDef?.targetType === 'RESOURCE' ? resourceTarget : undefined,
-            cost: profDef ? profDef.apCost : ACTION_COSTS[actionType]
+            resource_target: profDef?.target_type === 'RESOURCE' ? resourceTarget : undefined,
+            cost: profDef ? profDef.ap_cost : ACTION_COSTS[actionType]
         };
 
-        const result = engine.executeAgentAction(nextSilo, nextAgent, action);
-        
-        if (result.executed) {
-            const duration = ACTION_DURATIONS[actionType] || 0;
-            const logs: string[] = [];
-            
-            if (duration > 0) {
-                passMonths(duration, nextSilo, nextAgent, logs);
+        try {
+            const outcome = await ExecuteAction(action);
+
+            setSilo(outcome.silo);
+            setAgent(outcome.agent);
+            setOrganizedPopulation(outcome.organized_population);
+            setGameOver(outcome.game_over);
+
+            if (outcome.game_over) {
+                updateResultText(`Game Over: ${outcome.silo.victory_status?.description || outcome.ending_narrative}`);
+            } else if (!outcome.result.executed) {
+                updateResultText(`Action failed: ${outcome.result.message}`);
             } else {
-                // 即时操作，时间不流逝，但触发一次 NPC 回合 (统一 Actor 管线)
-                engine.runNpcTurn(nextSilo, nextAgent, 1/12, (msg) => logs.push(msg));
-                engine.updateSiloState(nextSilo, 0, nextAgent); // 检测一下是否有特殊状态更新，不过 deltaYears 为 0 时其实返回了
+                let msg = outcome.result.message;
+                const duration = ACTION_DURATIONS[actionType] || 0;
+                if (duration > 0) {
+                    msg += ` (Time passed: ${duration} months)`;
+                }
+                if (outcome.logs.length > 0) {
+                    msg += ` | NPC Activity: ${outcome.logs.join(', ')}`;
+                }
+                updateResultText(msg);
             }
-            
-            setSilo(nextSilo);
-            setAgent(nextAgent);
-            
-            if (nextSilo.victory_status?.is_won !== undefined) {
-                 updateResultText(`Game Over: ${nextSilo.victory_status.description}`);
-            } else {
-                 let msg = result.message;
-                 if (duration > 0) {
-                     msg += ` (Time passed: ${duration} months)`;
-                 }
-                 if (logs.length > 0) {
-                     msg += ` | NPC Activity: ${logs.join(', ')}`;
-                 }
-                 updateResultText(msg);
-            }
-        } else {
-            updateResultText(`Action failed: ${result.message}`);
+        } catch (err) {
+            updateResultText(`Failed to execute action: ${err}`);
         }
     };
 
@@ -216,15 +213,15 @@ function App() {
         <Center minH="100vh" bg="gray.50" color="gray.800" py={8}>
             <VStack gap={8} p={8} bg="white" borderRadius="xl" boxShadow="2xl" maxW="1200px" w="full" border="1px solid" borderColor="gray.200">
                 <Image src={logo} h="80px" alt="logo" />
-                
+
                 <Heading size="md" textAlign="center" color="blue.600">{resultText}</Heading>
-                
+
                 {!gameStarted && !showSetup && !showSiloWheel && (
                     <VStack gap={6} w="full" maxW="400px">
-                        <Input 
-                            placeholder="Enter agent name (e.g. Juliette)" 
-                            value={name} 
-                            onChange={updateName} 
+                        <Input
+                            placeholder="Enter agent name (e.g. Juliette)"
+                            value={name}
+                            onChange={updateName}
                             size="md"
                             bg="gray.100"
                             border="1px solid"
@@ -309,7 +306,7 @@ function App() {
                                     <Text fontSize="sm" color="gray.600">Organization Size</Text>
                                     <HStack w="full">
                                         <Text fontWeight="bold" color="cyan.700">
-                                            {silo && agent ? engine.getOrganizedPopulation(silo, agent) : 0}
+                                            {organizedPopulation}
                                         </Text>
                                         <Text fontSize="xs" color="gray.500">
                                             / {silo?.total_population || 0}
@@ -368,18 +365,18 @@ function App() {
                             </HStack>
 
                             <Heading size="xs" mb={3} color="gray.500" textTransform="uppercase">Departments Overview</Heading>
-                            
+
                             {/* ELITE Class Section */}
                             <Box mb={6}>
                                 <HStack justify="space-between" mb={2}>
                                     <Heading size="sm" color="purple.600">Elite Class</Heading>
                                     <HStack>
                                         <Text fontSize="xs" color="gray.500">Avg Ideology: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').reduce((acc, p) => acc + p.ideology_value, 0) || 0) / 
+                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').reduce((acc, p) => acc + p.ideology_value, 0) || 0) /
                                             (silo?.professions?.filter(p => p.class_type === 'ELITE').length || 1) * 100
                                         ).toFixed(0)}%</Text>
                                         <Text fontSize="xs" color="gray.500">Avg Panic: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').reduce((acc, p) => acc + p.panic_value, 0) || 0) / 
+                                            (silo?.professions?.filter(p => p.class_type === 'ELITE').reduce((acc, p) => acc + p.panic_value, 0) || 0) /
                                             (silo?.professions?.filter(p => p.class_type === 'ELITE').length || 1) * 100
                                         ).toFixed(0)}%</Text>
                                     </HStack>
@@ -442,11 +439,11 @@ function App() {
                                     <Heading size="sm" color="green.600">Commoner Class</Heading>
                                     <HStack>
                                         <Text fontSize="xs" color="gray.500">Avg Ideology: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').reduce((acc, p) => acc + p.ideology_value, 0) || 0) / 
+                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').reduce((acc, p) => acc + p.ideology_value, 0) || 0) /
                                             (silo?.professions?.filter(p => p.class_type === 'COMMONER').length || 1) * 100
                                         ).toFixed(0)}%</Text>
                                         <Text fontSize="xs" color="gray.500">Avg Panic: {(
-                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').reduce((acc, p) => acc + p.panic_value, 0) || 0) / 
+                                            (silo?.professions?.filter(p => p.class_type === 'COMMONER').reduce((acc, p) => acc + p.panic_value, 0) || 0) /
                                             (silo?.professions?.filter(p => p.class_type === 'COMMONER').length || 1) * 100
                                         ).toFixed(0)}%</Text>
                                     </HStack>
@@ -520,7 +517,7 @@ function App() {
                                 Unique actions of your profession. Hover for details.
                             </Text>
                             <SimpleGrid columns={2} gap={3} w="full">
-                                {getProfessionActions(agent?.profession || '').map(def => {
+                                {professionActions.map(def => {
                                     const isSelected = professionActionId === def.id && actionType === 'PROFESSION_ACTION';
                                     return (
                                         <Button
@@ -540,7 +537,7 @@ function App() {
                                             _hover={{ bg: isSelected ? "purple.600" : "gray.50" }}
                                         >
                                             <Text fontWeight="bold">{def.label}</Text>
-                                            <Text fontSize="xs" mt={1}>({def.apCost} AP)</Text>
+                                            <Text fontSize="xs" mt={1}>({def.ap_cost} AP)</Text>
                                         </Button>
                                     );
                                 })}
@@ -649,8 +646,8 @@ function App() {
                                                     const isSelected = selectedFragments.includes(f);
                                                     const isKnown = agent?.known_fragments?.includes(f);
                                                     return (
-                                                        <Badge 
-                                                            key={f} 
+                                                        <Badge
+                                                            key={f}
                                                             colorPalette={isSelected ? (isKnown ? "blue" : "red") : (isKnown ? "gray" : "orange")}
                                                             variant={isSelected ? "solid" : "subtle"}
                                                             cursor="pointer"
