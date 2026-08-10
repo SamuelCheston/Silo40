@@ -27,6 +27,7 @@ func CreateInitialSilo(name string, initialYear int, traitIds []string) *model.S
 		Resources:       []model.Resource{},
 		Professions:     []model.Profession{},
 		Floors:          []model.Floor{},
+		Cohorts:         []model.PopulationCohort{},
 		Residents:       []model.Resident{},
 		Factions:        []model.Faction{},
 	}
@@ -128,7 +129,7 @@ func CreateInitialSilo(name string, initialYear int, traitIds []string) *model.S
 		}
 	}
 
-	// 4. Initialize explicit residents and implicit factions after world traits settle
+	// 4. Initialize aggregated population model and key residents after world traits settle
 	initResidentsAndFactions(silo)
 
 	return silo

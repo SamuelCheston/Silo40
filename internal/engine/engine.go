@@ -884,10 +884,11 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 		return
 	}
 
-	// 1. Keep resident / faction state in sync, but do not drive political
-	// decisions from factions yet. Profession decisions remain the active
-	// NPC production-side behavior.
-	updateResidentPopulationState(silo, deltaYears)
+	// 1. Keep aggregated population / key resident / faction state in sync,
+	// but do not drive political decisions from factions yet. Profession
+	// decisions remain the active NPC production-side behavior.
+	updatePopulationCohorts(silo, deltaYears)
+	updateKeyResidents(silo, deltaYears)
 	RebuildImplicitFactions(silo)
 
 	var npcProfs []*model.Profession
@@ -1278,10 +1279,12 @@ func (e *GameEngine) updatePopulation(silo *model.Silo, deltaYears float64) {
 	}
 
 	deaths := float64(silo.TotalPopulation) * deathRate * deltaYears
-	silo.TotalPopulation -= int(math.Floor(deaths))
+	deathCount := int(math.Floor(deaths))
+	applyPopulationDeathsToCohorts(silo, deathCount)
 	if silo.TotalPopulation < 0 {
 		silo.TotalPopulation = 0
 	}
+	refreshProfessionPopulationFromCohorts(silo)
 }
 
 func formatPct(v float64) string {

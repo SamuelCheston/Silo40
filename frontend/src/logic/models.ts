@@ -1,4 +1,11 @@
-export type VictoryType = 'NONE' | 'INFORMATION' | 'TIME' | 'REBELLION' | 'EXCLUSIONIST' | 'DEATH' | 'AGENT_COMPROMISED';
+export type VictoryType =
+  | "NONE"
+  | "INFORMATION"
+  | "TIME"
+  | "REBELLION"
+  | "EXCLUSIONIST"
+  | "DEATH"
+  | "AGENT_COMPROMISED";
 
 export interface VictoryStatus {
   is_won: boolean;
@@ -44,7 +51,13 @@ export interface Agent {
   updated_at: string;
 }
 
-export type AgentActionType = 'GATHER_INFO' | 'SHARE_INFO' | 'BUILD_CONNECTION' | 'INCITE_REBELLION' | 'CONDUCT_PROPAGANDA' | 'PROFESSION_ACTION';
+export type AgentActionType =
+  | "GATHER_INFO"
+  | "SHARE_INFO"
+  | "BUILD_CONNECTION"
+  | "INCITE_REBELLION"
+  | "CONDUCT_PROPAGANDA"
+  | "PROFESSION_ACTION";
 
 export const ACTION_COSTS: Record<AgentActionType, number> = {
   GATHER_INFO: 10,
@@ -57,7 +70,7 @@ export const ACTION_COSTS: Record<AgentActionType, number> = {
 
 export const ACTION_DURATIONS: Record<AgentActionType, number> = {
   GATHER_INFO: 0, // 即时操作
-  SHARE_INFO: 0,  // 即时操作
+  SHARE_INFO: 0, // 即时操作
   BUILD_CONNECTION: 3, // 耗时3个月
   INCITE_REBELLION: 2, // 耗时2个月
   CONDUCT_PROPAGANDA: 1, // 耗时1个月
@@ -107,6 +120,7 @@ export interface Silo {
   resources: Resource[];
   professions: Profession[];
   floors: Floor[];
+  cohorts?: PopulationCohort[];
   factions?: Faction[];
   created_at: string;
   updated_at: string;
@@ -145,15 +159,32 @@ export interface Profession {
 }
 
 export const ALL_FRAGMENTS: string[] = [
-  'Mayor_1', 'Mayor_2', 'Mayor_3', 'Mayor_4', 'Mayor_5',
-  'Judicial_1', 'Judicial_2', 'Judicial_3', 'Judicial_4', 'Judicial_5',
-  'IT_1', 'IT_2', 'IT_3', 'IT_4', 'IT_5',
-  'Police_1', 'Police_2',
-  'Medical_1', 'Medical_2',
-  'Mechanical_1', 'Mechanical_2',
-  'Supply_1', 'Supply_2',
-  'Mines_1', 'Mines_2',
-  'Agricultural_1'
+  "Mayor_1",
+  "Mayor_2",
+  "Mayor_3",
+  "Mayor_4",
+  "Mayor_5",
+  "Judicial_1",
+  "Judicial_2",
+  "Judicial_3",
+  "Judicial_4",
+  "Judicial_5",
+  "IT_1",
+  "IT_2",
+  "IT_3",
+  "IT_4",
+  "IT_5",
+  "Police_1",
+  "Police_2",
+  "Medical_1",
+  "Medical_2",
+  "Mechanical_1",
+  "Mechanical_2",
+  "Supply_1",
+  "Supply_2",
+  "Mines_1",
+  "Mines_2",
+  "Agricultural_1",
 ];
 
 export interface Floor {
@@ -175,9 +206,30 @@ export interface Faction {
   tags: string[];
   member_count: number;
   representative_resident_id: number;
+  representative_cohort_id?: number;
   representative_name: string;
   influence: number;
   cohesion: number;
+  updated_at: string;
+}
+
+export interface PopulationCohort {
+  id: number;
+  silo_id: number;
+  profession_id: number;
+  faction_id?: number;
+  name: string;
+  count: number;
+  home_zone: string;
+  loyalty: number;
+  influence: number;
+  action_points: number;
+  political_prestige: number;
+  organization_factor: number;
+  panic_sensitivity: number;
+  ideologies: Record<string, number>;
+  known_fragments?: string[];
+  tags?: string[];
   updated_at: string;
 }
 

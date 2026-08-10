@@ -99,6 +99,12 @@ func (s *GameService) persist() error {
 	for i := range silo.Floors {
 		silo.Floors[i].SiloID = ActiveSiloID
 	}
+	for i := range silo.Cohorts {
+		silo.Cohorts[i].SiloID = ActiveSiloID
+		if silo.Cohorts[i].ID == 0 {
+			silo.Cohorts[i].ID = uint(i + 1)
+		}
+	}
 	for i := range silo.Factions {
 		silo.Factions[i].SiloID = ActiveSiloID
 		if silo.Factions[i].ID == 0 {
@@ -129,6 +135,14 @@ func (s *GameService) persist() error {
 		_ = tx.Where("silo_id = ?", ActiveSiloID).Find(&oldFloors).Error
 		for _, f := range oldFloors {
 			if err := tx.Delete(&model.Floor{}, f.ID).Error; err != nil {
+				return err
+			}
+		}
+
+		var oldCohorts []model.PopulationCohort
+		_ = tx.Where("silo_id = ?", ActiveSiloID).Find(&oldCohorts).Error
+		for _, cohort := range oldCohorts {
+			if err := tx.Delete(&model.PopulationCohort{}, cohort.ID).Error; err != nil {
 				return err
 			}
 		}
@@ -190,6 +204,9 @@ func (s *GameService) persist() error {
 		for i := range silo.Floors {
 			silo.Floors[i].SiloID = ActiveSiloID
 		}
+		for i := range silo.Cohorts {
+			silo.Cohorts[i].SiloID = ActiveSiloID
+		}
 		for i := range silo.Factions {
 			silo.Factions[i].SiloID = ActiveSiloID
 		}
@@ -203,6 +220,9 @@ func (s *GameService) persist() error {
 			return err
 		}
 		if err := tx.Create(&silo.Floors).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&silo.Cohorts).Error; err != nil {
 			return err
 		}
 		if err := tx.Create(&silo.Factions).Error; err != nil {
@@ -239,7 +259,7 @@ func (s *GameService) Resume() error {
 	}
 
 	var silo model.Silo
-	if err := s.db.Preload("Resources").Preload("Professions").Preload("Floors").Preload("Residents").Preload("Factions").
+	if err := s.db.Preload("Resources").Preload("Professions").Preload("Floors").Preload("Cohorts").Preload("Residents").Preload("Factions").
 		First(&silo, ActiveSiloID).Error; err != nil {
 		return err
 	}
@@ -437,6 +457,7 @@ func (s *GameService) publicSiloSnapshot() model.Silo {
 	snap := *s.silo
 	// Residents stay in the backend/session snapshot for simulation, but we avoid
 	// returning the full population on every UI round-trip.
+	snap.Cohorts = nil
 	snap.Residents = nil
 	return snap
 }

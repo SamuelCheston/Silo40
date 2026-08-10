@@ -12,8 +12,11 @@ func TestEngineSmoke(t *testing.T) {
 	silo := CreateInitialSilo("Silo 40", 122, []string{"shadowy"})
 	agent := CreateInitialAgent("Juliette", "Mechanical", []string{"shadowy"}, silo)
 
-	if len(silo.Residents) != silo.TotalPopulation {
-		t.Fatalf("expected %d residents, got %d", silo.TotalPopulation, len(silo.Residents))
+	if len(silo.Cohorts) == 0 {
+		t.Fatalf("expected aggregated population cohorts to be generated")
+	}
+	if len(silo.Residents) == 0 {
+		t.Fatalf("expected key residents to be generated")
 	}
 	if len(silo.Factions) == 0 {
 		t.Fatalf("expected implicit factions to be generated")
@@ -21,6 +24,9 @@ func TestEngineSmoke(t *testing.T) {
 	for _, faction := range silo.Factions {
 		if faction.RepresentativeResidentID == 0 {
 			t.Fatalf("faction %s has no representative", faction.Name)
+		}
+		if faction.RepresentativeCohortID == nil {
+			t.Fatalf("faction %s has no representative cohort", faction.Name)
 		}
 	}
 

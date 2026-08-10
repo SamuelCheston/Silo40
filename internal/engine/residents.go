@@ -14,46 +14,105 @@ func initResidentsAndFactions(silo *model.Silo) {
 	if silo == nil {
 		return
 	}
-	silo.Residents = initResidents(silo)
+	silo.Cohorts = initPopulationCohorts(silo)
+	refreshProfessionPopulationFromCohorts(silo)
+	silo.Residents = initKeyResidents(silo)
 	RebuildImplicitFactions(silo)
 }
 
-func initResidents(silo *model.Silo) []model.Resident {
-	residents := make([]model.Resident, 0, silo.TotalPopulation)
+func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
+	cohorts := make([]model.PopulationCohort, 0, len(silo.Professions)*3)
 	nextID := uint(1)
 	for i := range silo.Professions {
 		prof := &silo.Professions[i]
-		for idx := 0; idx < prof.Population; idx++ {
-			loyalty := clamp01(0.42 + rand.Float64()*0.36 + classBias(prof.ClassType, 0.08))
-			ideologyProForeign := clamp01(prof.Ideologies[model.IdeologyProForeign] + (rand.Float64()-0.5)*0.30)
-			ideologyDemocracy := clamp01(prof.Ideologies[model.IdeologyDemocracy] + (rand.Float64()-0.5)*0.20)
-			influence := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.12) + rand.Float64()*0.18)
-			resident := model.Resident{
-				ID:           nextID,
-				SiloID:       silo.ID,
-				Name:         fmt.Sprintf("%s Resident %04d", prof.Name, idx+1),
-				ProfessionID: prof.ID,
-				Profession:   prof.Name,
-				HomeFloor:    randomFloorForZone(prof.Zone),
-				Loyalty:      loyalty,
-				Ideologies: map[string]float64{
-					model.IdeologyProForeign: ideologyProForeign,
-					model.IdeologyDemocracy:  ideologyDemocracy,
-				},
-				Influence:          influence,
-				ActionPoints:       20 + rand.Float64()*25,
-				SuspicionLevel:     0,
-				PoliticalPrestige:  influence * 25,
-				PropagandaLevel:    0,
-				OrganizationFactor: 0.9 + rand.Float64()*0.35,
-				KnownFragments:     initResidentFragments(prof.Name),
-				Relations:          initResidentRelations(silo, prof),
-				Alive:              true,
+		splits := initialCohortSplits(prof.Population)
+		for idx, count := range splits {
+			if count <= 0 {
+				continue
 			}
-			resident.Tags = buildResidentTags(&resident, prof, silo)
-			residents = append(residents, resident)
+			loyalty := clamp01(0.42 + rand.Float64()*0.28 + classBias(prof.ClassType, 0.08) + float64(idx-1)*0.08)
+			influence := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10) + rand.Float64()*0.12 - float64(idx)*0.03)
+			ideologies := map[string]float64{
+				model.IdeologyProForeign: clamp01(prof.Ideologies[model.IdeologyProForeign] + (rand.Float64()-0.5)*0.18 + float64(idx-1)*0.05),
+				model.IdeologyDemocracy:  clamp01(prof.Ideologies[model.IdeologyDemocracy] + (rand.Float64()-0.5)*0.16 + float64(idx-1)*0.04),
+			}
+			cohort := model.PopulationCohort{
+				ID:                 nextID,
+				SiloID:             silo.ID,
+				ProfessionID:       prof.ID,
+				Name:               fmt.Sprintf("%s Cohort %d", prof.Name, idx+1),
+				Count:              count,
+				HomeZone:           prof.Zone,
+				Loyalty:            loyalty,
+				Influence:          influence,
+				ActionPoints:       18 + rand.Float64()*20,
+				PoliticalPrestige:  influence * 20,
+				OrganizationFactor: 0.85 + rand.Float64()*0.35,
+				PanicSensitivity:   0.85 + rand.Float64()*0.30,
+				Ideologies:         ideologies,
+				KnownFragments:     initResidentFragments(prof.Name),
+			}
+			cohort.Tags = buildCohortTags(&cohort, prof, silo)
+			cohorts = append(cohorts, cohort)
 			nextID++
 		}
+	}
+	return cohorts
+}
+
+func initialCohortSplits(population int) []int {
+	switch {
+	case population <= 4:
+		return []int{population}
+	case population <= 60:
+		first := int(math.Round(float64(population) * 0.6))
+		if first <= 0 {
+			first = 1
+		}
+		return []int{first, population - first}
+	default:
+		first := int(math.Round(float64(population) * 0.5))
+		second := int(math.Round(float64(population) * 0.3))
+		third := population - first - second
+		return []int{first, second, third}
+	}
+}
+
+func initKeyResidents(silo *model.Silo) []model.Resident {
+	if silo == nil {
+		return nil
+	}
+	residents := make([]model.Resident, 0, len(silo.Cohorts)+len(silo.Professions))
+	nextID := uint(1)
+	for i := range silo.Cohorts {
+		cohort := &silo.Cohorts[i]
+		prof := profByID(silo, cohort.ProfessionID)
+		if prof == nil {
+			continue
+		}
+		resident := model.Resident{
+			ID:                 nextID,
+			SiloID:             silo.ID,
+			Name:               fmt.Sprintf("%s Delegate %02d", prof.Name, i+1),
+			CohortID:           uintPtr(cohort.ID),
+			ProfessionID:       prof.ID,
+			Profession:         prof.Name,
+			HomeFloor:          randomFloorForZone(prof.Zone),
+			Loyalty:            cohort.Loyalty,
+			Ideologies:         copyIdeologies(cohort.Ideologies),
+			Influence:          clamp01(cohort.Influence + rand.Float64()*0.08),
+			ActionPoints:       cohort.ActionPoints,
+			SuspicionLevel:     0,
+			PoliticalPrestige:  cohort.PoliticalPrestige,
+			PropagandaLevel:    0,
+			OrganizationFactor: cohort.OrganizationFactor,
+			KnownFragments:     append([]string{}, cohort.KnownFragments...),
+			Relations:          initResidentRelations(silo, prof),
+			Alive:              true,
+		}
+		resident.Tags = buildResidentTags(&resident, prof, silo)
+		residents = append(residents, resident)
+		nextID++
 	}
 	return residents
 }
@@ -61,7 +120,7 @@ func initResidents(silo *model.Silo) []model.Resident {
 func initResidentFragments(profession string) []string {
 	var fragments []string
 	for _, frag := range model.ALL_FRAGMENTS {
-		if strings.HasPrefix(frag, profession+"_") && rand.Float64() < 0.12 {
+		if strings.HasPrefix(frag, profession+"_") && rand.Float64() < 0.18 {
 			fragments = append(fragments, frag)
 		}
 	}
@@ -186,6 +245,18 @@ func buildResidentTags(resident *model.Resident, prof *model.Profession, silo *m
 	return dedupeStrings(tags)
 }
 
+func buildCohortTags(cohort *model.PopulationCohort, prof *model.Profession, silo *model.Silo) []string {
+	proxy := model.Resident{
+		Loyalty:            cohort.Loyalty,
+		Ideologies:         cohort.Ideologies,
+		Influence:          cohort.Influence,
+		ActionPoints:       cohort.ActionPoints,
+		PoliticalPrestige:  cohort.PoliticalPrestige,
+		OrganizationFactor: cohort.OrganizationFactor,
+	}
+	return buildResidentTags(&proxy, prof, silo)
+}
+
 func dedupeStrings(values []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(values))
@@ -217,6 +288,16 @@ func factionSignatureForResident(resident *model.Resident) (string, []string) {
 	return stance + "|" + drive, []string{stance, drive}
 }
 
+func factionSignatureForCohort(cohort *model.PopulationCohort, prof *model.Profession, silo *model.Silo) (string, []string) {
+	proxy := model.Resident{
+		Loyalty:    cohort.Loyalty,
+		Ideologies: cohort.Ideologies,
+		Influence:  cohort.Influence,
+	}
+	proxy.Tags = buildResidentTags(&proxy, prof, silo)
+	return factionSignatureForResident(&proxy)
+}
+
 func factionNameFromSignature(tags []string) string {
 	words := make([]string, 0, len(tags))
 	for _, tag := range tags {
@@ -239,15 +320,21 @@ func titleToken(value string) string {
 	return strings.ToUpper(value[:1]) + value[1:]
 }
 
-func factionCohesion(members []*model.Resident) float64 {
+func factionCohesion(members []*model.PopulationCohort) float64 {
 	if len(members) == 0 {
 		return 0
 	}
+	totalWeight := 0.0
 	total := 0.0
 	for _, member := range members {
-		total += member.Loyalty
+		weight := float64(member.Count)
+		totalWeight += weight
+		total += member.Loyalty * weight
 	}
-	return total / float64(len(members))
+	if totalWeight == 0 {
+		return 0
+	}
+	return total / totalWeight
 }
 
 func representativeScore(resident *model.Resident) float64 {
@@ -258,31 +345,83 @@ func representativeScore(resident *model.Resident) float64 {
 		resident.ActionPoints/100.0*0.10
 }
 
-// RebuildImplicitFactions 依据 resident tags 动态聚类派系，并为每个派系选出代表人。
+func representativeCohortScore(cohort *model.PopulationCohort) float64 {
+	scale := math.Log(float64(cohort.Count) + 1)
+	return cohort.Influence*0.45 +
+		cohort.Loyalty*0.15 +
+		cohort.OrganizationFactor*0.20 +
+		cohort.PoliticalPrestige/100.0*0.10 +
+		scale*0.10
+}
+
+func refreshProfessionPopulationFromCohorts(silo *model.Silo) {
+	if silo == nil {
+		return
+	}
+	totalPopulation := 0
+	for i := range silo.Professions {
+		silo.Professions[i].Population = 0
+	}
+	for i := range silo.Cohorts {
+		cohort := &silo.Cohorts[i]
+		totalPopulation += cohort.Count
+		if prof := profByID(silo, cohort.ProfessionID); prof != nil {
+			prof.Population += cohort.Count
+		}
+	}
+	silo.TotalPopulation = totalPopulation
+}
+
+func shouldRemainUnaffiliated(cohort *model.PopulationCohort) bool {
+	if cohort.OrganizationFactor < 0.92 &&
+		cohort.Loyalty >= 0.35 && cohort.Loyalty <= 0.68 &&
+		cohort.Ideologies[model.IdeologyProForeign] < 0.45 &&
+		cohort.Ideologies[model.IdeologyDemocracy] < 0.45 {
+		return true
+	}
+	return false
+}
+
+// RebuildImplicitFactions 依据 cohort tags 动态聚类派系，并为每个派系选出 cohort/resident 双代表。
 func RebuildImplicitFactions(silo *model.Silo) {
 	if silo == nil {
 		return
 	}
 
 	for i := range silo.Residents {
-		silo.Residents[i].FactionID = 0
+		silo.Residents[i].FactionID = nil
 		silo.Residents[i].IsRepresentative = false
-		prof := profByID(silo, silo.Residents[i].ProfessionID)
-		if prof == nil {
+		if silo.Residents[i].CohortID == nil {
 			continue
 		}
+		cohort := cohortByID(silo, *silo.Residents[i].CohortID)
+		prof := profByID(silo, silo.Residents[i].ProfessionID)
+		if cohort == nil || prof == nil {
+			continue
+		}
+		silo.Residents[i].FactionID = cohort.FactionID
 		silo.Residents[i].Tags = buildResidentTags(&silo.Residents[i], prof, silo)
 	}
 
-	grouped := map[string][]*model.Resident{}
-	tagIndex := map[string][]string{}
-	for i := range silo.Residents {
-		resident := &silo.Residents[i]
-		if !resident.Alive {
+	for i := range silo.Cohorts {
+		silo.Cohorts[i].FactionID = nil
+		prof := profByID(silo, silo.Cohorts[i].ProfessionID)
+		if prof == nil {
 			continue
 		}
-		signature, tags := factionSignatureForResident(resident)
-		grouped[signature] = append(grouped[signature], resident)
+		silo.Cohorts[i].Tags = buildCohortTags(&silo.Cohorts[i], prof, silo)
+	}
+
+	grouped := map[string][]*model.PopulationCohort{}
+	tagIndex := map[string][]string{}
+	for i := range silo.Cohorts {
+		cohort := &silo.Cohorts[i]
+		prof := profByID(silo, cohort.ProfessionID)
+		if prof == nil || cohort.Count <= 0 || shouldRemainUnaffiliated(cohort) {
+			continue
+		}
+		signature, tags := factionSignatureForCohort(cohort, prof, silo)
+		grouped[signature] = append(grouped[signature], cohort)
 		tagIndex[signature] = tags
 	}
 
@@ -291,10 +430,18 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		signatures = append(signatures, signature)
 	}
 	sort.Slice(signatures, func(i, j int) bool {
-		if len(grouped[signatures[i]]) == len(grouped[signatures[j]]) {
+		leftSize := 0
+		rightSize := 0
+		for _, cohort := range grouped[signatures[i]] {
+			leftSize += cohort.Count
+		}
+		for _, cohort := range grouped[signatures[j]] {
+			rightSize += cohort.Count
+		}
+		if leftSize == rightSize {
 			return signatures[i] < signatures[j]
 		}
-		return len(grouped[signatures[i]]) > len(grouped[signatures[j]])
+		return leftSize > rightSize
 	})
 
 	factions := make([]model.Faction, 0, len(signatures))
@@ -307,75 +454,203 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			Name:        factionNameFromSignature(tags),
 			Signature:   signature,
 			Tags:        tags,
-			MemberCount: len(members),
+			MemberCount: 0,
 			Cohesion:    factionCohesion(members),
 		}
 
-		var rep *model.Resident
+		var repCohort *model.PopulationCohort
 		bestScore := -1.0
 		totalInfluence := 0.0
-		for _, member := range members {
-			score := representativeScore(member)
+		totalWeight := 0.0
+		for _, cohort := range members {
+			cohort.FactionID = uintPtr(faction.ID)
+			score := representativeCohortScore(cohort)
 			if score > bestScore {
 				bestScore = score
-				rep = member
+				repCohort = cohort
 			}
-			totalInfluence += member.Influence
+			weight := float64(cohort.Count)
+			faction.MemberCount += cohort.Count
+			totalInfluence += cohort.Influence * weight
+			totalWeight += weight
 		}
-		if rep != nil {
-			rep.IsRepresentative = true
-			rep.FactionID = faction.ID
-			if prof := profByID(silo, rep.ProfessionID); prof != nil {
-				rep.Tags = buildResidentTags(rep, prof, silo)
+		if totalWeight > 0 {
+			faction.Influence = totalInfluence / totalWeight
+		}
+		if repCohort != nil {
+			faction.RepresentativeCohortID = uintPtr(repCohort.ID)
+			rep := ensureRepresentativeResident(silo, repCohort)
+			if rep != nil {
+				rep.IsRepresentative = true
+				rep.FactionID = uintPtr(faction.ID)
+				if prof := profByID(silo, rep.ProfessionID); prof != nil {
+					rep.Tags = buildResidentTags(rep, prof, silo)
+				}
+				faction.RepresentativeResidentID = rep.ID
+				faction.RepresentativeName = rep.Name
+			} else {
+				faction.RepresentativeName = repCohort.Name
 			}
-			faction.RepresentativeResidentID = rep.ID
-			faction.RepresentativeName = rep.Name
-		}
-		for _, member := range members {
-			member.FactionID = faction.ID
-		}
-		if len(members) > 0 {
-			faction.Influence = totalInfluence / float64(len(members))
 		}
 		factions = append(factions, faction)
+	}
+
+	for i := range silo.Residents {
+		resident := &silo.Residents[i]
+		if resident.CohortID == nil {
+			continue
+		}
+		if cohort := cohortByID(silo, *resident.CohortID); cohort != nil {
+			resident.FactionID = cohort.FactionID
+		}
 	}
 
 	silo.Factions = factions
 }
 
-func updateResidentPopulationState(silo *model.Silo, deltaYears float64) {
+func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCohort) *model.Resident {
+	if silo == nil || cohort == nil {
+		return nil
+	}
+	for i := range silo.Residents {
+		if silo.Residents[i].CohortID != nil && *silo.Residents[i].CohortID == cohort.ID && silo.Residents[i].Alive {
+			return &silo.Residents[i]
+		}
+	}
+	prof := profByID(silo, cohort.ProfessionID)
+	if prof == nil {
+		return nil
+	}
+	nextID := uint(len(silo.Residents) + 1)
+	resident := model.Resident{
+		ID:                 nextID,
+		SiloID:             silo.ID,
+		Name:               fmt.Sprintf("%s Speaker %02d", prof.Name, nextID),
+		CohortID:           uintPtr(cohort.ID),
+		ProfessionID:       prof.ID,
+		Profession:         prof.Name,
+		HomeFloor:          randomFloorForZone(prof.Zone),
+		Loyalty:            cohort.Loyalty,
+		Ideologies:         copyIdeologies(cohort.Ideologies),
+		Influence:          clamp01(cohort.Influence + 0.08),
+		ActionPoints:       cohort.ActionPoints,
+		PoliticalPrestige:  cohort.PoliticalPrestige,
+		OrganizationFactor: cohort.OrganizationFactor,
+		KnownFragments:     append([]string{}, cohort.KnownFragments...),
+		Relations:          initResidentRelations(silo, prof),
+		Alive:              true,
+	}
+	resident.Tags = buildResidentTags(&resident, prof, silo)
+	silo.Residents = append(silo.Residents, resident)
+	return &silo.Residents[len(silo.Residents)-1]
+}
+
+func updatePopulationCohorts(silo *model.Silo, deltaYears float64) {
 	if silo == nil || deltaYears <= 0 {
 		return
 	}
+	for i := range silo.Cohorts {
+		cohort := &silo.Cohorts[i]
+		prof := profByID(silo, cohort.ProfessionID)
+		if prof == nil || cohort.Count <= 0 {
+			continue
+		}
+		loyaltyTarget := clamp01(silo.Legitimacy - prof.PanicValue*0.35*cohort.PanicSensitivity + classBias(prof.ClassType, 0.08))
+		influenceTarget := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10))
+		organizationTarget := clamp01(0.55 + (1.0-silo.Rebellion)*0.20 + prof.Productivity*0.20)
 
+		cohort.Loyalty += (loyaltyTarget - cohort.Loyalty) * 0.45 * deltaYears
+		for key := range cohort.Ideologies {
+			profVal := prof.Ideologies[key]
+			cohortVal := cohort.Ideologies[key]
+			target := clamp01((cohortVal + profVal + silo.Rebellion*0.15) / 2.15)
+			cohort.Ideologies[key] += (target - cohortVal) * 0.35 * deltaYears
+		}
+		cohort.Influence += (influenceTarget - cohort.Influence) * 0.20 * deltaYears
+		cohort.OrganizationFactor += (organizationTarget - cohort.OrganizationFactor) * 0.22 * deltaYears
+		cohort.ActionPoints = math.Min(70, cohort.ActionPoints+6*deltaYears)
+		cohort.PoliticalPrestige = math.Max(0, cohort.PoliticalPrestige+(cohort.Influence*18-cohort.PoliticalPrestige)*0.30*deltaYears)
+		cohort.Tags = buildCohortTags(cohort, prof, silo)
+	}
+}
+
+func updateKeyResidents(silo *model.Silo, deltaYears float64) {
+	if silo == nil || deltaYears <= 0 {
+		return
+	}
 	for i := range silo.Residents {
 		resident := &silo.Residents[i]
-		if !resident.Alive {
+		if !resident.Alive || resident.CohortID == nil {
 			continue
 		}
+		cohort := cohortByID(silo, *resident.CohortID)
 		prof := profByID(silo, resident.ProfessionID)
-		if prof == nil {
+		if cohort == nil || prof == nil {
 			continue
 		}
-
-		loyaltyTarget := clamp01(silo.Legitimacy - prof.PanicValue*0.35 + classBias(prof.ClassType, 0.08))
-		influenceTarget := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10))
-
-		resident.Loyalty += (loyaltyTarget - resident.Loyalty) * 0.45 * deltaYears
+		resident.Loyalty += (cohort.Loyalty - resident.Loyalty) * 0.55 * deltaYears
 		for key := range resident.Ideologies {
-			profVal := prof.Ideologies[key]
-			resVal := resident.Ideologies[key]
-			target := clamp01((resVal + profVal + silo.Rebellion*0.15) / 2.15)
-			resident.Ideologies[key] += (target - resVal) * 0.35 * deltaYears
+			target := cohort.Ideologies[key]
+			resident.Ideologies[key] += (target - resident.Ideologies[key]) * 0.45 * deltaYears
 		}
-		resident.Influence += (influenceTarget - resident.Influence) * 0.25 * deltaYears
+		resident.Influence += (cohort.Influence - resident.Influence) * 0.30 * deltaYears
 		resident.ActionPoints = math.Min(70, resident.ActionPoints+6*deltaYears)
-
+		resident.PoliticalPrestige = math.Max(0, resident.PoliticalPrestige+(cohort.PoliticalPrestige-resident.PoliticalPrestige)*0.35*deltaYears)
 		if resident.IsRepresentative {
 			resident.Influence = clamp01(resident.Influence + 0.04*deltaYears)
 		}
-		resident.PoliticalPrestige = math.Max(0, resident.PoliticalPrestige+(resident.Influence*18-resident.PoliticalPrestige)*0.30*deltaYears)
+		resident.Tags = buildResidentTags(resident, prof, silo)
 	}
+}
+
+func applyPopulationDeathsToCohorts(silo *model.Silo, deaths int) {
+	if silo == nil || deaths <= 0 || len(silo.Cohorts) == 0 {
+		return
+	}
+	total := 0
+	for _, cohort := range silo.Cohorts {
+		total += cohort.Count
+	}
+	if total <= 0 {
+		return
+	}
+	remainingDeaths := deaths
+	for i := range silo.Cohorts {
+		cohort := &silo.Cohorts[i]
+		if cohort.Count <= 0 {
+			continue
+		}
+		loss := int(math.Floor(float64(deaths) * float64(cohort.Count) / float64(total)))
+		if loss > cohort.Count {
+			loss = cohort.Count
+		}
+		cohort.Count -= loss
+		remainingDeaths -= loss
+	}
+	for remainingDeaths > 0 {
+		progressed := false
+		for i := range silo.Cohorts {
+			if silo.Cohorts[i].Count > 0 {
+				silo.Cohorts[i].Count--
+				remainingDeaths--
+				progressed = true
+				if remainingDeaths == 0 {
+					break
+				}
+			}
+		}
+		if !progressed {
+			break
+		}
+	}
+	pruned := silo.Cohorts[:0]
+	for i := range silo.Cohorts {
+		if silo.Cohorts[i].Count > 0 {
+			pruned = append(pruned, silo.Cohorts[i])
+		}
+	}
+	silo.Cohorts = pruned
+	refreshProfessionPopulationFromCohorts(silo)
 }
 
 func getFactionRepresentatives(silo *model.Silo) []*model.Resident {
@@ -396,4 +671,28 @@ func getFactionRepresentatives(silo *model.Silo) []*model.Resident {
 		}
 	}
 	return reps
+}
+
+func cohortByID(silo *model.Silo, id uint) *model.PopulationCohort {
+	for i := range silo.Cohorts {
+		if silo.Cohorts[i].ID == id {
+			return &silo.Cohorts[i]
+		}
+	}
+	return nil
+}
+
+func copyIdeologies(src map[string]float64) map[string]float64 {
+	if src == nil {
+		return map[string]float64{}
+	}
+	dst := make(map[string]float64, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
+}
+
+func uintPtr(v uint) *uint {
+	return &v
 }
