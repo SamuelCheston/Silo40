@@ -11,6 +11,7 @@ import { SiloWheel } from './components/SiloWheel';
 import { SetupPanel } from './components/SetupPanel';
 import { BunkerMap } from './components/BunkerMap';
 import { FactionView } from './components/FactionView';
+import { HeaderStats } from './components/HeaderStats';
 import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS, ProfessionActionMeta, GameState } from './logic/models';
 import { LayoutGrid, Users } from 'lucide-react';
 
@@ -221,9 +222,12 @@ function App() {
     };
 
     return (
-        <Center minH="100vh" bg="gray.50" color="gray.800" py={8}>
-            <VStack gap={8} p={8} bg="white" borderRadius="xl" boxShadow="2xl" maxW="1200px" w="full" border="1px solid" borderColor="gray.200">
-                <Image src={logo} h="80px" alt="logo" />
+        <Box minH="100vh" bg="gray.50" color="gray.800">
+            {gameStarted && <HeaderStats agent={agent} silo={silo} organizedPopulation={organizedPopulation} />}
+            
+            <Center py={8}>
+                <VStack gap={8} p={8} bg="white" borderRadius="xl" boxShadow="2xl" maxW="1200px" w="full" border="1px solid" borderColor="gray.200">
+                    <Image src={logo} h="80px" alt="logo" />
 
                 <Heading size="md" textAlign="center" color="blue.600">{resultText}</Heading>
 
@@ -581,6 +585,7 @@ function App() {
                 </Box>
             </VStack>
         </Center>
+    </Box>
     )
 }
 
