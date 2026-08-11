@@ -387,10 +387,11 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 			s.engine.RunNpcTurn(s.silo, s.agent, 0, func(msg string) {
 				npcLogs = append(npcLogs, msg)
 			})
-			l, st := s.engine.UpdateSiloState(s.silo, 0, s.agent)
-			logs = append(npcLogs, l...)
-			for _, story := range st {
-				stories = append(stories, *story)
+			logs = append(logs, npcLogs...)
+
+			s.engine.CheckVictoryConditions(s.silo, s.agent)
+			if s.silo.VictoryStatus != nil && s.silo.VictoryStatus.Score == nil {
+				s.silo.VictoryStatus.Score = s.engine.CalculateScore(s.silo)
 			}
 		}
 	}

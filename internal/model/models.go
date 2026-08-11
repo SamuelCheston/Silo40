@@ -330,8 +330,8 @@ var ACTION_COSTS = map[AgentActionType]float64{
 var ACTION_DURATIONS = map[AgentActionType]int{
 	ActionGatherInfo:        0,
 	ActionShareInfo:         0,
-	ActionBuildConnection:   3,
+	ActionBuildConnection:   1,
 	ActionInciteRebellion:   2,
 	ActionConductPropaganda: 1,
-	ActionProfession:        0,
+	ActionProfession:        1,
 }

@@ -154,7 +154,6 @@ func (e *GameEngine) registerSystems() {
 	e.Bus.Subscribe(EVENT_RESOURCE_UPDATE, func(event *GameEvent, ctx *EventContext) {
 		silo := event.Data["silo"].(*model.Silo)
 		deltaYears := event.Data["deltaYears"].(float64)
-		e.checkOperationalConditions(silo, deltaYears)
 		e.updateResources(silo, deltaYears)
 	})
 
@@ -573,14 +572,14 @@ func (e *GameEngine) ExecuteActionInternal(silo *model.Silo, actor ActorRef, act
 		// 职业修正
 		switch view.Profession() {
 		case "Mayor":
-			gained *= 3.0
+			gained *= 2.0
 		case "IT":
-			gained = 0 // IT部门行动不增加怀疑度
+			gained *= 0.3
 		case "Police":
 			discount := 0.5 + rand.Float64()*0.4
 			gained *= discount
 		case "Mines":
-			gained *= 0.05
+			gained *= 0.3
 		}
 
 		// 特质修正
@@ -1110,40 +1109,6 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 			IsWon:       false,
 			Type:        "DEATH",
 			Description: "地堡内已无生命迹象。人类最后的堡垒沦为了一座寂静的坟墓。",
-		}
-	}
-}
-
-// checkOperationalConditions 运作条件校验
-func (e *GameEngine) checkOperationalConditions(silo *model.Silo, deltaYears float64) {
-	proForeignDepts := 0
-	for _, p := range silo.Professions {
-		if p.Ideologies[model.IdeologyProForeign] >= 0.1 {
-			proForeignDepts++
-		}
-	}
-
-	if proForeignDepts < 3 {
-		silo.HistoryBurden += 0.05 * deltaYears
-
-		for i := range silo.Professions {
-			p := &silo.Professions[i]
-			p.Productivity -= 0.02 * deltaYears
-			if p.Productivity < 0.1 {
-				p.Productivity = 0.1
-			}
-		}
-	} else {
-		silo.HistoryBurden -= 0.01 * deltaYears
-		if silo.HistoryBurden < 0 {
-			silo.HistoryBurden = 0
-		}
-		for i := range silo.Professions {
-			p := &silo.Professions[i]
-			p.Productivity += 0.01 * deltaYears
-			if p.Productivity > 1.0 {
-				p.Productivity = 1.0
-			}
 		}
 	}
 }

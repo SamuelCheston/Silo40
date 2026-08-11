@@ -71,10 +71,10 @@ export const ACTION_COSTS: Record<AgentActionType, number> = {
 export const ACTION_DURATIONS: Record<AgentActionType, number> = {
   GATHER_INFO: 0, // 即时操作
   SHARE_INFO: 0, // 即时操作
-  BUILD_CONNECTION: 3, // 耗时3个月
+  BUILD_CONNECTION: 1, // 耗时1个月
   INCITE_REBELLION: 2, // 耗时2个月
   CONDUCT_PROPAGANDA: 1, // 耗时1个月
-  PROFESSION_ACTION: 0, // 职业专属行动均为即时操作
+  PROFESSION_ACTION: 1, // 职业专属行动默认为耗时操作
 };
 
 export interface AgentAction {
