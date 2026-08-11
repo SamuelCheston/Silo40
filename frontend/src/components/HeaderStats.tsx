@@ -163,10 +163,33 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
                 </HStack>
 
                 {/* Identity */}
-                <HStack gap={2}>
-                    <Text fontSize="xs" color="gray.500">{agent.name}</Text>
-                    <Badge colorPalette="purple" size="sm">{agent.profession}</Badge>
-                </HStack>
+                <Tooltip 
+                    content={
+                        <VStack align="start" gap={2}>
+                            <Box>
+                                <Text fontWeight="bold" fontSize="xs" mb={1}>特质 (Traits)</Text>
+                                <HStack wrap="wrap" gap={1}>
+                                    {agent.traits?.map(t => (
+                                        <Badge key={t} colorPalette="yellow" size="xs">{t}</Badge>
+                                    ))}
+                                </HStack>
+                            </Box>
+                            <Box>
+                                <Text fontWeight="bold" fontSize="xs" mb={1}>已知碎片 (Known Fragments)</Text>
+                                <HStack wrap="wrap" gap={1}>
+                                    {agent.known_fragments?.map(f => (
+                                        <Badge key={f} colorPalette="purple" size="xs" variant="solid">{f}</Badge>
+                                    ))}
+                                </HStack>
+                            </Box>
+                        </VStack>
+                    }
+                >
+                    <HStack gap={2} cursor="help">
+                        <Text fontSize="xs" color="gray.500">{agent.name}</Text>
+                        <Badge colorPalette="purple" size="sm">{agent.profession}</Badge>
+                    </HStack>
+                </Tooltip>
             </HStack>
         </Box>
     );

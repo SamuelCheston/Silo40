@@ -261,148 +261,56 @@ function App() {
                     <HStack align="start" gap={6} w="full" wrap="wrap">
                         {/* Left Side: Values */}
                         <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
-                            {/* Agent Status Panel */}
-                            <Box w="full" p={4} bg="blue.50" borderRadius="md" borderLeft="4px solid" borderColor="blue.500" boxShadow="sm">
-                                <Heading size="sm" mb={4} color="blue.800">Agent Profile: {agent?.name}</Heading>
-                            <SimpleGrid columns={2} gap={4} mb={4}>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Profession</Text>
-                                    <Badge colorPalette="blue" variant="solid">{agent?.profession}</Badge>
-                                </VStack>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Traits</Text>
-                                    <HStack wrap="wrap">
-                                        {agent?.traits?.map(t => (
-                                            <Badge key={t} colorPalette="yellow">{t}</Badge>
-                                        ))}
-                                    </HStack>
-                                </VStack>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Action Points (AP)</Text>
-                                    <HStack w="full">
-                                        <Text fontWeight="bold" color="blue.700">{Math.floor(agent?.action_points || 0)}</Text>
-                                        <ProgressRoot value={(agent?.action_points || 0)} max={100} w="full" size="sm" colorPalette="blue">
-                                            <ProgressBar />
-                                        </ProgressRoot>
-                                    </HStack>
-                                </VStack>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Suspicion Level</Text>
-                                    <HStack w="full">
-                                        <Text fontWeight="bold" color={agent && agent.suspicion_level > 0.5 ? "red.500" : "green.600"}>
-                                            {(agent?.suspicion_level || 0).toFixed(2)}
-                                        </Text>
-                                        <ProgressRoot value={(agent?.suspicion_level || 0) * 100} max={100} w="full" size="sm" colorPalette={agent && agent.suspicion_level > 0.5 ? "red" : "green"}>
-                                            <ProgressBar />
-                                        </ProgressRoot>
-                                    </HStack>
-                                </VStack>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Known Fragments</Text>
-                                    <HStack wrap="wrap">
-                                        {agent?.known_fragments?.map(f => (
-                                            <Badge key={f} colorPalette="purple" variant="solid">{f}</Badge>
-                                        ))}
-                                    </HStack>
-                                </VStack>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Political Prestige</Text>
-                                    <Text fontWeight="bold" color="orange.500">{Math.floor(agent?.political_prestige || 0)}</Text>
-                                </VStack>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Propaganda Level</Text>
-                                    <Text fontWeight="bold" color="pink.500">{(agent?.propaganda_level || 0).toFixed(1)}</Text>
-                                </VStack>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Organization Factor</Text>
-                                    <Text fontWeight="bold" color="teal.600">{(agent?.organization_factor || 1).toFixed(1)}x</Text>
-                                </VStack>
-                                <VStack align="start" gap={1}>
-                                    <Text fontSize="sm" color="gray.600">Organization Size</Text>
-                                    <HStack w="full">
-                                        <Text fontWeight="bold" color="cyan.700">
-                                            {organizedPopulation}
-                                        </Text>
-                                        <Text fontSize="xs" color="gray.500">
-                                            / {silo?.total_population || 0}
-                                        </Text>
-                                    </HStack>
-                                </VStack>
-                                {agent?.profession === 'IT' && (
-                                    <VStack align="start" gap={1}>
-                                        <Text fontSize="sm" color="gray.600">Safeguard Risk</Text>
-                                        <HStack w="full">
-                                            <Text fontWeight="bold" color={silo?.safeguard_risk && silo.safeguard_risk > 0.7 ? "red.500" : "purple.600"}>
+                            {/* Silo State Panel */}
+                            <Box w="full" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
+                                <Heading size="sm" mb={4} color="gray.800">Silo State Overview (Year: {silo?.current_year}, Month: {silo?.current_month})</Heading>
+                                <HStack justify="space-between" mb={4} p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                    <VStack align="start" gap={0}>
+                                        <Text fontSize="xs" color="gray.500">Legitimacy</Text>
+                                        <Text fontSize="md" fontWeight="bold" color="blue.600">{(silo?.legitimacy || 0).toFixed(2)}</Text>
+                                    </VStack>
+                                    <VStack align="start" gap={0}>
+                                        <Text fontSize="xs" color="gray.500">Rebellion</Text>
+                                        <Text fontSize="md" fontWeight="bold" color="red.500">{(silo?.rebellion || 0).toFixed(2)}</Text>
+                                    </VStack>
+                                    <VStack align="start" gap={0}>
+                                        <Text fontSize="xs" color="gray.500">Population</Text>
+                                        <Text fontSize="md" fontWeight="bold" color="green.600">{silo?.total_population}</Text>
+                                    </VStack>
+                                    {agent?.profession === 'IT' && (
+                                        <VStack align="start" gap={0} minW="100px">
+                                            <Text fontSize="xs" color="gray.500">Safeguard Risk</Text>
+                                            <Text fontSize="md" fontWeight="bold" color={silo?.safeguard_risk && silo.safeguard_risk > 0.7 ? "red.500" : "purple.600"}>
                                                 {((silo?.safeguard_risk || 0) * 100).toFixed(0)}%
                                             </Text>
-                                            <ProgressRoot value={(silo?.safeguard_risk || 0) * 100} max={100} w="full" size="sm" colorPalette={silo?.safeguard_risk && silo.safeguard_risk > 0.7 ? "red" : "purple"}>
-                                                <ProgressBar />
-                                            </ProgressRoot>
-                                        </HStack>
-                                    </VStack>
-                                )}
-                            </SimpleGrid>
+                                        </VStack>
+                                    )}
+                                </HStack>
 
-                            {/* Connections breakdown */}
-                            <Box borderTop="1px solid" borderColor="gray.300" pt={3}>
-                                <Text fontSize="sm" color="gray.600" mb={2} fontWeight="bold">Department Connections (Network)</Text>
-                                <SimpleGrid columns={{ base: 2, md: 3 }} gap={2}>
-                                    {silo?.professions?.map(prof => {
-                                        const conn = agent?.connections?.find(c => c.profession_id === prof.id);
-                                        const val = conn ? conn.value : 0;
-                                        return (
-                                            <HStack key={prof.id} justify="space-between" bg="white" p={1} px={2} borderRadius="sm" border="1px solid" borderColor="gray.200">
-                                                <Text fontSize="xs" color={val > 0.5 ? "green.600" : "gray.500"}>{prof.name}</Text>
-                                                <Text fontSize="xs" fontWeight="bold" color="gray.700">{(val * 100).toFixed(0)}%</Text>
-                                            </HStack>
-                                        );
-                                    })}
-                                </SimpleGrid>
+                                <TabsRoot defaultValue="map" variant="enclosed" size="sm" w="full">
+                                     <TabsList mb={4} borderBottom="1px solid" borderColor="gray.200">
+                                         <TabsTrigger value="map" _selected={{ color: "blue.600", borderBottom: "2px solid", borderColor: "blue.600" }}>
+                                             <HStack gap={2}>
+                                                 <LayoutGrid size={14} />
+                                                 <Text fontWeight="bold">地堡地图</Text>
+                                             </HStack>
+                                         </TabsTrigger>
+                                         <TabsTrigger value="factions" _selected={{ color: "blue.600", borderBottom: "2px solid", borderColor: "blue.600" }}>
+                                             <HStack gap={2}>
+                                                 <Users size={14} />
+                                                 <Text fontWeight="bold">阵营概览</Text>
+                                             </HStack>
+                                         </TabsTrigger>
+                                     </TabsList>
+                                     <TabsContent value="map">
+                                         {silo && <BunkerMap silo={silo} agent={agent} />}
+                                     </TabsContent>
+                                     <TabsContent value="factions">
+                                         {silo && <FactionView silo={silo} />}
+                                     </TabsContent>
+                                 </TabsRoot>
                             </Box>
-                        </Box>
-
-                        {/* Silo State Panel */}
-                        <Box w="full" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                            <Heading size="sm" mb={4} color="gray.800">Silo State Overview (Year: {silo?.current_year}, Month: {silo?.current_month})</Heading>
-                            <HStack justify="space-between" mb={4} p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
-                                <VStack align="start" gap={0}>
-                                    <Text fontSize="xs" color="gray.500">Legitimacy</Text>
-                                    <Text fontSize="md" fontWeight="bold" color="blue.600">{(silo?.legitimacy || 0).toFixed(2)}</Text>
-                                </VStack>
-                                <VStack align="start" gap={0}>
-                                    <Text fontSize="xs" color="gray.500">Rebellion</Text>
-                                    <Text fontSize="md" fontWeight="bold" color="red.500">{(silo?.rebellion || 0).toFixed(2)}</Text>
-                                </VStack>
-                                <VStack align="start" gap={0}>
-                                    <Text fontSize="xs" color="gray.500">Population</Text>
-                                    <Text fontSize="md" fontWeight="bold" color="green.600">{silo?.total_population}</Text>
-                                </VStack>
-                            </HStack>
-
-                            <TabsRoot defaultValue="map" variant="enclosed" size="sm" w="full">
-                                 <TabsList mb={4} borderBottom="1px solid" borderColor="gray.200">
-                                     <TabsTrigger value="map" _selected={{ color: "blue.600", borderBottom: "2px solid", borderColor: "blue.600" }}>
-                                         <HStack gap={2}>
-                                             <LayoutGrid size={14} />
-                                             <Text fontWeight="bold">地堡地图</Text>
-                                         </HStack>
-                                     </TabsTrigger>
-                                     <TabsTrigger value="factions" _selected={{ color: "blue.600", borderBottom: "2px solid", borderColor: "blue.600" }}>
-                                         <HStack gap={2}>
-                                             <Users size={14} />
-                                             <Text fontWeight="bold">阵营概览</Text>
-                                         </HStack>
-                                     </TabsTrigger>
-                                 </TabsList>
-                                 <TabsContent value="map">
-                                     {silo && <BunkerMap silo={silo} />}
-                                 </TabsContent>
-                                 <TabsContent value="factions">
-                                     {silo && <FactionView silo={silo} />}
-                                 </TabsContent>
-                             </TabsRoot>
-                        </Box>
-                    </VStack>
+                        </VStack>
 
                     {/* Right Side: Operations */}
                         <VStack gap={6} flex={{ base: "1 1 100%", lg: 1 }} w="full" position="sticky" top="20px">

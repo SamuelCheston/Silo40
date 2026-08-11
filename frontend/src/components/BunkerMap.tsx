@@ -11,12 +11,13 @@ import {
     IconButton
 } from "@chakra-ui/react";
 import { ProgressBar, ProgressRoot } from './ui/progress';
-import { Profession, Silo } from '../logic/models';
-import { X } from 'lucide-react';
+import { Profession, Silo, Agent } from '../logic/models';
+import { X, Network } from 'lucide-react';
 import './BunkerMap.css';
 
 interface BunkerMapProps {
     silo: Silo;
+    agent: Agent | null;
 }
 
 const ZONE_DATA = [
@@ -25,8 +26,14 @@ const ZONE_DATA = [
     { id: 'Lower', name: '下层区 (Lower Zone)', levels: '91-144', color: 'orange', bg: 'orange.50', borderColor: 'orange.500' }
 ];
 
-export const BunkerMap: React.FC<BunkerMapProps> = ({ silo }) => {
+export const BunkerMap: React.FC<BunkerMapProps> = ({ silo, agent }) => {
     const [selectedDept, setSelectedDept] = useState<Profession | null>(null);
+
+    const getConnValue = (profId: number) => {
+        if (!agent || !agent.connections) return 0;
+        const conn = agent.connections.find(c => c.profession_id === profId);
+        return conn ? conn.value : 0;
+    };
 
     const getIdeologyLabel = (type: string, val: number) => {
         const v = val * 100;
@@ -70,31 +77,45 @@ export const BunkerMap: React.FC<BunkerMapProps> = ({ silo }) => {
                                 <SimpleGrid columns={{ base: 2, sm: 3, lg: 4 }} gap={3}>
                                     {silo.professions
                                         .filter(p => p.zone === zone.id)
-                                        .map(dept => (
-                                            <Box 
-                                                key={dept.id} 
-                                                onClick={() => setSelectedDept(dept)}
-                                                p={3}
-                                                bg={selectedDept?.id === dept.id ? `${zone.color}.200` : "white"}
-                                                borderRadius="md"
-                                                boxShadow="sm"
-                                                cursor="pointer"
-                                                border="2px solid"
-                                                borderColor={selectedDept?.id === dept.id ? zone.borderColor : "transparent"}
-                                                _hover={{ transform: "translateY(-2px)", boxShadow: "md", borderColor: zone.borderColor }}
-                                                transition="all 0.2s"
-                                                display="flex"
-                                                flexDirection="column"
-                                                alignItems="center"
-                                                justifyContent="center"
-                                                minH="60px"
-                                            >
-                                                <Text fontWeight="bold" fontSize="xs" textAlign="center" color="gray.700">{dept.name}</Text>
-                                                <Badge colorPalette={dept.class_type === 'ELITE' ? 'purple' : 'green'} size="xs" mt={1} variant="outline">
-                                                    {dept.class_type}
-                                                </Badge>
-                                            </Box>
-                                        ))}
+                                        .map(dept => {
+                                            const connVal = getConnValue(dept.id);
+                                            return (
+                                                <Box 
+                                                    key={dept.id} 
+                                                    onClick={() => setSelectedDept(dept)}
+                                                    p={3}
+                                                    bg={selectedDept?.id === dept.id ? `${zone.color}.200` : "white"}
+                                                    borderRadius="md"
+                                                    boxShadow="sm"
+                                                    cursor="pointer"
+                                                    border="2px solid"
+                                                    borderColor={selectedDept?.id === dept.id ? zone.borderColor : "transparent"}
+                                                    _hover={{ transform: "translateY(-2px)", boxShadow: "md", borderColor: zone.borderColor }}
+                                                    transition="all 0.2s"
+                                                    display="flex"
+                                                    flexDirection="column"
+                                                    alignItems="center"
+                                                    justifyContent="center"
+                                                    minH="70px"
+                                                    position="relative"
+                                                >
+                                                    <Text fontWeight="bold" fontSize="xs" textAlign="center" color="gray.700">{dept.name}</Text>
+                                                    <HStack gap={1} mt={1}>
+                                                        <Badge colorPalette={dept.class_type === 'ELITE' ? 'purple' : 'green'} size="xs" variant="outline">
+                                                            {dept.class_type}
+                                                        </Badge>
+                                                        {connVal > 0 && (
+                                                            <Badge colorPalette="blue" size="xs" variant="solid">
+                                                                <HStack gap={0.5}>
+                                                                    <Network size={8} />
+                                                                    <Text fontSize="8px">{(connVal * 100).toFixed(0)}%</Text>
+                                                                </HStack>
+                                                            </Badge>
+                                                        )}
+                                                    </HStack>
+                                                </Box>
+                                            );
+                                        })}
                                 </SimpleGrid>
                             </Box>
                         ))}
@@ -130,26 +151,28 @@ export const BunkerMap: React.FC<BunkerMapProps> = ({ silo }) => {
                             </HStack>
 
                             <VStack align="stretch" gap={5}>
-                                <Grid templateColumns="repeat(2, 1fr)" gap={4}>
-                                    <VStack align="start" gap={0}>
-                                        <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Class</Text>
-                                        <Badge colorPalette={selectedDept.class_type === 'ELITE' ? 'purple' : 'green'} variant="solid">
-                                            {selectedDept.class_type}
-                                        </Badge>
-                                    </VStack>
-                                    <VStack align="start" gap={0}>
-                                        <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Population</Text>
-                                        <Text fontWeight="bold" color="blue.600">{selectedDept.population}</Text>
-                                    </VStack>
-                                    <VStack align="start" gap={0}>
-                                        <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Power Level</Text>
-                                        <Text fontWeight="bold" color="orange.600">{selectedDept.power_level}</Text>
-                                    </VStack>
-                                    <VStack align="start" gap={0}>
-                                        <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Productivity</Text>
-                                        <Text fontWeight="bold" color="green.600">{(selectedDept.productivity * 100).toFixed(0)}%</Text>
-                                    </VStack>
-                                </Grid>
+                                    <Grid templateColumns="repeat(2, 1fr)" gap={4}>
+                                        <VStack align="start" gap={0}>
+                                            <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Class</Text>
+                                            <Badge colorPalette={selectedDept.class_type === 'ELITE' ? 'purple' : 'green'} variant="solid">
+                                                {selectedDept.class_type}
+                                            </Badge>
+                                        </VStack>
+                                        <VStack align="start" gap={0}>
+                                            <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Agent Network</Text>
+                                            <Badge colorPalette="blue" variant="solid">
+                                                {(getConnValue(selectedDept.id) * 100).toFixed(0)}%
+                                            </Badge>
+                                        </VStack>
+                                        <VStack align="start" gap={0}>
+                                            <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Population</Text>
+                                            <Text fontWeight="bold" color="blue.600">{selectedDept.population}</Text>
+                                        </VStack>
+                                        <VStack align="start" gap={0}>
+                                            <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Power Level</Text>
+                                            <Text fontWeight="bold" color="orange.600">{selectedDept.power_level}</Text>
+                                        </VStack>
+                                    </Grid>
 
                                 <VStack align="stretch" gap={1}>
                                     <Text fontSize="2xs" color="gray.500" textTransform="uppercase" fontWeight="bold">Panic Level</Text>
