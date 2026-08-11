@@ -12,6 +12,39 @@ interface HeaderStatsProps {
 export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsProps) => {
     if (!agent || !silo) return null;
 
+    // --- Logic Constants (Sync with internal/engine/rule.go) ---
+    const PROF_MODS: Record<string, number> = {
+        'Mayor': 0.5, 'Judicial': 0.4, 'IT': 0.3, 'Police': 0.3, 'Mechanical': 0.2, 'Medical': 0.2
+    };
+    const TRAIT_MODS: Record<string, number> = {
+        '一号地堡密使': 0.5, '煽动者': 0.2, '地堡土著': 0.1, '守旧派': -0.1
+    };
+
+    // --- AP Recovery Calc ---
+    const apBaseRecovery = 10;
+    const apPrestigeBonus = agent.political_prestige * 0.05;
+    const apOrgBonus = agent.organization_factor * 2;
+    const apTotalRecovery = apBaseRecovery + apPrestigeBonus + apOrgBonus;
+
+    // --- AP Limit Calc ---
+    const apBaseLimit = 100;
+    const apLimitOrgBonus = agent.organization_factor * 10;
+    const apTotalLimit = apBaseLimit + apLimitOrgBonus;
+
+    // --- Prestige Calc ---
+    const connCount = silo.professions?.length || 1;
+    const connSum = agent.connections?.reduce((sum, c) => sum + c.value, 0) || 0;
+    const avgConn = connSum / connCount;
+    const prestigeBase = avgConn * 100;
+    const profMod = PROF_MODS[agent.profession] || 0;
+    const traitModSum = agent.traits?.reduce((sum, t) => sum + (TRAIT_MODS[t] || 0), 0) || 0;
+    
+    // --- Appeal Calc (Simplified for global view) ---
+    const appealBase = 0.1;
+    const appealTraitBonus = agent.traits?.includes('魅力非凡') ? 0.2 : 0;
+    const appealTotalBase = appealBase + appealTraitBonus;
+    const appealEffect = appealTotalBase * agent.propaganda_level;
+
     return (
         <Box 
             w="full" 
@@ -62,10 +95,24 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
                 <HStack gap={6} wrap="wrap">
                     <Tooltip 
                         content={
-                            <VStack align="start" gap={0}>
-                                <Text fontWeight="bold">行动点 (AP)</Text>
-                                <Text>恢复：10 + (威望 × 0.05) + (组织系数 × 2) /年</Text>
-                                <Text>上限：100 + (组织系数 × 10)</Text>
+                            <VStack align="start" gap={1} p={1}>
+                                <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>行动点 (AP)</Text>
+                                <HStack justify="space-between" w="full">
+                                    <Text>基础恢复:</Text>
+                                    <Text color="green.300">+{apBaseRecovery}</Text>
+                                </HStack>
+                                <HStack justify="space-between" w="full">
+                                    <Text>威望加成:</Text>
+                                    <Text color="green.300">+{apPrestigeBonus.toFixed(2)}</Text>
+                                </HStack>
+                                <HStack justify="space-between" w="full">
+                                    <Text>组织加成:</Text>
+                                    <Text color="green.300">+{apOrgBonus.toFixed(1)}</Text>
+                                </HStack>
+                                <Text fontWeight="bold" pt={1} color="blue.300">年度总恢复: {apTotalRecovery.toFixed(2)} AP</Text>
+                                <Text fontSize="10px" color="gray.400" mt={2} borderTop="1px solid" borderColor="whiteAlpha.200" pt={1}>
+                                    上限: {apBaseLimit} + {apLimitOrgBonus.toFixed(0)} (组织加成) = {apTotalLimit}
+                                </Text>
                             </VStack>
                         }
                     >
@@ -79,10 +126,15 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
 
                     <Tooltip 
                         content={
-                            <VStack align="start" gap={0}>
-                                <Text fontWeight="bold">怀疑度</Text>
-                                <Text>来源：非法行动、传播虚假信息</Text>
-                                <Text>影响：降低行动成功率，增加暴露风险</Text>
+                            <VStack align="start" gap={1} p={1}>
+                                <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>怀疑度</Text>
+                                <Text>当前等级: {agent.suspicion_level.toFixed(2)}</Text>
+                                <Text fontSize="10px" color="gray.400">超过 0.5 将显著增加被发现风险</Text>
+                                <VStack align="start" gap={0} mt={1}>
+                                    <Text fontSize="10px">主要来源:</Text>
+                                    <Text fontSize="10px" color="red.300">· 传播虚假信息</Text>
+                                    <Text fontSize="10px" color="red.300">· 执行高风险职业行动</Text>
+                                </VStack>
                             </VStack>
                         }
                     >
@@ -96,10 +148,21 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
 
                     <Tooltip 
                         content={
-                            <VStack align="start" gap={0}>
-                                <Text fontWeight="bold">政治威望</Text>
-                                <Text>来源：(平均人脉 × 100) × 职业/特质修正</Text>
-                                <Text>影响：AP 恢复、政治点获取、煽动效果</Text>
+                            <VStack align="start" gap={1} p={1}>
+                                <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>政治威望</Text>
+                                <HStack justify="space-between" w="full">
+                                    <Text>人脉基础 (均值):</Text>
+                                    <Text>{prestigeBase.toFixed(1)}</Text>
+                                </HStack>
+                                <HStack justify="space-between" w="full">
+                                    <Text>职业修正 ({agent.profession}):</Text>
+                                    <Text color={profMod >= 0 ? "green.300" : "red.300"}>×{(1 + profMod).toFixed(1)}</Text>
+                                </HStack>
+                                <HStack justify="space-between" w="full">
+                                    <Text>特质修正:</Text>
+                                    <Text color={traitModSum >= 0 ? "green.300" : "red.300"}>×{(1 + traitModSum).toFixed(1)}</Text>
+                                </HStack>
+                                <Text fontWeight="bold" pt={1} color="orange.300">最终威望值: {Math.floor(agent.political_prestige)}</Text>
                             </VStack>
                         }
                     >
@@ -113,10 +176,11 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
 
                     <Tooltip 
                         content={
-                            <VStack align="start" gap={0}>
-                                <Text fontWeight="bold">宣传力度</Text>
-                                <Text>来源：执行宣传行动</Text>
-                                <Text>影响：提升特工吸引力 (进而增加人口转化率)</Text>
+                            <VStack align="start" gap={1} p={1}>
+                                <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>宣传力度</Text>
+                                <Text>当前加成: {(agent.propaganda_level).toFixed(1)}x</Text>
+                                <Text fontSize="10px" color="gray.400">倍增特工的吸引力基础值</Text>
+                                <Text fontSize="10px" color="blue.300" mt={1}>最终吸引力效果: {appealEffect.toFixed(2)}</Text>
                             </VStack>
                         }
                     >
@@ -130,9 +194,15 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
 
                     <Tooltip 
                         content={
-                            <VStack align="start" gap={0}>
-                                <Text fontWeight="bold">组织度系数</Text>
-                                <Text>影响：AP 恢复速度、AP 上限、人口转化效率</Text>
+                            <VStack align="start" gap={1} p={1}>
+                                <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>组织度系数</Text>
+                                <Text>当前效率: {agent.organization_factor.toFixed(1)}x</Text>
+                                <VStack align="start" gap={0} mt={1}>
+                                    <Text fontSize="10px">影响:</Text>
+                                    <Text fontSize="10px" color="teal.300">· AP 恢复速度 (+{apOrgBonus.toFixed(1)}/年)</Text>
+                                    <Text fontSize="10px" color="teal.300">· AP 容量上限 (+{apLimitOrgBonus.toFixed(0)})</Text>
+                                    <Text fontSize="10px" color="teal.300">· 人口转化基础效率 (×{agent.organization_factor.toFixed(1)})</Text>
+                                </VStack>
                             </VStack>
                         }
                     >
@@ -146,10 +216,22 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
 
                     <Tooltip 
                         content={
-                            <VStack align="start" gap={0}>
-                                <Text fontWeight="bold">组织化人口</Text>
-                                <Text>转化率：(吸引力 × 0.4 + 人脉 × 0.6) × 组织系数 × 思潮</Text>
-                                <Text>目标：达到总人口 3% 触发叛乱胜利</Text>
+                            <VStack align="start" gap={1} p={1}>
+                                <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>组织化人口</Text>
+                                <HStack justify="space-between" w="full">
+                                    <Text>吸引力效果:</Text>
+                                    <Text>{appealEffect.toFixed(2)}</Text>
+                                </HStack>
+                                <HStack justify="space-between" w="full">
+                                    <Text>组织系数:</Text>
+                                    <Text>×{agent.organization_factor.toFixed(1)}</Text>
+                                </HStack>
+                                <Text fontSize="10px" color="gray.400" mt={1}>
+                                    转化公式: (吸引力×0.4 + 人脉×0.6) × 组织系数 × 思潮
+                                </Text>
+                                <Text fontWeight="bold" color="cyan.300" pt={1}>
+                                    距离叛乱目标 (3%): {Math.max(0, Math.ceil(silo.total_population * 0.03) - organizedPopulation)} 人
+                                </Text>
                             </VStack>
                         }
                     >
