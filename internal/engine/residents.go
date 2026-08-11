@@ -643,7 +643,6 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		var repCohort *model.PopulationCohort
 		bestScore := -1.0
 		totalInfluence := 0.0
-		totalWeight := 0.0
 		for _, cohort := range members {
 			cohort.FactionID = uintPtr(faction.ID)
 			
@@ -664,11 +663,8 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			weight := float64(cohort.Count)
 			faction.MemberCount += cohort.Count
 			totalInfluence += cohort.Influence * weight
-			totalWeight += weight
 		}
-		if totalWeight > 0 {
-			faction.Influence = totalInfluence / totalWeight
-		}
+		faction.Influence = totalInfluence // 阵营总影响力为成员影响力之和
 		if repCohort != nil {
 			faction.RepresentativeCohortID = uintPtr(repCohort.ID)
 			rep := ensureRepresentativeResident(silo, repCohort)

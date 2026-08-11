@@ -125,16 +125,16 @@ func (e *GameEngine) registerSystems() {
 			"silo": silo, "deltaYears": deltaYears,
 		}), ctx)
 
-		e.Bus.Emit(CreateEvent("metrics_update#"+e.nextID(), EVENT_METRICS_UPDATE, map[string]interface{}{
-			"silo": silo, "deltaYears": deltaYears,
-		}), ctx)
-
 		e.Bus.Emit(CreateEvent("ideology_update#"+e.nextID(), EVENT_IDEOLOGY_UPDATE, map[string]interface{}{
 			"silo": silo, "deltaYears": deltaYears,
 		}), ctx)
 
 		e.Bus.Emit(CreateEvent("npc_actions#"+e.nextID(), EVENT_NPC_ACTIONS, map[string]interface{}{
 			"silo": silo, "agent": agent, "deltaYears": deltaYears,
+		}), ctx)
+
+		e.Bus.Emit(CreateEvent("metrics_update#"+e.nextID(), EVENT_METRICS_UPDATE, map[string]interface{}{
+			"silo": silo, "deltaYears": deltaYears,
 		}), ctx)
 
 		e.Bus.Emit(CreateEvent("victory_check#"+e.nextID(), EVENT_VICTORY_CHECK, map[string]interface{}{
@@ -1148,51 +1148,92 @@ func (e *GameEngine) checkOperationalConditions(silo *model.Silo, deltaYears flo
 	}
 }
 
-// updateIdeology 思潮演化
+// updateIdeology 思潮演化：核心逻辑作用于人口单元 (Cohort)，生产部门同步宏观分布
 func (e *GameEngine) updateIdeology(silo *model.Silo, deltaYears float64) {
-	for i := range silo.Professions {
-		p := &silo.Professions[i]
-		stability := silo.Cohesion
+	stability := silo.Cohesion
 
-		if p.PanicValue > 0.3 && stability < 0.5 {
-			drift := p.PanicValue * (1.0 - stability) * deltaYears * 0.01
-			p.Ideologies[model.IdeologyProForeign] += drift
+	// 1. 人口单元 (Cohort) 级别的思潮演化
+	for i := range silo.Cohorts {
+		c := &silo.Cohorts[i]
+		prof := profByID(silo, c.ProfessionID)
+		if prof == nil {
+			continue
 		}
 
-		if p.PanicValue > 0 {
+		// 恐慌值与社会不稳定性导致思潮偏移
+		if prof.PanicValue > 0.3 && stability < 0.5 {
+			drift := prof.PanicValue * (1.0 - stability) * deltaYears * 0.01
+			c.Ideologies[model.IdeologyProForeign] += drift
+		}
+
+		// 恐慌转化为激进意识形态
+		if prof.PanicValue > 0 {
 			conversionRate := 0.10
-			convertedAmount := p.PanicValue * conversionRate * deltaYears
-			p.PanicValue -= convertedAmount
-			if p.PanicValue < 0 {
-				p.PanicValue = 0
-			}
-			p.Ideologies[model.IdeologyProForeign] += convertedAmount
+			convertedAmount := prof.PanicValue * conversionRate * deltaYears
+			c.Ideologies[model.IdeologyProForeign] += convertedAmount
+			// 注意：PanicValue 属于部门属性，在 sync 阶段处理，此处仅消耗
 		}
 
-		for key, val := range p.Ideologies {
+		// 限制范围
+		for key, val := range c.Ideologies {
 			if val > 1.0 {
-				p.Ideologies[key] = 1.0
+				c.Ideologies[key] = 1.0
 			} else if val < 0 {
-				p.Ideologies[key] = 0
+				c.Ideologies[key] = 0
 			}
 		}
 	}
 
+	// 2. 特殊地堡特质影响 (如：精神药物)
 	for _, trait := range silo.Traits {
 		if trait == "psychoactive_meds" {
 			itDept := findDept(silo, "IT")
 			if itDept != nil {
-				for i := range silo.Professions {
-					p := &silo.Professions[i]
-					if p.Name != "IT" {
+				for i := range silo.Cohorts {
+					c := &silo.Cohorts[i]
+					if prof := profByID(silo, c.ProfessionID); prof != nil && prof.Name != "IT" {
 						for key, targetIdeology := range itDept.Ideologies {
-							diff := targetIdeology - p.Ideologies[key]
-							p.Ideologies[key] += diff * 0.05 * deltaYears
+							diff := targetIdeology - c.Ideologies[key]
+							c.Ideologies[key] += diff * 0.05 * deltaYears
 						}
 					}
 				}
 			}
 			break
+		}
+	}
+
+	// 3. 消耗部门恐慌值
+	for i := range silo.Professions {
+		p := &silo.Professions[i]
+		if p.PanicValue > 0 {
+			p.PanicValue -= p.PanicValue * 0.10 * deltaYears
+			if p.PanicValue < 0 {
+				p.PanicValue = 0
+			}
+		}
+	}
+
+	// 4. 同步生产部门的宏观思潮数据 (符合用户设计：公民宏观数据挂在部门下)
+	for i := range silo.Professions {
+		p := &silo.Professions[i]
+		// 重置部门意识形态分布
+		newIdeologies := make(map[string]float64)
+		totalPop := 0.0
+		for _, c := range silo.Cohorts {
+			if c.ProfessionID == p.ID {
+				weight := float64(c.Count)
+				for k, v := range c.Ideologies {
+					newIdeologies[k] += v * weight
+				}
+				totalPop += weight
+			}
+		}
+		if totalPop > 0 {
+			for k := range newIdeologies {
+				newIdeologies[k] /= totalPop
+			}
+			p.Ideologies = newIdeologies
 		}
 	}
 }
@@ -1239,21 +1280,35 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 
 	silo.EventTrigger += (1.0 - silo.Cohesion) * deltaYears * 0.1
 
-	avgPanic := 0.0
-	profCount := len(silo.Professions)
-	if profCount > 0 {
-		for _, p := range silo.Professions {
-			avgPanic += p.PanicValue
+	// --- 政治系统：由阵营 (Factions) 驱动 ---
+	totalInf := 0.0
+	weightedCohesion := 0.0
+	radicalInf := 0.0
+
+	for _, f := range silo.Factions {
+		totalInf += f.Influence
+		weightedCohesion += f.Cohesion * f.Influence
+		// 凝聚力（忠诚度）低于 0.4 的阵营视为激进/不满阵营
+		if f.Cohesion < 0.4 {
+			radicalInf += f.Influence * (0.4 - f.Cohesion)
 		}
-		avgPanic /= float64(profCount)
 	}
 
-	const threshold = 0.1
-	stressFactor := (1.0 - silo.Legitimacy) * avgPanic
-	if stressFactor > threshold {
-		silo.Rebellion += (stressFactor - threshold) * deltaYears * 0.05
-	} else {
-		silo.Rebellion -= 0.01 * deltaYears
+	if totalInf > 0 {
+		// 全局凝聚力与合法性由阵营状态派生
+		silo.Cohesion = weightedCohesion / totalInf
+		silo.Legitimacy = silo.Cohesion // 基础合法性等同于全局忠诚度
+	}
+
+	// 叛乱值受激进阵营影响
+	const rebellionThreshold = 0.05
+	if totalInf > 0 {
+		stressFactor := radicalInf / totalInf
+		if stressFactor > rebellionThreshold {
+			silo.Rebellion += (stressFactor - rebellionThreshold) * deltaYears * 0.1
+		} else {
+			silo.Rebellion -= 0.02 * deltaYears
+		}
 	}
 
 	if silo.Rebellion > 1.0 {
@@ -1262,7 +1317,7 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 		silo.Rebellion = 0
 	}
 
-	// 计算部门间紧张程度 (DeptTension)
+	// 计算部门间紧张程度 (DeptTension) - 仅作为经济/社会统计，不再驱动政治系统
 	totalRel := 0.0
 	relCount := 0
 	for _, p := range silo.Professions {
@@ -1275,14 +1330,14 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 		silo.DeptTension = 1.0 - (totalRel / float64(relCount))
 	}
 
-	// 计算精英与平民割裂程度 (ClassFragmentation)
+	// 计算精英与平民割裂程度 (ClassFragmentation) - 宏观数据挂在部门之下
 	eliteLoyalty := 0.0
 	commonerLoyalty := 0.0
 	eliteCount := 0
 	commonerCount := 0
 
 	for _, p := range silo.Professions {
-		// 从所属的 cohorts 中计算平均忠诚度
+		// 从所属的 cohorts 中计算平均忠诚度 (符合用户“宏观数据挂在部门下”的设计)
 		avgL := 0.0
 		cCount := 0
 		for _, c := range silo.Cohorts {
@@ -1310,7 +1365,7 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 
 	// 每隔一段时间（如每季度）在日志中反馈宏观指标变化
 	if silo.CurrentMonth%3 == 0 && e.logs != nil {
-		e.logf(fmt.Sprintf("[Metrics] 部门紧张度: %.2f, 阶层割裂度: %.2f", silo.DeptTension, silo.ClassFragmentation))
+		e.logf(fmt.Sprintf("[Political] 凝聚力: %.2f, 叛乱风险: %.2f, 部门紧张度: %.2f", silo.Cohesion, silo.Rebellion, silo.DeptTension))
 	}
 
 	e.updatePopulation(silo, deltaYears)

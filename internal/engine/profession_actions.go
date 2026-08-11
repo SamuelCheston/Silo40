@@ -151,12 +151,15 @@ func init() {
 			Description: "Deliver a rousing speech to the silo. Legitimacy +6%, all departments panic -4%, cohesion +3%.",
 			APCost:      15, TargetType: TargetNone, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
-				silo.Legitimacy = clamp(silo.Legitimacy+0.06, 0, 1)
-				silo.Cohesion = clamp(silo.Cohesion+0.03, 0, 1)
+				// 市长演讲通过提高全体人口忠诚度来间接提升合法性与凝聚力
+				for i := range silo.Cohorts {
+					c := &silo.Cohorts[i]
+					c.Ideologies[model.IdeologyLoyalty] = clamp(c.Ideologies[model.IdeologyLoyalty]+0.06, 0, 1)
+				}
 				for i := range silo.Professions {
 					silo.Professions[i].PanicValue = clamp(silo.Professions[i].PanicValue-0.04, 0, 1)
 				}
-				return model.ActionResult{Executed: true, Message: "Public address delivered. Legitimacy rose and panic eased across the silo."}
+				return model.ActionResult{Executed: true, Message: "Public address delivered. Population loyalty increased and panic eased."}
 			},
 		},
 		{
@@ -206,7 +209,11 @@ func init() {
 				}
 				dept.ActionPoints = math.Max(0, dept.ActionPoints-20)
 				dept.PanicValue = clamp(dept.PanicValue+0.10, 0, 1)
-				silo.Legitimacy = clamp(silo.Legitimacy+0.04, 0, 1)
+				// 逮捕行动通过震慑提升整体忠诚度
+				for i := range silo.Cohorts {
+					c := &silo.Cohorts[i]
+					c.Ideologies[model.IdeologyLoyalty] = clamp(c.Ideologies[model.IdeologyLoyalty]+0.04, 0, 1)
+				}
 				return model.ActionResult{Executed: true, Message: "Arrests carried out in " + dept.Name + ". The law is reaffirmed."}
 			},
 		},
@@ -280,7 +287,13 @@ func init() {
 					return model.ActionResult{Executed: false, Message: "Target department not found."}
 				}
 				dept.PanicValue = clamp(dept.PanicValue-0.15, 0, 1)
-				dept.Ideologies[model.IdeologyProForeign] = clamp(dept.Ideologies[model.IdeologyProForeign]-0.05, 0, 1)
+				// 镇压行动直接降低该部门下所有人口单元的激进思潮
+				for i := range silo.Cohorts {
+					c := &silo.Cohorts[i]
+					if c.ProfessionID == dept.ID {
+						c.Ideologies[model.IdeologyProForeign] = clamp(c.Ideologies[model.IdeologyProForeign]-0.05, 0, 1)
+					}
+				}
 				dept.Productivity = clamp(dept.Productivity-0.03, 0, 1)
 				return model.ActionResult{Executed: true, Message: "Crackdown executed in " + dept.Name + ". Order restored, at a cost."}
 			},
@@ -314,7 +327,13 @@ func init() {
 				}
 				dept.PanicValue = clamp(dept.PanicValue-0.20, 0, 1)
 				dept.Productivity = clamp(dept.Productivity-0.12, 0, 1)
-				dept.Ideologies[model.IdeologyProForeign] = clamp(dept.Ideologies[model.IdeologyProForeign]-0.04, 0, 1)
+				// 隔离行动降低该部门的激进思潮偏移
+				for i := range silo.Cohorts {
+					c := &silo.Cohorts[i]
+					if c.ProfessionID == dept.ID {
+						c.Ideologies[model.IdeologyProForeign] = clamp(c.Ideologies[model.IdeologyProForeign]-0.04, 0, 1)
+					}
+				}
 				return model.ActionResult{Executed: true, Message: dept.Name + " placed under quarantine. The silence is oppressive."}
 			},
 		},
@@ -403,7 +422,13 @@ func init() {
 					p := &silo.Professions[i]
 					if p.ClassType == "COMMONER" {
 						view.AddConnection(p.ID, 0.10)
-						p.Ideologies[model.IdeologyProForeign] = clamp(p.Ideologies[model.IdeologyProForeign]+0.03, 0, 1)
+						// 隧道网络在平民部门中传播激进思潮
+						for j := range silo.Cohorts {
+							c := &silo.Cohorts[j]
+							if c.ProfessionID == p.ID {
+								c.Ideologies[model.IdeologyProForeign] = clamp(c.Ideologies[model.IdeologyProForeign]+0.03, 0, 1)
+							}
+						}
 					}
 				}
 				return model.ActionResult{Executed: true, Message: "The tunnel network hums with new alliances and whispered hopes."}
@@ -433,7 +458,13 @@ func init() {
 					return model.ActionResult{Executed: false, Message: "Target department not found."}
 				}
 				gained := gainFragment(view, dept.Name, 1)
-				dept.Ideologies[model.IdeologyProForeign] = clamp(dept.Ideologies[model.IdeologyProForeign]+0.03, 0, 1)
+				// 田间八卦在该部门中增加激进思潮
+				for i := range silo.Cohorts {
+					c := &silo.Cohorts[i]
+					if c.ProfessionID == dept.ID {
+						c.Ideologies[model.IdeologyProForeign] = clamp(c.Ideologies[model.IdeologyProForeign]+0.03, 0, 1)
+					}
+				}
 				if len(gained) == 0 {
 					return model.ActionResult{Executed: false, Message: "The fields whispered nothing new about " + dept.Name + "."}
 				}
