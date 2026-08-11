@@ -496,8 +496,9 @@ func shouldRemainUnaffiliated(cohort *model.PopulationCohort) bool {
 }
 
 const (
-	MIN_FACTION_SIZE       = 20
-	BAD_RELATION_THRESHOLD = 0.3
+	MIN_FACTION_SIZE       = 200
+	BAD_RELATION_THRESHOLD = 0.05
+	NON_FACTION_NAME       = "Unaffiliated"
 )
 
 // RebuildImplicitFactions 依据 cohort 意识形态组合聚类派系，并为每个派系选出 cohort/resident 双代表。
@@ -583,8 +584,9 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		}
 	}
 
-	// 预先计算大小并过滤掉人数过少的阵营
+	// 预先计算大小并过滤掉人数过少的阵营，将其归入“无阵营”
 	validGroups := groups[:0]
+	var unaffiliatedCohorts []*model.PopulationCohort
 	for _, g := range groups {
 		size := 0
 		for _, c := range g.cohorts {
@@ -592,6 +594,8 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		}
 		if size >= MIN_FACTION_SIZE {
 			validGroups = append(validGroups, g)
+		} else {
+			unaffiliatedCohorts = append(unaffiliatedCohorts, g.cohorts...)
 		}
 	}
 	groups = validGroups
@@ -611,6 +615,16 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		return sizeI > sizeJ
 	})
 
+	// 将“无阵营”群体作为一个特殊的组添加到最后
+	if len(unaffiliatedCohorts) > 0 {
+		groups = append(groups, &factionGroup{
+			signature: "special:unaffiliated",
+			tags:      []string{"status:unaffiliated"},
+			cohorts:   unaffiliatedCohorts,
+			profIds:   make(map[uint]bool),
+		})
+	}
+
 	// 统计每个 signature 出现的总次数，用于命名区分
 	sigTotalCounts := make(map[string]int)
 	for _, g := range groups {
@@ -625,7 +639,9 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		
 		sigCurrentIndex[g.signature]++
 		name := factionNameFromSignature(tags)
-		if sigTotalCounts[g.signature] > 1 {
+		if g.signature == "special:unaffiliated" {
+			name = NON_FACTION_NAME
+		} else if sigTotalCounts[g.signature] > 1 {
 			name = fmt.Sprintf("%s (%d)", name, sigCurrentIndex[g.signature])
 		}
 
@@ -640,9 +656,18 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			Cohesion:    factionCohesion(members),
 		}
 
+		// 非政治阵营的影响力设为 0，确保不参与政治指标计算
+		totalInfluence := 0.0
+		if g.signature != "special:unaffiliated" {
+			for _, cohort := range members {
+				weight := float64(cohort.Count)
+				totalInfluence += cohort.Influence * weight
+			}
+		}
+		faction.Influence = totalInfluence
+
 		var repCohort *model.PopulationCohort
 		bestScore := -1.0
-		totalInfluence := 0.0
 		for _, cohort := range members {
 			cohort.FactionID = uintPtr(faction.ID)
 			
@@ -660,11 +685,9 @@ func RebuildImplicitFactions(silo *model.Silo) {
 				bestScore = score
 				repCohort = cohort
 			}
-			weight := float64(cohort.Count)
 			faction.MemberCount += cohort.Count
-			totalInfluence += cohort.Influence * weight
 		}
-		faction.Influence = totalInfluence // 阵营总影响力为成员影响力之和
+		
 		if repCohort != nil {
 			faction.RepresentativeCohortID = uintPtr(repCohort.ID)
 			rep := ensureRepresentativeResident(silo, repCohort)
