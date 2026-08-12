@@ -94,6 +94,7 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 		}
 
 		// 遍历 27 种组合
+		createdAny := false
 		for l1 := 0; l1 < 3; l1++ {
 			for l2 := 0; l2 < 3; l2++ {
 				for l3 := 0; l3 < 3; l3++ {
@@ -103,6 +104,7 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 					if count <= 0 {
 						continue
 					}
+					createdAny = true
 
 					profile := []string{}
 					if l1 > 0 {
@@ -147,6 +149,34 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 					nextID++
 				}
 			}
+		}
+
+		// 如果人数很少（如市长 1 人）且没能四舍五入到任何 Cohort，则强制生成一个
+		if !createdAny && prof.Population > 0 {
+			loyalty := clamp01(0.45 + rand.Float64()*0.25 + classBias(prof.ClassType, 0.08))
+			influence := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10) + rand.Float64()*0.10)
+			cohort := model.PopulationCohort{
+				ID:              nextID,
+				SiloID:          silo.ID,
+				ProfessionID:    prof.ID,
+				Name:            fmt.Sprintf("%s Representative", prof.Name),
+				Count:           prof.Population,
+				IdeologyProfile: []string{"Ideology:Neutral"},
+				HomeZone:        prof.Zone,
+				Loyalty:         loyalty,
+				Influence:       influence,
+				ActionPoints:    20 + rand.Float64()*20,
+				Ideologies: map[string]float64{
+					model.IdeologyProForeign: pValues[0],
+					model.IdeologyDemocracy:  pValues[1],
+					model.IdeologyLoyalty:    pValues[2],
+				},
+				PanicSensitivity: 0.9 + rand.Float64()*0.25,
+				KnownFragments:   initResidentFragments(prof.Name),
+			}
+			cohort.Tags = buildCohortTags(&cohort, prof, silo)
+			cohorts = append(cohorts, cohort)
+			nextID++
 		}
 
 		// 补差额逻辑
