@@ -206,6 +206,7 @@ export interface Faction {
   representative_resident_id: number;
   representative_cohort_id?: number;
   representative_name: string;
+  ambition: number;
   influence: number;
   cohesion: number;
   updated_at: string;
@@ -219,6 +220,7 @@ export interface PopulationCohort {
   name: string;
   count: number;
   home_zone: string;
+  ambition: number;
   influence: number;
   action_points: number;
   political_prestige: number;

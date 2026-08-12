@@ -26,21 +26,21 @@ type User struct {
 
 // Agent 特工模型 (玩家角色)
 type Agent struct {
-	ID                 uint           `gorm:"primarykey" json:"id"`
-	UserID             uint           `gorm:"index" json:"user_id"`
-	Name               string         `gorm:"size:64" json:"name"`
-	Profession         string         `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
-	Traits             []string       `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
-	PoliticalPrestige  float64        `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
-	PoliticalPoints    float64        `gorm:"default:0.0" json:"political_points"`     // 政治点数
-	ActionPoints       float64        `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
-	PropagandaLevel    float64        `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
-	SuspicionLevel     float64        `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
-	Connections        []Connection   `gorm:"foreignKey:AgentID" json:"connections"`
-	KnownFragments     []string       `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
-	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                uint           `gorm:"primarykey" json:"id"`
+	UserID            uint           `gorm:"index" json:"user_id"`
+	Name              string         `gorm:"size:64" json:"name"`
+	Profession        string         `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
+	Traits            []string       `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
+	PoliticalPrestige float64        `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
+	PoliticalPoints   float64        `gorm:"default:0.0" json:"political_points"`     // 政治点数
+	ActionPoints      float64        `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
+	PropagandaLevel   float64        `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
+	SuspicionLevel    float64        `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
+	Connections       []Connection   `gorm:"foreignKey:AgentID" json:"connections"`
+	KnownFragments    []string       `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // Connection 各部门人脉值
@@ -53,32 +53,32 @@ type Connection struct {
 
 // Silo 地堡核心模型
 type Silo struct {
-	ID              uint               `gorm:"primarykey" json:"id"`
-	Name            string             `gorm:"size:100" json:"name"`
-	Traits          []string           `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
-	SafeguardRisk   float64            `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
-	TotalPopulation int                `gorm:"default:10000" json:"total_population"`
-	Legitimacy      float64            `gorm:"default:1.0" json:"legitimacy"`                             // 合法性值
-	Cohesion        float64            `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
-	Rebellion       float64            `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
-	DeptTension     float64            `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
-	ClassFragmentation float64         `gorm:"default:0.0" json:"class_fragmentation"`                 // 精英与平民割裂程度 (0-1)
-	HistoryBurden   float64            `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
-	EventTrigger    float64            `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
-	CurrentYear     int                `gorm:"default:122" json:"current_year"`                           // 当前年份
-	CurrentMonth    int                `gorm:"default:1" json:"current_month"`                            // 当前月份 (1-12)
-	Countdown       float64            `gorm:"default:500.0" json:"countdown"`                            // 500年倒计时 (时间胜利)
-	Silo1Destroyed  bool               `gorm:"default:false" json:"silo1_destroyed"`                      // 1号地堡是否已覆灭
-	VictoryStatus   *VictoryStatus     `gorm:"type:text;serializer:json" json:"victory_status,omitempty"` // 胜利判定结果
-	Resources       []Resource         `gorm:"foreignKey:SiloID" json:"resources"`
-	Professions     []Profession       `gorm:"foreignKey:SiloID" json:"professions"`
-	Floors          []Floor            `gorm:"foreignKey:SiloID" json:"floors"`
-	Cohorts         []PopulationCohort `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
-	Residents       []Resident         `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
-	Factions        []Faction          `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
-	CreatedAt       time.Time          `json:"created_at"`
-	UpdatedAt       time.Time          `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt     `gorm:"index" json:"-"`
+	ID                 uint               `gorm:"primarykey" json:"id"`
+	Name               string             `gorm:"size:100" json:"name"`
+	Traits             []string           `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
+	SafeguardRisk      float64            `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
+	TotalPopulation    int                `gorm:"default:10000" json:"total_population"`
+	Legitimacy         float64            `gorm:"default:1.0" json:"legitimacy"`                             // 合法性值
+	Cohesion           float64            `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
+	Rebellion          float64            `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
+	DeptTension        float64            `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
+	ClassFragmentation float64            `gorm:"default:0.0" json:"class_fragmentation"`                    // 精英与平民割裂程度 (0-1)
+	HistoryBurden      float64            `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
+	EventTrigger       float64            `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
+	CurrentYear        int                `gorm:"default:122" json:"current_year"`                           // 当前年份
+	CurrentMonth       int                `gorm:"default:1" json:"current_month"`                            // 当前月份 (1-12)
+	Countdown          float64            `gorm:"default:500.0" json:"countdown"`                            // 500年倒计时 (时间胜利)
+	Silo1Destroyed     bool               `gorm:"default:false" json:"silo1_destroyed"`                      // 1号地堡是否已覆灭
+	VictoryStatus      *VictoryStatus     `gorm:"type:text;serializer:json" json:"victory_status,omitempty"` // 胜利判定结果
+	Resources          []Resource         `gorm:"foreignKey:SiloID" json:"resources"`
+	Professions        []Profession       `gorm:"foreignKey:SiloID" json:"professions"`
+	Floors             []Floor            `gorm:"foreignKey:SiloID" json:"floors"`
+	Cohorts            []PopulationCohort `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
+	Residents          []Resident         `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
+	Factions           []Faction          `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt     `gorm:"index" json:"-"`
 }
 
 // VictoryStatus 胜利状态
@@ -124,12 +124,12 @@ type Profession struct {
 	KnownFragments []string           `gorm:"type:text;serializer:json" json:"known_fragments"`     // 掌握的其他部门信息碎片来源
 	Relations      map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"` // NPC部门之间的人脉/关系网
 	// ---- 统一 Actor 经济体系 (与 Agent 同构) ----
-	ActionPoints       float64   `gorm:"default:0" json:"action_points"`                    // 行动点数 (AP)
-	SuspicionLevel     float64   `gorm:"default:0" json:"suspicion_level"`                  // 怀疑度
-	PoliticalPrestige  float64   `gorm:"default:0" json:"political_prestige"`               // 政治威望
-	PropagandaLevel    float64   `gorm:"default:0" json:"propaganda_level"`                 // 宣传力度
-	Traits             []string  `gorm:"type:text;serializer:json" json:"traits,omitempty"` // 特质
-	UpdatedAt          time.Time `json:"updated_at"`
+	ActionPoints      float64   `gorm:"default:0" json:"action_points"`                    // 行动点数 (AP)
+	SuspicionLevel    float64   `gorm:"default:0" json:"suspicion_level"`                  // 怀疑度
+	PoliticalPrestige float64   `gorm:"default:0" json:"political_prestige"`               // 政治威望
+	PropagandaLevel   float64   `gorm:"default:0" json:"propaganda_level"`                 // 宣传力度
+	Traits            []string  `gorm:"type:text;serializer:json" json:"traits,omitempty"` // 特质
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // Floor 楼层模型 (Silo 核心空间)
@@ -146,48 +146,50 @@ type Floor struct {
 
 // PopulationCohort 聚合人口单元：以职业为首要维度，按意识形态组合划分。
 type PopulationCohort struct {
-	ID                 uint               `gorm:"primarykey" json:"id"`
-	SiloID             uint               `gorm:"index" json:"silo_id"`
-	ProfessionID       uint               `gorm:"index" json:"profession_id"`
-	FactionID          *uint              `gorm:"index" json:"faction_id,omitempty"`
-	Name               string             `gorm:"size:100" json:"name"`
-	Count              int                `gorm:"default:0" json:"count"`
-	IdeologyProfile    []string           `gorm:"type:text;serializer:json" json:"ideology_profile"` // 核心意识形态组合 (1-2个)
-	HomeZone           string             `gorm:"size:20" json:"home_zone"`
-	Loyalty            float64            `gorm:"default:0.5" json:"loyalty"`
-	Influence          float64            `gorm:"default:0.0" json:"influence"`
-	ActionPoints       float64            `gorm:"default:0.0" json:"action_points"`
-	PoliticalPrestige  float64            `gorm:"default:0.0" json:"political_prestige"`
-	PanicSensitivity   float64            `gorm:"default:1.0" json:"panic_sensitivity"`
-	Ideologies         map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
-	KnownFragments     []string           `gorm:"type:text;serializer:json" json:"known_fragments,omitempty"`
-	Tags               []string           `gorm:"type:text;serializer:json" json:"tags,omitempty"`
-	UpdatedAt          time.Time          `json:"updated_at"`
+	ID                uint               `gorm:"primarykey" json:"id"`
+	SiloID            uint               `gorm:"index" json:"silo_id"`
+	ProfessionID      uint               `gorm:"index" json:"profession_id"`
+	FactionID         *uint              `gorm:"index" json:"faction_id,omitempty"`
+	Name              string             `gorm:"size:100" json:"name"`
+	Count             int                `gorm:"default:0" json:"count"`
+	IdeologyProfile   []string           `gorm:"type:text;serializer:json" json:"ideology_profile"` // 核心意识形态组合 (1-2个)
+	HomeZone          string             `gorm:"size:20" json:"home_zone"`
+	Loyalty           float64            `gorm:"default:0.5" json:"loyalty"`
+	Ambition          float64            `gorm:"default:0.0" json:"ambition"`
+	Influence         float64            `gorm:"default:0.0" json:"influence"`
+	ActionPoints      float64            `gorm:"default:0.0" json:"action_points"`
+	PoliticalPrestige float64            `gorm:"default:0.0" json:"political_prestige"`
+	PanicSensitivity  float64            `gorm:"default:1.0" json:"panic_sensitivity"`
+	Ideologies        map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
+	KnownFragments    []string           `gorm:"type:text;serializer:json" json:"known_fragments,omitempty"`
+	Tags              []string           `gorm:"type:text;serializer:json" json:"tags,omitempty"`
+	UpdatedAt         time.Time          `json:"updated_at"`
 }
 
 // Resident 显式居民/单位模型：每个 NPC unit 都有自己的 tags 与状态
 type Resident struct {
-	ID                 uint               `gorm:"primarykey" json:"id"`
-	SiloID             uint               `gorm:"index" json:"silo_id"`
-	Name               string             `gorm:"size:80" json:"name"`
-	CohortID           *uint              `gorm:"index" json:"cohort_id,omitempty"`
-	ProfessionID       uint               `gorm:"index" json:"profession_id"`
-	Profession         string             `gorm:"size:50" json:"profession"`
-	FactionID          *uint              `gorm:"index" json:"faction_id,omitempty"`
-	HomeFloor          int                `json:"home_floor"`
-	Tags               []string           `gorm:"type:text;serializer:json" json:"tags"`
-	Loyalty            float64            `gorm:"default:0.5" json:"loyalty"`
-	Ideologies         map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
-	Influence          float64            `gorm:"default:0.0" json:"influence"`
-	ActionPoints       float64            `gorm:"default:0.0" json:"action_points"`
-	SuspicionLevel     float64            `gorm:"default:0.0" json:"suspicion_level"`
-	PoliticalPrestige  float64            `gorm:"default:0.0" json:"political_prestige"`
-	PropagandaLevel    float64            `gorm:"default:0.0" json:"propaganda_level"`
-	KnownFragments     []string           `gorm:"type:text;serializer:json" json:"known_fragments"`
-	Relations          map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"`
-	IsRepresentative   bool               `gorm:"default:false" json:"is_representative"`
-	Alive              bool               `gorm:"default:true" json:"alive"`
-	UpdatedAt          time.Time          `json:"updated_at"`
+	ID                uint               `gorm:"primarykey" json:"id"`
+	SiloID            uint               `gorm:"index" json:"silo_id"`
+	Name              string             `gorm:"size:80" json:"name"`
+	CohortID          *uint              `gorm:"index" json:"cohort_id,omitempty"`
+	ProfessionID      uint               `gorm:"index" json:"profession_id"`
+	Profession        string             `gorm:"size:50" json:"profession"`
+	FactionID         *uint              `gorm:"index" json:"faction_id,omitempty"`
+	HomeFloor         int                `json:"home_floor"`
+	Tags              []string           `gorm:"type:text;serializer:json" json:"tags"`
+	Loyalty           float64            `gorm:"default:0.5" json:"loyalty"`
+	Ambition          float64            `gorm:"default:0.0" json:"ambition"`
+	Ideologies        map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
+	Influence         float64            `gorm:"default:0.0" json:"influence"`
+	ActionPoints      float64            `gorm:"default:0.0" json:"action_points"`
+	SuspicionLevel    float64            `gorm:"default:0.0" json:"suspicion_level"`
+	PoliticalPrestige float64            `gorm:"default:0.0" json:"political_prestige"`
+	PropagandaLevel   float64            `gorm:"default:0.0" json:"propaganda_level"`
+	KnownFragments    []string           `gorm:"type:text;serializer:json" json:"known_fragments"`
+	Relations         map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"`
+	IsRepresentative  bool               `gorm:"default:false" json:"is_representative"`
+	Alive             bool               `gorm:"default:true" json:"alive"`
+	UpdatedAt         time.Time          `json:"updated_at"`
 }
 
 // Faction 派系模型：独立于 Profession，由 resident tags 隐式聚类生成
@@ -202,6 +204,7 @@ type Faction struct {
 	RepresentativeResidentID uint           `gorm:"default:0" json:"representative_resident_id"`
 	RepresentativeCohortID   *uint          `gorm:"index" json:"representative_cohort_id,omitempty"`
 	RepresentativeName       string         `gorm:"size:80" json:"representative_name"`
+	Ambition                 float64        `gorm:"default:0.0" json:"ambition"`
 	Influence                float64        `gorm:"default:0.0" json:"influence"`
 	Cohesion                 float64        `gorm:"default:0.0" json:"cohesion"`
 	UpdatedAt                time.Time      `json:"updated_at"`
@@ -256,33 +259,33 @@ type CreateGameRequest struct {
 
 // GameState 后端权威游戏状态快照 (返回给前端)
 type GameState struct {
-	Silo                Silo                   `json:"silo"`
-	Agent               Agent                  `json:"agent"`
-	GameOver            bool                   `json:"game_over"`
-	EndingNarrative     string                 `json:"ending_narrative,omitempty"`
-	VictoryStatus       *VictoryStatus     `json:"victory_status,omitempty"`
-	ProfessionActions   []ProfessionActionMeta `json:"profession_actions,omitempty"`
+	Silo              Silo                   `json:"silo"`
+	Agent             Agent                  `json:"agent"`
+	GameOver          bool                   `json:"game_over"`
+	EndingNarrative   string                 `json:"ending_narrative,omitempty"`
+	VictoryStatus     *VictoryStatus         `json:"victory_status,omitempty"`
+	ProfessionActions []ProfessionActionMeta `json:"profession_actions,omitempty"`
 }
 
 // TickResult 时间推进结果
 type TickResult struct {
-	Silo                Silo         `json:"silo"`
-	Agent               Agent        `json:"agent"`
-	Logs                []string     `json:"logs"`
-	Stories             []StoryEvent `json:"stories"`
-	GameOver            bool         `json:"game_over"`
-	EndingNarrative     string       `json:"ending_narrative,omitempty"`
+	Silo            Silo         `json:"silo"`
+	Agent           Agent        `json:"agent"`
+	Logs            []string     `json:"logs"`
+	Stories         []StoryEvent `json:"stories"`
+	GameOver        bool         `json:"game_over"`
+	EndingNarrative string       `json:"ending_narrative,omitempty"`
 }
 
 // ActionOutcome 动作执行结果 (含最新状态)
 type ActionOutcome struct {
-	Silo                Silo         `json:"silo"`
-	Agent               Agent        `json:"agent"`
-	Result              ActionResult `json:"result"`
-	Logs                []string     `json:"logs"`
-	Stories             []StoryEvent `json:"stories"`
-	GameOver            bool         `json:"game_over"`
-	EndingNarrative     string       `json:"ending_narrative,omitempty"`
+	Silo            Silo         `json:"silo"`
+	Agent           Agent        `json:"agent"`
+	Result          ActionResult `json:"result"`
+	Logs            []string     `json:"logs"`
+	Stories         []StoryEvent `json:"stories"`
+	GameOver        bool         `json:"game_over"`
+	EndingNarrative string       `json:"ending_narrative,omitempty"`
 }
 
 // ProfessionActionMeta 职业专属行动元数据 (前端渲染按钮用，不含执行逻辑)
