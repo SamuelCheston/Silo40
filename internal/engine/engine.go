@@ -58,9 +58,9 @@ func NewGameEngine() *GameEngine {
 		TriggerEngine:   NewTriggerEngine(),
 		EventEngine:     NewEventEngine(),
 		perCapitaConsumption: map[string]float64{
-			"Supplies":  130.0,
-			"Energy":    100.0,
-			"Materials": 20.0,
+			"Supplies":  1.0,
+			"Energy":    1.0,
+			"Materials": 1.0,
 		},
 		resourceProducers: map[string][]string{
 			"Energy":    {"Mechanical"},
@@ -1203,33 +1203,79 @@ func (e *GameEngine) updateIdeology(silo *model.Silo, deltaYears float64) {
 	}
 }
 
-// updateResources 资源结算
+// updateResources 资源结算：按人头计算，包含生产与转化逻辑
 func (e *GameEngine) updateResources(silo *model.Silo, deltaYears float64) {
-	populationFactor := float64(silo.TotalPopulation) / 10000.0
+	if deltaYears <= 0 {
+		return
+	}
+
+	totalPop := float64(silo.TotalPopulation)
 	isRebelling := silo.Rebellion > 0.7
 
+	// 1. 获取各部门生产力与效率
+	getEfficiency := func(profName string) float64 {
+		prof := findDept(silo, profName)
+		if prof == nil {
+			return 0
+		}
+		// 效率默认 1.0
+		eff := 1.0
+		if isRebelling {
+			eff = 0.3
+		}
+		return eff * float64(prof.Population)
+	}
+
+	// 2. 计算基础产率 (2.1 人份 / 人)
+	const prodRate = 2.1
+
+	// 3. 计算 Energy 生产 (Mechanical)
+	energyProdRate := prodRate * e.perCapitaConsumption["Energy"] * getEfficiency("Mechanical")
+	energyConsPopRate := e.perCapitaConsumption["Energy"] * totalPop
+
+	// 4. 计算 Materials 生产 (Mines)
+	materialsProdRate := prodRate * e.perCapitaConsumption["Materials"] * getEfficiency("Mines")
+	materialsConsPopRate := e.perCapitaConsumption["Materials"] * totalPop
+
+	// 5. 计算 Supplies 生产容量 (Agricultural & Supply)
+	agriCapacityRate := prodRate * e.perCapitaConsumption["Supplies"] * getEfficiency("Agricultural")
+	supplyCapacityRate := prodRate * e.perCapitaConsumption["Supplies"] * getEfficiency("Supply")
+	suppliesConsPopRate := e.perCapitaConsumption["Supplies"] * totalPop
+
+	// 6. 执行转化逻辑
+	// 农业部：Energy -> Supplies (1:1)
+	// 供给部：Materials -> Supplies (1:1)
+
+	// 获取当前库存量
+	var energyRes, materialsRes, suppliesRes *model.Resource
+	for i := range silo.Resources {
+		switch silo.Resources[i].Type {
+		case "Energy":
+			energyRes = &silo.Resources[i]
+		case "Materials":
+			materialsRes = &silo.Resources[i]
+		case "Supplies":
+			suppliesRes = &silo.Resources[i]
+		}
+	}
+
+	// 能量转化上限 (库存 + 本期产出 - 人口消耗)
+	energyAvailable := math.Max(0, energyRes.Amount/deltaYears+energyProdRate-energyConsPopRate)
+	actualAgriSuppliesProd := math.Min(agriCapacityRate, energyAvailable)
+
+	// 矿物转化上限 (库存 + 本期产出 - 人口消耗)
+	materialsAvailable := math.Max(0, materialsRes.Amount/deltaYears+materialsProdRate-materialsConsPopRate)
+	actualSupplySuppliesProd := math.Min(supplyCapacityRate, materialsAvailable)
+
+	// 7. 更新结算数据
+	energyRes.NetBalance = energyProdRate - energyConsPopRate - actualAgriSuppliesProd
+	materialsRes.NetBalance = materialsProdRate - materialsConsPopRate - actualSupplySuppliesProd
+	suppliesRes.NetBalance = actualAgriSuppliesProd + actualSupplySuppliesProd - suppliesConsPopRate
+
+	// 8. 应用变动
 	for i := range silo.Resources {
 		r := &silo.Resources[i]
-		consumption := e.perCapitaConsumption[r.Type] * populationFactor
-
-		production := 0.0
-		producers := e.resourceProducers[r.Type]
-		for _, profName := range producers {
-			prof := findDept(silo, profName)
-			if prof != nil {
-				efficiency := (1.0 - prof.PanicValue) * prof.Productivity
-				baseProd := e.perCapitaConsumption[r.Type] * 1.2 / float64(len(producers))
-				production += baseProd * efficiency
-			}
-		}
-
-		if isRebelling {
-			production *= 0.3
-		}
-
-		r.NetBalance = production - consumption
 		r.Amount += r.NetBalance * deltaYears
-
 		if r.Amount < 0 {
 			r.Amount = 0
 		}

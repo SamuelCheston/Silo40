@@ -342,14 +342,14 @@ func init() {
 		{
 			ID: "SUPPLY_RATION", Profession: "Supply",
 			Label:       "Ration Allocation",
-			Description: "Reallocate stockpiles. Add +150 to a chosen resource (Energy / Materials / Supplies).",
+			Description: "Reallocate stockpiles. Add +1000 to a chosen resource (Energy / Materials / Supplies).",
 			APCost:      15, TargetType: TargetResource, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
 				if target == "" {
 					return model.ActionResult{Executed: false, Message: "Invalid resource target."}
 				}
-				addResource(silo, target, 150)
-				return model.ActionResult{Executed: true, Message: "Reallocated stockpiles. +150 " + target + "."}
+				addResource(silo, target, 1000)
+				return model.ActionResult{Executed: true, Message: "Reallocated stockpiles. +1000 " + target + "."}
 			},
 		},
 		{
@@ -373,11 +373,11 @@ func init() {
 		{
 			ID: "MECHANICAL_OVERHAUL", Profession: "Mechanical",
 			Label:       "Overhaul",
-			Description: "Overhaul the silo machinery. Energy +60, Materials +30, own productivity +5%.",
+			Description: "Overhaul the silo machinery. Energy +500, Materials +200, own productivity +5%.",
 			APCost:      15, TargetType: TargetNone, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
-				addResource(silo, "Energy", 60)
-				addResource(silo, "Materials", 30)
+				addResource(silo, "Energy", 500)
+				addResource(silo, "Materials", 200)
 				view.SetProductivity(clamp(view.Productivity()+0.05, 0, 1))
 				return model.ActionResult{Executed: true, Message: "Machinery overhauled. Energy and materials production improved."}
 			},
@@ -404,10 +404,10 @@ func init() {
 		{
 			ID: "MINES_DEEP_EXCAVATION", Profession: "Mines",
 			Label:       "Deep Excavation",
-			Description: "Push the mines deeper. Materials +120, own productivity +5%.",
+			Description: "Push the mines deeper. Materials +800, own productivity +5%.",
 			APCost:      15, TargetType: TargetNone, SuspicionPenalty: 0.005,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
-				addResource(silo, "Materials", 120)
+				addResource(silo, "Materials", 800)
 				view.SetProductivity(clamp(view.Productivity()+0.05, 0, 1))
 				return model.ActionResult{Executed: true, Message: "Deep excavation completed. Materials reserves increased."}
 			},
@@ -439,10 +439,10 @@ func init() {
 		{
 			ID: "AGRICULTURAL_INTENSIVE_HARVEST", Profession: "Agricultural",
 			Label:       "Intensive Harvest",
-			Description: "Work the hydroponics around the clock. Supplies +200, own productivity +8%.",
+			Description: "Work the hydroponics around the clock. Supplies +1500, own productivity +8%.",
 			APCost:      15, TargetType: TargetNone, SuspicionPenalty: 0.01,
 			Effect: func(silo *model.Silo, view *ActorView, target string) model.ActionResult {
-				addResource(silo, "Supplies", 200)
+				addResource(silo, "Supplies", 1500)
 				view.SetProductivity(clamp(view.Productivity()+0.08, 0, 1))
 				return model.ActionResult{Executed: true, Message: "Intensive harvest completed. Supplies increased."}
 			},

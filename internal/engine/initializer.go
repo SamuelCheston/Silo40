@@ -186,8 +186,8 @@ func initProfessions() []model.Profession {
 func initResources() []model.Resource {
 	return []model.Resource{
 		{ID: 0, SiloID: 0, Type: "Energy", Amount: 5000, NetBalance: 0},
-		{ID: 0, SiloID: 0, Type: "Materials", Amount: 500, NetBalance: 0},
-		{ID: 0, SiloID: 0, Type: "Supplies", Amount: 3000, NetBalance: 0},
+		{ID: 0, SiloID: 0, Type: "Materials", Amount: 2000, NetBalance: 0},
+		{ID: 0, SiloID: 0, Type: "Supplies", Amount: 5000, NetBalance: 0},
 	}
 }
 
