@@ -497,11 +497,11 @@ func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYe
 		view.SetPoliticalPoints(view.PoliticalPoints() + prestige*pointGainRate*deltaYears)
 	}
 
-	// 行动点数恢复：基础恢复 10 点/年，受威望和组织度加成
-	apGainRate := 10 + (prestige * 0.05) + (view.OrganizationFactor() * 2)
+	// 行动点数恢复：基础恢复 10 点/年，受威望加成
+	apGainRate := 10 + (prestige * 0.05)
 	view.SetActionPoints(view.ActionPoints() + apGainRate*deltaYears)
 	// 设置 AP 上限
-	maxAP := 100 + (view.OrganizationFactor() * 10)
+	maxAP := 100.0
 	if view.ActionPoints() > maxAP {
 		view.SetActionPoints(maxAP)
 	}
@@ -802,82 +802,6 @@ func (e *GameEngine) shareInformation(silo *model.Silo, view *ActorView, action 
 	}
 }
 
-// GetOrganizedPopulation 组织化人口计算
-func (e *GameEngine) GetOrganizedPopulation(silo *model.Silo, agent *model.Agent) int {
-	organizedPopulation := 0.0
-	for _, conn := range agent.Connections {
-		orgFactor := agent.OrganizationFactor
-		if orgFactor == 0 {
-			orgFactor = 1.0
-		}
-		for _, t := range agent.Traits {
-			if t == "魅力非凡" {
-				orgFactor *= 1.2
-				break
-			}
-		}
-
-		targetProf := findDept(silo, profNameByID(silo, conn.ProfessionID))
-		// findDept by name; fallback: search by id
-		if targetProf == nil || targetProf.ID != conn.ProfessionID {
-			targetProf = profByID(silo, conn.ProfessionID)
-		}
-		if targetProf != nil {
-			isAgentCommoner := agent.Profession == "Supply" || agent.Profession == "Mechanical" ||
-				agent.Profession == "Mines" || agent.Profession == "Agricultural"
-
-			if isAgentCommoner && targetProf.ClassType == "COMMONER" {
-				if agent.Profession == "Mechanical" {
-					orgFactor *= 2.0
-				} else {
-					orgFactor *= 1.5
-				}
-			}
-
-			appeal := 0.1
-			if agent.Profession == "Mechanical" && targetProf.Name == "Mechanical" {
-				appeal += 0.4
-			}
-			for _, t := range agent.Traits {
-				if t == "魅力非凡" {
-					appeal += 0.2
-					break
-				}
-			}
-
-			propagandaMultiplier := agent.PropagandaLevel
-			appealEffect := appeal * propagandaMultiplier
-			conversionRate := (appealEffect*0.4 + conn.Value*0.6) * orgFactor * targetProf.Ideologies[model.IdeologyProForeign]
-
-			maxConvertible := float64(targetProf.Population) * 0.20
-			deptOrganized := float64(targetProf.Population) * conversionRate
-			if deptOrganized > maxConvertible {
-				deptOrganized = maxConvertible
-			}
-			organizedPopulation += deptOrganized
-		}
-	}
-	return int(math.Floor(organizedPopulation))
-}
-
-func profNameByID(silo *model.Silo, id uint) string {
-	for _, p := range silo.Professions {
-		if p.ID == id {
-			return p.Name
-		}
-	}
-	return ""
-}
-
-func profByID(silo *model.Silo, id uint) *model.Profession {
-	for i := range silo.Professions {
-		if silo.Professions[i].ID == id {
-			return &silo.Professions[i]
-		}
-	}
-	return nil
-}
-
 // RunNpcTurn NPC 回合 (统一 Actor 管线)：经济结算 + 决策层提交动作
 func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears float64, addLog func(string)) {
 	if silo == nil {
@@ -1078,28 +1002,14 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 			return
 		}
 
-		organizedPopulation := e.GetOrganizedPopulation(silo, agent)
-
-		if float64(organizedPopulation) >= float64(silo.TotalPopulation)*0.03 {
-			hasEnoughSurvivors := silo.TotalPopulation >= 10000*0.03
-
-			escapingDeptsCount := 0
-			for _, p := range silo.Professions {
-				escapingPeople := float64(p.Population) * p.Ideologies[model.IdeologyProForeign]
-				if escapingPeople > 10 {
-					escapingDeptsCount++
-				}
+		// TODO: 叛乱胜利逻辑将在此处重写。目前使用地堡叛乱值作为临时判定。
+		if silo.Rebellion >= 1.0 {
+			silo.VictoryStatus = &model.VictoryStatus{
+				IsWon:       true,
+				Type:        "REBELLION",
+				Description: "你成功组织了反抗力量并发动了叛乱。旧的统治被推翻，幸存者们冲破了封闭的牢笼。",
 			}
-			hasLaborEscape := escapingDeptsCount >= 3
-
-			if hasEnoughSurvivors || hasLaborEscape {
-				silo.VictoryStatus = &model.VictoryStatus{
-					IsWon:       true,
-					Type:        "REBELLION",
-					Description: "你成功组织了反抗力量并发动了叛乱。旧的统治被推翻，幸存者们冲破了封闭的牢笼。",
-				}
-				return
-			}
+			return
 		}
 	}
 
@@ -1113,6 +1023,15 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 	}
 }
 
+func getProfessionByID(silo *model.Silo, id uint) *model.Profession {
+	for i := range silo.Professions {
+		if silo.Professions[i].ID == id {
+			return &silo.Professions[i]
+		}
+	}
+	return nil
+}
+
 // updateIdeology 思潮演化：核心逻辑作用于人口单元 (Cohort)，生产部门同步宏观分布
 func (e *GameEngine) updateIdeology(silo *model.Silo, deltaYears float64) {
 	stability := silo.Cohesion
@@ -1120,7 +1039,7 @@ func (e *GameEngine) updateIdeology(silo *model.Silo, deltaYears float64) {
 	// 1. 人口单元 (Cohort) 级别的思潮演化
 	for i := range silo.Cohorts {
 		c := &silo.Cohorts[i]
-		prof := profByID(silo, c.ProfessionID)
+		prof := getProfessionByID(silo, c.ProfessionID)
 		if prof == nil {
 			continue
 		}
@@ -1156,7 +1075,7 @@ func (e *GameEngine) updateIdeology(silo *model.Silo, deltaYears float64) {
 			if itDept != nil {
 				for i := range silo.Cohorts {
 					c := &silo.Cohorts[i]
-					if prof := profByID(silo, c.ProfessionID); prof != nil && prof.Name != "IT" {
+					if prof := getProfessionByID(silo, c.ProfessionID); prof != nil && prof.Name != "IT" {
 						for key, targetIdeology := range itDept.Ideologies {
 							diff := targetIdeology - c.Ideologies[key]
 							c.Ideologies[key] += diff * 0.05 * deltaYears

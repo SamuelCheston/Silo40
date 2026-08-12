@@ -53,13 +53,6 @@ func (s *GameService) hasSession() bool {
 	return s.silo != nil && s.agent != nil
 }
 
-func (s *GameService) organizedPopulation() int {
-	if !s.hasSession() {
-		return 0
-	}
-	return s.engine.GetOrganizedPopulation(s.silo, s.agent)
-}
-
 func (s *GameService) gameOver() bool {
 	return s.hasSession() && s.silo.VictoryStatus != nil
 }
@@ -347,7 +340,6 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 		Agent:               *s.agent,
 		Logs:                logs,
 		Stories:             stories,
-		OrganizedPopulation: s.organizedPopulation(),
 		GameOver:            s.gameOver(),
 		EndingNarrative:     s.endingNarrative(),
 	}, nil
@@ -409,7 +401,6 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 		Result:              result,
 		Logs:                logs,
 		Stories:             stories,
-		OrganizedPopulation: s.organizedPopulation(),
 		GameOver:            s.gameOver(),
 		EndingNarrative:     s.endingNarrative(),
 	}, nil
@@ -443,7 +434,6 @@ func (s *GameService) buildState() *model.GameState {
 	return &model.GameState{
 		Silo:                s.publicSiloSnapshot(),
 		Agent:               *s.agent,
-		OrganizedPopulation: s.organizedPopulation(),
 		GameOver:            gameOver,
 		EndingNarrative:     s.endingNarrative(),
 		VictoryStatus:       s.silo.VictoryStatus,

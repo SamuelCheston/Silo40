@@ -34,7 +34,6 @@ type Agent struct {
 	PoliticalPrestige  float64        `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
 	PoliticalPoints    float64        `gorm:"default:0.0" json:"political_points"`     // 政治点数
 	ActionPoints       float64        `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
-	OrganizationFactor float64        `gorm:"default:1.0" json:"organization_factor"`  // 组织度系数
 	PropagandaLevel    float64        `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
 	SuspicionLevel     float64        `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
 	Connections        []Connection   `gorm:"foreignKey:AgentID" json:"connections"`
@@ -129,7 +128,6 @@ type Profession struct {
 	SuspicionLevel     float64   `gorm:"default:0" json:"suspicion_level"`                  // 怀疑度
 	PoliticalPrestige  float64   `gorm:"default:0" json:"political_prestige"`               // 政治威望
 	PropagandaLevel    float64   `gorm:"default:0" json:"propaganda_level"`                 // 宣传力度
-	OrganizationFactor float64   `gorm:"default:1.0" json:"organization_factor"`            // 组织度系数
 	Traits             []string  `gorm:"type:text;serializer:json" json:"traits,omitempty"` // 特质
 	UpdatedAt          time.Time `json:"updated_at"`
 }
@@ -160,7 +158,6 @@ type PopulationCohort struct {
 	Influence          float64            `gorm:"default:0.0" json:"influence"`
 	ActionPoints       float64            `gorm:"default:0.0" json:"action_points"`
 	PoliticalPrestige  float64            `gorm:"default:0.0" json:"political_prestige"`
-	OrganizationFactor float64            `gorm:"default:1.0" json:"organization_factor"`
 	PanicSensitivity   float64            `gorm:"default:1.0" json:"panic_sensitivity"`
 	Ideologies         map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
 	KnownFragments     []string           `gorm:"type:text;serializer:json" json:"known_fragments,omitempty"`
@@ -186,7 +183,6 @@ type Resident struct {
 	SuspicionLevel     float64            `gorm:"default:0.0" json:"suspicion_level"`
 	PoliticalPrestige  float64            `gorm:"default:0.0" json:"political_prestige"`
 	PropagandaLevel    float64            `gorm:"default:0.0" json:"propaganda_level"`
-	OrganizationFactor float64            `gorm:"default:1.0" json:"organization_factor"`
 	KnownFragments     []string           `gorm:"type:text;serializer:json" json:"known_fragments"`
 	Relations          map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"`
 	IsRepresentative   bool               `gorm:"default:false" json:"is_representative"`
@@ -262,10 +258,9 @@ type CreateGameRequest struct {
 type GameState struct {
 	Silo                Silo                   `json:"silo"`
 	Agent               Agent                  `json:"agent"`
-	OrganizedPopulation int                    `json:"organized_population"`
 	GameOver            bool                   `json:"game_over"`
 	EndingNarrative     string                 `json:"ending_narrative,omitempty"`
-	VictoryStatus       *VictoryStatus         `json:"victory_status,omitempty"`
+	VictoryStatus       *VictoryStatus     `json:"victory_status,omitempty"`
 	ProfessionActions   []ProfessionActionMeta `json:"profession_actions,omitempty"`
 }
 
@@ -275,7 +270,6 @@ type TickResult struct {
 	Agent               Agent        `json:"agent"`
 	Logs                []string     `json:"logs"`
 	Stories             []StoryEvent `json:"stories"`
-	OrganizedPopulation int          `json:"organized_population"`
 	GameOver            bool         `json:"game_over"`
 	EndingNarrative     string       `json:"ending_narrative,omitempty"`
 }
@@ -287,7 +281,6 @@ type ActionOutcome struct {
 	Result              ActionResult `json:"result"`
 	Logs                []string     `json:"logs"`
 	Stories             []StoryEvent `json:"stories"`
-	OrganizedPopulation int          `json:"organized_population"`
 	GameOver            bool         `json:"game_over"`
 	EndingNarrative     string       `json:"ending_narrative,omitempty"`
 }

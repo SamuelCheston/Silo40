@@ -100,7 +100,6 @@ func CreateInitialSilo(name string, initialYear int, traitIds []string) *model.S
 		prof.SuspicionLevel = 0
 		prof.PoliticalPrestige = 0
 		prof.PropagandaLevel = 0
-		prof.OrganizationFactor = 1.0
 		if prof.Traits == nil {
 			prof.Traits = []string{}
 		}
@@ -209,7 +208,6 @@ func CreateInitialAgent(name, profession string, traitIds []string, silo *model.
 		PoliticalPrestige:  10,
 		PoliticalPoints:    0,
 		ActionPoints:       50,
-		OrganizationFactor: 1.0,
 		PropagandaLevel:    0.0,
 		SuspicionLevel:     0.0,
 		Connections:        []model.Connection{},

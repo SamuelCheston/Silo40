@@ -119,7 +119,6 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 							model.IdeologyDemocracy:  pValues[1],
 							model.IdeologyLoyalty:    pValues[2],
 						},
-						OrganizationFactor: 0.9 + rand.Float64()*0.30,
 						PanicSensitivity:   0.9 + rand.Float64()*0.25,
 						KnownFragments:     initResidentFragments(prof.Name),
 					}
@@ -163,7 +162,7 @@ func initKeyResidents(silo *model.Silo) []model.Resident {
 	nextID := uint(1)
 	for i := range silo.Cohorts {
 		cohort := &silo.Cohorts[i]
-		prof := profByID(silo, cohort.ProfessionID)
+		prof := getProfessionByID(silo, cohort.ProfessionID)
 		if prof == nil {
 			continue
 		}
@@ -181,7 +180,6 @@ func initKeyResidents(silo *model.Silo) []model.Resident {
 			SuspicionLevel:     0,
 			PoliticalPrestige:  cohort.PoliticalPrestige,
 			PropagandaLevel:    0,
-			OrganizationFactor: cohort.OrganizationFactor,
 			KnownFragments:     append([]string{}, cohort.KnownFragments...),
 			Relations:          initResidentRelations(silo, prof),
 			Alive:              true,
@@ -354,7 +352,6 @@ func buildCohortTags(cohort *model.PopulationCohort, prof *model.Profession, sil
 		Influence:          cohort.Influence,
 		ActionPoints:       cohort.ActionPoints,
 		PoliticalPrestige:  cohort.PoliticalPrestige,
-		OrganizationFactor: cohort.OrganizationFactor,
 	}
 	return buildResidentTags(&proxy, prof, silo)
 }
@@ -458,7 +455,6 @@ func factionCohesion(members []*model.PopulationCohort) float64 {
 func representativeScore(resident *model.Resident) float64 {
 	return resident.Influence*0.40 +
 		resident.Ideologies[model.IdeologyLoyalty]*0.20 +
-		resident.OrganizationFactor*0.15 +
 		resident.PoliticalPrestige/100.0*0.15 +
 		resident.ActionPoints/100.0*0.10
 }
@@ -467,7 +463,6 @@ func representativeCohortScore(cohort *model.PopulationCohort) float64 {
 	scale := math.Log(float64(cohort.Count) + 1)
 	return cohort.Influence*0.45 +
 		cohort.Ideologies[model.IdeologyLoyalty]*0.15 +
-		cohort.OrganizationFactor*0.20 +
 		cohort.PoliticalPrestige/100.0*0.10 +
 		scale*0.10
 }
@@ -483,7 +478,7 @@ func refreshProfessionPopulationFromCohorts(silo *model.Silo) {
 	for i := range silo.Cohorts {
 		cohort := &silo.Cohorts[i]
 		totalPopulation += cohort.Count
-		if prof := profByID(silo, cohort.ProfessionID); prof != nil {
+		if prof := getProfessionByID(silo, cohort.ProfessionID); prof != nil {
 			prof.Population += cohort.Count
 		}
 	}
@@ -514,7 +509,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			continue
 		}
 		cohort := cohortByID(silo, *silo.Residents[i].CohortID)
-		prof := profByID(silo, silo.Residents[i].ProfessionID)
+		prof := getProfessionByID(silo, silo.Residents[i].ProfessionID)
 		if cohort == nil || prof == nil {
 			continue
 		}
@@ -524,7 +519,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 
 	for i := range silo.Cohorts {
 		silo.Cohorts[i].FactionID = nil
-		prof := profByID(silo, silo.Cohorts[i].ProfessionID)
+		prof := getProfessionByID(silo, silo.Cohorts[i].ProfessionID)
 		if prof == nil {
 			continue
 		}
@@ -541,7 +536,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 
 	for i := range silo.Cohorts {
 		cohort := &silo.Cohorts[i]
-		prof := profByID(silo, cohort.ProfessionID)
+		prof := getProfessionByID(silo, cohort.ProfessionID)
 		if prof == nil || cohort.Count <= 0 {
 			continue
 		}
@@ -553,7 +548,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 				// 检查该阵营中现有的部门是否与当前部门关系恶劣
 				isHostile := false
 				for existingProfId := range g.profIds {
-					existingProf := profByID(silo, existingProfId)
+					existingProf := getProfessionByID(silo, existingProfId)
 					if existingProf != nil {
 						// 检查双向关系，只要有一方关系低于阈值即视为不合
 						rel1 := prof.Relations[existingProf.Name]
@@ -672,7 +667,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			cohort.FactionID = uintPtr(faction.ID)
 			
 			// 宏观统计：统计阵营内不同职业和标签的分布
-			prof := profByID(silo, cohort.ProfessionID)
+			prof := getProfessionByID(silo, cohort.ProfessionID)
 			if prof != nil {
 				faction.TagStats["prof:"+prof.Name] += cohort.Count
 			}
@@ -694,7 +689,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			if rep != nil {
 				rep.IsRepresentative = true
 				rep.FactionID = uintPtr(faction.ID)
-				if prof := profByID(silo, rep.ProfessionID); prof != nil {
+				if prof := getProfessionByID(silo, rep.ProfessionID); prof != nil {
 					rep.Tags = buildResidentTags(rep, prof, silo)
 				}
 				faction.RepresentativeResidentID = rep.ID
@@ -729,7 +724,7 @@ func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCoho
 			return &silo.Residents[i]
 		}
 	}
-	prof := profByID(silo, cohort.ProfessionID)
+	prof := getProfessionByID(silo, cohort.ProfessionID)
 	if prof == nil {
 		return nil
 	}
@@ -746,7 +741,6 @@ func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCoho
 		Influence:          clamp01(cohort.Influence + 0.08),
 		ActionPoints:       cohort.ActionPoints,
 		PoliticalPrestige:  cohort.PoliticalPrestige,
-		OrganizationFactor: cohort.OrganizationFactor,
 		KnownFragments:     append([]string{}, cohort.KnownFragments...),
 		Relations:          initResidentRelations(silo, prof),
 		Alive:              true,
@@ -773,7 +767,6 @@ func updatePopulationCohorts(silo *model.Silo, deltaYears float64) {
 
 			loyaltyTarget := clamp01(silo.Legitimacy - prof.PanicValue*0.35*cohort.PanicSensitivity + classBias(prof.ClassType, 0.08))
 			influenceTarget := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10))
-			organizationTarget := clamp01(0.55 + (1.0-silo.Rebellion)*0.20 + prof.Productivity*0.20)
 
 			cohort.Ideologies[model.IdeologyLoyalty] += (loyaltyTarget - cohort.Ideologies[model.IdeologyLoyalty]) * 0.45 * deltaYears
 			for key := range cohort.Ideologies {
@@ -786,7 +779,6 @@ func updatePopulationCohorts(silo *model.Silo, deltaYears float64) {
 				cohort.Ideologies[key] += (target - cohortVal) * 0.35 * deltaYears
 			}
 			cohort.Influence += (influenceTarget - cohort.Influence) * 0.20 * deltaYears
-			cohort.OrganizationFactor += (organizationTarget - cohort.OrganizationFactor) * 0.22 * deltaYears
 			cohort.ActionPoints = math.Min(70, cohort.ActionPoints+6*deltaYears)
 			cohort.PoliticalPrestige = math.Max(0, cohort.PoliticalPrestige+(cohort.Influence*18-cohort.PoliticalPrestige)*0.30*deltaYears)
 			cohort.Tags = buildCohortTags(cohort, prof, silo)
@@ -804,7 +796,7 @@ func updateKeyResidents(silo *model.Silo, deltaYears float64) {
 			continue
 		}
 		cohort := cohortByID(silo, *resident.CohortID)
-		prof := profByID(silo, resident.ProfessionID)
+		prof := getProfessionByID(silo, resident.ProfessionID)
 		if cohort == nil || prof == nil {
 			continue
 		}

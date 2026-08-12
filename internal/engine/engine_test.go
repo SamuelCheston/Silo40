@@ -71,9 +71,6 @@ func TestEngineSmoke(t *testing.T) {
 		t.Fatalf("profession action should have executed: %s", res.Message)
 	}
 
-	// 组织化人口计算不 panic
-	_ = e.GetOrganizedPopulation(silo, agent)
-
 	// 评分与叙事
 	score := e.CalculateScore(silo)
 	if score == nil || score.Total <= 0 {

@@ -6,10 +6,9 @@ import { Tooltip } from "./ui/tooltip";
 interface HeaderStatsProps {
     agent: Agent | null;
     silo: Silo | null;
-    organizedPopulation: number;
 }
 
-export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsProps) => {
+export const HeaderStats = ({ agent, silo }: HeaderStatsProps) => {
     if (!agent || !silo) return null;
 
     // --- Logic Constants (Sync with internal/engine/rule.go) ---
@@ -23,13 +22,11 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
     // --- AP Recovery Calc ---
     const apBaseRecovery = 10;
     const apPrestigeBonus = agent.political_prestige * 0.05;
-    const apOrgBonus = agent.organization_factor * 2;
-    const apTotalRecovery = apBaseRecovery + apPrestigeBonus + apOrgBonus;
+    const apTotalRecovery = apBaseRecovery + apPrestigeBonus;
 
     // --- AP Limit Calc ---
     const apBaseLimit = 100;
-    const apLimitOrgBonus = agent.organization_factor * 10;
-    const apTotalLimit = apBaseLimit + apLimitOrgBonus;
+    const apTotalLimit = apBaseLimit;
 
     // --- Prestige Calc ---
     const connCount = silo.professions?.length || 1;
@@ -81,7 +78,7 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
                         </HStack>
                     </Tooltip>
                     
-                    <Tooltip content="地堡叛乱度。受组织化人口规模和居民不满情绪驱动。">
+                    <Tooltip content="地堡叛乱度。受居民不满情绪和激进阵营影响。">
                         <HStack gap={1} cursor="help">
                             <Flame size={16} color="#e53e3e" />
                             <Text fontSize="sm" fontWeight="bold" color="red.600">
@@ -105,13 +102,9 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
                                     <Text>威望加成:</Text>
                                     <Text color="green.300">+{apPrestigeBonus.toFixed(2)}</Text>
                                 </HStack>
-                                <HStack justify="space-between" w="full">
-                                    <Text>组织加成:</Text>
-                                    <Text color="green.300">+{apOrgBonus.toFixed(1)}</Text>
-                                </HStack>
                                 <Text fontWeight="bold" pt={1} color="blue.300">年度总恢复: {apTotalRecovery.toFixed(2)} AP</Text>
                                 <Text fontSize="10px" color="gray.400" mt={2} borderTop="1px solid" borderColor="whiteAlpha.200" pt={1}>
-                                    上限: {apBaseLimit} + {apLimitOrgBonus.toFixed(0)} (组织加成) = {apTotalLimit}
+                                    上限: {apTotalLimit}
                                 </Text>
                             </VStack>
                         }
@@ -188,57 +181,6 @@ export const HeaderStats = ({ agent, silo, organizedPopulation }: HeaderStatsPro
                             <Megaphone size={16} color="#d53f8c" />
                             <Text fontSize="sm" fontWeight="bold" color="pink.600">
                                 {agent.propaganda_level.toFixed(1)}
-                            </Text>
-                        </HStack>
-                    </Tooltip>
-
-                    <Tooltip 
-                        content={
-                            <VStack align="start" gap={1} p={1}>
-                                <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>组织度系数</Text>
-                                <Text>当前效率: {agent.organization_factor.toFixed(1)}x</Text>
-                                <VStack align="start" gap={0} mt={1}>
-                                    <Text fontSize="10px">影响:</Text>
-                                    <Text fontSize="10px" color="teal.300">· AP 恢复速度 (+{apOrgBonus.toFixed(1)}/年)</Text>
-                                    <Text fontSize="10px" color="teal.300">· AP 容量上限 (+{apLimitOrgBonus.toFixed(0)})</Text>
-                                    <Text fontSize="10px" color="teal.300">· 人口转化基础效率 (×{agent.organization_factor.toFixed(1)})</Text>
-                                </VStack>
-                            </VStack>
-                        }
-                    >
-                        <HStack gap={1} cursor="help">
-                            <Network size={16} color="#319795" />
-                            <Text fontSize="sm" fontWeight="bold" color="teal.600">
-                                {agent.organization_factor.toFixed(1)}x
-                            </Text>
-                        </HStack>
-                    </Tooltip>
-
-                    <Tooltip 
-                        content={
-                            <VStack align="start" gap={1} p={1}>
-                                <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>组织化人口</Text>
-                                <HStack justify="space-between" w="full">
-                                    <Text>吸引力效果:</Text>
-                                    <Text>{appealEffect.toFixed(2)}</Text>
-                                </HStack>
-                                <HStack justify="space-between" w="full">
-                                    <Text>组织系数:</Text>
-                                    <Text>×{agent.organization_factor.toFixed(1)}</Text>
-                                </HStack>
-                                <Text fontSize="10px" color="gray.400" mt={1}>
-                                    转化公式: (吸引力×0.4 + 人脉×0.6) × 组织系数 × 思潮
-                                </Text>
-                                <Text fontWeight="bold" color="cyan.300" pt={1}>
-                                    距离叛乱目标 (3%): {Math.max(0, Math.ceil(silo.total_population * 0.03) - organizedPopulation)} 人
-                                </Text>
-                            </VStack>
-                        }
-                    >
-                        <HStack gap={1} cursor="help">
-                            <Users size={16} color="#00b5d8" />
-                            <Text fontSize="sm" fontWeight="bold" color="cyan.700">
-                                {organizedPopulation} / {silo.total_population}
                             </Text>
                         </HStack>
                     </Tooltip>

@@ -42,7 +42,6 @@ export interface Agent {
   political_prestige: number;
   political_points: number;
   action_points: number; // 行动点数 (用于执行信息传播等操作)
-  organization_factor: number; // 组织度系数
   propaganda_level: number; // 宣传力度
   suspicion_level: number; // 怀疑度指数
   connections: Connection[];
@@ -153,7 +152,6 @@ export interface Profession {
   suspicion_level?: number; // 怀疑度
   political_prestige?: number; // 政治威望
   propaganda_level?: number; // 宣传力度
-  organization_factor?: number; // 组织度系数
   traits?: string[]; // 特质
   updated_at: string;
 }
@@ -224,7 +222,6 @@ export interface PopulationCohort {
   influence: number;
   action_points: number;
   political_prestige: number;
-  organization_factor: number;
   panic_sensitivity: number;
   ideologies: Record<string, number>;
   known_fragments?: string[];
@@ -265,7 +262,6 @@ export interface ProfessionActionMeta {
 export interface GameState {
   silo: Silo;
   agent: Agent;
-  organized_population: number;
   game_over: boolean;
   ending_narrative?: string;
   victory_status?: VictoryStatus;
@@ -277,7 +273,6 @@ export interface TickResult {
   agent: Agent;
   logs: string[];
   stories: StoryEvent[];
-  organized_population: number;
   game_over: boolean;
   ending_narrative?: string;
 }
@@ -288,7 +283,6 @@ export interface ActionOutcome {
   result: ActionResult;
   logs: string[];
   stories: StoryEvent[];
-  organized_population: number;
   game_over: boolean;
   ending_narrative?: string;
 }

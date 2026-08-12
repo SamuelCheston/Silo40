@@ -190,32 +190,6 @@ func (v *ActorView) SetPropagandaLevel(val float64) {
 	}
 }
 
-func (v *ActorView) OrganizationFactor() float64 {
-	if v.agent != nil {
-		return v.agent.OrganizationFactor
-	}
-	if v.resident != nil {
-		if v.resident.OrganizationFactor == 0 {
-			return 1.0
-		}
-		return v.resident.OrganizationFactor
-	}
-	if v.prof.OrganizationFactor == 0 {
-		return 1.0
-	}
-	return v.prof.OrganizationFactor
-}
-
-func (v *ActorView) SetOrganizationFactor(val float64) {
-	if v.agent != nil {
-		v.agent.OrganizationFactor = val
-	} else if v.resident != nil {
-		v.resident.OrganizationFactor = val
-	} else {
-		v.prof.OrganizationFactor = val
-	}
-}
-
 // Productivity 生产力：读写 Actor 所属部门的生产力
 func (v *ActorView) Productivity() float64 {
 	if v.prof != nil {

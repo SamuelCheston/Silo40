@@ -25,7 +25,6 @@ function App() {
     const [siloNumber, setSiloNumber] = useState(40);
     const [silo, setSilo] = useState<Silo | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
-    const [organizedPopulation, setOrganizedPopulation] = useState(0);
     const [professionActions, setProfessionActions] = useState<ProfessionActionMeta[]>([]);
 
     // Action Form State
@@ -72,7 +71,6 @@ function App() {
     const applyGameState = (state: GameState) => {
         setSilo(state.silo);
         setAgent(state.agent);
-        setOrganizedPopulation(state.organized_population);
         setProfessionActions(state.profession_actions || []);
         setGameStarted(true);
         setShowSetup(false);
@@ -137,7 +135,6 @@ function App() {
             const result = await PassTime(1); // 每次点击过 1 个月，结算在 Go 完成
             setSilo(result.silo);
             setAgent(result.agent);
-            setOrganizedPopulation(result.organized_population);
 
             if (result.game_over) {
                 updateResultText(`Game Over: ${result.silo.victory_status?.description || result.ending_narrative}`);
@@ -199,7 +196,6 @@ function App() {
 
             setSilo(outcome.silo);
             setAgent(outcome.agent);
-            setOrganizedPopulation(outcome.organized_population);
 
             if (outcome.game_over) {
                 updateResultText(`Game Over: ${outcome.silo.victory_status?.description || outcome.ending_narrative}`);
@@ -223,7 +219,7 @@ function App() {
 
     return (
         <Box minH="100vh" bg="gray.50" color="gray.800">
-            {gameStarted && <HeaderStats agent={agent} silo={silo} organizedPopulation={organizedPopulation} />}
+            {gameStarted && <HeaderStats agent={agent} silo={silo} />}
             
             <Center py={8}>
                 <VStack gap={8} p={8} bg="white" borderRadius="xl" boxShadow="2xl" maxW="1200px" w="full" border="1px solid" borderColor="gray.200">
