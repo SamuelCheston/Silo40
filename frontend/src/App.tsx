@@ -1,11 +1,10 @@
 // @ts-nocheck
 import { useState, useEffect } from 'react';
-import logo from './assets/images/logo-universal.png';
 import './App.css';
 import { CreateGame, GetGameState, HasActiveGame, PassTime, ExecuteAction } from "../wailsjs/go/main/App";
-import { Box, Button, Center, Heading, Image, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
+import { Box, Button, Heading, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
 import { ProgressBar, ProgressRoot } from './components/ui/progress';
-import { TabsRoot, TabsList, TabsTrigger, TabsContent } from './components/ui/tabs';
+import { Tooltip } from './components/ui/tooltip';
 import { TimeWheel } from './components/TimeWheel';
 import { SiloWheel } from './components/SiloWheel';
 import { SetupPanel } from './components/SetupPanel';
@@ -26,6 +25,7 @@ function App() {
     const [silo, setSilo] = useState<Silo | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
     const [professionActions, setProfessionActions] = useState<ProfessionActionMeta[]>([]);
+    const [activeView, setActiveView] = useState<'map' | 'factions'>('map');
 
     // Action Form State
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
@@ -218,278 +218,276 @@ function App() {
     };
 
     return (
-        <Box minH="100vh" bg="gray.50" color="gray.800">
+        <Box minH="100vh" bg="white" color="gray.800" display="flex" flexDirection="column">
             {gameStarted && <HeaderStats agent={agent} silo={silo} />}
             
-            <Center py={8}>
-                <VStack gap={8} p={8} bg="white" borderRadius="xl" boxShadow="2xl" maxW="1200px" w="full" border="1px solid" borderColor="gray.200">
-                    <Image src={logo} h="80px" alt="logo" />
-
-                <Heading size="md" textAlign="center" color="blue.600">{resultText}</Heading>
-
-                {!gameStarted && !showSetup && !showSiloWheel && (
-                    <VStack gap={6} w="full" maxW="400px">
-                        <Input
-                            placeholder="Enter agent name (e.g. Juliette)"
-                            value={name}
-                            onChange={updateName}
-                            size="md"
-                            bg="gray.100"
-                            border="1px solid"
-                            borderColor="gray.300"
-                            _focus={{ border: "1px solid", borderColor: "blue.500", bg: "white" }}
-                        />
-                        <TimeWheel onSelect={handleWheelSelect} />
-                    </VStack>
-                )}
-
-                {!gameStarted && !showSetup && showSiloWheel && (
-                    <VStack gap={6} w="full" maxW="400px">
-                        <SiloWheel onSelect={handleSiloSelect} />
-                    </VStack>
-                )}
-
-                {!gameStarted && showSetup && !showSiloWheel && (
-                    <SetupPanel onComplete={handleSetupComplete} />
-                )}
-
+            <HStack align="stretch" flex={1} w="full" gap={0} overflow="hidden">
+                {/* Sidebar */}
                 {gameStarted && (
-                    <HStack align="start" gap={6} w="full" wrap="wrap">
-                        {/* Left Side: Values */}
-                        <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
-                            {/* Silo State Panel */}
-                            <Box w="full" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                                <Heading size="sm" mb={4} color="gray.800">Silo State Overview (Year: {silo?.current_year}, Month: {silo?.current_month})</Heading>
-                                <HStack justify="space-between" mb={4} p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
-                                    <VStack align="start" gap={0}>
-                                        <Text fontSize="xs" color="gray.500">Legitimacy</Text>
-                                        <Text fontSize="md" fontWeight="bold" color="blue.600">{(silo?.legitimacy || 0).toFixed(2)}</Text>
-                                    </VStack>
-                                    <VStack align="start" gap={0}>
-                                        <Text fontSize="xs" color="gray.500">Rebellion</Text>
-                                        <Text fontSize="md" fontWeight="bold" color="red.500">{(silo?.rebellion || 0).toFixed(2)}</Text>
-                                    </VStack>
-                                    <VStack align="start" gap={0}>
-                                        <Text fontSize="xs" color="gray.500">Population</Text>
-                                        <Text fontSize="md" fontWeight="bold" color="green.600">{silo?.total_population}</Text>
-                                    </VStack>
-                                    {agent?.profession === 'IT' && (
-                                        <VStack align="start" gap={0} minW="100px">
-                                            <Text fontSize="xs" color="gray.500">Safeguard Risk</Text>
-                                            <Text fontSize="md" fontWeight="bold" color={silo?.safeguard_risk && silo.safeguard_risk > 0.7 ? "red.500" : "purple.600"}>
-                                                {((silo?.safeguard_risk || 0) * 100).toFixed(0)}%
-                                            </Text>
-                                        </VStack>
-                                    )}
-                                </HStack>
+                    <VStack 
+                        w="70px" 
+                        bg="gray.50" 
+                        borderRight="1px solid" 
+                        borderColor="gray.200" 
+                        py={6} 
+                        gap={6} 
+                        align="center"
+                    >
+                        <Tooltip content="地堡地图" placement="right">
+                            <Button 
+                                variant={activeView === 'map' ? "solid" : "ghost"} 
+                                colorPalette="blue"
+                                onClick={() => setActiveView('map')}
+                                w="50px"
+                                h="50px"
+                                borderRadius="lg"
+                                p={0}
+                            >
+                                <LayoutGrid size={24} />
+                            </Button>
+                        </Tooltip>
 
-                                <TabsRoot defaultValue="map" variant="enclosed" size="sm" w="full">
-                                     <TabsList mb={4} borderBottom="1px solid" borderColor="gray.200">
-                                         <TabsTrigger value="map" _selected={{ color: "blue.600", borderBottom: "2px solid", borderColor: "blue.600" }}>
-                                             <HStack gap={2}>
-                                                 <LayoutGrid size={14} />
-                                                 <Text fontWeight="bold">地堡地图</Text>
-                                             </HStack>
-                                         </TabsTrigger>
-                                         <TabsTrigger value="factions" _selected={{ color: "blue.600", borderBottom: "2px solid", borderColor: "blue.600" }}>
-                                             <HStack gap={2}>
-                                                 <Users size={14} />
-                                                 <Text fontWeight="bold">阵营概览</Text>
-                                             </HStack>
-                                         </TabsTrigger>
-                                     </TabsList>
-                                     <TabsContent value="map">
-                                         {silo && <BunkerMap silo={silo} agent={agent} />}
-                                     </TabsContent>
-                                     <TabsContent value="factions">
-                                         {silo && <FactionView silo={silo} />}
-                                     </TabsContent>
-                                 </TabsRoot>
-                            </Box>
-                        </VStack>
-
-                    {/* Right Side: Operations */}
-                        <VStack gap={6} flex={{ base: "1 1 100%", lg: 1 }} w="full" position="sticky" top="20px">
-                        {/* Profession Actions Frame */}
-                        <Box w="full" p={5} bg="purple.50" borderRadius="md" border="1px solid" borderColor="purple.200" boxShadow="sm">
-                            <Heading size="sm" mb={2} color="purple.800" borderBottom="1px solid" borderColor="purple.200" pb={2}>
-                                Profession Actions: {agent?.profession}
-                            </Heading>
-                            <Text fontSize="xs" color="gray.600" mb={3}>
-                                Unique actions of your profession. Hover for details.
-                            </Text>
-                            <SimpleGrid columns={2} gap={3} w="full">
-                                {professionActions.map(def => {
-                                    const isSelected = professionActionId === def.id && actionType === 'PROFESSION_ACTION';
-                                    return (
-                                        <Button
-                                            key={def.id}
-                                            variant={isSelected ? "solid" : "outline"}
-                                            colorPalette={isSelected ? "purple" : "gray"}
-                                            onClick={() => { setActionType('PROFESSION_ACTION'); setProfessionActionId(def.id); }}
-                                            h="80px"
-                                            display="flex"
-                                            flexDirection="column"
-                                            justifyContent="center"
-                                            alignItems="center"
-                                            whiteSpace="normal"
-                                            lineHeight="1.2"
-                                            title={def.description}
-                                            bg={isSelected ? "purple.500" : "white"}
-                                            _hover={{ bg: isSelected ? "purple.600" : "gray.50" }}
-                                        >
-                                            <Text fontWeight="bold">{def.label}</Text>
-                                            <Text fontSize="xs" mt={1}>({def.ap_cost} AP)</Text>
-                                        </Button>
-                                    );
-                                })}
-                            </SimpleGrid>
-                        </Box>
-
-                        {/* Actions Panel */}
-                        <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                            <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>Agent Action Interface</Heading>
-                            <VStack gap={5} align="stretch">
-                                <VStack align="start" gap={2}>
-                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">Department Actions:</Text>
-                                    <SimpleGrid columns={2} gap={3} w="full">
-                                        {[
-                                            { value: 'GATHER_INFO', label: 'Gather Info', ap: 10 },
-                                            { value: 'SHARE_INFO', label: 'Share Info', ap: 20 },
-                                            { value: 'BUILD_CONNECTION', label: 'Build Network', ap: 15 }
-                                        ].map((action) => (
-                                            <Button
-                                                key={action.value}
-                                                variant={actionType === action.value ? "solid" : "outline"}
-                                                colorPalette={actionType === action.value ? "blue" : "gray"}
-                                                onClick={() => setActionType(action.value as AgentActionType)}
-                                                h="80px"
-                                                display="flex"
-                                                flexDirection="column"
-                                                justifyContent="center"
-                                                alignItems="center"
-                                                whiteSpace="normal"
-                                                lineHeight="1.2"
-                                                bg={actionType === action.value ? "blue.500" : "white"}
-                                                _hover={{ bg: actionType === action.value ? "blue.600" : "gray.50" }}
-                                            >
-                                                <Text fontWeight="bold">{action.label}</Text>
-                                                <Text fontSize="xs" mt={1}>({action.ap} AP)</Text>
-                                            </Button>
-                                        ))}
-                                    </SimpleGrid>
-                                </VStack>
-
-                                <VStack align="start" gap={2}>
-                                    <Text fontSize="sm" fontWeight="bold" color="red.700">Global Actions:</Text>
-                                    <SimpleGrid columns={2} gap={3} w="full">
-                                        {[
-                                            { value: 'CONDUCT_PROPAGANDA', label: 'Propaganda', ap: 20 },
-                                            { value: 'INCITE_REBELLION', label: 'Incite Rebellion', ap: 30 }
-                                        ].map((action) => (
-                                            <Button
-                                                key={action.value}
-                                                variant={actionType === action.value ? "solid" : "outline"}
-                                                colorPalette={actionType === action.value ? "red" : "gray"}
-                                                onClick={() => setActionType(action.value as AgentActionType)}
-                                                h="80px"
-                                                display="flex"
-                                                flexDirection="column"
-                                                justifyContent="center"
-                                                alignItems="center"
-                                                whiteSpace="normal"
-                                                lineHeight="1.2"
-                                                bg={actionType === action.value ? "red.500" : "white"}
-                                                _hover={{ bg: actionType === action.value ? "red.600" : "gray.50" }}
-                                            >
-                                                <Text fontWeight="bold">{action.label}</Text>
-                                                <Text fontSize="xs" mt={1}>({action.ap} AP)</Text>
-                                            </Button>
-                                        ))}
-                                    </SimpleGrid>
-                                </VStack>
-
-                                {showDeptSelector && (
-                                    <VStack align="start" gap={1}>
-                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Dept:</Text>
-                                        <NativeSelect.Root size="md" w="full" bg="white">
-                                            <NativeSelect.Field value={targetDept} onChange={(e) => setTargetDept(e.target.value)}>
-                                                <option value="" disabled>Select Department...</option>
-                                                {silo?.professions?.map(p => (
-                                                    <option key={p.id} value={p.name}>{p.name}</option>
-                                                ))}
-                                            </NativeSelect.Field>
-                                            <NativeSelect.Indicator />
-                                        </NativeSelect.Root>
-                                    </VStack>
-                                )}
-
-                                {showResourceSelector && (
-                                    <VStack align="start" gap={1}>
-                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Resource:</Text>
-                                        <NativeSelect.Root size="md" w="full" bg="white">
-                                            <NativeSelect.Field value={resourceTarget} onChange={(e) => setResourceTarget(e.target.value)}>
-                                                <option value="" disabled>Select Resource...</option>
-                                                {['Energy', 'Materials', 'Supplies'].map(r => (
-                                                    <option key={r} value={r}>{r}</option>
-                                                ))}
-                                            </NativeSelect.Field>
-                                            <NativeSelect.Indicator />
-                                        </NativeSelect.Root>
-                                    </VStack>
-                                )}
-
-                                {actionType === 'SHARE_INFO' && (
-                                    <>
-                                        <VStack align="start" gap={1}>
-                                            <Text fontSize="sm" fontWeight="bold" color="gray.700">Fragments to Share (Real & Fake):</Text>
-                                            <HStack wrap="wrap" gap={2} maxH="200px" overflowY="auto" p={2} border="1px solid" borderColor="gray.200" borderRadius="md" w="full">
-                                                {ALL_FRAGMENTS.map(f => {
-                                                    const isSelected = selectedFragments.includes(f);
-                                                    const isKnown = agent?.known_fragments?.includes(f);
-                                                    return (
-                                                        <Badge
-                                                            key={f}
-                                                            colorPalette={isSelected ? (isKnown ? "blue" : "red") : (isKnown ? "gray" : "orange")}
-                                                            variant={isSelected ? "solid" : "subtle"}
-                                                            cursor="pointer"
-                                                            onClick={() => toggleFragment(f)}
-                                                            title={isKnown ? "Real Fragment" : "Fake Fragment (Increases Suspicion)"}
-                                                        >
-                                                            {f} {!isKnown && "(Fake)"}
-                                                        </Badge>
-                                                    );
-                                                })}
-                                            </HStack>
-                                        </VStack>
-                                        <Text fontSize="xs" color="gray.600" mt={1}>
-                                            Sharing fake fragments boosts ideology spread but drastically increases Suspicion and lowers acceptance rate.
-                                        </Text>
-                                    </>
-                                )}
-
-                                <VStack gap={3} mt={2}>
-                                    <Button colorPalette="blue" w="full" size="lg" onClick={handleExecuteAction} boxShadow="md">
-                                        Execute Action
-                                    </Button>
-                                    <Button colorPalette="teal" variant="outline" w="full" size="md" onClick={handlePassTime} bg="white">
-                                        Pass 1 Month
-                                    </Button>
-                                </VStack>
-                            </VStack>
-                        </Box>
-                        </VStack>
-                    </HStack>
+                        <Tooltip content="阵营概览" placement="right">
+                            <Button 
+                                variant={activeView === 'factions' ? "solid" : "ghost"} 
+                                colorPalette="blue"
+                                onClick={() => setActiveView('factions')}
+                                w="50px"
+                                h="50px"
+                                borderRadius="lg"
+                                p={0}
+                            >
+                                <Users size={24} />
+                            </Button>
+                        </Tooltip>
+                    </VStack>
                 )}
 
-                <Box w="full" pt={4} borderTop="1px solid" borderColor="gray.200">
-                    <Text color="gray.400" fontSize="sm" textAlign="center">
-                        Silo40 Control Panel - Agent Operations
-                    </Text>
+                {/* Main Content Area */}
+                <Box flex={1} overflowY="auto" p={8}>
+                    <VStack gap={8} w="full">
+                        <Heading size="md" textAlign="center" color="blue.600">{resultText}</Heading>
+
+                        {!gameStarted && !showSetup && !showSiloWheel && (
+                            <VStack gap={6} w="full" maxW="400px">
+                                <Input
+                                    placeholder="Enter agent name (e.g. Juliette)"
+                                    value={name}
+                                    onChange={updateName}
+                                    size="md"
+                                    bg="gray.100"
+                                    border="1px solid"
+                                    borderColor="gray.300"
+                                    _focus={{ border: "1px solid", borderColor: "blue.500", bg: "white" }}
+                                />
+                                <TimeWheel onSelect={handleWheelSelect} />
+                            </VStack>
+                        )}
+
+                        {!gameStarted && !showSetup && showSiloWheel && (
+                            <VStack gap={6} w="full" maxW="400px">
+                                <SiloWheel onSelect={handleSiloSelect} />
+                            </VStack>
+                        )}
+
+                        {!gameStarted && showSetup && !showSiloWheel && (
+                            <SetupPanel onComplete={handleSetupComplete} />
+                        )}
+
+                        {gameStarted && (
+                            <HStack align="start" gap={6} w="full" wrap="wrap">
+                                {/* Left Side: View Content */}
+                                <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
+                                    {activeView === 'map' ? (
+                                        silo && <BunkerMap silo={silo} agent={agent} />
+                                    ) : (
+                                        silo && <FactionView silo={silo} />
+                                    )}
+                                </VStack>
+
+                                {/* Right Side: Operations */}
+                                <VStack gap={6} flex={{ base: "1 1 100%", lg: 1 }} w="full" position="sticky" top="0px">
+                                    {/* Profession Actions Frame */}
+                                    <Box w="full" p={5} bg="purple.50" borderRadius="md" border="1px solid" borderColor="purple.200" boxShadow="sm">
+                                        <Heading size="sm" mb={2} color="purple.800" borderBottom="1px solid" borderColor="purple.200" pb={2}>
+                                            Profession Actions: {agent?.profession}
+                                        </Heading>
+                                        <Text fontSize="xs" color="gray.600" mb={3}>
+                                            Unique actions of your profession. Hover for details.
+                                        </Text>
+                                        <SimpleGrid columns={2} gap={3} w="full">
+                                            {professionActions.map(def => {
+                                                const isSelected = professionActionId === def.id && actionType === 'PROFESSION_ACTION';
+                                                return (
+                                                    <Button
+                                                        key={def.id}
+                                                        variant={isSelected ? "solid" : "outline"}
+                                                        colorPalette={isSelected ? "purple" : "gray"}
+                                                        onClick={() => { setActionType('PROFESSION_ACTION'); setProfessionActionId(def.id); }}
+                                                        h="80px"
+                                                        display="flex"
+                                                        flexDirection="column"
+                                                        justifyContent="center"
+                                                        alignItems="center"
+                                                        whiteSpace="normal"
+                                                        lineHeight="1.2"
+                                                        title={def.description}
+                                                        bg={isSelected ? "purple.500" : "white"}
+                                                        _hover={{ bg: isSelected ? "purple.600" : "gray.50" }}
+                                                    >
+                                                        <Text fontWeight="bold">{def.label}</Text>
+                                                        <Text fontSize="xs" mt={1}>({def.ap_cost} AP)</Text>
+                                                    </Button>
+                                                );
+                                            })}
+                                        </SimpleGrid>
+                                    </Box>
+
+                                    {/* Actions Panel */}
+                                    <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
+                                        <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>Agent Action Interface</Heading>
+                                        <VStack gap={5} align="stretch">
+                                            <VStack align="start" gap={2}>
+                                                <Text fontSize="sm" fontWeight="bold" color="gray.700">Department Actions:</Text>
+                                                <SimpleGrid columns={2} gap={3} w="full">
+                                                    {[
+                                                        { value: 'GATHER_INFO', label: 'Gather Info', ap: 10 },
+                                                        { value: 'SHARE_INFO', label: 'Share Info', ap: 20 },
+                                                        { value: 'BUILD_CONNECTION', label: 'Build Network', ap: 15 }
+                                                    ].map((action) => (
+                                                        <Button
+                                                            key={action.value}
+                                                            variant={actionType === action.value ? "solid" : "outline"}
+                                                            colorPalette={actionType === action.value ? "blue" : "gray"}
+                                                            onClick={() => setActionType(action.value as AgentActionType)}
+                                                            h="80px"
+                                                            display="flex"
+                                                            flexDirection="column"
+                                                            justifyContent="center"
+                                                            alignItems="center"
+                                                            whiteSpace="normal"
+                                                            lineHeight="1.2"
+                                                            bg={actionType === action.value ? "blue.500" : "white"}
+                                                            _hover={{ bg: actionType === action.value ? "blue.600" : "gray.50" }}
+                                                        >
+                                                            <Text fontWeight="bold">{action.label}</Text>
+                                                            <Text fontSize="xs" mt={1}>({action.ap} AP)</Text>
+                                                        </Button>
+                                                    ))}
+                                                </SimpleGrid>
+                                            </VStack>
+
+                                            <VStack align="start" gap={2}>
+                                                <Text fontSize="sm" fontWeight="bold" color="red.700">Global Actions:</Text>
+                                                <SimpleGrid columns={2} gap={3} w="full">
+                                                    {[
+                                                        { value: 'CONDUCT_PROPAGANDA', label: 'Propaganda', ap: 20 },
+                                                        { value: 'INCITE_REBELLION', label: 'Incite Rebellion', ap: 30 }
+                                                    ].map((action) => (
+                                                        <Button
+                                                            key={action.value}
+                                                            variant={actionType === action.value ? "solid" : "outline"}
+                                                            colorPalette={actionType === action.value ? "red" : "gray"}
+                                                            onClick={() => setActionType(action.value as AgentActionType)}
+                                                            h="80px"
+                                                            display="flex"
+                                                            flexDirection="column"
+                                                            justifyContent="center"
+                                                            alignItems="center"
+                                                            whiteSpace="normal"
+                                                            lineHeight="1.2"
+                                                            bg={actionType === action.value ? "red.500" : "white"}
+                                                            _hover={{ bg: actionType === action.value ? "red.600" : "gray.50" }}
+                                                        >
+                                                            <Text fontWeight="bold">{action.label}</Text>
+                                                            <Text fontSize="xs" mt={1}>({action.ap} AP)</Text>
+                                                        </Button>
+                                                    ))}
+                                                </SimpleGrid>
+                                            </VStack>
+
+                                            {showDeptSelector && (
+                                                <VStack align="start" gap={1}>
+                                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Dept:</Text>
+                                                    <NativeSelect.Root size="md" w="full" bg="white">
+                                                        <NativeSelect.Field value={targetDept} onChange={(e) => setTargetDept(e.target.value)}>
+                                                            <option value="" disabled>Select Department...</option>
+                                                            {silo?.professions?.map(p => (
+                                                                <option key={p.id} value={p.name}>{p.name}</option>
+                                                            ))}
+                                                        </NativeSelect.Field>
+                                                        <NativeSelect.Indicator />
+                                                    </NativeSelect.Root>
+                                                </VStack>
+                                            )}
+
+                                            {showResourceSelector && (
+                                                <VStack align="start" gap={1}>
+                                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Resource:</Text>
+                                                    <NativeSelect.Root size="md" w="full" bg="white">
+                                                        <NativeSelect.Field value={resourceTarget} onChange={(e) => setResourceTarget(e.target.value)}>
+                                                            <option value="" disabled>Select Resource...</option>
+                                                            {['Energy', 'Materials', 'Supplies'].map(r => (
+                                                                <option key={r} value={r}>{r}</option>
+                                                            ))}
+                                                        </NativeSelect.Field>
+                                                        <NativeSelect.Indicator />
+                                                    </NativeSelect.Root>
+                                                </VStack>
+                                            )}
+
+                                            {actionType === 'SHARE_INFO' && (
+                                                <>
+                                                    <VStack align="start" gap={1}>
+                                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">Fragments to Share (Real & Fake):</Text>
+                                                        <HStack wrap="wrap" gap={2} maxH="200px" overflowY="auto" p={2} border="1px solid" borderColor="gray.200" borderRadius="md" w="full">
+                                                            {ALL_FRAGMENTS.map(f => {
+                                                                const isSelected = selectedFragments.includes(f);
+                                                                const isKnown = agent?.known_fragments?.includes(f);
+                                                                return (
+                                                                    <Badge
+                                                                        key={f}
+                                                                        colorPalette={isSelected ? (isKnown ? "blue" : "red") : (isKnown ? "gray" : "orange")}
+                                                                        variant={isSelected ? "solid" : "subtle"}
+                                                                        cursor="pointer"
+                                                                        onClick={() => toggleFragment(f)}
+                                                                        title={isKnown ? "Real Fragment" : "Fake Fragment (Increases Suspicion)"}
+                                                                    >
+                                                                        {f} {!isKnown && "(Fake)"}
+                                                                    </Badge>
+                                                                );
+                                                            })}
+                                                        </HStack>
+                                                    </VStack>
+                                                    <Text fontSize="xs" color="gray.600" mt={1}>
+                                                        Sharing fake fragments boosts ideology spread but drastically increases Suspicion and lowers acceptance rate.
+                                                    </Text>
+                                                </>
+                                            )}
+
+                                            <VStack gap={3} mt={2}>
+                                                <Button colorPalette="blue" w="full" size="lg" onClick={handleExecuteAction} boxShadow="md">
+                                                    Execute Action
+                                                </Button>
+                                                <Button colorPalette="teal" variant="outline" w="full" size="md" onClick={handlePassTime} bg="white">
+                                                    Pass 1 Month
+                                                </Button>
+                                            </VStack>
+                                        </VStack>
+                                    </Box>
+                                </VStack>
+                            </HStack>
+                        )}
+
+                        <Box w="full" pt={4} borderTop="1px solid" borderColor="gray.200">
+                            <Text color="gray.400" fontSize="sm" textAlign="center">
+                                Silo40 Control Panel - Agent Operations
+                            </Text>
+                        </Box>
+                    </VStack>
                 </Box>
-            </VStack>
-        </Center>
-    </Box>
+            </HStack>
+        </Box>
     )
 }
 

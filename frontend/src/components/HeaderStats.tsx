@@ -86,6 +86,15 @@ export const HeaderStats = ({ agent, silo }: HeaderStatsProps) => {
                             </Text>
                         </HStack>
                     </Tooltip>
+
+                    <Tooltip content="地堡总人口。">
+                        <HStack gap={1} cursor="help">
+                            <Users size={16} color="#38a169" />
+                            <Text fontSize="sm" fontWeight="bold" color="green.600">
+                                {silo.total_population}
+                            </Text>
+                        </HStack>
+                    </Tooltip>
                 </HStack>
 
                 {/* Agent Stats */}
