@@ -155,7 +155,6 @@ type PopulationCohort struct {
 	IdeologyProfile   []string           `gorm:"type:text;serializer:json" json:"ideology_profile"` // 核心意识形态组合 (1-2个)
 	HomeZone          string             `gorm:"size:20" json:"home_zone"`
 	Loyalty           float64            `gorm:"default:0.5" json:"loyalty"`
-	Ambition          float64            `gorm:"default:0.0" json:"ambition"`
 	Influence         float64            `gorm:"default:0.0" json:"influence"`
 	ActionPoints      float64            `gorm:"default:0.0" json:"action_points"`
 	PoliticalPrestige float64            `gorm:"default:0.0" json:"political_prestige"`
@@ -204,7 +203,6 @@ type Faction struct {
 	RepresentativeResidentID uint           `gorm:"default:0" json:"representative_resident_id"`
 	RepresentativeCohortID   *uint          `gorm:"index" json:"representative_cohort_id,omitempty"`
 	RepresentativeName       string         `gorm:"size:80" json:"representative_name"`
-	Ambition                 float64        `gorm:"default:0.0" json:"ambition"`
 	Influence                float64        `gorm:"default:0.0" json:"influence"`
 	Cohesion                 float64        `gorm:"default:0.0" json:"cohesion"`
 	UpdatedAt                time.Time      `json:"updated_at"`
