@@ -20,10 +20,9 @@ interface BunkerMapProps {
     agent: Agent | null;
 }
 
-const ZONE_DATA = [
-    { id: 'Upper', name: '上层区 (Upper Zone)', levels: '1-30', color: 'purple', bg: 'purple.50', borderColor: 'purple.500' },
-    { id: 'Mid', name: '中层区 (Mid Zone)', levels: '31-90', color: 'green', bg: 'green.50', borderColor: 'green.500' },
-    { id: 'Lower', name: '下层区 (Lower Zone)', levels: '91-144', color: 'orange', bg: 'orange.50', borderColor: 'orange.500' }
+const CLASS_DATA = [
+    { id: 'ELITE', name: '精英阶层 (Elite Class)', color: 'purple', bg: 'purple.50', borderColor: 'purple.500' },
+    { id: 'COMMONER', name: '平民阶层 (Commoner Class)', color: 'green', bg: 'green.50', borderColor: 'green.500' }
 ];
 
 export const BunkerMap: React.FC<BunkerMapProps> = ({ silo, agent }) => {
@@ -54,65 +53,71 @@ export const BunkerMap: React.FC<BunkerMapProps> = ({ silo, agent }) => {
                 {/* Silo Map */}
                 <Box flex={{ base: "1 1 100%", md: 2 }} className="bunker-map-container" borderRadius="lg" border="1px solid" borderColor="gray.300" overflow="hidden" bg="gray.100">
                     <VStack align="stretch" gap={0} className="bunker-silo-structure">
-                        {ZONE_DATA.map(zone => (
+                        {CLASS_DATA.map(cls => (
                             <Box 
-                                key={zone.id} 
-                                bg={zone.bg}
+                                key={cls.id} 
+                                bg={cls.bg}
                                 borderLeft="8px solid"
-                                borderColor={zone.borderColor}
-                                p={4}
-                                borderBottom="2px dashed"
-                                className={`bunker-zone zone-${zone.id.toLowerCase()}`}
+                                borderColor={cls.borderColor}
+                                p={6}
+                                borderBottom={cls.id === 'ELITE' ? "4px solid" : "none"}
+                                className={`bunker-class class-${cls.id.toLowerCase()}`}
                             >
-                                <HStack justify="space-between" mb={4}>
+                                <HStack justify="space-between" mb={6}>
                                     <VStack align="start" gap={0}>
-                                        <Heading size="xs" color={`${zone.color}.700`} textTransform="uppercase" letterSpacing="wider">{zone.name}</Heading>
-                                        <Text fontSize="2xs" color="gray.500" fontWeight="bold">LEVELS: {zone.levels}</Text>
+                                        <Heading size="sm" color={`${cls.color}.700`} textTransform="uppercase" letterSpacing="wider">{cls.name}</Heading>
+                                        <Text fontSize="xs" color="gray.500" fontWeight="bold">SOCIETY RANK: {cls.id}</Text>
                                     </VStack>
-                                    <Badge colorPalette={zone.color} variant="subtle" size="sm">
-                                        {silo.professions.filter(p => p.zone === zone.id).length} DEPARTMENTS
+                                    <Badge colorPalette={cls.color} variant="solid" size="md" px={3} py={1} borderRadius="full">
+                                        {silo.professions.filter(p => p.class_type === cls.id).length} DEPARTMENTS
                                     </Badge>
                                 </HStack>
 
-                                <SimpleGrid columns={{ base: 2, sm: 3, lg: 4 }} gap={3}>
+                                <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} gap={4}>
                                     {silo.professions
-                                        .filter(p => p.zone === zone.id)
+                                        .filter(p => p.class_type === cls.id)
                                         .map(dept => {
                                             const connVal = getConnValue(dept.id);
                                             return (
                                                 <Box 
                                                     key={dept.id} 
                                                     onClick={() => setSelectedDept(dept)}
-                                                    p={3}
-                                                    bg={selectedDept?.id === dept.id ? `${zone.color}.200` : "white"}
-                                                    borderRadius="md"
+                                                    p={4}
+                                                    bg={selectedDept?.id === dept.id ? `${cls.color}.200` : "white"}
+                                                    borderRadius="lg"
                                                     boxShadow="sm"
                                                     cursor="pointer"
                                                     border="2px solid"
-                                                    borderColor={selectedDept?.id === dept.id ? zone.borderColor : "transparent"}
-                                                    _hover={{ transform: "translateY(-2px)", boxShadow: "md", borderColor: zone.borderColor }}
+                                                    borderColor={selectedDept?.id === dept.id ? cls.borderColor : "gray.100"}
+                                                    _hover={{ transform: "scale(1.02)", boxShadow: "md", borderColor: cls.borderColor }}
                                                     transition="all 0.2s"
                                                     display="flex"
                                                     flexDirection="column"
-                                                    alignItems="center"
-                                                    justifyContent="center"
-                                                    minH="70px"
+                                                    alignItems="flex-start"
+                                                    minH="100px"
                                                     position="relative"
                                                 >
-                                                    <Text fontWeight="bold" fontSize="xs" textAlign="center" color="gray.700">{dept.name}</Text>
-                                                    <HStack gap={1} mt={1}>
-                                                        <Badge colorPalette={dept.class_type === 'ELITE' ? 'purple' : 'green'} size="xs" variant="outline">
-                                                            {dept.class_type}
-                                                        </Badge>
+                                                    <HStack w="full" justify="space-between" mb={2}>
+                                                        <Text fontWeight="black" fontSize="sm" color="gray.800">{dept.name}</Text>
                                                         {connVal > 0 && (
-                                                            <Badge colorPalette="blue" size="xs" variant="solid">
+                                                            <Badge colorPalette="blue" size="xs" variant="solid" borderRadius="sm">
                                                                 <HStack gap={0.5}>
-                                                                    <Network size={8} />
-                                                                    <Text fontSize="8px">{(connVal * 100).toFixed(0)}%</Text>
+                                                                    <Network size={10} />
+                                                                    <Text fontSize="9px">{(connVal * 100).toFixed(0)}%</Text>
                                                                 </HStack>
                                                             </Badge>
                                                         )}
                                                     </HStack>
+                                                    
+                                                    <VStack align="start" gap={1} w="full">
+                                                        <HStack justify="space-between" w="full">
+                                                            <Text fontSize="10px" color="gray.500">Population</Text>
+                                                            <Text fontSize="10px" fontWeight="bold" color="blue.600">{dept.population}</Text>
+                                                        </HStack>
+                                                        <ProgressRoot value={dept.panic_value * 100} max={100} w="full" size="xs" colorPalette={dept.panic_value > 0.5 ? "red" : "blue"}>
+                                                            <ProgressBar />
+                                                        </ProgressRoot>
+                                                    </VStack>
                                                 </Box>
                                             );
                                         })}

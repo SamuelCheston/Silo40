@@ -1,30 +1,24 @@
 .bunker-map-container {
-    border: 2px solid #2D3748;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    border: 2px solid #E2E8F0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .bunker-silo-structure {
-    background: #EDF2F7;
+    background: #F7FAFC;
 }
 
-.bunker-zone {
+.bunker-class {
     transition: all 0.3s ease;
 }
 
-.bunker-zone:last-child {
-    border-bottom: none;
+.class-elite {
+    min-height: 250px;
+    background: linear-gradient(180deg, #FAF5FF 0%, #FFFFFF 100%);
 }
 
-.zone-upper {
-    min-height: 180px;
-}
-
-.zone-mid {
-    min-height: 280px;
-}
-
-.zone-lower {
-    min-height: 220px;
+.class-commoner {
+    min-height: 450px;
+    background: linear-gradient(180deg, #F0FFF4 0%, #FFFFFF 100%);
 }
 
 .department-block {
@@ -37,5 +31,5 @@
 }
 
 .department-block:active {
-    transform: scale(0.95) translateY(0);
+    transform: scale(0.98);
 }
