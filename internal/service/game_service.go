@@ -534,19 +534,38 @@ func (s *GameService) eventHistory(limit int) []model.StoryEventLog {
 	return events
 }
 
+const (
+	FactionVisibilityHidden  = 0
+	FactionVisibilityAware   = 1
+	FactionVisibilityVisible = 2
+)
+
 func (s *GameService) publicSiloSnapshot() model.Silo {
 	if s.silo == nil {
 		return model.Silo{}
 	}
 	snap := *s.silo
 
-	// 阵营可见性过滤：基于关系值门槛或是否已昭告天下
-	factions := make([]model.Faction, len(s.silo.Factions))
-	for i, f := range s.silo.Factions {
-		if s.canAgentSeeFaction(f) {
-			factions[i] = f
-		} else {
-			factions[i] = model.Faction{
+	// 找出“无阵营”的 ID
+	var unaffiliatedID uint
+	for _, f := range s.silo.Factions {
+		if f.Signature == "special:unaffiliated" {
+			unaffiliatedID = f.ID
+			break
+		}
+	}
+
+	// 阵营可见性过滤
+	visibleFactions := make([]model.Faction, 0, len(s.silo.Factions))
+	hiddenFactionIDs := make(map[uint]bool)
+
+	for _, f := range s.silo.Factions {
+		level := s.getFactionVisibilityLevel(f)
+		switch level {
+		case FactionVisibilityVisible:
+			visibleFactions = append(visibleFactions, f)
+		case FactionVisibilityAware:
+			visibleFactions = append(visibleFactions, model.Faction{
 				ID:        f.ID,
 				SiloID:    f.SiloID,
 				Name:      "Unknown Faction",
@@ -554,10 +573,40 @@ func (s *GameService) publicSiloSnapshot() model.Silo {
 				IsPublic:  false,
 				TagStats:  make(map[string]int),
 				Tags:      []string{"status:unknown"},
+			})
+		case FactionVisibilityHidden:
+			hiddenFactionIDs[f.ID] = true
+		}
+	}
+	snap.Factions = visibleFactions
+
+	// 同步人口单元（Cohort）的归属，并修正“无阵营”的人数统计
+	// 如果所属阵营被隐藏，则在前端显示为“无阵营”
+	if len(hiddenFactionIDs) > 0 {
+		hiddenMembersCount := 0
+		snap.Cohorts = make([]model.PopulationCohort, len(s.silo.Cohorts))
+		for i, c := range s.silo.Cohorts {
+			snap.Cohorts[i] = c
+			if c.FactionID != nil && hiddenFactionIDs[*c.FactionID] {
+				hiddenMembersCount += c.Count
+				if unaffiliatedID > 0 {
+					snap.Cohorts[i].FactionID = &unaffiliatedID
+				} else {
+					snap.Cohorts[i].FactionID = nil
+				}
+			}
+		}
+
+		// 修正“无阵营”显示的总人数
+		if hiddenMembersCount > 0 && unaffiliatedID > 0 {
+			for i := range snap.Factions {
+				if snap.Factions[i].ID == unaffiliatedID {
+					snap.Factions[i].MemberCount += hiddenMembersCount
+					break
+				}
 			}
 		}
 	}
-	snap.Factions = factions
 
 	// Residents stay in the backend/session snapshot for simulation, but we avoid
 	// returning the full resident list on every UI round-trip.
@@ -565,18 +614,18 @@ func (s *GameService) publicSiloSnapshot() model.Silo {
 	return snap
 }
 
-func (s *GameService) canAgentSeeFaction(f model.Faction) bool {
+func (s *GameService) getFactionVisibilityLevel(f model.Faction) int {
 	if f.IsPublic || f.Signature == "special:unaffiliated" {
-		return true
+		return FactionVisibilityVisible
 	}
 
 	// 如果特工自身所属部门就在该阵营中，显然可见
 	if count, ok := f.TagStats["prof:"+s.agent.Profession]; ok && count > 0 {
-		return true
+		return FactionVisibilityVisible
 	}
 
-	// 检查特工与该阵营内任何部门的关系是否足够高 (门槛设为 0.4)
-	const visibilityThreshold = 0.4
+	// 获取特工与该阵营内所有相关部门的关系最大值
+	maxRelation := 0.0
 	for tag := range f.TagStats {
 		if len(tag) > 5 && tag[:5] == "prof:" {
 			profName := tag[5:]
@@ -590,13 +639,20 @@ func (s *GameService) canAgentSeeFaction(f model.Faction) bool {
 
 			if profID > 0 {
 				for _, conn := range s.agent.Connections {
-					if conn.ProfessionID == profID && conn.Value >= visibilityThreshold {
-						return true
+					if conn.ProfessionID == profID && conn.Value > maxRelation {
+						maxRelation = conn.Value
 					}
 				}
 			}
 		}
 	}
 
-	return false
+	// 关系值门槛判定
+	if maxRelation >= 0.4 {
+		return FactionVisibilityVisible
+	}
+	if maxRelation >= 0.15 {
+		return FactionVisibilityAware
+	}
+	return FactionVisibilityHidden
 }
