@@ -149,7 +149,9 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 		// 如果人数很少（如市长 1 人）且没能四舍五入到任何 Cohort，则强制生成一个
 		if !createdAny && prof.Population > 0 {
 			loyalty := clamp01(0.45 + rand.Float64()*0.25 + classBias(prof.ClassType, 0.08))
-			influence := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10) + rand.Float64()*0.10)
+			// 初始影响力设为“麻木”状态 (0.05)
+			influence := 0.05
+
 			cohort := model.PopulationCohort{
 				ID:              nextID,
 				SiloID:          silo.ID,
@@ -432,6 +434,22 @@ func clamp01(v float64) float64 {
 	return math.Max(0, math.Min(1, v))
 }
 
+func isPotentialLeader(res *model.Resident) bool {
+	return res.Ambition >= RESIDENT_AMBITION_THRESHOLD && res.Influence >= 0.25
+}
+
+func hasPotentialLeaderInCohort(silo *model.Silo, cohortID uint) bool {
+	for i := range silo.Residents {
+		res := &silo.Residents[i]
+		if res.CohortID != nil && *res.CohortID == cohortID {
+			if isPotentialLeader(res) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func factionSignatureForResident(resident *model.Resident) (string, []string) {
 	profile := make([]string, 0, 1)
 	if resident.Ideologies[model.IdeologyProForeign] >= 0.7 {
@@ -439,9 +457,14 @@ func factionSignatureForResident(resident *model.Resident) (string, []string) {
 	} else if resident.Ideologies[model.IdeologyProForeign] >= 0.3 {
 		profile = append(profile, model.IdeologyProForeign+":Medium")
 	}
-	if politicalFormationTier(profile) == "" {
-		profile = append(profile, "ideology:status_quo")
+
+	// 即使 ideology 不够 High，如果该居民本身就是潜在领袖，也允许显示其意识形态标签
+	isPolitical := politicalFormationTier(profile) != "" || isPotentialLeader(resident)
+
+	if !isPolitical {
+		profile = []string{"ideology:status_quo"}
 	}
+
 	sort.Strings(profile)
 	drive := "drive:care"
 	for _, tag := range resident.Tags {
@@ -452,8 +475,11 @@ func factionSignatureForResident(resident *model.Resident) (string, []string) {
 	return strings.Join(profile, "|") + "|" + drive, append(profile, drive)
 }
 
-func factionSignatureForCohort(cohort *model.PopulationCohort, _ *model.Profession, _ *model.Silo) (string, []string) {
-	profile := factionProfileTags(cohort.IdeologyProfile)
+func factionSignatureForCohort(cohort *model.PopulationCohort, _ *model.Profession, silo *model.Silo) (string, []string) {
+	// 判断该人群是否政治化：要么意识形态达标，要么拥有潜在领袖
+	isPolitical := politicalFormationTier(cohort.IdeologyProfile) != "" || hasPotentialLeaderInCohort(silo, cohort.ID)
+
+	profile := factionProfileTags(cohort.IdeologyProfile, isPolitical)
 	sort.Strings(profile)
 	sig := strings.Join(profile, "|")
 
@@ -470,7 +496,7 @@ func factionSignatureForCohort(cohort *model.PopulationCohort, _ *model.Professi
 	return fullSig, append(append([]string{}, profile...), drive)
 }
 
-func factionProfileTags(profile []string) []string {
+func factionProfileTags(profile []string, isPolitical bool) []string {
 	filtered := make([]string, 0, len(profile))
 	for _, tag := range profile {
 		if strings.HasPrefix(tag, model.IdeologyLoyalty+":") {
@@ -480,7 +506,8 @@ func factionProfileTags(profile []string) []string {
 			filtered = append(filtered, tag)
 		}
 	}
-	if politicalFormationTier(filtered) == "" {
+	// 如果不是政治化状态，且没有达到 High 门槛，则显示为 status_quo
+	if !isPolitical && politicalFormationTier(filtered) == "" {
 		return []string{"ideology:status_quo"}
 	}
 	return filtered
@@ -511,6 +538,7 @@ func politicalFormationTier(tags []string) string {
 	if highCount >= 1 {
 		return "formation:high"
 	}
+	// Medium 级别不再直接返回 formation 标识，而是由上层结合领袖状态判定
 	return ""
 }
 
@@ -592,11 +620,13 @@ func refreshProfessionPopulationFromCohorts(silo *model.Silo) {
 	silo.TotalPopulation = totalPopulation
 }
 
-func shouldRemainUnaffiliated(cohort *model.PopulationCohort) bool {
+func shouldRemainUnaffiliated(silo *model.Silo, cohort *model.PopulationCohort) bool {
 	if cohort == nil {
 		return true
 	}
-	return politicalFormationTier(factionProfileTags(cohort.IdeologyProfile)) == ""
+	// 判断该人群是否政治化：要么意识形态达标，要么拥有潜在领袖
+	isPolitical := politicalFormationTier(cohort.IdeologyProfile) != "" || hasPotentialLeaderInCohort(silo, cohort.ID)
+	return !isPolitical
 }
 
 // RebuildImplicitFactions 依据 cohort 意识形态组合聚类派系，并为每个派系选出 cohort/resident 双代表。
@@ -638,7 +668,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		if prof == nil || cohort.Count <= 0 {
 			continue
 		}
-		if shouldRemainUnaffiliated(cohort) {
+		if shouldRemainUnaffiliated(silo, cohort) {
 			unaffiliatedCohorts = append(unaffiliatedCohorts, cohort)
 			continue
 		}
