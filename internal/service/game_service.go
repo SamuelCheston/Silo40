@@ -376,6 +376,7 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 	return &model.TickResult{
 		Silo:            s.publicSiloSnapshot(),
 		Agent:           *s.agent,
+		AgentStats:      s.engine.BuildAgentStats(s.agent, s.silo),
 		Logs:            logs,
 		Stories:         stories,
 		GameOver:        s.gameOver(),
@@ -437,6 +438,7 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 	return &model.ActionOutcome{
 		Silo:            s.publicSiloSnapshot(),
 		Agent:           *s.agent,
+		AgentStats:      s.engine.BuildAgentStats(s.agent, s.silo),
 		Result:          result,
 		Logs:            logs,
 		Stories:         stories,
@@ -483,6 +485,7 @@ func (s *GameService) buildState() *model.GameState {
 	return &model.GameState{
 		Silo:              s.publicSiloSnapshot(),
 		Agent:             *s.agent,
+		AgentStats:        s.engine.BuildAgentStats(s.agent, s.silo),
 		GameOver:          gameOver,
 		EndingNarrative:   s.endingNarrative(),
 		VictoryStatus:     s.silo.VictoryStatus,

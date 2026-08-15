@@ -24,6 +24,7 @@ export type PopulationCohort = model.PopulationCohort;
 export type StoryEvent = model.StoryEvent;
 export type StoryEventLog = model.StoryEventLog;
 export type ActionResult = model.ActionResult;
+export type AgentStats = model.AgentStats;
 export type ProfessionActionMeta = model.ProfessionActionMeta;
 export type GameState = model.GameState;
 export type TickResult = model.TickResult;

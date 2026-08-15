@@ -296,16 +296,35 @@ type CreateGameRequest struct {
 type GameState struct {
 	Silo              Silo                   `json:"silo"`
 	Agent             Agent                  `json:"agent"`
+	AgentStats        AgentStats             `json:"agent_stats"`
 	GameOver          bool                   `json:"game_over"`
 	EndingNarrative   string                 `json:"ending_narrative,omitempty"`
 	VictoryStatus     *VictoryStatus         `json:"victory_status,omitempty"`
 	ProfessionActions []ProfessionActionMeta `json:"profession_actions,omitempty"`
 }
 
+// AgentStats 后端下发的 Agent 派生指标，用于前端展示，避免 UI 复算引擎公式
+type AgentStats struct {
+	AvgConnection        float64 `json:"avg_connection"`
+	PrestigeBase         float64 `json:"prestige_base"`
+	ProfessionFactor     float64 `json:"profession_factor"`
+	TraitFactor          float64 `json:"trait_factor"`
+	StructuralPrestige   float64 `json:"structural_prestige"`
+	PoliticalPrestige    float64 `json:"political_prestige"`
+	APBaseRecovery       float64 `json:"ap_base_recovery"`
+	APPrestigeBonus      float64 `json:"ap_prestige_bonus"`
+	APTotalRecovery      float64 `json:"ap_total_recovery"`
+	APMax                float64 `json:"ap_max"`
+	PropagandaLevel      float64 `json:"propaganda_level"`
+	PropagandaMultiplier float64 `json:"propaganda_multiplier"`
+	RebellionBaseEffect  float64 `json:"rebellion_base_effect"`
+}
+
 // TickResult 时间推进结果
 type TickResult struct {
 	Silo            Silo         `json:"silo"`
 	Agent           Agent        `json:"agent"`
+	AgentStats      AgentStats   `json:"agent_stats"`
 	Logs            []string     `json:"logs"`
 	Stories         []StoryEvent `json:"stories"`
 	GameOver        bool         `json:"game_over"`
@@ -316,6 +335,7 @@ type TickResult struct {
 type ActionOutcome struct {
 	Silo            Silo         `json:"silo"`
 	Agent           Agent        `json:"agent"`
+	AgentStats      AgentStats   `json:"agent_stats"`
 	Result          ActionResult `json:"result"`
 	Logs            []string     `json:"logs"`
 	Stories         []StoryEvent `json:"stories"`

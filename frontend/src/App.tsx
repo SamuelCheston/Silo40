@@ -11,7 +11,7 @@ import { SetupPanel } from './components/SetupPanel';
 import { BunkerMap } from './components/BunkerMap';
 import { FactionView } from './components/FactionView';
 import { HeaderStats } from './components/HeaderStats';
-import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS, ProfessionActionMeta, GameState } from './logic/models';
+import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS, ProfessionActionMeta, GameState, AgentStats } from './logic/models';
 import { LayoutGrid, Users } from 'lucide-react';
 
 function App() {
@@ -24,6 +24,7 @@ function App() {
     const [siloNumber, setSiloNumber] = useState(40);
     const [silo, setSilo] = useState<Silo | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
+    const [agentStats, setAgentStats] = useState<AgentStats | null>(null);
     const [professionActions, setProfessionActions] = useState<ProfessionActionMeta[]>([]);
     const [activeView, setActiveView] = useState<'map' | 'factions'>('map');
 
@@ -65,6 +66,7 @@ function App() {
     const applyGameState = (state: GameState) => {
         setSilo(state.silo);
         setAgent(state.agent);
+        setAgentStats(state.agent_stats);
         setProfessionActions(state.profession_actions || []);
         setGameStarted(true);
         setShowSetup(false);
@@ -151,6 +153,7 @@ function App() {
             const result = await PassTime(1); // 每次点击过 1 个月，结算在 Go 完成
             setSilo(result.silo);
             setAgent(result.agent);
+            setAgentStats(result.agent_stats);
 
             if (result.game_over) {
                 updateResultText(`Game Over: ${result.silo.victory_status?.description || result.ending_narrative}`);
@@ -212,6 +215,7 @@ function App() {
 
             setSilo(outcome.silo);
             setAgent(outcome.agent);
+            setAgentStats(outcome.agent_stats);
 
             if (outcome.game_over) {
                 updateResultText(`Game Over: ${outcome.silo.victory_status?.description || outcome.ending_narrative}`);
@@ -235,7 +239,7 @@ function App() {
 
     return (
         <Box minH="100vh" bg="white" color="gray.800" display="flex" flexDirection="column">
-            {gameStarted && <HeaderStats agent={agent} silo={silo} />}
+            {gameStarted && <HeaderStats agent={agent} silo={silo} agentStats={agentStats} />}
             
             <HStack align="stretch" flex={1} w="full" gap={0} overflow="hidden">
                 {/* Sidebar */}
