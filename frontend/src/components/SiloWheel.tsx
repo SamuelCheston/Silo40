@@ -63,7 +63,7 @@ export const SiloWheel: React.FC<SiloWheelProps> = ({ onSelect }) => {
                 primaryColor="#3182CE"
                 contrastColor="#FFFFFF"
                 buttonText="SPIN"
-                spinDuration={4}
+                spinDuration={1}
             />
 
             {!selectedOption && !isSpinning && (

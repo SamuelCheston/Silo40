@@ -63,7 +63,7 @@ export const TimeWheel: React.FC<TimeWheelProps> = ({ onSelect }) => {
                 primaryColor="#3182CE"
                 contrastColor="#FFFFFF"
                 buttonText="SPIN"
-                spinDuration={4}
+                spinDuration={1}
             />
 
             {!selectedOption && !isSpinning && (
