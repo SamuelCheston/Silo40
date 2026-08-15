@@ -122,7 +122,7 @@ func CreateInitialSilo(name string, initialYear int, traitIds []string) *model.S
 			for i := range silo.Professions {
 				p := &silo.Professions[i]
 				if p.ClassType == "COMMONER" {
-					p.Ideologies[model.IdeologyProForeign] = min1(p.Ideologies[model.IdeologyProForeign] + 0.3)
+					p.Ideologies[model.IdeologyProForeign] = min1(p.Ideologies[model.IdeologyProForeign] + 0.1)
 				}
 			}
 		}
@@ -200,17 +200,17 @@ func min1(v float64) float64 {
 // CreateInitialAgent 创建初始特工
 func CreateInitialAgent(name, profession string, traitIds []string, silo *model.Silo) *model.Agent {
 	agent := &model.Agent{
-		ID:                 1,
-		UserID:             1,
-		Name:               name,
-		Profession:         profession,
-		Traits:             []string{},
-		PoliticalPrestige:  10,
-		PoliticalPoints:    0,
-		ActionPoints:       50,
-		PropagandaLevel:    0.0,
-		SuspicionLevel:     0.0,
-		Connections:        []model.Connection{},
+		ID:                1,
+		UserID:            1,
+		Name:              name,
+		Profession:        profession,
+		Traits:            []string{},
+		PoliticalPrestige: 10,
+		PoliticalPoints:   0,
+		ActionPoints:      50,
+		PropagandaLevel:   0.0,
+		SuspicionLevel:    0.0,
+		Connections:       []model.Connection{},
 	}
 	// 默认掌握本部门的碎片
 	for _, f := range model.ALL_FRAGMENTS {
