@@ -122,6 +122,12 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 				// 初始影响力设为“麻木”状态 (0.05)
 				influence := 0.05
 
+				// 根据 bucket 分配具体的意识形态值，而非统一使用职业平均值
+				// Low: 0.15, Medium: 0.5, High: 0.85
+				bucketValues := []float64{0.15, 0.5, 0.85}
+				cProForeign := bucketValues[l1]
+				cLoyalty := bucketValues[l2]
+
 				cohort := model.PopulationCohort{
 					ID:              nextID,
 					SiloID:          silo.ID,
@@ -134,8 +140,8 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 					Influence:       influence,
 					ActionPoints:    20 + rand.Float64()*20,
 					Ideologies: map[string]float64{
-						model.IdeologyProForeign: pValues[0],
-						model.IdeologyLoyalty:    pValues[1],
+						model.IdeologyProForeign: cProForeign,
+						model.IdeologyLoyalty:    cLoyalty,
 					},
 					PanicSensitivity: 0.9 + rand.Float64()*0.25,
 					KnownFragments:   initResidentFragments(prof.Name),
@@ -459,7 +465,8 @@ func factionSignatureForResident(resident *model.Resident) (string, []string) {
 	}
 
 	// 即使 ideology 不够 High，如果该居民本身就是潜在领袖，也允许显示其意识形态标签
-	isPolitical := politicalFormationTier(profile) != "" || isPotentialLeader(resident)
+	isIdeologyHigh := resident.Ideologies[model.IdeologyProForeign] >= 0.7
+	isPolitical := isIdeologyHigh || isPotentialLeader(resident)
 
 	if !isPolitical {
 		profile = []string{"ideology:status_quo"}
@@ -476,8 +483,9 @@ func factionSignatureForResident(resident *model.Resident) (string, []string) {
 }
 
 func factionSignatureForCohort(cohort *model.PopulationCohort, _ *model.Profession, silo *model.Silo) (string, []string) {
-	// 判断该人群是否政治化：要么意识形态达标，要么拥有潜在领袖
-	isPolitical := politicalFormationTier(cohort.IdeologyProfile) != "" || hasPotentialLeaderInCohort(silo, cohort.ID)
+	// 判断该人群是否政治化
+	isIdeologyHigh := cohort.Ideologies[model.IdeologyProForeign] >= 0.7
+	isPolitical := isIdeologyHigh || hasPotentialLeaderInCohort(silo, cohort.ID)
 
 	profile := factionProfileTags(cohort.IdeologyProfile, isPolitical)
 	sort.Strings(profile)
@@ -624,8 +632,11 @@ func shouldRemainUnaffiliated(silo *model.Silo, cohort *model.PopulationCohort) 
 	if cohort == nil {
 		return true
 	}
-	// 判断该人群是否政治化：要么意识形态达标，要么拥有潜在领袖
-	isPolitical := politicalFormationTier(cohort.IdeologyProfile) != "" || hasPotentialLeaderInCohort(silo, cohort.ID)
+	// 判断该人群是否政治化：
+	// 1. 意识形态值达到 70% 门槛
+	// 2. 或者人群中产生了具备野心和影响力的潜在领袖
+	isIdeologyHigh := cohort.Ideologies[model.IdeologyProForeign] >= 0.7
+	isPolitical := isIdeologyHigh || hasPotentialLeaderInCohort(silo, cohort.ID)
 	return !isPolitical
 }
 
@@ -680,6 +691,10 @@ func RebuildImplicitFactions(silo *model.Silo) {
 				// 检查该阵营中现有的部门是否与当前部门关系恶劣
 				isHostile := false
 				for existingProfId := range g.profIDs {
+					// 同一职业的人群内部不视为敌对
+					if existingProfId == prof.ID {
+						continue
+					}
 					existingProf := getProfessionByID(silo, existingProfId)
 					if existingProf != nil {
 						// 检查双向关系，只要有一方关系低于阈值即视为不合
