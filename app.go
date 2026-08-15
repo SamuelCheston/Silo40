@@ -59,6 +59,11 @@ func (a *App) GetGameState() (*model.GameState, error) {
 	return a.gameService.GetState()
 }
 
+// GetEventHistory 获取事件历史，供 debug 前端或工具查询
+func (a *App) GetEventHistory(limit int) (*model.EventHistoryResult, error) {
+	return a.gameService.GetEventHistory(limit)
+}
+
 // PassTime 推进时间 months 个月 (tick 结算全部在 Go 完成)
 func (a *App) PassTime(months int) (*model.TickResult, error) {
 	return a.gameService.PassTime(months)

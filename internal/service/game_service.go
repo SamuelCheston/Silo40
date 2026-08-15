@@ -21,17 +21,21 @@ import (
 // 当前为单活跃游戏设计 (固定 Silo.ID=1 / Agent.ID=1)，与现有单窗口 UI 匹配。
 
 const (
-	ActiveSiloID  = uint(1)
-	ActiveAgentID = uint(1)
-	sessionKey    = "game_session_v1"
+	ActiveSiloID      = uint(1)
+	ActiveAgentID     = uint(1)
+	sessionKey        = "game_session_v1"
+	timestampBaseYear = 100
+	daysPerMonth      = 30
+	monthsPerYear     = 12
 )
 
 type GameService struct {
-	db     *gorm.DB
-	mu     sync.Mutex
-	engine *engine.GameEngine
-	silo   *model.Silo
-	agent  *model.Agent
+	db        *gorm.DB
+	mu        sync.Mutex
+	engine    *engine.GameEngine
+	silo      *model.Silo
+	agent     *model.Agent
+	eventLogs []model.StoryEventLog
 }
 
 func NewGameService(db *gorm.DB) *GameService {
@@ -45,8 +49,9 @@ func NewGameService(db *gorm.DB) *GameService {
 
 // sessionState 缓存快照结构
 type sessionState struct {
-	Silo  model.Silo  `json:"silo"`
-	Agent model.Agent `json:"agent"`
+	Silo      model.Silo            `json:"silo"`
+	Agent     model.Agent           `json:"agent"`
+	EventLogs []model.StoryEventLog `json:"event_logs"`
 }
 
 func (s *GameService) hasSession() bool {
@@ -61,7 +66,11 @@ func (s *GameService) cacheSnapshot() {
 	if cache.GlobalCache == nil || !s.hasSession() {
 		return
 	}
-	data, err := json.Marshal(sessionState{Silo: *s.silo, Agent: *s.agent})
+	data, err := json.Marshal(sessionState{
+		Silo:      *s.silo,
+		Agent:     *s.agent,
+		EventLogs: s.eventLogs,
+	})
 	if err != nil {
 		return
 	}
@@ -75,6 +84,8 @@ func (s *GameService) persist() error {
 	}
 	silo := s.silo
 	agent := s.agent
+	eventLogs := make([]model.StoryEventLog, len(s.eventLogs))
+	copy(eventLogs, s.eventLogs)
 
 	// 固定主键
 	silo.ID = ActiveSiloID
@@ -112,6 +123,10 @@ func (s *GameService) persist() error {
 	}
 	for i := range agent.Connections {
 		agent.Connections[i].AgentID = ActiveAgentID
+	}
+	for i := range eventLogs {
+		eventLogs[i].ID = 0
+		eventLogs[i].SiloID = ActiveSiloID
 	}
 
 	return s.db.Transaction(func(tx *gorm.DB) error {
@@ -172,6 +187,14 @@ func (s *GameService) persist() error {
 			}
 		}
 
+		var oldEventLogs []model.StoryEventLog
+		_ = tx.Where("silo_id = ?", ActiveSiloID).Find(&oldEventLogs).Error
+		for _, eventLog := range oldEventLogs {
+			if err := tx.Delete(&model.StoryEventLog{}, eventLog.ID).Error; err != nil {
+				return err
+			}
+		}
+
 		// Silo/Agent 含 gorm.DeletedAt，普通 Delete 为软删除，旧行仍占用固定主键；
 		// 整图替换式保存需物理删除 (Unscoped) 才能用同 ID 重建。
 		if err := tx.Unscoped().Delete(&model.Agent{}, ActiveAgentID).Error; err != nil {
@@ -226,7 +249,14 @@ func (s *GameService) persist() error {
 		}
 		if len(agent.Connections) > 0 {
 			agent.Connections[0].AgentID = ActiveAgentID
-			return tx.Create(&agent.Connections).Error
+			if err := tx.Create(&agent.Connections).Error; err != nil {
+				return err
+			}
+		}
+		if len(eventLogs) > 0 {
+			if err := tx.Create(&eventLogs).Error; err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -245,6 +275,7 @@ func (s *GameService) Resume() error {
 			if json.Unmarshal(val, &snap) == nil {
 				s.silo = &snap.Silo
 				s.agent = &snap.Agent
+				s.eventLogs = snap.EventLogs
 				s.engine = engine.NewGameEngine()
 				return nil
 			}
@@ -260,8 +291,13 @@ func (s *GameService) Resume() error {
 	if err := s.db.Preload("Connections").First(&agent, ActiveAgentID).Error; err != nil {
 		return err
 	}
+	var eventLogs []model.StoryEventLog
+	if err := s.db.Order("id asc").Where("silo_id = ?", ActiveSiloID).Find(&eventLogs).Error; err != nil {
+		return err
+	}
 	s.silo = &silo
 	s.agent = &agent
+	s.eventLogs = eventLogs
 	s.engine = engine.NewGameEngine()
 	return nil
 }
@@ -282,6 +318,7 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	s.engine = engine.NewGameEngine()
 	s.silo = silo
 	s.agent = agent
+	s.eventLogs = nil
 
 	if err := s.persist(); err != nil {
 		return nil, fmt.Errorf("failed to persist new game: %w", err)
@@ -318,6 +355,7 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 		for _, story := range st {
 			stories = append(stories, *story)
 		}
+		s.recordStories(st, "PASS_TIME")
 
 		if s.silo.CurrentMonth == 12 {
 			s.silo.CurrentMonth = 1
@@ -336,12 +374,12 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 	s.cacheSnapshot()
 
 	return &model.TickResult{
-		Silo:                s.publicSiloSnapshot(),
-		Agent:               *s.agent,
-		Logs:                logs,
-		Stories:             stories,
-		GameOver:            s.gameOver(),
-		EndingNarrative:     s.endingNarrative(),
+		Silo:            s.publicSiloSnapshot(),
+		Agent:           *s.agent,
+		Logs:            logs,
+		Stories:         stories,
+		GameOver:        s.gameOver(),
+		EndingNarrative: s.endingNarrative(),
 	}, nil
 }
 
@@ -367,6 +405,7 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 				for _, story := range st {
 					stories = append(stories, *story)
 				}
+				s.recordStories(st, "ACTION:"+string(action.Type))
 				if s.silo.CurrentMonth == 12 {
 					s.silo.CurrentMonth = 1
 					s.silo.CurrentYear++
@@ -396,13 +435,13 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 	s.cacheSnapshot()
 
 	return &model.ActionOutcome{
-		Silo:                s.publicSiloSnapshot(),
-		Agent:               *s.agent,
-		Result:              result,
-		Logs:                logs,
-		Stories:             stories,
-		GameOver:            s.gameOver(),
-		EndingNarrative:     s.endingNarrative(),
+		Silo:            s.publicSiloSnapshot(),
+		Agent:           *s.agent,
+		Result:          result,
+		Logs:            logs,
+		Stories:         stories,
+		GameOver:        s.gameOver(),
+		EndingNarrative: s.endingNarrative(),
 	}, nil
 }
 
@@ -420,6 +459,16 @@ func (s *GameService) HasActiveGame() bool {
 	return s.hasSession()
 }
 
+// GetEventHistory 获取事件历史，limit<=0 表示返回全部
+func (s *GameService) GetEventHistory(limit int) (*model.EventHistoryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasSession() {
+		return nil, fmt.Errorf("no active game session")
+	}
+	return &model.EventHistoryResult{Events: s.eventHistory(limit)}, nil
+}
+
 // ---------- 私有 ----------
 
 func (s *GameService) endingNarrative() string {
@@ -432,13 +481,54 @@ func (s *GameService) endingNarrative() string {
 func (s *GameService) buildState() *model.GameState {
 	gameOver := s.gameOver()
 	return &model.GameState{
-		Silo:                s.publicSiloSnapshot(),
-		Agent:               *s.agent,
-		GameOver:            gameOver,
-		EndingNarrative:     s.endingNarrative(),
-		VictoryStatus:       s.silo.VictoryStatus,
-		ProfessionActions:   engine.GetProfessionActionMeta(s.agent.Profession),
+		Silo:              s.publicSiloSnapshot(),
+		Agent:             *s.agent,
+		GameOver:          gameOver,
+		EndingNarrative:   s.endingNarrative(),
+		VictoryStatus:     s.silo.VictoryStatus,
+		ProfessionActions: engine.GetProfessionActionMeta(s.agent.Profession),
 	}
+}
+
+func (s *GameService) recordStories(stories []*model.StoryEvent, source string) {
+	if len(stories) == 0 || s.silo == nil {
+		return
+	}
+	for _, story := range stories {
+		if story == nil {
+			continue
+		}
+		s.eventLogs = append(s.eventLogs, model.StoryEventLog{
+			SiloID:      ActiveSiloID,
+			Timestamp:   gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth),
+			Year:        s.silo.CurrentYear,
+			Month:       s.silo.CurrentMonth,
+			Source:      source,
+			EventID:     story.ID,
+			Title:       story.Title,
+			Description: story.Description,
+			Type:        story.Type,
+		})
+	}
+}
+
+func gameTimestamp(year, month int) int {
+	return ((year-timestampBaseYear)*monthsPerYear + (month - 1)) * daysPerMonth
+}
+
+func (s *GameService) eventHistory(limit int) []model.StoryEventLog {
+	if len(s.eventLogs) == 0 {
+		return nil
+	}
+	max := len(s.eventLogs)
+	if limit > 0 && limit < max {
+		max = limit
+	}
+	events := make([]model.StoryEventLog, 0, max)
+	for i := len(s.eventLogs) - 1; i >= 0 && len(events) < max; i-- {
+		events = append(events, s.eventLogs[i])
+	}
+	return events
 }
 
 func (s *GameService) publicSiloSnapshot() model.Silo {

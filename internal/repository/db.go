@@ -29,6 +29,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		&model.Faction{},
 		&model.Agent{},
 		&model.Connection{},
+		&model.StoryEventLog{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run auto migration: %w", err)

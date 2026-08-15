@@ -230,6 +230,22 @@ type Faction struct {
 	UpdatedAt                time.Time      `json:"updated_at"`
 }
 
+// StoryEventLog 剧情事件历史记录 (用于持久化与 debug 查询)
+type StoryEventLog struct {
+	ID          uint      `gorm:"primarykey" json:"id"`
+	SiloID      uint      `gorm:"index" json:"silo_id"`
+	Timestamp   int       `gorm:"index" json:"timestamp"` // 以 Y100-M1-D1 为 0，按 30 天/月折算
+	Year        int       `gorm:"index" json:"year"`
+	Month       int       `gorm:"index" json:"month"`
+	Source      string    `gorm:"size:64" json:"source"` // PASS_TIME / ACTION:<type>
+	EventID     string    `gorm:"size:100" json:"event_id"`
+	Title       string    `gorm:"size:120" json:"title"`
+	Description string    `gorm:"type:text" json:"description"`
+	Type        string    `gorm:"size:32" json:"type"` // SOCIAL / TECHNICAL / EXTERNAL
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 // ============ 游戏交互 DTO (前后端通信) ============
 
 // AgentActionType 动作类型
@@ -306,6 +322,11 @@ type ActionOutcome struct {
 	Stories         []StoryEvent `json:"stories"`
 	GameOver        bool         `json:"game_over"`
 	EndingNarrative string       `json:"ending_narrative,omitempty"`
+}
+
+// EventHistoryResult 事件历史查询结果
+type EventHistoryResult struct {
+	Events []StoryEventLog `json:"events"`
 }
 
 // ProfessionActionMeta 职业专属行动元数据 (前端渲染按钮用，不含执行逻辑)

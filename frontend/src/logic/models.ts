@@ -259,6 +259,21 @@ export interface StoryEvent {
   type: string; // 'SOCIAL' | 'TECHNICAL' | 'EXTERNAL'
 }
 
+export interface StoryEventLog {
+  id: number;
+  silo_id: number;
+  timestamp: number; // Y100-M1-D1 = 0, mapped with 30 days per month
+  year: number;
+  month: number;
+  source: string; // 'PASS_TIME' | `ACTION:${string}`
+  event_id: string;
+  title: string;
+  description: string;
+  type: string; // 'SOCIAL' | 'TECHNICAL' | 'EXTERNAL'
+  created_at: string;
+  updated_at: string;
+}
+
 // ============ 后端通信 DTO (镜像 Go model 包 JSON) ============
 
 export interface CreateGameRequest {
@@ -305,4 +320,8 @@ export interface ActionOutcome {
   stories: StoryEvent[];
   game_over: boolean;
   ending_narrative?: string;
+}
+
+export interface EventHistoryResult {
+  events: StoryEventLog[];
 }
