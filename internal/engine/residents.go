@@ -119,7 +119,8 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 				}
 
 				loyalty := clamp01(0.45 + rand.Float64()*0.25 + classBias(prof.ClassType, 0.08))
-				influence := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10) + rand.Float64()*0.10)
+				// 初始影响力设为“麻木”状态 (0.05)
+				influence := 0.05
 
 				cohort := model.PopulationCohort{
 					ID:              nextID,
@@ -210,16 +211,17 @@ func initKeyResidents(silo *model.Silo) []model.Resident {
 			continue
 		}
 		resident := model.Resident{
-			ID:                nextID,
-			SiloID:            silo.ID,
-			Name:              fmt.Sprintf("%s Delegate %02d", prof.Name, i+1),
-			CohortID:          uintPtr(cohort.ID),
-			ProfessionID:      prof.ID,
-			Profession:        prof.Name,
-			HomeFloor:         randomFloorForZone(prof.Zone),
-			Ideologies:        copyIdeologies(cohort.Ideologies),
-			Ambition:          generateResidentAmbition(prof, cohort.PoliticalPrestige, cohort.Ideologies),
-			Influence:         clamp01(cohort.Influence + rand.Float64()*0.08),
+			ID:           nextID,
+			SiloID:       silo.ID,
+			Name:         fmt.Sprintf("%s Delegate %02d", prof.Name, i+1),
+			CohortID:     uintPtr(cohort.ID),
+			ProfessionID: prof.ID,
+			Profession:   prof.Name,
+			HomeFloor:    randomFloorForZone(prof.Zone),
+			Ideologies:   copyIdeologies(cohort.Ideologies),
+			Ambition:     generateResidentAmbition(prof, cohort.PoliticalPrestige, cohort.Ideologies),
+			// 居民代表初始影响力跟随 Cohort 的“麻木”状态
+			Influence:         cohort.Influence,
 			ActionPoints:      cohort.ActionPoints,
 			SuspicionLevel:    0,
 			PoliticalPrestige: cohort.PoliticalPrestige,
@@ -490,19 +492,16 @@ func politicalFormationTier(tags []string) string {
 	}
 
 	highCount := 0
-	mediumCount := 0
 	politicalCount := 0
 
 	for _, tag := range tags {
 		switch {
 		case strings.HasPrefix(tag, model.IdeologyProForeign+":"):
 			politicalCount++
-			switch {
-			case strings.HasSuffix(tag, ":High"):
+			if strings.HasSuffix(tag, ":High") {
 				highCount++
-			case strings.HasSuffix(tag, ":Medium"):
-				mediumCount++
 			}
+			// Note: Medium ProForeign no longer triggers formation threshold (requires 70%+)
 		}
 	}
 
@@ -511,9 +510,6 @@ func politicalFormationTier(tags []string) string {
 	}
 	if highCount >= 1 {
 		return "formation:high"
-	}
-	if mediumCount >= 1 {
-		return "formation:medium"
 	}
 	return ""
 }
@@ -841,16 +837,17 @@ func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCoho
 	}
 	nextID := uint(len(silo.Residents) + 1)
 	resident := model.Resident{
-		ID:                nextID,
-		SiloID:            silo.ID,
-		Name:              fmt.Sprintf("%s Speaker %02d", prof.Name, nextID),
-		CohortID:          uintPtr(cohort.ID),
-		ProfessionID:      prof.ID,
-		Profession:        prof.Name,
-		HomeFloor:         randomFloorForZone(prof.Zone),
-		Ideologies:        copyIdeologies(cohort.Ideologies),
-		Ambition:          generateResidentAmbition(prof, cohort.PoliticalPrestige, cohort.Ideologies),
-		Influence:         clamp01(cohort.Influence + 0.08),
+		ID:           nextID,
+		SiloID:       silo.ID,
+		Name:         fmt.Sprintf("%s Speaker %02d", prof.Name, nextID),
+		CohortID:     uintPtr(cohort.ID),
+		ProfessionID: prof.ID,
+		Profession:   prof.Name,
+		HomeFloor:    randomFloorForZone(prof.Zone),
+		Ideologies:   copyIdeologies(cohort.Ideologies),
+		Ambition:     generateResidentAmbition(prof, cohort.PoliticalPrestige, cohort.Ideologies),
+		// 新代表初始影响力跟随 Cohort 的“麻木”状态
+		Influence:         cohort.Influence,
 		ActionPoints:      cohort.ActionPoints,
 		PoliticalPrestige: cohort.PoliticalPrestige,
 		KnownFragments:    append([]string{}, cohort.KnownFragments...),
@@ -925,12 +922,13 @@ func updateKeyResidents(silo *model.Silo, deltaYears float64) {
 			target := cohort.Ideologies[key]
 			resident.Ideologies[key] += (target - resident.Ideologies[key]) * 0.45 * deltaYears
 		}
-		resident.Influence += (cohort.Influence - resident.Influence) * 0.30 * deltaYears
+		// 影响力不再简单同步 Cohort，而是由野心驱动缓慢增长
+		// 基础增长率极低，高野心者增长较快
+		influenceGrowth := (0.005 + resident.Ambition*0.05) * deltaYears
+		resident.Influence = clamp01(resident.Influence + influenceGrowth)
+
 		resident.ActionPoints = math.Min(70, resident.ActionPoints+6*deltaYears)
 		resident.PoliticalPrestige = math.Max(0, resident.PoliticalPrestige+(cohort.PoliticalPrestige-resident.PoliticalPrestige)*0.35*deltaYears)
-		if resident.IsRepresentative {
-			resident.Influence = clamp01(resident.Influence + 0.04*deltaYears)
-		}
 		resident.Tags = buildResidentTags(resident, prof, silo)
 	}
 }
