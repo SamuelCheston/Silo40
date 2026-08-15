@@ -102,6 +102,28 @@ function App() {
         updateResultText(`Silo ${num} selected. Use Selection Points to customize your Agent and Silo.`);
     };
 
+    const handleDebugStart = async () => {
+        const agentName = name || "Juliette";
+        const siloName = "Silo 20";
+        const debugYear = 122; // Just now
+        const debugTraits = ['charismatic', 'native', 'leak'];
+        const debugProfession = 'Mechanical';
+
+        try {
+            const state = await CreateGame({
+                silo_name: siloName,
+                start_year: debugYear,
+                trait_ids: debugTraits,
+                agent_name: agentName,
+                profession: debugProfession,
+            });
+            applyGameState(state);
+            updateResultText(`[DEBUG] 快速开始于 ${state.silo.name}。当前年份：${state.silo.current_year}。`);
+        } catch (err) {
+            updateResultText(`Debug 启动失败: ${err}`);
+        }
+    };
+
     // 新建游戏：初始化/落库/缓存全部由 Go 后端完成
     const handleSetupComplete = async (selectedTraitIds: string[], profession: string) => {
         const agentName = name || "Juliette";
@@ -275,6 +297,15 @@ function App() {
                                     _focus={{ border: "1px solid", borderColor: "blue.500", bg: "white" }}
                                 />
                                 <TimeWheel onSelect={handleWheelSelect} />
+                                <Button 
+                                    colorPalette="red" 
+                                    variant="outline" 
+                                    size="sm" 
+                                    w="full" 
+                                    onClick={handleDebugStart}
+                                >
+                                    DEBUG: 快速开始 (Silo 20, Just now)
+                                </Button>
                             </VStack>
                         )}
 
