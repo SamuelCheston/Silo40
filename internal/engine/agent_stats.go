@@ -49,6 +49,15 @@ func (e *GameEngine) BuildAgentStats(agent *model.Agent, silo *model.Silo) model
 	apPrestigeBonus := prestige * 0.05
 	propagandaMultiplier := 1 + (agent.PropagandaLevel * 0.2)
 
+	isFactionLeader := false
+	for i := range silo.Residents {
+		res := &silo.Residents[i]
+		if res.Alive && res.Profession == agent.Profession && res.IsRepresentative {
+			isFactionLeader = true
+			break
+		}
+	}
+
 	return model.AgentStats{
 		AvgConnection:        totalConnection,
 		PrestigeBase:         prestigeBase,
@@ -63,6 +72,7 @@ func (e *GameEngine) BuildAgentStats(agent *model.Agent, silo *model.Silo) model
 		PropagandaLevel:      agent.PropagandaLevel,
 		PropagandaMultiplier: propagandaMultiplier,
 		RebellionBaseEffect:  0.05 + (prestige * 0.002),
+		IsFactionLeader:      isFactionLeader,
 	}
 }
 

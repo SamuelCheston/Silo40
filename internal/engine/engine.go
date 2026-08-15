@@ -559,6 +559,8 @@ func (e *GameEngine) ExecuteActionInternal(silo *model.Silo, actor ActorRef, act
 		result = e.inciteRebellion(silo, view, action)
 	case model.ActionConductPropaganda:
 		result = e.conductPropaganda(silo, view, action)
+	case model.ActionPublicizeFaction:
+		result = e.publicizeFaction(silo, view, action)
 	case model.ActionProfession:
 		result = e.executeProfessionAction(silo, view, action)
 	}
@@ -675,6 +677,46 @@ func (e *GameEngine) conductPropaganda(silo *model.Silo, view *ActorView, action
 	view.SetPropagandaLevel(view.PropagandaLevel() + 1.0)
 	view.SetActionPoints(view.ActionPoints() - action.Cost)
 	return model.ActionResult{Executed: true, Message: "Conducted propaganda. Propaganda Level increased by 1.0."}
+}
+
+// PublicizeFaction 昭告天下：公开阵营存在并增加威望
+func (e *GameEngine) publicizeFaction(silo *model.Silo, view *ActorView, action model.AgentAction) model.ActionResult {
+	resident := view.resident
+	if resident == nil {
+		// 如果是特工，尝试找到对应的居民
+		for i := range silo.Residents {
+			if silo.Residents[i].Alive && silo.Residents[i].Profession == view.agent.Profession && silo.Residents[i].IsRepresentative {
+				resident = &silo.Residents[i]
+				break
+			}
+		}
+	}
+
+	if resident == nil || !resident.IsRepresentative || resident.FactionID == nil {
+		return model.ActionResult{Executed: false, Message: "Only faction representatives can publicize their faction."}
+	}
+
+	var targetFaction *model.Faction
+	for i := range silo.Factions {
+		if silo.Factions[i].ID == *resident.FactionID {
+			targetFaction = &silo.Factions[i]
+			break
+		}
+	}
+
+	if targetFaction == nil {
+		return model.ActionResult{Executed: false, Message: "Faction not found."}
+	}
+
+	if targetFaction.IsPublic {
+		return model.ActionResult{Executed: false, Message: "Faction is already public."}
+	}
+
+	targetFaction.IsPublic = true
+	targetFaction.Prestige += 15.0 // 昭告天下增加威望
+
+	view.SetActionPoints(view.ActionPoints() - action.Cost)
+	return model.ActionResult{Executed: true, Message: "Successfully publicized " + targetFaction.Name + ". The silo is now aware of your presence."}
 }
 
 // ExecuteProfessionAction 职业专属行动

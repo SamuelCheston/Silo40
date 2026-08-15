@@ -760,6 +760,18 @@ func RebuildImplicitFactions(silo *model.Silo) {
 	}
 	sigCurrentIndex := make(map[string]int)
 
+	// 缓存现有阵营的状态以便保留
+	existingFactionStates := make(map[string]struct {
+		isPublic bool
+		prestige float64
+	})
+	for _, f := range silo.Factions {
+		existingFactionStates[f.Signature] = struct {
+			isPublic bool
+			prestige float64
+		}{isPublic: f.IsPublic, prestige: f.Prestige}
+	}
+
 	factions := make([]model.Faction, 0, len(groups))
 	for idx, g := range groups {
 		members := g.cohorts
@@ -782,6 +794,12 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			TagStats:    make(map[string]int),
 			MemberCount: 0,
 			Cohesion:    factionCohesion(members),
+		}
+
+		// 保留状态
+		if state, ok := existingFactionStates[g.signature]; ok {
+			faction.IsPublic = state.isPublic
+			faction.Prestige = state.prestige
 		}
 
 		// 非政治阵营的影响力设为 0，确保不参与政治指标计算

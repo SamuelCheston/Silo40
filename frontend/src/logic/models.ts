@@ -38,7 +38,8 @@ export type AgentActionType =
   | "BUILD_CONNECTION"
   | "INCITE_REBELLION"
   | "CONDUCT_PROPAGANDA"
-  | "PROFESSION_ACTION";
+  | "PROFESSION_ACTION"
+  | "PUBLICIZE_FACTION";
 
 export type AgentAction = Omit<model.AgentAction, "type"> & {
   type: AgentActionType;
@@ -51,6 +52,7 @@ export const ACTION_COSTS: Record<AgentActionType, number> = {
   INCITE_REBELLION: 30,
   CONDUCT_PROPAGANDA: 20,
   PROFESSION_ACTION: 0,
+  PUBLICIZE_FACTION: 25,
 };
 
 export const ACTION_DURATIONS: Record<AgentActionType, number> = {
@@ -60,6 +62,7 @@ export const ACTION_DURATIONS: Record<AgentActionType, number> = {
   INCITE_REBELLION: 2,
   CONDUCT_PROPAGANDA: 1,
   PROFESSION_ACTION: 1,
+  PUBLICIZE_FACTION: 0,
 };
 
 export const ALL_FRAGMENTS: string[] = [

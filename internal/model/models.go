@@ -226,6 +226,8 @@ type Faction struct {
 	RepresentativeName       string         `gorm:"size:80" json:"representative_name"`
 	Influence                float64        `gorm:"default:0.0" json:"influence"`
 	Cohesion                 float64        `gorm:"default:0.0" json:"cohesion"`
+	Prestige                 float64        `gorm:"default:0.0" json:"prestige"`    // 阵营威望
+	IsPublic                 bool           `gorm:"default:false" json:"is_public"` // 是否已向全地堡公开存在
 	UpdatedAt                time.Time      `json:"updated_at"`
 }
 
@@ -257,6 +259,7 @@ const (
 	ActionInciteRebellion   AgentActionType = "INCITE_REBELLION"
 	ActionConductPropaganda AgentActionType = "CONDUCT_PROPAGANDA"
 	ActionProfession        AgentActionType = "PROFESSION_ACTION"
+	ActionPublicizeFaction  AgentActionType = "PUBLICIZE_FACTION"
 )
 
 // AgentAction 特工/部门动作请求
@@ -318,6 +321,7 @@ type AgentStats struct {
 	PropagandaLevel      float64 `json:"propaganda_level"`
 	PropagandaMultiplier float64 `json:"propaganda_multiplier"`
 	RebellionBaseEffect  float64 `json:"rebellion_base_effect"`
+	IsFactionLeader      bool    `json:"is_faction_leader"`
 }
 
 // TickResult 时间推进结果
@@ -379,6 +383,7 @@ var ACTION_COSTS = map[AgentActionType]float64{
 	ActionBuildConnection:   15,
 	ActionInciteRebellion:   30,
 	ActionConductPropaganda: 20,
+	ActionPublicizeFaction:  25,
 	ActionProfession:        0, // 实际成本由职业行动注册表决定
 }
 
@@ -389,5 +394,6 @@ var ACTION_DURATIONS = map[AgentActionType]int{
 	ActionBuildConnection:   1,
 	ActionInciteRebellion:   2,
 	ActionConductPropaganda: 1,
+	ActionPublicizeFaction:  0, // 立即生效
 	ActionProfession:        1,
 }

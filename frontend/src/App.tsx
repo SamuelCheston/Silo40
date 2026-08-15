@@ -59,7 +59,7 @@ function App() {
     // 目标选择器显示条件：职业行动按 targetType 决定；通用行动排除全局操作
     const showDeptSelector = actionType === 'PROFESSION_ACTION'
         ? selectedProfessionAction?.target_type === 'DEPT'
-        : !(actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION');
+        : !(actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION' || actionType === 'PUBLICIZE_FACTION');
     const showResourceSelector = actionType === 'PROFESSION_ACTION' && selectedProfessionAction?.target_type === 'RESOURCE';
 
     // 应用后端返回的游戏状态快照
@@ -411,7 +411,8 @@ function App() {
                                                 <SimpleGrid columns={2} gap={3} w="full">
                                                     {[
                                                         { value: 'CONDUCT_PROPAGANDA', label: 'Propaganda', ap: 20 },
-                                                        { value: 'INCITE_REBELLION', label: 'Incite Rebellion', ap: 30 }
+                                                        { value: 'INCITE_REBELLION', label: 'Incite Rebellion', ap: 30 },
+                                                        ...(agentStats?.is_faction_leader ? [{ value: 'PUBLICIZE_FACTION', label: 'Publicize Faction', ap: 25 }] : [])
                                                     ].map((action) => (
                                                         <Button
                                                             key={action.value}
