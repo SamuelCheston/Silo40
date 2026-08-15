@@ -484,8 +484,26 @@ func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYe
 		traitFactor += e.traitFactors[trait]
 	}
 
-	// 4. 计算政治威望
-	prestige := totalConnection * 100 * (1 + profFactor) * (1 + traitFactor)
+	// 4. 计算政治威望：整合人脉、职业背景、权力等级和阶层偏见
+	// 获取职业对象以提取权力等级和阶层信息
+	var powerLevel int
+	var classType string
+	for _, p := range silo.Professions {
+		if p.Name == view.Profession() {
+			powerLevel = p.PowerLevel
+			classType = p.ClassType
+			break
+		}
+	}
+
+	// 基础威望来源于人脉积累
+	basePrestige := totalConnection * 100
+	// 职业背景加成
+	careerBonus := (1 + profFactor) * (1 + traitFactor)
+	// 权力等级和阶层偏见对威望的直接贡献 (取代独立的影响力参数)
+	structuralPrestige := float64(powerLevel)*1.5 + classBias(classType, 2.0)
+
+	prestige := basePrestige*careerBonus + structuralPrestige
 	if prestige < 0 {
 		prestige = 0
 	}

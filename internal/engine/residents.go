@@ -15,6 +15,7 @@ const (
 	BAD_RELATION_THRESHOLD      = 0.05
 	NON_FACTION_NAME            = "Unaffiliated"
 	RESIDENT_AMBITION_THRESHOLD = 0.62
+	RESIDENT_PRESTIGE_THRESHOLD = 15.0
 )
 
 type implicitFactionGroup struct {
@@ -217,7 +218,7 @@ func initKeyResidents(silo *model.Silo) []model.Resident {
 			Profession:        prof.Name,
 			HomeFloor:         randomFloorForZone(prof.Zone),
 			Ideologies:        copyIdeologies(cohort.Ideologies),
-			Ambition:          generateResidentAmbition(prof, cohort.Influence, cohort.PoliticalPrestige, cohort.Ideologies),
+			Ambition:          generateResidentAmbition(prof, cohort.PoliticalPrestige, cohort.Ideologies),
 			Influence:         clamp01(cohort.Influence + rand.Float64()*0.08),
 			ActionPoints:      cohort.ActionPoints,
 			SuspicionLevel:    0,
@@ -399,18 +400,15 @@ func ideologicalIntensity(proForeign float64) float64 {
 	return clamp01(math.Abs(proForeign - 0.5))
 }
 
-func generateResidentAmbition(prof *model.Profession, influence, prestige float64, ideologies map[string]float64) float64 {
+func generateResidentAmbition(prof *model.Profession, prestige float64, ideologies map[string]float64) float64 {
 	if prof == nil {
 		return 0
 	}
 	proForeign := ideologies[model.IdeologyProForeign]
 	return clamp01(
 		0.22 +
-			influence*0.28 +
-			math.Min(prestige, 100)/100.0*0.10 +
-			float64(prof.PowerLevel)/10.0*0.12 +
-			classBias(prof.ClassType, 0.10) +
-			ideologicalIntensity(proForeign)*0.22 +
+			math.Min(prestige, 30)/30.0*0.40 +
+			ideologicalIntensity(proForeign)*0.30 +
 			rand.Float64()*0.08,
 	)
 }
@@ -575,9 +573,8 @@ func representativeScore(resident *model.Resident) float64 {
 
 func representativeCohortScore(cohort *model.PopulationCohort) float64 {
 	scale := math.Log(float64(cohort.Count) + 1)
-	return cohort.Influence*0.35 +
+	return cohort.PoliticalPrestige/20.0*0.45 +
 		cohort.Ideologies[model.IdeologyLoyalty]*0.20 +
-		cohort.PoliticalPrestige/100.0*0.10 +
 		scale*0.10
 }
 
@@ -698,6 +695,37 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		if size >= MIN_FACTION_SIZE {
 			validGroups = append(validGroups, g)
 		} else {
+			unaffiliatedCohorts = append(unaffiliatedCohorts, g.cohorts...)
+		}
+	}
+	groups = validGroups
+
+	// 领袖资格校验：只有代表人物具备足够的野心和影响力时，派系才能正式形成
+	validGroups = groups[:0]
+	for _, g := range groups {
+		// 找到得分最高的 cohort 作为领袖候选
+		var bestCohort *model.PopulationCohort
+		bestScore := -1.0
+		for _, c := range g.cohorts {
+			score := representativeCohortScore(c)
+			if score > bestScore {
+				bestScore = score
+				bestCohort = c
+			}
+		}
+
+		qualified := false
+		if bestCohort != nil {
+			rep := ensureRepresentativeResident(silo, bestCohort)
+			if rep != nil && rep.Ambition >= RESIDENT_AMBITION_THRESHOLD && rep.PoliticalPrestige >= RESIDENT_PRESTIGE_THRESHOLD {
+				qualified = true
+			}
+		}
+
+		if qualified {
+			validGroups = append(validGroups, g)
+		} else {
+			// 领袖不合格，解散该阵营并将其成员归入“无阵营”
 			unaffiliatedCohorts = append(unaffiliatedCohorts, g.cohorts...)
 		}
 	}
@@ -852,7 +880,7 @@ func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCoho
 		Profession:        prof.Name,
 		HomeFloor:         randomFloorForZone(prof.Zone),
 		Ideologies:        copyIdeologies(cohort.Ideologies),
-		Ambition:          generateResidentAmbition(prof, cohort.Influence, cohort.PoliticalPrestige, cohort.Ideologies),
+		Ambition:          generateResidentAmbition(prof, cohort.PoliticalPrestige, cohort.Ideologies),
 		Influence:         clamp01(cohort.Influence + 0.08),
 		ActionPoints:      cohort.ActionPoints,
 		PoliticalPrestige: cohort.PoliticalPrestige,
@@ -881,7 +909,8 @@ func updatePopulationCohorts(silo *model.Silo, deltaYears float64) {
 			}
 
 			loyaltyTarget := clamp01(silo.Legitimacy - prof.PanicValue*0.35*cohort.PanicSensitivity + classBias(prof.ClassType, 0.08))
-			influenceTarget := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10))
+			// 威望目标由权力等级、阶层偏见以及影响力（作为修正项）共同决定
+			prestigeTarget := (float64(prof.PowerLevel)*1.8 + classBias(prof.ClassType, 2.5) + cohort.Influence*5.0)
 
 			cohort.Ideologies[model.IdeologyLoyalty] += (loyaltyTarget - cohort.Ideologies[model.IdeologyLoyalty]) * 0.45 * deltaYears
 			for key := range cohort.Ideologies {
@@ -893,9 +922,13 @@ func updatePopulationCohorts(silo *model.Silo, deltaYears float64) {
 				target := clamp01((cohortVal + profVal + silo.Rebellion*0.15) / 2.15)
 				cohort.Ideologies[key] += (target - cohortVal) * 0.35 * deltaYears
 			}
-			cohort.Influence += (influenceTarget - cohort.Influence) * 0.20 * deltaYears
+
+			// 影响力不再独立增长，而是趋向于权力等级的基础水平
+			influenceTarget := clamp01(float64(prof.PowerLevel) / 10.0)
+			cohort.Influence += (influenceTarget - cohort.Influence) * 0.15 * deltaYears
+
 			cohort.ActionPoints = math.Min(70, cohort.ActionPoints+6*deltaYears)
-			cohort.PoliticalPrestige = math.Max(0, cohort.PoliticalPrestige+(cohort.Influence*18-cohort.PoliticalPrestige)*0.30*deltaYears)
+			cohort.PoliticalPrestige = math.Max(0, cohort.PoliticalPrestige+(prestigeTarget-cohort.PoliticalPrestige)*0.30*deltaYears)
 			cohort.Tags = buildCohortTags(cohort, prof, silo)
 		}
 	}
