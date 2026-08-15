@@ -700,37 +700,6 @@ func RebuildImplicitFactions(silo *model.Silo) {
 	}
 	groups = validGroups
 
-	// 领袖资格校验：只有代表人物具备足够的野心和影响力时，派系才能正式形成
-	validGroups = groups[:0]
-	for _, g := range groups {
-		// 找到得分最高的 cohort 作为领袖候选
-		var bestCohort *model.PopulationCohort
-		bestScore := -1.0
-		for _, c := range g.cohorts {
-			score := representativeCohortScore(c)
-			if score > bestScore {
-				bestScore = score
-				bestCohort = c
-			}
-		}
-
-		qualified := false
-		if bestCohort != nil {
-			rep := ensureRepresentativeResident(silo, bestCohort)
-			if rep != nil && rep.Ambition >= RESIDENT_AMBITION_THRESHOLD && rep.PoliticalPrestige >= RESIDENT_PRESTIGE_THRESHOLD {
-				qualified = true
-			}
-		}
-
-		if qualified {
-			validGroups = append(validGroups, g)
-		} else {
-			// 领袖不合格，解散该阵营并将其成员归入“无阵营”
-			unaffiliatedCohorts = append(unaffiliatedCohorts, g.cohorts...)
-		}
-	}
-	groups = validGroups
-
 	sort.Slice(groups, func(i, j int) bool {
 		sizeI := 0
 		for _, c := range groups[i].cohorts {

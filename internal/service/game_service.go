@@ -537,8 +537,7 @@ func (s *GameService) publicSiloSnapshot() model.Silo {
 	}
 	snap := *s.silo
 	// Residents stay in the backend/session snapshot for simulation, but we avoid
-	// returning the full population on every UI round-trip.
-	snap.Cohorts = nil
+	// returning the full resident list on every UI round-trip.
 	snap.Residents = nil
 	return snap
 }
