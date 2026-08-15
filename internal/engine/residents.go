@@ -751,8 +751,6 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		})
 	}
 
-	applyFactionLoyaltyDynamics(silo, groups)
-
 	// 统计每个 signature 出现的总次数，用于命名区分
 	sigTotalCounts := make(map[string]int)
 	for _, g := range groups {
@@ -868,6 +866,9 @@ func RebuildImplicitFactions(silo *model.Silo) {
 	}
 
 	silo.Factions = factions
+
+	// 在阵营构建完成后应用忠诚度动态逻辑 (考虑公开度和威望)
+	applyFactionLoyaltyDynamics(silo)
 }
 
 func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCohort) *model.Resident {
@@ -1075,45 +1076,112 @@ func uintPtr(v uint) *uint {
 	return &v
 }
 
-func applyFactionLoyaltyDynamics(silo *model.Silo, groups []*implicitFactionGroup) {
+func applyFactionLoyaltyDynamics(silo *model.Silo) {
 	if silo == nil {
 		return
 	}
-	for _, group := range groups {
-		if group == nil || len(group.cohorts) == 0 {
+	for i := range silo.Factions {
+		faction := &silo.Factions[i]
+		if faction.Signature == "special:unaffiliated" {
 			continue
 		}
-		dissentBias := factionDissentBias(group.tags)
-		orderBias := factionOrderBias(group.tags)
-		formationBias := factionFormationBias(group.tags)
 
-		for _, cohort := range group.cohorts {
+		dissentBias := factionDissentBias(faction.Tags)
+		orderBias := factionOrderBias(faction.Tags)
+		formationBias := factionFormationBias(faction)
+
+		// 遍历所有属于该阵营的 Cohorts
+		for j := range silo.Cohorts {
+			cohort := &silo.Cohorts[j]
+			if cohort.FactionID == nil || *cohort.FactionID != faction.ID {
+				continue
+			}
+
 			prof := getProfessionByID(silo, cohort.ProfessionID)
 			if prof == nil {
 				continue
 			}
+
 			baseTarget := clamp01(silo.Legitimacy - prof.PanicValue*0.35*cohort.PanicSensitivity + classBias(prof.ClassType, 0.08))
 			target := baseTarget
-			if group.signature != "special:unaffiliated" {
-				unrest := 1 - silo.Legitimacy
-				target -= formationBias * unrest * (0.12 + 0.12*dissentBias)
-				target += formationBias * silo.Legitimacy * 0.08 * orderBias
-			}
+
+			unrest := 1 - silo.Legitimacy
+			target -= formationBias * unrest * (0.12 + 0.12*dissentBias)
+			target += formationBias * silo.Legitimacy * 0.08 * orderBias
+
 			cohort.Ideologies[model.IdeologyLoyalty] += (clamp01(target) - cohort.Ideologies[model.IdeologyLoyalty]) * 0.50
 			cohort.Tags = buildCohortTags(cohort, prof, silo)
 		}
 	}
 }
 
-func factionFormationBias(tags []string) float64 {
-	switch politicalFormationTier(tags) {
+func factionFormationBias(f *model.Faction) float64 {
+	base := 0.0
+	switch politicalFormationTier(f.Tags) {
 	case "formation:high":
-		return 1.0
+		base = 1.0
 	case "formation:medium":
-		return 0.7
+		base = 0.7
 	default:
-		return 0
+		// 检查是否有领袖觉醒 (对应 "双向奔赴" 逻辑)
+		if f.RepresentativeResidentID > 0 {
+			base = 0.6 // 领袖触发的初始组织力稍低
+		}
 	}
+
+	// 如果没有公开且威望低，组织力显著下降（NPC 感知不到，难以形成合力）
+	if !f.IsPublic {
+		// 威望可以恢复一部分组织力 (0.4 + prestige/50)
+		base *= clamp01(0.4 + f.Prestige/50.0)
+	}
+
+	return clamp01(base)
+}
+
+const (
+	FactionVisibilityHidden  = 0
+	FactionVisibilityAware   = 1
+	FactionVisibilityVisible = 2
+)
+
+// GetFactionVisibilityLevel 判定一个观测者（特工或 NPC）对目标阵营的感知等级
+func GetFactionVisibilityLevel(silo *model.Silo, viewerProfID uint, viewerRelations map[string]float64, targetFaction *model.Faction) int {
+	if targetFaction == nil {
+		return FactionVisibilityHidden
+	}
+	if targetFaction.IsPublic || targetFaction.Signature == "special:unaffiliated" {
+		return FactionVisibilityVisible
+	}
+
+	// 1. 如果观测者所属部门就在该阵营中，显然可见
+	viewerProf := getProfessionByID(silo, viewerProfID)
+	if viewerProf != nil {
+		if count, ok := targetFaction.TagStats["prof:"+viewerProf.Name]; ok && count > 0 {
+			return FactionVisibilityVisible
+		}
+	}
+
+	// 2. 检查与阵营内任何部门的关系值
+	maxRelation := 0.0
+	for tag := range targetFaction.TagStats {
+		if strings.HasPrefix(tag, "prof:") {
+			targetProfName := tag[5:]
+			if val, ok := viewerRelations[targetProfName]; ok {
+				if val > maxRelation {
+					maxRelation = val
+				}
+			}
+		}
+	}
+
+	// 3. 门槛判定
+	if maxRelation >= 0.4 {
+		return FactionVisibilityVisible
+	}
+	if maxRelation >= 0.15 {
+		return FactionVisibilityAware
+	}
+	return FactionVisibilityHidden
 }
 
 func factionDissentBias(tags []string) float64 {

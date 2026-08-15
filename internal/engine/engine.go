@@ -892,10 +892,32 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 		e.UpdateActorState(view, silo, deltaYears, addLog)
 	}
 
-	// 3. Profession-side decisions remain active for now
+	// 3. NPC-side decisions (Professions and Resident Representatives)
 	var brain NpcBrain
+	
+	// 3a. Profession decisions
 	for _, prof := range npcProfs {
 		view, err := CreateActorView(CreateActorRefForProfession(prof), silo, nil)
+		if err != nil {
+			continue
+		}
+		decision := brain.Decide(view, silo, deltaYears)
+		if decision == nil {
+			continue
+		}
+		result := e.SubmitAction(view.Ref, silo, decision.Action, nil)
+		if result.Executed && addLog != nil && rand.Float64() < decision.LogChance {
+			addLog(view.Label() + " " + decision.Message)
+		}
+	}
+
+	// 3b. Resident Representative decisions (e.g., Faction Leaders)
+	for i := range silo.Residents {
+		res := &silo.Residents[i]
+		if !res.Alive || !res.IsRepresentative {
+			continue
+		}
+		view, err := CreateActorView(CreateActorRefForResident(res), silo, nil)
 		if err != nil {
 			continue
 		}

@@ -534,12 +534,6 @@ func (s *GameService) eventHistory(limit int) []model.StoryEventLog {
 	return events
 }
 
-const (
-	FactionVisibilityHidden  = 0
-	FactionVisibilityAware   = 1
-	FactionVisibilityVisible = 2
-)
-
 func (s *GameService) publicSiloSnapshot() model.Silo {
 	if s.silo == nil {
 		return model.Silo{}
@@ -555,16 +549,30 @@ func (s *GameService) publicSiloSnapshot() model.Silo {
 		}
 	}
 
+	// 转换特工关系为 map 以便复用引擎可见性逻辑
+	agentRelations := make(map[string]float64)
+	var agentProfID uint
+	for _, p := range s.silo.Professions {
+		if p.Name == s.agent.Profession {
+			agentProfID = p.ID
+		}
+		for _, conn := range s.agent.Connections {
+			if p.ID == conn.ProfessionID {
+				agentRelations[p.Name] = conn.Value
+			}
+		}
+	}
+
 	// 阵营可见性过滤
 	visibleFactions := make([]model.Faction, 0, len(s.silo.Factions))
 	hiddenFactionIDs := make(map[uint]bool)
 
 	for _, f := range s.silo.Factions {
-		level := s.getFactionVisibilityLevel(f)
+		level := engine.GetFactionVisibilityLevel(s.silo, agentProfID, agentRelations, &f)
 		switch level {
-		case FactionVisibilityVisible:
+		case engine.FactionVisibilityVisible:
 			visibleFactions = append(visibleFactions, f)
-		case FactionVisibilityAware:
+		case engine.FactionVisibilityAware:
 			visibleFactions = append(visibleFactions, model.Faction{
 				ID:        f.ID,
 				SiloID:    f.SiloID,
@@ -574,7 +582,7 @@ func (s *GameService) publicSiloSnapshot() model.Silo {
 				TagStats:  make(map[string]int),
 				Tags:      []string{"status:unknown"},
 			})
-		case FactionVisibilityHidden:
+		case engine.FactionVisibilityHidden:
 			hiddenFactionIDs[f.ID] = true
 		}
 	}
@@ -612,47 +620,4 @@ func (s *GameService) publicSiloSnapshot() model.Silo {
 	// returning the full resident list on every UI round-trip.
 	snap.Residents = nil
 	return snap
-}
-
-func (s *GameService) getFactionVisibilityLevel(f model.Faction) int {
-	if f.IsPublic || f.Signature == "special:unaffiliated" {
-		return FactionVisibilityVisible
-	}
-
-	// 如果特工自身所属部门就在该阵营中，显然可见
-	if count, ok := f.TagStats["prof:"+s.agent.Profession]; ok && count > 0 {
-		return FactionVisibilityVisible
-	}
-
-	// 获取特工与该阵营内所有相关部门的关系最大值
-	maxRelation := 0.0
-	for tag := range f.TagStats {
-		if len(tag) > 5 && tag[:5] == "prof:" {
-			profName := tag[5:]
-			var profID uint
-			for _, p := range s.silo.Professions {
-				if p.Name == profName {
-					profID = p.ID
-					break
-				}
-			}
-
-			if profID > 0 {
-				for _, conn := range s.agent.Connections {
-					if conn.ProfessionID == profID && conn.Value > maxRelation {
-						maxRelation = conn.Value
-					}
-				}
-			}
-		}
-	}
-
-	// 关系值门槛判定
-	if maxRelation >= 0.4 {
-		return FactionVisibilityVisible
-	}
-	if maxRelation >= 0.15 {
-		return FactionVisibilityAware
-	}
-	return FactionVisibilityHidden
 }

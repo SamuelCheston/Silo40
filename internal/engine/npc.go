@@ -155,6 +155,22 @@ func (NpcBrain) scoreCandidates(view *ActorView, silo *model.Silo) []WeightedDec
 		add(model.ActionInciteRebellion, 0.8, "incited unrest among the commoners.", 0.3)
 	}
 
+	// --- PUBLICIZE_FACTION：身为领袖且阵营未公开时 ---
+	if view.IsRepresentative() && view.FactionID() != nil {
+		var myFaction *model.Faction
+		fid := *view.FactionID()
+		for i := range silo.Factions {
+			if silo.Factions[i].ID == fid {
+				myFaction = &silo.Factions[i]
+				break
+			}
+		}
+		if myFaction != nil && !myFaction.IsPublic {
+			// 领袖非常有动力公开自己的阵营
+			add(model.ActionPublicizeFaction, 2.5, "solemnly publicized the existence of "+myFaction.Name+" to the entire silo.", 1.0)
+		}
+	}
+
 	// --- 职业专属行动：按职业注册表挑选，走统一执行管线 ---
 	resTypes := []string{"Energy", "Materials", "Supplies"}
 	for _, def := range GetProfessionActions(view.Profession()) {

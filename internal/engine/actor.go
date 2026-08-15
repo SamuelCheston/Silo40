@@ -283,6 +283,47 @@ func (v *ActorView) KnownFragments() []string {
 	return v.prof.KnownFragments
 }
 
+func (v *ActorView) IsRepresentative() bool {
+	if v.resident != nil {
+		return v.resident.IsRepresentative
+	}
+	return false
+}
+
+func (v *ActorView) FactionID() *uint {
+	if v.resident != nil {
+		return v.resident.FactionID
+	}
+	if v.prof != nil {
+		// 部门层面不直接持有 FactionID，但我们可以从其人口单元推导 (这里简化处理)
+		return nil
+	}
+	return nil
+}
+
+func (v *ActorView) Relations() map[string]float64 {
+	if v.resident != nil {
+		return v.resident.Relations
+	}
+	if v.prof != nil {
+		return v.prof.Relations
+	}
+	// Agent 的关系是 slice，需要特殊转换
+	if v.agent != nil {
+		rels := make(map[string]float64)
+		for _, conn := range v.agent.Connections {
+			for _, p := range v.silo.Professions {
+				if p.ID == conn.ProfessionID {
+					rels[p.Name] = conn.Value
+					break
+				}
+			}
+		}
+		return rels
+	}
+	return nil
+}
+
 // ============ 人脉 (统一按部门 id 访问) ============
 
 // ConnectionValues 该 Actor 对各地堡部门的人脉值数组 (用于平均威望计算)
