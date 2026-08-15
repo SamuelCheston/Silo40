@@ -3,20 +3,24 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"silo40/internal/api"
 	"silo40/internal/cache"
 	"silo40/internal/engine"
 	"silo40/internal/model"
 	"silo40/internal/repository"
 	"silo40/internal/service"
+	"time"
 
 	"gorm.io/gorm"
 )
 
 // App struct
 type App struct {
-	ctx         context.Context
-	db          *gorm.DB
-	gameService *service.GameService
+	ctx          context.Context
+	db           *gorm.DB
+	gameService  *service.GameService
+	debugHTTPAPI *api.DebugHTTPServer
 }
 
 // NewApp creates a new App application struct
@@ -44,6 +48,25 @@ func (a *App) startup(ctx context.Context) {
 	a.gameService = service.NewGameService(db)
 	if err := a.gameService.Resume(); err != nil {
 		log.Println("no saved game session to resume:", err)
+	}
+
+	a.debugHTTPAPI = api.NewDebugHTTPServer(os.Getenv("SILO40_DEBUG_HTTP_ADDR"), a)
+	if err := a.debugHTTPAPI.Start(); err != nil {
+		log.Printf("failed to start debug HTTP server: %v", err)
+	}
+}
+
+// shutdown is called when the app is closing.
+func (a *App) shutdown(ctx context.Context) {
+	if a.debugHTTPAPI == nil {
+		return
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	if err := a.debugHTTPAPI.Shutdown(shutdownCtx); err != nil {
+		log.Printf("failed to stop debug HTTP server: %v", err)
 	}
 }
 
