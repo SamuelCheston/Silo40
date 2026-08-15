@@ -38,6 +38,7 @@ type Agent struct {
 	SuspicionLevel    float64        `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
 	Connections       []Connection   `gorm:"foreignKey:AgentID" json:"connections"`
 	KnownFragments    []string       `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
+	Relics            []Relic        `gorm:"foreignKey:AgentID" json:"relics,omitempty"`       // 特工私吞的遗物
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
 	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
@@ -76,6 +77,7 @@ type Silo struct {
 	Cohorts            []PopulationCohort `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
 	Residents          []Resident         `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
 	Factions           []Faction          `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
+	Relics             []Relic            `gorm:"foreignKey:SiloID" json:"relics,omitempty"` // 地堡中存在的所有遗物
 	CreatedAt          time.Time          `json:"created_at"`
 	UpdatedAt          time.Time          `json:"updated_at"`
 	DeletedAt          gorm.DeletedAt     `gorm:"index" json:"-"`
@@ -129,6 +131,7 @@ type Profession struct {
 	PoliticalPrestige float64   `gorm:"default:0" json:"political_prestige"`               // 政治威望
 	PropagandaLevel   float64   `gorm:"default:0" json:"propaganda_level"`                 // 宣传力度
 	Traits            []string  `gorm:"type:text;serializer:json" json:"traits,omitempty"` // 特质
+	Relics            []Relic   `gorm:"foreignKey:ProfessionID" json:"relics,omitempty"`   // 部门保管的遗物 (如司法部)
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
@@ -189,6 +192,25 @@ type Resident struct {
 	IsRepresentative  bool               `gorm:"default:false" json:"is_representative"`
 	Alive             bool               `gorm:"default:true" json:"alive"`
 	UpdatedAt         time.Time          `json:"updated_at"`
+}
+
+// Relic 遗物模型
+type Relic struct {
+	ID            uint               `gorm:"primarykey" json:"id"`
+	SiloID        uint               `gorm:"index" json:"silo_id"`
+	Name          string             `gorm:"size:100" json:"name"`
+	Description   string             `gorm:"type:text" json:"description"`
+	SourceDept    string             `gorm:"size:50" json:"source_dept"`
+	DiscoveryYear int                `json:"discovery_year"`
+	Effects       map[string]float64 `gorm:"type:text;serializer:json" json:"effects"`
+
+	// 归属关系
+	AgentID      *uint `gorm:"index" json:"agent_id,omitempty"`      // 如果被特工私吞
+	ProfessionID *uint `gorm:"index" json:"profession_id,omitempty"` // 如果在部门（如司法部）保管
+
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // Faction 派系模型：独立于 Profession，由 resident tags 隐式聚类生成

@@ -46,6 +46,7 @@ export interface Agent {
   suspicion_level: number; // 怀疑度指数
   connections: Connection[];
   known_fragments: string[]; // 特工个人掌握的信息碎片
+  relics?: Relic[]; // 特工私吞的遗物
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +122,7 @@ export interface Silo {
   floors: Floor[];
   cohorts?: PopulationCohort[];
   factions?: Faction[];
+  relics?: Relic[]; // 地堡中存在的所有遗物
   created_at: string;
   updated_at: string;
 }
@@ -153,6 +155,7 @@ export interface Profession {
   political_prestige?: number; // 政治威望
   propaganda_level?: number; // 宣传力度
   traits?: string[]; // 特质
+  relics?: Relic[]; // 部门保管的遗物 (如司法部)
   updated_at: string;
 }
 
@@ -184,6 +187,23 @@ export const ALL_FRAGMENTS: string[] = [
   "Mines_2",
   "Agricultural_1",
 ];
+
+export interface Relic {
+  id: number;
+  silo_id: number;
+  name: string;
+  description: string;
+  source_dept: string;
+  discovery_year: number;
+  effects: Record<string, number>;
+
+  // 归属关系
+  agent_id?: number;
+  profession_id?: number;
+
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Floor {
   id: number;
