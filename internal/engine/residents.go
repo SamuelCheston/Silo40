@@ -51,113 +51,83 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 	for i := range silo.Professions {
 		prof := &silo.Professions[i]
 
-		// 统计同一个职业中拥有不同意识形态组合的人口数量
-		// 我们按 3^2 = 9 种组合拆分
-		pValues := []float64{
-			prof.Ideologies[model.IdeologyProForeign],
-			prof.Ideologies[model.IdeologyLoyalty],
-		}
+		// 仅按亲外倾向 (ProForeign) 拆分 bucket
+		proForeignVal := prof.Ideologies[model.IdeologyProForeign]
 
-		// 为每个维度计算概率分布 (简化的正态分布映射)
 		// Low: [0, 0.3), Medium: [0.3, 0.7), High: [0.7, 1.0]
-		dimProbs := make([][]float64, 2)
-		for d := 0; d < 2; d++ {
-			val := pValues[d]
-			// 简单的启发式分布：
-			// 如果 val = 0.5, 大部分在 Medium
-			// 如果 val > 0.7, 大部分在 High
-			// 如果 val < 0.3, 大部分在 Low
-			var lProb, mProb, hProb float64
-			if val < 0.3 {
-				lProb = 0.7 - val
-				mProb = 0.3 + val
-				hProb = 0.0
-			} else if val > 0.7 {
-				lProb = 0.0
-				mProb = 1.0 - val
-				hProb = val
+		var lProb, mProb, hProb float64
+		if proForeignVal < 0.3 {
+			lProb = 0.7 - proForeignVal
+			mProb = 0.3 + proForeignVal
+			hProb = 0.0
+		} else if proForeignVal > 0.7 {
+			lProb = 0.0
+			mProb = 1.0 - proForeignVal
+			hProb = proForeignVal
+		} else {
+			distToCenter := math.Abs(proForeignVal - 0.5)
+			mProb = 0.8 - distToCenter*2
+			sideProb := (1.0 - mProb) / 2
+			if proForeignVal > 0.5 {
+				hProb = sideProb + (proForeignVal-0.5)*2*sideProb
+				lProb = 1.0 - mProb - hProb
 			} else {
-				// 0.3 <= val <= 0.7
-				distToCenter := math.Abs(val - 0.5)
-				mProb = 0.8 - distToCenter*2 // 0.5时为0.8, 0.3/0.7时为0.4
-				sideProb := (1.0 - mProb) / 2
-				if val > 0.5 {
-					hProb = sideProb + (val-0.5)*2*sideProb
-					lProb = 1.0 - mProb - hProb
-				} else {
-					lProb = sideProb + (0.5-val)*2*sideProb
-					hProb = 1.0 - mProb - lProb
-				}
+				lProb = sideProb + (0.5-proForeignVal)*2*sideProb
+				hProb = 1.0 - mProb - lProb
 			}
-			total := lProb + mProb + hProb
-			dimProbs[d] = []float64{lProb / total, mProb / total, hProb / total}
 		}
+		total := lProb + mProb + hProb
+		probs := []float64{lProb / total, mProb / total, hProb / total}
 
-		// 遍历 9 种组合
 		createdAny := false
-		for l1 := 0; l1 < 3; l1++ {
-			for l2 := 0; l2 < 3; l2++ {
-				prob := dimProbs[0][l1] * dimProbs[1][l2]
-				count := int(math.Round(float64(prof.Population) * prob))
-
-				if count <= 0 {
-					continue
-				}
-				createdAny = true
-
-				profile := []string{}
-				if l1 > 0 {
-					profile = append(profile, fmt.Sprintf("%s:%s", model.IdeologyProForeign, levels[l1].name))
-				}
-				if l2 > 0 {
-					profile = append(profile, fmt.Sprintf("%s:%s", model.IdeologyLoyalty, levels[l2].name))
-				}
-
-				// 确保每个人都有意识形态，如果为空则标记为 Neutral
-				if len(profile) == 0 {
-					profile = append(profile, "Ideology:Neutral")
-				}
-
-				loyalty := clamp01(0.45 + rand.Float64()*0.25 + classBias(prof.ClassType, 0.08))
-				// 初始影响力设为“麻木”状态 (0.05)
-				influence := 0.05
-
-				// 根据 bucket 分配具体的意识形态值，而非统一使用职业平均值
-				// Low: 0.15, Medium: 0.5, High: 0.85
-				bucketValues := []float64{0.15, 0.5, 0.85}
-				cProForeign := bucketValues[l1]
-				cLoyalty := bucketValues[l2]
-
-				cohort := model.PopulationCohort{
-					ID:              nextID,
-					SiloID:          silo.ID,
-					ProfessionID:    prof.ID,
-					Name:            fmt.Sprintf("%s %s-%s", prof.Name, levels[l1].name, levels[l2].name),
-					Count:           count,
-					IdeologyProfile: profile,
-					HomeZone:        prof.Zone,
-					Loyalty:         loyalty,
-					Influence:       influence,
-					ActionPoints:    20 + rand.Float64()*20,
-					Ideologies: map[string]float64{
-						model.IdeologyProForeign: cProForeign,
-						model.IdeologyLoyalty:    cLoyalty,
-					},
-					PanicSensitivity: 0.9 + rand.Float64()*0.25,
-					KnownFragments:   initResidentFragments(prof.Name),
-				}
-				cohort.Tags = buildCohortTags(&cohort, prof, silo)
-				cohorts = append(cohorts, cohort)
-				nextID++
+		for l := 0; l < 3; l++ {
+			count := int(math.Round(float64(prof.Population) * probs[l]))
+			if count <= 0 {
+				continue
 			}
+			createdAny = true
+
+			profile := []string{}
+			if l > 0 {
+				profile = append(profile, fmt.Sprintf("%s:%s", model.IdeologyProForeign, levels[l].name))
+			}
+
+			if len(profile) == 0 {
+				profile = append(profile, "Ideology:Neutral")
+			}
+
+			// 初始忠诚度不再受 Bucket 影响，而是基于地堡整体合法性和阶层偏见
+			loyalty := clamp01(silo.Legitimacy + classBias(prof.ClassType, 0.08) + (rand.Float64()-0.5)*0.1)
+			influence := 0.05
+			bucketValues := []float64{0.15, 0.5, 0.85}
+			cProForeign := bucketValues[l]
+
+			cohort := model.PopulationCohort{
+				ID:              nextID,
+				SiloID:          silo.ID,
+				ProfessionID:    prof.ID,
+				Name:            fmt.Sprintf("%s %s", prof.Name, levels[l].name),
+				Count:           count,
+				IdeologyProfile: profile,
+				HomeZone:        prof.Zone,
+				Loyalty:         loyalty,
+				Influence:       influence,
+				ActionPoints:    20 + rand.Float64()*20,
+				Ideologies: map[string]float64{
+					model.IdeologyProForeign: cProForeign,
+					model.IdeologyLoyalty:    loyalty, // 忠诚度作为状态存入 Ideologies map
+				},
+				PanicSensitivity: 0.9 + rand.Float64()*0.25,
+				KnownFragments:   initResidentFragments(prof.Name),
+			}
+			cohort.Tags = buildCohortTags(&cohort, prof, silo)
+			cohorts = append(cohorts, cohort)
+			nextID++
 		}
 
-		// 如果人数很少（如市长 1 人）且没能四舍五入到任何 Cohort，则强制生成一个
+		// 如果人数很少且没能分配到 Cohort
 		if !createdAny && prof.Population > 0 {
-			loyalty := clamp01(0.45 + rand.Float64()*0.25 + classBias(prof.ClassType, 0.08))
-			// 初始影响力设为“麻木”状态 (0.05)
-			influence := 0.05
-
+			loyalty := clamp01(silo.Legitimacy + classBias(prof.ClassType, 0.08))
 			cohort := model.PopulationCohort{
 				ID:              nextID,
 				SiloID:          silo.ID,
@@ -167,11 +137,11 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 				IdeologyProfile: []string{"Ideology:Neutral"},
 				HomeZone:        prof.Zone,
 				Loyalty:         loyalty,
-				Influence:       influence,
+				Influence:       0.05,
 				ActionPoints:    20 + rand.Float64()*20,
 				Ideologies: map[string]float64{
-					model.IdeologyProForeign: pValues[0],
-					model.IdeologyLoyalty:    pValues[1],
+					model.IdeologyProForeign: proForeignVal,
+					model.IdeologyLoyalty:    loyalty,
 				},
 				PanicSensitivity: 0.9 + rand.Float64()*0.25,
 				KnownFragments:   initResidentFragments(prof.Name),
@@ -578,21 +548,67 @@ func titleToken(value string) string {
 	return strings.ToUpper(value[:1]) + value[1:]
 }
 
-func factionCohesion(members []*model.PopulationCohort) float64 {
+func factionCohesion(silo *model.Silo, members []*model.PopulationCohort, leader *model.Resident) float64 {
 	if len(members) == 0 {
 		return 0
 	}
-	totalWeight := 0.0
-	total := 0.0
-	for _, member := range members {
-		weight := float64(member.Count)
-		totalWeight += weight
-		total += member.Ideologies[model.IdeologyLoyalty] * weight
+
+	// 1. 成员间关系基础值 (内部和谐度)
+	// 计算阵营内不同职业之间的平均关系值
+	internalRelSum := 0.0
+	relPairs := 0
+	profIDs := make(map[uint]bool)
+	for _, m := range members {
+		profIDs[m.ProfessionID] = true
 	}
-	if totalWeight == 0 {
-		return 0
+
+	ids := make([]uint, 0, len(profIDs))
+	for id := range profIDs {
+		ids = append(ids, id)
 	}
-	return total / totalWeight
+
+	for i := 0; i < len(ids); i++ {
+		p1 := getProfessionByID(silo, ids[i])
+		if p1 == nil {
+			continue
+		}
+		for j := i; j < len(ids); j++ {
+			p2 := getProfessionByID(silo, ids[j])
+			if p2 == nil {
+				continue
+			}
+			if i == j {
+				internalRelSum += 1.0 // 自身关系满分
+			} else {
+				// 双向关系平均
+				internalRelSum += (p1.Relations[p2.Name] + p2.Relations[p1.Name]) / 2.0
+			}
+			relPairs++
+		}
+	}
+	avgInternalRel := 1.0
+	if relPairs > 0 {
+		avgInternalRel = internalRelSum / float64(relPairs)
+	}
+
+	// 2. 领袖威望修正
+	leaderBonus := 0.0
+	if leader != nil {
+		// 威望 (0-100) 转化为 0-0.4 的修正项
+		leaderBonus = (leader.PoliticalPrestige / 100.0) * 0.4
+	}
+
+	// 3. 组织规模惩罚 (规模越大，凝聚力天然下降)
+	totalPop := 0
+	for _, m := range members {
+		totalPop += m.Count
+	}
+	sizePenalty := math.Log10(float64(totalPop)/100.0+1.0) * 0.05
+
+	// 最终凝聚力 = (内部关系 * 0.6) + (领袖威望修正) - (规模惩罚)
+	cohesion := (avgInternalRel * 0.6) + leaderBonus - sizePenalty
+
+	return clamp01(cohesion)
 }
 
 func representativeScore(resident *model.Resident) float64 {
@@ -806,7 +822,6 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			Tags:        tags,
 			TagStats:    make(map[string]int),
 			MemberCount: 0,
-			Cohesion:    factionCohesion(members),
 		}
 
 		// 保留状态
@@ -847,6 +862,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			faction.MemberCount += cohort.Count
 		}
 
+		var leader *model.Resident
 		if repCohort != nil {
 			faction.RepresentativeCohortID = uintPtr(repCohort.ID)
 			rep := ensureRepresentativeResident(silo, repCohort)
@@ -858,10 +874,15 @@ func RebuildImplicitFactions(silo *model.Silo) {
 				}
 				faction.RepresentativeResidentID = rep.ID
 				faction.RepresentativeName = rep.Name
+				leader = rep
 			} else {
 				faction.RepresentativeName = repCohort.Name
 			}
 		}
+
+		// 计算阵营凝聚力 (传入 Silo, 成员列表, 和领袖)
+		faction.Cohesion = factionCohesion(silo, members, leader)
+
 		factions = append(factions, faction)
 	}
 
