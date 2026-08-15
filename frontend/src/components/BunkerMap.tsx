@@ -36,12 +36,6 @@ export const BunkerMap: React.FC<BunkerMapProps> = ({ silo, agent }) => {
 
     const getIdeologyLabel = (type: string, val: number) => {
         const v = val * 100;
-        if (type === 'democracy') {
-            if (v <= 30) return "顺民";
-            if (v <= 60) return "臣民";
-            if (v <= 90) return "民主";
-            return "积极民主";
-        }
         if (v <= 10) return "排外";
         if (v <= 40) return "中立排外";
         return "亲外";

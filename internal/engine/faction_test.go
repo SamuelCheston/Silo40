@@ -20,7 +20,6 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 				Zone:       "Lower",
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.75,
-					model.IdeologyDemocracy:  0.80,
 					model.IdeologyLoyalty:    0.35,
 				},
 				Relations: map[string]float64{"Mechanical": 1.0, "Supply": 0.60, "Mines": 0.40},
@@ -33,7 +32,6 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 				Zone:       "Mid",
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.78,
-					model.IdeologyDemocracy:  0.75,
 					model.IdeologyLoyalty:    0.80,
 				},
 				Relations: map[string]float64{"Supply": 1.0, "Mechanical": 0.60, "Mines": 0.40},
@@ -45,8 +43,7 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 				PowerLevel: 4,
 				Zone:       "Lower",
 				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.76,
-					model.IdeologyDemocracy:  0.20,
+					model.IdeologyProForeign: 0.10,
 					model.IdeologyLoyalty:    0.20,
 				},
 				Relations: map[string]float64{"Mines": 1.0, "Mechanical": 0.40, "Supply": 0.40},
@@ -58,12 +55,11 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 				ProfessionID:    1,
 				Name:            "Mechanical Bloc",
 				Count:           260,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyDemocracy + ":High", model.IdeologyLoyalty + ":Low"},
+				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyLoyalty + ":Low"},
 				Influence:       0.72,
 				ActionPoints:    35,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.75,
-					model.IdeologyDemocracy:  0.80,
 					model.IdeologyLoyalty:    0.25,
 				},
 				PanicSensitivity: 1.0,
@@ -73,12 +69,11 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 				ProfessionID:    2,
 				Name:            "Supply Bloc",
 				Count:           260,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyDemocracy + ":High", model.IdeologyLoyalty + ":High"},
+				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyLoyalty + ":High"},
 				Influence:       0.69,
 				ActionPoints:    34,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.78,
-					model.IdeologyDemocracy:  0.75,
 					model.IdeologyLoyalty:    0.82,
 				},
 				PanicSensitivity: 1.0,
@@ -88,12 +83,11 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 				ProfessionID:    3,
 				Name:            "Mines Crew",
 				Count:           260,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High"},
+				IdeologyProfile: []string{model.IdeologyLoyalty + ":Low"},
 				Influence:       0.42,
 				ActionPoints:    20,
 				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.76,
-					model.IdeologyDemocracy:  0.20,
+					model.IdeologyProForeign: 0.10,
 					model.IdeologyLoyalty:    0.20,
 				},
 				PanicSensitivity: 1.0,
@@ -141,7 +135,7 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 	if unaffiliated.MemberCount != 260 {
 		t.Fatalf("expected unaffiliated size 260, got %d", unaffiliated.MemberCount)
 	}
-	if political.Signature != "democracy:High|pro_foreign:High|drive:solidarity" {
+	if political.Signature != "pro_foreign:High|drive:solidarity" {
 		t.Fatalf("unexpected political signature: %s", political.Signature)
 	}
 }
@@ -161,7 +155,6 @@ func TestFactionRebuildAppliesPostGroupingLoyaltyDynamics(t *testing.T) {
 				Zone:       "Lower",
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.80,
-					model.IdeologyDemocracy:  0.82,
 					model.IdeologyLoyalty:    0.55,
 				},
 				Relations: map[string]float64{"Mechanical": 1.0},
@@ -173,12 +166,11 @@ func TestFactionRebuildAppliesPostGroupingLoyaltyDynamics(t *testing.T) {
 				ProfessionID:    1,
 				Name:            "Restless Mechanics",
 				Count:           320,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyDemocracy + ":High"},
+				IdeologyProfile: []string{model.IdeologyProForeign + ":High"},
 				Influence:       0.76,
 				ActionPoints:    38,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.80,
-					model.IdeologyDemocracy:  0.82,
 					model.IdeologyLoyalty:    0.58,
 				},
 				PanicSensitivity: 1.0,
@@ -214,8 +206,7 @@ func TestSingleIdeologyCannotFormPoliticalFaction(t *testing.T) {
 				PowerLevel: 8,
 				Zone:       "Lower",
 				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.82,
-					model.IdeologyDemocracy:  0.10,
+					model.IdeologyProForeign: 0.10,
 					model.IdeologyLoyalty:    0.45,
 				},
 				Relations: map[string]float64{"Mechanical": 1.0},
@@ -225,14 +216,13 @@ func TestSingleIdeologyCannotFormPoliticalFaction(t *testing.T) {
 			{
 				ID:              1,
 				ProfessionID:    1,
-				Name:            "Single-Axis Bloc",
+				Name:            "Status-Quo Bloc",
 				Count:           340,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyLoyalty + ":Medium"},
+				IdeologyProfile: []string{model.IdeologyLoyalty + ":Medium"},
 				Influence:       0.74,
 				ActionPoints:    32,
 				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.82,
-					model.IdeologyDemocracy:  0.10,
+					model.IdeologyProForeign: 0.10,
 					model.IdeologyLoyalty:    0.45,
 				},
 				PanicSensitivity: 1.0,
@@ -249,10 +239,7 @@ func TestSingleIdeologyCannotFormPoliticalFaction(t *testing.T) {
 		t.Fatalf("expected only unaffiliated faction, got %d factions", len(silo.Factions))
 	}
 	if silo.Factions[0].Signature != "special:unaffiliated" {
-		t.Fatalf("expected single-ideology cohort to stay unaffiliated, got %s", silo.Factions[0].Signature)
-	}
-	if silo.Factions[0].Influence != 0 {
-		t.Fatalf("expected unaffiliated faction to have zero political influence, got %.2f", silo.Factions[0].Influence)
+		t.Fatalf("expected non-political cohort to stay unaffiliated, got %s", silo.Factions[0].Signature)
 	}
 }
 
@@ -263,23 +250,18 @@ func TestPoliticalFormationTier(t *testing.T) {
 		want string
 	}{
 		{
-			name: "medium high qualifies",
-			tags: []string{model.IdeologyDemocracy + ":Medium", model.IdeologyProForeign + ":High"},
-			want: "formation:medium_high",
-		},
-		{
-			name: "high high qualifies",
-			tags: []string{model.IdeologyDemocracy + ":High", model.IdeologyProForeign + ":High"},
-			want: "formation:high_high",
-		},
-		{
-			name: "medium medium does not qualify",
-			tags: []string{model.IdeologyDemocracy + ":Medium", model.IdeologyProForeign + ":Medium"},
-			want: "",
-		},
-		{
-			name: "single axis does not qualify",
+			name: "high qualifies",
 			tags: []string{model.IdeologyProForeign + ":High"},
+			want: "formation:high",
+		},
+		{
+			name: "medium qualifies",
+			tags: []string{model.IdeologyProForeign + ":Medium"},
+			want: "formation:medium",
+		},
+		{
+			name: "no political tags does not qualify",
+			tags: []string{"ideology:neutral"},
 			want: "",
 		},
 	}
@@ -306,7 +288,6 @@ func TestRepresentativeResidentGetsNativeFixedAmbition(t *testing.T) {
 				Zone:       "Lower",
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.75,
-					model.IdeologyDemocracy:  0.80,
 					model.IdeologyLoyalty:    0.55,
 				},
 				Relations: map[string]float64{"Mechanical": 1.0},
@@ -318,13 +299,12 @@ func TestRepresentativeResidentGetsNativeFixedAmbition(t *testing.T) {
 				ProfessionID:      1,
 				Name:              "Mechanics",
 				Count:             300,
-				IdeologyProfile:   []string{model.IdeologyProForeign + ":High", model.IdeologyDemocracy + ":High"},
+				IdeologyProfile:   []string{model.IdeologyProForeign + ":High"},
 				Influence:         0.72,
 				ActionPoints:      35,
 				PoliticalPrestige: 18,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.75,
-					model.IdeologyDemocracy:  0.80,
 					model.IdeologyLoyalty:    0.55,
 				},
 				PanicSensitivity: 1.0,

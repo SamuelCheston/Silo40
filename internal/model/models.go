@@ -8,7 +8,6 @@ import (
 
 const (
 	IdeologyProForeign = "pro_foreign"
-	IdeologyDemocracy  = "democracy"
 	IdeologyLoyalty    = "loyalty"
 )
 

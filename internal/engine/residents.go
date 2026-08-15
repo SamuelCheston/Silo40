@@ -35,7 +35,7 @@ func initResidentsAndFactions(silo *model.Silo) {
 }
 
 func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
-	cohorts := make([]model.PopulationCohort, 0, len(silo.Professions)*27)
+	cohorts := make([]model.PopulationCohort, 0, len(silo.Professions)*9)
 	nextID := uint(1)
 
 	levels := []struct {
@@ -51,17 +51,16 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 		prof := &silo.Professions[i]
 
 		// 统计同一个职业中拥有不同意识形态组合的人口数量
-		// 我们按 3^3 = 27 种组合拆分
+		// 我们按 3^2 = 9 种组合拆分
 		pValues := []float64{
 			prof.Ideologies[model.IdeologyProForeign],
-			prof.Ideologies[model.IdeologyDemocracy],
 			prof.Ideologies[model.IdeologyLoyalty],
 		}
 
 		// 为每个维度计算概率分布 (简化的正态分布映射)
 		// Low: [0, 0.3), Medium: [0.3, 0.7), High: [0.7, 1.0]
-		dimProbs := make([][]float64, 3)
-		for d := 0; d < 3; d++ {
+		dimProbs := make([][]float64, 2)
+		for d := 0; d < 2; d++ {
 			val := pValues[d]
 			// 简单的启发式分布：
 			// 如果 val = 0.5, 大部分在 Medium
@@ -93,61 +92,55 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 			dimProbs[d] = []float64{lProb / total, mProb / total, hProb / total}
 		}
 
-		// 遍历 27 种组合
+		// 遍历 9 种组合
 		createdAny := false
 		for l1 := 0; l1 < 3; l1++ {
 			for l2 := 0; l2 < 3; l2++ {
-				for l3 := 0; l3 < 3; l3++ {
-					prob := dimProbs[0][l1] * dimProbs[1][l2] * dimProbs[2][l3]
-					count := int(math.Round(float64(prof.Population) * prob))
+				prob := dimProbs[0][l1] * dimProbs[1][l2]
+				count := int(math.Round(float64(prof.Population) * prob))
 
-					if count <= 0 {
-						continue
-					}
-					createdAny = true
-
-					profile := []string{}
-					if l1 > 0 {
-						profile = append(profile, fmt.Sprintf("%s:%s", model.IdeologyProForeign, levels[l1].name))
-					}
-					if l2 > 0 {
-						profile = append(profile, fmt.Sprintf("%s:%s", model.IdeologyDemocracy, levels[l2].name))
-					}
-					if l3 > 0 {
-						profile = append(profile, fmt.Sprintf("%s:%s", model.IdeologyLoyalty, levels[l3].name))
-					}
-
-					// 确保每个人都有意识形态，如果为空则标记为 Neutral
-					if len(profile) == 0 {
-						profile = append(profile, "Ideology:Neutral")
-					}
-
-					loyalty := clamp01(0.45 + rand.Float64()*0.25 + classBias(prof.ClassType, 0.08))
-					influence := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10) + rand.Float64()*0.10)
-
-					cohort := model.PopulationCohort{
-						ID:              nextID,
-						SiloID:          silo.ID,
-						ProfessionID:    prof.ID,
-						Name:            fmt.Sprintf("%s %s-%s-%s", prof.Name, levels[l1].name, levels[l2].name, levels[l3].name),
-						Count:           count,
-						IdeologyProfile: profile,
-						HomeZone:        prof.Zone,
-						Loyalty:         loyalty,
-						Influence:       influence,
-						ActionPoints:    20 + rand.Float64()*20,
-						Ideologies: map[string]float64{
-							model.IdeologyProForeign: pValues[0],
-							model.IdeologyDemocracy:  pValues[1],
-							model.IdeologyLoyalty:    pValues[2],
-						},
-						PanicSensitivity: 0.9 + rand.Float64()*0.25,
-						KnownFragments:   initResidentFragments(prof.Name),
-					}
-					cohort.Tags = buildCohortTags(&cohort, prof, silo)
-					cohorts = append(cohorts, cohort)
-					nextID++
+				if count <= 0 {
+					continue
 				}
+				createdAny = true
+
+				profile := []string{}
+				if l1 > 0 {
+					profile = append(profile, fmt.Sprintf("%s:%s", model.IdeologyProForeign, levels[l1].name))
+				}
+				if l2 > 0 {
+					profile = append(profile, fmt.Sprintf("%s:%s", model.IdeologyLoyalty, levels[l2].name))
+				}
+
+				// 确保每个人都有意识形态，如果为空则标记为 Neutral
+				if len(profile) == 0 {
+					profile = append(profile, "Ideology:Neutral")
+				}
+
+				loyalty := clamp01(0.45 + rand.Float64()*0.25 + classBias(prof.ClassType, 0.08))
+				influence := clamp01(float64(prof.PowerLevel)/10.0 + classBias(prof.ClassType, 0.10) + rand.Float64()*0.10)
+
+				cohort := model.PopulationCohort{
+					ID:              nextID,
+					SiloID:          silo.ID,
+					ProfessionID:    prof.ID,
+					Name:            fmt.Sprintf("%s %s-%s", prof.Name, levels[l1].name, levels[l2].name),
+					Count:           count,
+					IdeologyProfile: profile,
+					HomeZone:        prof.Zone,
+					Loyalty:         loyalty,
+					Influence:       influence,
+					ActionPoints:    20 + rand.Float64()*20,
+					Ideologies: map[string]float64{
+						model.IdeologyProForeign: pValues[0],
+						model.IdeologyLoyalty:    pValues[1],
+					},
+					PanicSensitivity: 0.9 + rand.Float64()*0.25,
+					KnownFragments:   initResidentFragments(prof.Name),
+				}
+				cohort.Tags = buildCohortTags(&cohort, prof, silo)
+				cohorts = append(cohorts, cohort)
+				nextID++
 			}
 		}
 
@@ -168,8 +161,7 @@ func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
 				ActionPoints:    20 + rand.Float64()*20,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: pValues[0],
-					model.IdeologyDemocracy:  pValues[1],
-					model.IdeologyLoyalty:    pValues[2],
+					model.IdeologyLoyalty:    pValues[1],
 				},
 				PanicSensitivity: 0.9 + rand.Float64()*0.25,
 				KnownFragments:   initResidentFragments(prof.Name),
@@ -318,7 +310,7 @@ func skillTagForProfession(name string) string {
 	}
 }
 
-func stanceTag(loyalty, proForeign, democracy float64) string {
+func stanceTag(loyalty, proForeign float64) string {
 	// 基于三维意识形态综合判断立场
 	// 忠诚度 (Loyalty) 为主导维度之一
 	// Low: < 0.3 (Extremist), Medium: 0.3-0.7 (Moderate), High: >= 0.7 (Extremist)
@@ -329,18 +321,12 @@ func stanceTag(loyalty, proForeign, democracy float64) string {
 		return "stance:dissent"
 	}
 
-	// 亲外 (ProForeign) 与 民主 (Democracy) 维度
+	// 亲外 (ProForeign) 维度
 	if proForeign >= 0.7 {
 		return "stance:truth"
 	}
 	if proForeign < 0.3 {
 		return "stance:isolation"
-	}
-	if democracy >= 0.7 {
-		return "stance:liberty"
-	}
-	if democracy < 0.3 {
-		return "stance:tradition"
 	}
 
 	return "stance:survival"
@@ -368,7 +354,6 @@ func buildResidentTags(resident *model.Resident, prof *model.Profession, silo *m
 		stanceTag(
 			resident.Ideologies[model.IdeologyLoyalty],
 			resident.Ideologies[model.IdeologyProForeign],
-			resident.Ideologies[model.IdeologyDemocracy],
 		),
 		driveTag(resident, prof, silo),
 	}
@@ -410,8 +395,8 @@ func buildCohortTags(cohort *model.PopulationCohort, prof *model.Profession, sil
 	return buildResidentTags(&proxy, prof, silo)
 }
 
-func ideologicalIntensity(proForeign, democracy float64) float64 {
-	return clamp01(math.Abs(proForeign-0.5) + math.Abs(democracy-0.5))
+func ideologicalIntensity(proForeign float64) float64 {
+	return clamp01(math.Abs(proForeign - 0.5))
 }
 
 func generateResidentAmbition(prof *model.Profession, influence, prestige float64, ideologies map[string]float64) float64 {
@@ -419,14 +404,13 @@ func generateResidentAmbition(prof *model.Profession, influence, prestige float6
 		return 0
 	}
 	proForeign := ideologies[model.IdeologyProForeign]
-	democracy := ideologies[model.IdeologyDemocracy]
 	return clamp01(
 		0.22 +
 			influence*0.28 +
 			math.Min(prestige, 100)/100.0*0.10 +
 			float64(prof.PowerLevel)/10.0*0.12 +
 			classBias(prof.ClassType, 0.10) +
-			ideologicalIntensity(proForeign, democracy)*0.22 +
+			ideologicalIntensity(proForeign)*0.22 +
 			rand.Float64()*0.08,
 	)
 }
@@ -449,16 +433,11 @@ func clamp01(v float64) float64 {
 }
 
 func factionSignatureForResident(resident *model.Resident) (string, []string) {
-	profile := make([]string, 0, 2)
+	profile := make([]string, 0, 1)
 	if resident.Ideologies[model.IdeologyProForeign] >= 0.7 {
 		profile = append(profile, model.IdeologyProForeign+":High")
 	} else if resident.Ideologies[model.IdeologyProForeign] >= 0.3 {
 		profile = append(profile, model.IdeologyProForeign+":Medium")
-	}
-	if resident.Ideologies[model.IdeologyDemocracy] >= 0.7 {
-		profile = append(profile, model.IdeologyDemocracy+":High")
-	} else if resident.Ideologies[model.IdeologyDemocracy] >= 0.3 {
-		profile = append(profile, model.IdeologyDemocracy+":Medium")
 	}
 	if politicalFormationTier(profile) == "" {
 		profile = append(profile, "ideology:status_quo")
@@ -497,7 +476,7 @@ func factionProfileTags(profile []string) []string {
 		if strings.HasPrefix(tag, model.IdeologyLoyalty+":") {
 			continue
 		}
-		if strings.HasPrefix(tag, model.IdeologyProForeign+":") || strings.HasPrefix(tag, model.IdeologyDemocracy+":") {
+		if strings.HasPrefix(tag, model.IdeologyProForeign+":") {
 			filtered = append(filtered, tag)
 		}
 	}
@@ -508,7 +487,7 @@ func factionProfileTags(profile []string) []string {
 }
 
 func politicalFormationTier(tags []string) string {
-	if len(tags) < 2 {
+	if len(tags) < 1 {
 		return ""
 	}
 
@@ -518,7 +497,7 @@ func politicalFormationTier(tags []string) string {
 
 	for _, tag := range tags {
 		switch {
-		case strings.HasPrefix(tag, model.IdeologyProForeign+":"), strings.HasPrefix(tag, model.IdeologyDemocracy+":"):
+		case strings.HasPrefix(tag, model.IdeologyProForeign+":"):
 			politicalCount++
 			switch {
 			case strings.HasSuffix(tag, ":High"):
@@ -529,14 +508,14 @@ func politicalFormationTier(tags []string) string {
 		}
 	}
 
-	if politicalCount < 2 {
+	if politicalCount < 1 {
 		return ""
 	}
-	if highCount >= 2 {
-		return "formation:high_high"
+	if highCount >= 1 {
+		return "formation:high"
 	}
-	if highCount >= 1 && mediumCount >= 1 {
-		return "formation:medium_high"
+	if mediumCount >= 1 {
+		return "formation:medium"
 	}
 	return ""
 }
@@ -550,7 +529,7 @@ func factionNameFromSignature(tags []string) string {
 		}
 		// 转换 Ideology:Level 为 "Level Ideology"
 		// 例如 pro_foreign:High -> High Proforeign
-		if parts[0] == model.IdeologyProForeign || parts[0] == model.IdeologyDemocracy || parts[0] == model.IdeologyLoyalty {
+		if parts[0] == model.IdeologyProForeign || parts[0] == model.IdeologyLoyalty {
 			words = append(words, fmt.Sprintf("%s %s", titleToken(parts[1]), titleToken(parts[0])))
 		} else {
 			words = append(words, titleToken(parts[1]))
@@ -1080,9 +1059,9 @@ func applyFactionLoyaltyDynamics(silo *model.Silo, groups []*implicitFactionGrou
 
 func factionFormationBias(tags []string) float64 {
 	switch politicalFormationTier(tags) {
-	case "formation:high_high":
+	case "formation:high":
 		return 1.0
-	case "formation:medium_high":
+	case "formation:medium":
 		return 0.7
 	default:
 		return 0
@@ -1093,10 +1072,6 @@ func factionDissentBias(tags []string) float64 {
 	score := 0.0
 	for _, tag := range tags {
 		switch tag {
-		case model.IdeologyDemocracy + ":High":
-			score += 0.8
-		case model.IdeologyDemocracy + ":Medium":
-			score += 0.4
 		case model.IdeologyProForeign + ":High":
 			score += 0.6
 		case model.IdeologyProForeign + ":Medium":
@@ -1112,8 +1087,6 @@ func factionOrderBias(tags []string) float64 {
 		switch tag {
 		case "ideology:status_quo":
 			score += 0.7
-		case model.IdeologyDemocracy + ":Medium":
-			score += 0.1
 		case model.IdeologyProForeign + ":Medium":
 			score += 0.1
 		}

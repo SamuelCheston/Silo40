@@ -41,12 +41,6 @@ function App() {
 
     const getIdeologyLabel = (type: string, val: number) => {
         const v = val * 100;
-        if (type === 'democracy') {
-            if (v <= 30) return "顺民";
-            if (v <= 60) return "臣民";
-            if (v <= 90) return "民主";
-            return "积极民主";
-        }
         if (type === 'loyalty') {
             if (v <= 30) return "异见者";
             if (v <= 70) return "中立";
