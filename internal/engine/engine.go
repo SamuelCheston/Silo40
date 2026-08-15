@@ -894,7 +894,7 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 
 	// 3. NPC-side decisions (Professions and Resident Representatives)
 	var brain NpcBrain
-	
+
 	// 3a. Profession decisions
 	for _, prof := range npcProfs {
 		view, err := CreateActorView(CreateActorRefForProfession(prof), silo, nil)
@@ -1227,8 +1227,8 @@ func (e *GameEngine) updateResources(silo *model.Silo, deltaYears float64) {
 		return eff * float64(prof.Population)
 	}
 
-	// 2. 计算基础产率 (2.1 人份 / 人)
-	const prodRate = 2.1
+	// 2. 计算基础产率 (4.5 人份 / 人)
+	const prodRate = 4.5
 
 	// 3. 计算 Energy 生产 (Mechanical)
 	energyProdRate := prodRate * e.perCapitaConsumption["Energy"] * getEfficiency("Mechanical")
