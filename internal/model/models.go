@@ -240,6 +240,7 @@ type StoryEventLog struct {
 	Month       int       `gorm:"index" json:"month"`
 	Source      string    `gorm:"size:64" json:"source"` // PASS_TIME / ACTION:<type>
 	EventID     string    `gorm:"size:100" json:"event_id"`
+	Category    string    `gorm:"size:32" json:"category"` // history / special / crisis / player_action
 	Title       string    `gorm:"size:120" json:"title"`
 	Description string    `gorm:"type:text" json:"description"`
 	Type        string    `gorm:"size:32" json:"type"` // SOCIAL / TECHNICAL / EXTERNAL
@@ -247,11 +248,11 @@ type StoryEventLog struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// ContentEventDefinition 文件驱动的事件定义（来自 events/ 与 histories/）
+// ContentEventDefinition 文件驱动的事件定义（来自 events/ 下的各个分组目录）
 type ContentEventDefinition struct {
 	ID             uint      `gorm:"primarykey" json:"id"`
 	Key            string    `gorm:"uniqueIndex;size:180" json:"key"`
-	SourceGroup    string    `gorm:"index;size:32" json:"source_group"` // events / histories
+	SourceGroup    string    `gorm:"index;size:32" json:"source_group"` // histories / special / crisis / player_actions / legacy events
 	SourceFile     string    `gorm:"size:255" json:"source_file"`
 	EventID        string    `gorm:"index;size:100" json:"event_id"`
 	Title          string    `gorm:"size:120" json:"title"`
@@ -313,6 +314,7 @@ type ActionResult struct {
 // StoryEvent 剧情随机事件 (响应用)
 type StoryEvent struct {
 	ID          string `json:"id"`
+	Category    string `json:"category"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Type        string `json:"type"` // SOCIAL / TECHNICAL / EXTERNAL

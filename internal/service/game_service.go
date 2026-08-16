@@ -412,7 +412,7 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 			stories = append(stories, *story)
 		}
 		s.recordStories(st, "PASS_TIME")
-		contentLogs, contentStories := s.triggerContentEvents("PASS_TIME:CONTENT")
+		contentLogs, contentStories := s.triggerSystemContentEvents("PASS_TIME:CONTENT")
 		logs = append(logs, contentLogs...)
 		stories = append(stories, contentStories...)
 
@@ -451,10 +451,14 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 		return nil, fmt.Errorf("no active game session")
 	}
 
-	result := s.engine.ExecuteAgentAction(s.silo, s.agent, action)
-
 	var logs []string
 	var stories []model.StoryEvent
+	handledByContent, result, playerActionLogs, playerActionStories := s.executePlayerActionEvents(action)
+	logs = append(logs, playerActionLogs...)
+	stories = append(stories, playerActionStories...)
+	if !handledByContent {
+		result = s.engine.ExecuteAgentAction(s.silo, s.agent, action)
+	}
 
 	if result.Executed {
 		duration := model.ACTION_DURATIONS[action.Type]
@@ -466,7 +470,7 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 					stories = append(stories, *story)
 				}
 				s.recordStories(st, "ACTION:"+string(action.Type))
-				contentLogs, contentStories := s.triggerContentEvents("ACTION:" + string(action.Type) + ":CONTENT")
+				contentLogs, contentStories := s.triggerSystemContentEvents("ACTION:" + string(action.Type) + ":CONTENT")
 				logs = append(logs, contentLogs...)
 				stories = append(stories, contentStories...)
 				if s.silo.CurrentMonth == 12 {
@@ -487,7 +491,7 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 			if s.silo.VictoryStatus != nil && s.silo.VictoryStatus.Score == nil {
 				s.silo.VictoryStatus.Score = s.engine.CalculateScore(s.silo)
 			}
-			contentLogs, contentStories := s.triggerContentEvents("ACTION:" + string(action.Type) + ":CONTENT")
+			contentLogs, contentStories := s.triggerSystemContentEvents("ACTION:" + string(action.Type) + ":CONTENT")
 			logs = append(logs, contentLogs...)
 			stories = append(stories, contentStories...)
 		}
@@ -539,8 +543,7 @@ func (s *GameService) GetEventHistory(limit int) (*model.EventHistoryResult, err
 // ---------- 私有 ----------
 
 func resolveContentDirectories() (map[string]string, error) {
-	groups := []string{"events", "histories"}
-	dirs := make(map[string]string, len(groups))
+	dirs := map[string]string{}
 
 	cwd, _ := os.Getwd()
 	exePath, _ := os.Executable()
@@ -549,30 +552,52 @@ func resolveContentDirectories() (map[string]string, error) {
 		candidates = append(candidates, filepath.Dir(exePath))
 	}
 
-	seen := map[string]bool{}
 	for _, base := range candidates {
-		for _, group := range groups {
-			if dirs[group] != "" {
-				continue
-			}
-			path := findContentDirectory(base, group)
-			if path != "" && !seen[path] {
+		for group, path := range discoverContentDirectories(base) {
+			if dirs[group] == "" {
 				dirs[group] = path
-				seen[path] = true
 			}
 		}
 	}
 
-	var missing []string
-	for _, group := range groups {
-		if dirs[group] == "" {
-			missing = append(missing, group)
-		}
-	}
-	if len(missing) > 0 {
-		return nil, fmt.Errorf("failed to locate content directories: %s", strings.Join(missing, ", "))
+	if len(dirs) == 0 {
+		return nil, fmt.Errorf("failed to locate content directories under events/")
 	}
 	return dirs, nil
+}
+
+func discoverContentDirectories(baseDir string) map[string]string {
+	dirs := map[string]string{}
+	root := findContentDirectory(baseDir, "events")
+	if root != "" {
+		entries, err := os.ReadDir(root)
+		if err == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				group := strings.TrimSpace(entry.Name())
+				if group == "" {
+					continue
+				}
+				dirs[group] = filepath.Join(root, group)
+			}
+		}
+
+		// Backward compatibility for the legacy flat layout.
+		hasJSON, err := directoryHasJSONFiles(root)
+		if err == nil && hasJSON && dirs["events"] == "" {
+			dirs["events"] = root
+		}
+	}
+
+	// Backward compatibility for the legacy top-level histories/ directory.
+	if dirs["histories"] == "" {
+		if legacy := findContentDirectory(baseDir, "histories"); legacy != "" {
+			dirs["histories"] = legacy
+		}
+	}
+	return dirs
 }
 
 func findContentDirectory(baseDir, group string) string {
@@ -594,6 +619,22 @@ func findContentDirectory(baseDir, group string) string {
 	return ""
 }
 
+func directoryHasJSONFiles(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.EqualFold(filepath.Ext(entry.Name()), ".json") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *GameService) syncContentDefinitions(dirs map[string]string) error {
 	defs, err := engine.LoadContentEventDefinitions(dirs)
 	if err != nil {
@@ -601,7 +642,9 @@ func (s *GameService) syncContentDefinitions(dirs map[string]string) error {
 	}
 
 	return s.db.Transaction(func(tx *gorm.DB) error {
+		activeKeys := make([]string, 0, len(defs))
 		for _, def := range defs {
+			activeKeys = append(activeKeys, def.Key)
 			triggerJSON, err := json.Marshal(def.Trigger)
 			if err != nil {
 				return fmt.Errorf("failed to marshal trigger for %s: %w", def.Key, err)
@@ -633,6 +676,16 @@ func (s *GameService) syncContentDefinitions(dirs map[string]string) error {
 			if err != nil {
 				return fmt.Errorf("failed to upsert content event %s: %w", def.Key, err)
 			}
+		}
+
+		query := tx.Model(&model.ContentEventDefinition{})
+		if len(activeKeys) > 0 {
+			query = query.Where("key NOT IN ?", activeKeys)
+		} else {
+			query = query.Session(&gorm.Session{AllowGlobalUpdate: true})
+		}
+		if err := query.Update("enabled", false).Error; err != nil {
+			return fmt.Errorf("failed to disable stale content events: %w", err)
 		}
 		return nil
 	})
@@ -687,7 +740,39 @@ func (s *GameService) contentStateSlice() []model.ContentEventState {
 	return states
 }
 
-func (s *GameService) triggerContentEvents(source string) ([]string, []model.StoryEvent) {
+func (s *GameService) triggerSystemContentEvents(source string) ([]string, []model.StoryEvent) {
+	return s.triggerContentEvents(source, nil, func(def engine.ContentEventDefinition) bool {
+		return def.SourceGroup != "player_actions" && def.SourceGroup != "player_action"
+	})
+}
+
+func (s *GameService) executePlayerActionEvents(action model.AgentAction) (bool, model.ActionResult, []string, []model.StoryEvent) {
+	if !s.hasSession() {
+		return false, model.ActionResult{}, nil, nil
+	}
+	if s.agent.ActionPoints < action.Cost {
+		return false, model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}, nil, nil
+	}
+
+	logs, stories := s.triggerContentEvents("ACTION:"+string(action.Type)+":PLAYER_EVENT", &action, func(def engine.ContentEventDefinition) bool {
+		return def.SourceGroup == "player_actions" || def.SourceGroup == "player_action"
+	})
+	if len(stories) == 0 {
+		return false, model.ActionResult{}, nil, nil
+	}
+
+	s.agent.ActionPoints -= action.Cost
+	if s.agent.ActionPoints < 0 {
+		s.agent.ActionPoints = 0
+	}
+	message := "Triggered player action event: " + stories[0].Title
+	if len(stories) > 1 {
+		message = fmt.Sprintf("Triggered %d player action events.", len(stories))
+	}
+	return true, model.ActionResult{Executed: true, Message: message}, logs, stories
+}
+
+func (s *GameService) triggerContentEvents(source string, action *model.AgentAction, allow func(engine.ContentEventDefinition) bool) ([]string, []model.StoryEvent) {
 	if !s.hasSession() || len(s.contentDefinitions) == 0 {
 		return nil, nil
 	}
@@ -695,13 +780,21 @@ func (s *GameService) triggerContentEvents(source string) ([]string, []model.Sto
 	var logs []string
 	var stories []model.StoryEvent
 	for _, def := range s.contentDefinitions {
-		state := s.contentStates[def.Key]
-		runtime := engine.ContentEventRuntime{
+		if allow != nil && !allow(def) {
+			continue
+		}
+		state, legacyKey := s.contentStateForDefinition(def)
+		ctx := engine.ContentEvaluationContext{
+			Silo:   s.silo,
+			States: s.contentRuntimeMap(),
+			Action: action,
+		}
+		ctx.Runtime = engine.ContentEventRuntime{
 			Triggered:              state.Triggered,
 			TriggerCount:           state.TriggerCount,
 			LastTriggeredTimestamp: state.LastTriggeredTimestamp,
 		}
-		if !engine.CanTriggerContentEvent(def, s.silo, runtime) {
+		if !engine.CanTriggerContentEvent(def, ctx) {
 			continue
 		}
 
@@ -717,9 +810,39 @@ func (s *GameService) triggerContentEvents(source string) ([]string, []model.Sto
 		state.Triggered = true
 		state.TriggerCount++
 		state.LastTriggeredTimestamp = gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth)
+		if legacyKey != "" && legacyKey != def.Key {
+			delete(s.contentStates, legacyKey)
+		}
 		s.contentStates[def.Key] = state
 	}
 	return logs, stories
+}
+
+func (s *GameService) contentRuntimeMap() map[string]engine.ContentEventRuntime {
+	if len(s.contentStates) == 0 {
+		return nil
+	}
+	runtimes := make(map[string]engine.ContentEventRuntime, len(s.contentStates))
+	for key, state := range s.contentStates {
+		runtimes[key] = engine.ContentEventRuntime{
+			Triggered:              state.Triggered,
+			TriggerCount:           state.TriggerCount,
+			LastTriggeredTimestamp: state.LastTriggeredTimestamp,
+		}
+	}
+	return runtimes
+}
+
+func (s *GameService) contentStateForDefinition(def engine.ContentEventDefinition) (model.ContentEventState, string) {
+	if state, ok := s.contentStates[def.Key]; ok {
+		return state, def.Key
+	}
+	for key, state := range s.contentStates {
+		if key == def.EventID || strings.HasSuffix(key, ":"+def.EventID) {
+			return state, key
+		}
+	}
+	return model.ContentEventState{}, ""
 }
 
 func (s *GameService) endingNarrative() string {
@@ -757,6 +880,7 @@ func (s *GameService) recordStories(stories []*model.StoryEvent, source string) 
 			Month:       s.silo.CurrentMonth,
 			Source:      source,
 			EventID:     story.ID,
+			Category:    story.Category,
 			Title:       story.Title,
 			Description: story.Description,
 			Type:        story.Type,

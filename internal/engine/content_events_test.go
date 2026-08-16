@@ -11,10 +11,10 @@ import (
 
 func TestLoadContentEventDefinitions(t *testing.T) {
 	root := t.TempDir()
-	eventsDir := filepath.Join(root, "events")
-	historiesDir := filepath.Join(root, "histories")
-	if err := os.MkdirAll(eventsDir, 0o755); err != nil {
-		t.Fatalf("mkdir events: %v", err)
+	specialDir := filepath.Join(root, "events", "special")
+	historiesDir := filepath.Join(root, "events", "histories")
+	if err := os.MkdirAll(specialDir, 0o755); err != nil {
+		t.Fatalf("mkdir special: %v", err)
 	}
 	if err := os.MkdirAll(historiesDir, 0o755); err != nil {
 		t.Fatalf("mkdir histories: %v", err)
@@ -39,7 +39,7 @@ func TestLoadContentEventDefinitions(t *testing.T) {
                 "effects": [{"type": "silo_metric_delta", "metric": "history_burden", "value": 0.08}]
         }`
 
-	if err := os.WriteFile(filepath.Join(eventsDir, "history_burden_awakened.json"), []byte(eventJSON), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(specialDir, "history_burden_awakened.json"), []byte(eventJSON), 0o644); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(historiesDir, "archive_truth_broadcast.json"), []byte(historyJSON), 0o644); err != nil {
@@ -47,7 +47,7 @@ func TestLoadContentEventDefinitions(t *testing.T) {
 	}
 
 	defs, err := LoadContentEventDefinitions(map[string]string{
-		"events":    eventsDir,
+		"special":   specialDir,
 		"histories": historiesDir,
 	})
 	if err != nil {
@@ -90,7 +90,7 @@ func TestCanTriggerAndApplyContentEvent(t *testing.T) {
 		},
 	}
 
-	if !CanTriggerContentEvent(def, silo, ContentEventRuntime{}) {
+	if !CanTriggerContentEvent(def, ContentEvaluationContext{Silo: silo}) {
 		t.Fatalf("expected event to trigger")
 	}
 
@@ -98,13 +98,67 @@ func TestCanTriggerAndApplyContentEvent(t *testing.T) {
 	if story.ID != def.EventID {
 		t.Fatalf("expected story id %q, got %q", def.EventID, story.ID)
 	}
+	if story.Category != "" {
+		t.Fatalf("expected empty category without source group, got %q", story.Category)
+	}
 	if math.Abs(silo.Cohesion-0.98) > 1e-9 {
 		t.Fatalf("expected cohesion to become 0.98, got %v", silo.Cohesion)
 	}
 	if math.Abs(silo.Professions[0].PanicValue-0.14) > 1e-9 || math.Abs(silo.Professions[1].PanicValue-0.24) > 1e-9 {
 		t.Fatalf("expected panic values to increase, got %+v", silo.Professions)
 	}
-	if CanTriggerContentEvent(def, silo, ContentEventRuntime{Triggered: true}) {
+	if CanTriggerContentEvent(def, ContentEvaluationContext{
+		Silo: silo,
+		Runtime: ContentEventRuntime{
+			Triggered: true,
+		},
+	}) {
 		t.Fatalf("expected once event not to re-trigger after being marked triggered")
+	}
+}
+
+func TestCanTriggerCrisisEventAfterSpecialEvent(t *testing.T) {
+	silo := &model.Silo{CurrentYear: 122, CurrentMonth: 1, Cohesion: 0.4}
+	def := ContentEventDefinition{
+		SourceGroup: "crisis",
+		EventID:     "deep_unrest",
+		Title:       "Deep Unrest",
+		FireMode:    ContentFireModeOnce,
+		Trigger: ContentTrigger{
+			Type: "all",
+			Conditions: []ContentTrigger{
+				{Type: "event_triggered", Category: "special", EventID: "history_burden_awakened"},
+				{Type: "silo_metric_lte", Metric: "cohesion", Value: 0.5},
+			},
+		},
+	}
+	if !CanTriggerContentEvent(def, ContentEvaluationContext{
+		Silo: silo,
+		States: map[string]ContentEventRuntime{
+			"special:history_burden_awakened": {Triggered: true},
+		},
+	}) {
+		t.Fatalf("expected crisis event to trigger after special event")
+	}
+}
+
+func TestCanTriggerPlayerActionEvent(t *testing.T) {
+	silo := &model.Silo{CurrentYear: 122, CurrentMonth: 1}
+	action := model.AgentAction{Type: model.ActionConductPropaganda}
+	def := ContentEventDefinition{
+		SourceGroup: "player_actions",
+		EventID:     "propaganda_broadcast",
+		Title:       "Propaganda Broadcast",
+		FireMode:    ContentFireModeRepeatable,
+		Trigger: ContentTrigger{
+			Type:   "player_action_is",
+			Action: string(model.ActionConductPropaganda),
+		},
+	}
+	if !CanTriggerContentEvent(def, ContentEvaluationContext{
+		Silo:   silo,
+		Action: &action,
+	}) {
+		t.Fatalf("expected player action event to trigger for matching action")
 	}
 }

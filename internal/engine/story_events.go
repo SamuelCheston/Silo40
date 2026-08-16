@@ -12,6 +12,7 @@ const STORY_EVENT_TYPE = "STORY_EVENT"
 // StoryEvent 剧情随机事件 (含执行效果)
 type StoryEvent struct {
 	ID          string
+	Category    string
 	Title       string
 	Description string
 	Type        string // SOCIAL / TECHNICAL / EXTERNAL
@@ -26,7 +27,7 @@ type EventEngine struct {
 func NewEventEngine() *EventEngine {
 	return &EventEngine{events: []StoryEvent{
 		{
-			ID: "water_leak", Title: "供水管线泄漏",
+			ID: "water_leak", Category: "crisis", Title: "供水管线泄漏",
 			Description: "底层机械部报告发生严重水管泄漏，部分楼层供水中断。",
 			Type:        "TECHNICAL",
 			Effects: func(silo *model.Silo) {
@@ -39,7 +40,7 @@ func NewEventEngine() *EventEngine {
 			},
 		},
 		{
-			ID: "food_poisoning", Title: "群体性食物中毒",
+			ID: "food_poisoning", Category: "crisis", Title: "群体性食物中毒",
 			Description: "水培区的一批农产品受到污染，引发大规模恐慌。",
 			Type:        "SOCIAL",
 			Effects: func(silo *model.Silo) {
@@ -50,7 +51,7 @@ func NewEventEngine() *EventEngine {
 			},
 		},
 		{
-			ID: "outside_signal", Title: "接收到外部信号",
+			ID: "outside_signal", Category: "special", Title: "接收到外部信号",
 			Description: "IT部门截获了一段模糊的无线电信号，似乎来自地表或其他地堡。",
 			Type:        "EXTERNAL",
 			Effects: func(silo *model.Silo) {
@@ -82,6 +83,7 @@ func (e *EventEngine) TriggerRandomEvent(silo *model.Silo, bus *EventBus, ctx *E
 
 	return &model.StoryEvent{
 		ID:          story.ID,
+		Category:    story.Category,
 		Title:       story.Title,
 		Description: story.Description,
 		Type:        story.Type,

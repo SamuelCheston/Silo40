@@ -43,6 +43,9 @@ type ContentTrigger struct {
 	Flag       string           `json:"flag,omitempty"`
 	Ideology   string           `json:"ideology,omitempty"`
 	Profession string           `json:"profession,omitempty"`
+	Category   string           `json:"category,omitempty"`
+	EventID    string           `json:"event_id,omitempty"`
+	Action     string           `json:"action,omitempty"`
 	Value      float64          `json:"value,omitempty"`
 	Count      int              `json:"count,omitempty"`
 	Year       int              `json:"year,omitempty"`
@@ -67,6 +70,14 @@ type ContentEventRuntime struct {
 	Triggered              bool
 	TriggerCount           int
 	LastTriggeredTimestamp int
+}
+
+// ContentEvaluationContext provides runtime state for trigger evaluation.
+type ContentEvaluationContext struct {
+	Silo    *model.Silo
+	Runtime ContentEventRuntime
+	States  map[string]ContentEventRuntime
+	Action  *model.AgentAction
 }
 
 // LoadContentEventDefinitions 从多个目录加载 JSON 事件定义。
@@ -178,6 +189,9 @@ func normalizeTrigger(trigger *ContentTrigger) {
 	trigger.Flag = strings.ToLower(strings.TrimSpace(trigger.Flag))
 	trigger.Ideology = strings.TrimSpace(trigger.Ideology)
 	trigger.Profession = strings.TrimSpace(trigger.Profession)
+	trigger.Category = normalizeContentCategory(trigger.Category)
+	trigger.EventID = strings.TrimSpace(trigger.EventID)
+	trigger.Action = strings.ToUpper(strings.TrimSpace(trigger.Action))
 	if trigger.Month == 0 {
 		trigger.Month = 1
 	}
@@ -237,6 +251,16 @@ func validateTrigger(trigger ContentTrigger) error {
 			return fmt.Errorf("%s requires flag", trigger.Type)
 		}
 		return nil
+	case "event_triggered":
+		if trigger.EventID == "" {
+			return fmt.Errorf("event_triggered requires event_id")
+		}
+		return nil
+	case "player_action_is":
+		if trigger.Action == "" {
+			return fmt.Errorf("player_action_is requires action")
+		}
+		return nil
 	case "profession_metric_gte_count", "profession_ideology_gte_count":
 		if trigger.Count <= 0 {
 			return fmt.Errorf("%s requires positive count", trigger.Type)
@@ -272,35 +296,35 @@ func validateEffect(effect ContentEffect) error {
 }
 
 // CanTriggerContentEvent 判断当前事件是否满足触发条件以及运行时限制。
-func CanTriggerContentEvent(def ContentEventDefinition, silo *model.Silo, runtime ContentEventRuntime) bool {
-	if silo == nil {
+func CanTriggerContentEvent(def ContentEventDefinition, ctx ContentEvaluationContext) bool {
+	if ctx.Silo == nil {
 		return false
 	}
-	if def.FireMode == ContentFireModeOnce && runtime.Triggered {
+	if def.FireMode == ContentFireModeOnce && ctx.Runtime.Triggered {
 		return false
 	}
-	now := contentGameTimestamp(silo.CurrentYear, silo.CurrentMonth)
-	if def.FireMode == ContentFireModeRepeatable && def.CooldownMonths > 0 && runtime.TriggerCount > 0 {
+	now := contentGameTimestamp(ctx.Silo.CurrentYear, ctx.Silo.CurrentMonth)
+	if def.FireMode == ContentFireModeRepeatable && def.CooldownMonths > 0 && ctx.Runtime.TriggerCount > 0 {
 		cooldown := def.CooldownMonths * contentDaysPerMonth
-		if now-runtime.LastTriggeredTimestamp < cooldown {
+		if now-ctx.Runtime.LastTriggeredTimestamp < cooldown {
 			return false
 		}
 	}
-	return evaluateContentTrigger(def.Trigger, silo)
+	return evaluateContentTrigger(def.Trigger, ctx)
 }
 
-func evaluateContentTrigger(trigger ContentTrigger, silo *model.Silo) bool {
+func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext) bool {
 	switch trigger.Type {
 	case "all":
 		for _, child := range trigger.Conditions {
-			if !evaluateContentTrigger(child, silo) {
+			if !evaluateContentTrigger(child, ctx) {
 				return false
 			}
 		}
 		return true
 	case "any":
 		for _, child := range trigger.Conditions {
-			if evaluateContentTrigger(child, silo) {
+			if evaluateContentTrigger(child, ctx) {
 				return true
 			}
 		}
@@ -310,22 +334,34 @@ func evaluateContentTrigger(trigger ContentTrigger, silo *model.Silo) bool {
 		if target == 0 {
 			target = contentGameTimestamp(trigger.Year, trigger.Month)
 		}
-		return contentGameTimestamp(silo.CurrentYear, silo.CurrentMonth) >= target
+		return contentGameTimestamp(ctx.Silo.CurrentYear, ctx.Silo.CurrentMonth) >= target
 	case "silo_metric_gte":
-		value, ok := readSiloMetric(silo, trigger.Metric)
+		value, ok := readSiloMetric(ctx.Silo, trigger.Metric)
 		return ok && value >= trigger.Value
 	case "silo_metric_lte":
-		value, ok := readSiloMetric(silo, trigger.Metric)
+		value, ok := readSiloMetric(ctx.Silo, trigger.Metric)
 		return ok && value <= trigger.Value
 	case "silo_flag_true":
-		value, ok := readSiloFlag(silo, trigger.Flag)
+		value, ok := readSiloFlag(ctx.Silo, trigger.Flag)
 		return ok && value
 	case "silo_flag_false":
-		value, ok := readSiloFlag(silo, trigger.Flag)
+		value, ok := readSiloFlag(ctx.Silo, trigger.Flag)
 		return ok && !value
+	case "event_triggered":
+		for key, runtime := range ctx.States {
+			if !runtime.Triggered {
+				continue
+			}
+			if contentStateMatchesTrigger(key, trigger) {
+				return true
+			}
+		}
+		return false
+	case "player_action_is":
+		return ctx.Action != nil && string(ctx.Action.Type) == trigger.Action
 	case "profession_metric_gte_count":
 		count := 0
-		for _, profession := range silo.Professions {
+		for _, profession := range ctx.Silo.Professions {
 			if trigger.Profession != "" && profession.Name != trigger.Profession {
 				continue
 			}
@@ -337,7 +373,7 @@ func evaluateContentTrigger(trigger ContentTrigger, silo *model.Silo) bool {
 		return count >= trigger.Count
 	case "profession_ideology_gte_count":
 		count := 0
-		for _, profession := range silo.Professions {
+		for _, profession := range ctx.Silo.Professions {
 			if trigger.Profession != "" && profession.Name != trigger.Profession {
 				continue
 			}
@@ -358,10 +394,47 @@ func ApplyContentEvent(def ContentEventDefinition, silo *model.Silo) model.Story
 	}
 	return model.StoryEvent{
 		ID:          def.EventID,
+		Category:    normalizeContentCategory(def.SourceGroup),
 		Title:       def.Title,
 		Description: def.Description,
 		Type:        def.Type,
 	}
+}
+
+func normalizeContentCategory(group string) string {
+	switch strings.ToLower(strings.TrimSpace(group)) {
+	case "histories", "history":
+		return "history"
+	case "special":
+		return "special"
+	case "crisis":
+		return "crisis"
+	case "player_actions", "player_action":
+		return "player_action"
+	case "events":
+		return "special"
+	default:
+		return strings.ToLower(strings.TrimSpace(group))
+	}
+}
+
+func contentStateMatchesTrigger(key string, trigger ContentTrigger) bool {
+	stateCategory := ""
+	stateEventID := key
+	if parts := strings.SplitN(key, ":", 2); len(parts) == 2 {
+		stateCategory = normalizeContentCategory(parts[0])
+		stateEventID = parts[1]
+	}
+	if trigger.EventID != "" && stateEventID != trigger.EventID {
+		return false
+	}
+	if trigger.Category != "" && stateCategory != "" && stateCategory != trigger.Category {
+		return false
+	}
+	if trigger.Category != "" && stateCategory == "" {
+		return false
+	}
+	return true
 }
 
 func applyContentEffect(effect ContentEffect, silo *model.Silo) {

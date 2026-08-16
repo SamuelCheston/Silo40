@@ -158,7 +158,8 @@ function App() {
             if (result.game_over) {
                 updateResultText(`Game Over: ${result.silo.victory_status?.description || result.ending_narrative}`);
             } else if (result.stories.length > 0) {
-                updateResultText(`Event Occurred: ${result.stories[0].title}`);
+                const story = result.stories[0];
+                updateResultText(`Event Occurred [${story.category || "uncategorized"}]: ${story.title}`);
             } else {
                 const prefix = `Year ${result.silo.current_year} Month ${result.silo.current_month}. `;
                 if (result.logs.length > 0) {
@@ -223,6 +224,9 @@ function App() {
                 updateResultText(`Action failed: ${outcome.result.message}`);
             } else {
                 let msg = outcome.result.message;
+                if (outcome.stories.length > 0) {
+                    msg += ` | Event [${outcome.stories[0].category || "uncategorized"}]: ${outcome.stories[0].title}`;
+                }
                 const duration = ACTION_DURATIONS[actionType] || 0;
                 if (duration > 0) {
                     msg += ` (Time passed: ${duration} months)`;
