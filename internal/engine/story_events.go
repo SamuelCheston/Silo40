@@ -59,14 +59,6 @@ func NewEventEngine() *EventEngine {
 				}
 			},
 		},
-		{
-			ID: "silo1_destroyed_signal", Title: "一号地堡失去联系",
-			Description: "所有与一号地堡的通信协议均已超时，服务器不再响应。",
-			Type:        "EXTERNAL",
-			Effects: func(silo *model.Silo) {
-				silo.Silo1Destroyed = true
-			},
-		},
 	}}
 }
 

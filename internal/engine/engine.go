@@ -317,39 +317,8 @@ func (e *GameEngine) registerRules() {
 
 // ============ 剧情触发器 ============
 func (e *GameEngine) registerTriggers() {
-	e.TriggerEngine.RegisterMany([]Trigger{
-		{
-			ID:          "silo1_fallout",
-			Description: "一号地堡失联后，凝聚力下降、恐慌上升 (剧情链条起点)",
-			Condition: func(state *State) bool {
-				return state.Silo.Silo1Destroyed && state.Silo.Cohesion > 0.3
-			},
-			Effect: func(bus *EventBus, ctx *EventContext, state *State) {
-				state.Silo.Cohesion = math.Max(0, state.Silo.Cohesion-0.05)
-				for i := range state.Silo.Professions {
-					state.Silo.Professions[i].PanicValue = math.Min(1.0, state.Silo.Professions[i].PanicValue+0.05)
-				}
-				state.Logs = append(state.Logs, "[Trigger] 一号地堡失联的传闻在居民中蔓延。")
-			},
-		},
-		{
-			ID:          "pro_foreign_awakening",
-			Description: "多数部门亲外度超过 50% 时，社会进入觉醒阶段",
-			Condition: func(state *State) bool {
-				count := 0
-				for _, p := range state.Silo.Professions {
-					if p.Ideologies[model.IdeologyProForeign] > 0.5 {
-						count++
-					}
-				}
-				return count >= 4
-			},
-			Effect: func(bus *EventBus, ctx *EventContext, state *State) {
-				state.Silo.Legitimacy = math.Max(0, state.Silo.Legitimacy-0.05)
-				state.Logs = append(state.Logs, "[Trigger] 社会思潮觉醒，旧秩序受到挑战。")
-			},
-		},
-	})
+	// 条件驱动剧情事件已迁移为 events/ 与 histories/ 目录中的 JSON 定义，
+	// 由 service 层统一加载、入库并在每次推进后评估。
 }
 
 // ============ 对外接口 ============

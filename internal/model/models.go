@@ -247,6 +247,38 @@ type StoryEventLog struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// ContentEventDefinition 文件驱动的事件定义（来自 events/ 与 histories/）
+type ContentEventDefinition struct {
+	ID             uint      `gorm:"primarykey" json:"id"`
+	Key            string    `gorm:"uniqueIndex;size:180" json:"key"`
+	SourceGroup    string    `gorm:"index;size:32" json:"source_group"` // events / histories
+	SourceFile     string    `gorm:"size:255" json:"source_file"`
+	EventID        string    `gorm:"index;size:100" json:"event_id"`
+	Title          string    `gorm:"size:120" json:"title"`
+	Description    string    `gorm:"type:text" json:"description"`
+	Type           string    `gorm:"size:32" json:"type"`
+	FireMode       string    `gorm:"size:32" json:"fire_mode"` // ONCE / REPEATABLE
+	CooldownMonths int       `gorm:"default:0" json:"cooldown_months"`
+	Enabled        bool      `gorm:"default:true" json:"enabled"`
+	TriggerSpec    string    `gorm:"type:text" json:"trigger_spec"`
+	EffectsSpec    string    `gorm:"type:text" json:"effects_spec"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// ContentEventState 单局游戏内文件驱动事件的触发状态
+type ContentEventState struct {
+	ID                     uint      `gorm:"primarykey" json:"id"`
+	SiloID                 uint      `gorm:"index" json:"silo_id"`
+	DefinitionID           uint      `gorm:"index" json:"definition_id"`
+	EventKey               string    `gorm:"index;size:180" json:"event_key"`
+	Triggered              bool      `gorm:"default:false" json:"triggered"`
+	TriggerCount           int       `gorm:"default:0" json:"trigger_count"`
+	LastTriggeredTimestamp int       `gorm:"default:0" json:"last_triggered_timestamp"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
 // ============ 游戏交互 DTO (前后端通信) ============
 
 // AgentActionType 动作类型

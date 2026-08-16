@@ -3,6 +3,10 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	"silo40/internal/cache"
@@ -30,28 +34,47 @@ const (
 )
 
 type GameService struct {
-	db        *gorm.DB
-	mu        sync.Mutex
-	engine    *engine.GameEngine
-	silo      *model.Silo
-	agent     *model.Agent
-	eventLogs []model.StoryEventLog
+	db                 *gorm.DB
+	mu                 sync.Mutex
+	engine             *engine.GameEngine
+	silo               *model.Silo
+	agent              *model.Agent
+	eventLogs          []model.StoryEventLog
+	contentDefinitions []engine.ContentEventDefinition
+	contentStates      map[string]model.ContentEventState
 }
 
 func NewGameService(db *gorm.DB) *GameService {
 	return &GameService{
-		db:     db,
-		engine: engine.NewGameEngine(),
+		db:            db,
+		engine:        engine.NewGameEngine(),
+		contentStates: map[string]model.ContentEventState{},
 	}
+}
+
+// BootstrapContent 同步文件驱动事件定义到数据库并加载到内存。
+func (s *GameService) BootstrapContent() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	dirs, err := resolveContentDirectories()
+	if err != nil {
+		return err
+	}
+	if err := s.syncContentDefinitions(dirs); err != nil {
+		return err
+	}
+	return s.loadContentDefinitions()
 }
 
 // ---------- 内部辅助 ----------
 
 // sessionState 缓存快照结构
 type sessionState struct {
-	Silo      model.Silo            `json:"silo"`
-	Agent     model.Agent           `json:"agent"`
-	EventLogs []model.StoryEventLog `json:"event_logs"`
+	Silo          model.Silo                `json:"silo"`
+	Agent         model.Agent               `json:"agent"`
+	EventLogs     []model.StoryEventLog     `json:"event_logs"`
+	ContentStates []model.ContentEventState `json:"content_states"`
 }
 
 func (s *GameService) hasSession() bool {
@@ -66,10 +89,12 @@ func (s *GameService) cacheSnapshot() {
 	if cache.GlobalCache == nil || !s.hasSession() {
 		return
 	}
+	contentStates := s.contentStateSlice()
 	data, err := json.Marshal(sessionState{
-		Silo:      *s.silo,
-		Agent:     *s.agent,
-		EventLogs: s.eventLogs,
+		Silo:          *s.silo,
+		Agent:         *s.agent,
+		EventLogs:     s.eventLogs,
+		ContentStates: contentStates,
 	})
 	if err != nil {
 		return
@@ -86,6 +111,7 @@ func (s *GameService) persist() error {
 	agent := s.agent
 	eventLogs := make([]model.StoryEventLog, len(s.eventLogs))
 	copy(eventLogs, s.eventLogs)
+	contentStates := s.contentStateSlice()
 
 	// 固定主键
 	silo.ID = ActiveSiloID
@@ -127,6 +153,10 @@ func (s *GameService) persist() error {
 	for i := range eventLogs {
 		eventLogs[i].ID = 0
 		eventLogs[i].SiloID = ActiveSiloID
+	}
+	for i := range contentStates {
+		contentStates[i].ID = 0
+		contentStates[i].SiloID = ActiveSiloID
 	}
 
 	return s.db.Transaction(func(tx *gorm.DB) error {
@@ -195,6 +225,14 @@ func (s *GameService) persist() error {
 			}
 		}
 
+		var oldContentStates []model.ContentEventState
+		_ = tx.Where("silo_id = ?", ActiveSiloID).Find(&oldContentStates).Error
+		for _, state := range oldContentStates {
+			if err := tx.Delete(&model.ContentEventState{}, state.ID).Error; err != nil {
+				return err
+			}
+		}
+
 		// Silo/Agent 含 gorm.DeletedAt，普通 Delete 为软删除，旧行仍占用固定主键；
 		// 整图替换式保存需物理删除 (Unscoped) 才能用同 ID 重建。
 		if err := tx.Unscoped().Delete(&model.Agent{}, ActiveAgentID).Error; err != nil {
@@ -258,6 +296,11 @@ func (s *GameService) persist() error {
 				return err
 			}
 		}
+		if len(contentStates) > 0 {
+			if err := tx.Create(&contentStates).Error; err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 }
@@ -276,6 +319,10 @@ func (s *GameService) Resume() error {
 				s.silo = &snap.Silo
 				s.agent = &snap.Agent
 				s.eventLogs = snap.EventLogs
+				s.contentStates = map[string]model.ContentEventState{}
+				for _, state := range snap.ContentStates {
+					s.contentStates[state.EventKey] = state
+				}
 				s.engine = engine.NewGameEngine()
 				return nil
 			}
@@ -295,9 +342,17 @@ func (s *GameService) Resume() error {
 	if err := s.db.Order("id asc").Where("silo_id = ?", ActiveSiloID).Find(&eventLogs).Error; err != nil {
 		return err
 	}
+	var contentStates []model.ContentEventState
+	if err := s.db.Where("silo_id = ?", ActiveSiloID).Find(&contentStates).Error; err != nil {
+		return err
+	}
 	s.silo = &silo
 	s.agent = &agent
 	s.eventLogs = eventLogs
+	s.contentStates = map[string]model.ContentEventState{}
+	for _, state := range contentStates {
+		s.contentStates[state.EventKey] = state
+	}
 	s.engine = engine.NewGameEngine()
 	return nil
 }
@@ -319,6 +374,7 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	s.silo = silo
 	s.agent = agent
 	s.eventLogs = nil
+	s.contentStates = map[string]model.ContentEventState{}
 
 	if err := s.persist(); err != nil {
 		return nil, fmt.Errorf("failed to persist new game: %w", err)
@@ -356,6 +412,9 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 			stories = append(stories, *story)
 		}
 		s.recordStories(st, "PASS_TIME")
+		contentLogs, contentStories := s.triggerContentEvents("PASS_TIME:CONTENT")
+		logs = append(logs, contentLogs...)
+		stories = append(stories, contentStories...)
 
 		if s.silo.CurrentMonth == 12 {
 			s.silo.CurrentMonth = 1
@@ -407,6 +466,9 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 					stories = append(stories, *story)
 				}
 				s.recordStories(st, "ACTION:"+string(action.Type))
+				contentLogs, contentStories := s.triggerContentEvents("ACTION:" + string(action.Type) + ":CONTENT")
+				logs = append(logs, contentLogs...)
+				stories = append(stories, contentStories...)
 				if s.silo.CurrentMonth == 12 {
 					s.silo.CurrentMonth = 1
 					s.silo.CurrentYear++
@@ -425,6 +487,9 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 			if s.silo.VictoryStatus != nil && s.silo.VictoryStatus.Score == nil {
 				s.silo.VictoryStatus.Score = s.engine.CalculateScore(s.silo)
 			}
+			contentLogs, contentStories := s.triggerContentEvents("ACTION:" + string(action.Type) + ":CONTENT")
+			logs = append(logs, contentLogs...)
+			stories = append(stories, contentStories...)
 		}
 	}
 
@@ -472,6 +537,190 @@ func (s *GameService) GetEventHistory(limit int) (*model.EventHistoryResult, err
 }
 
 // ---------- 私有 ----------
+
+func resolveContentDirectories() (map[string]string, error) {
+	groups := []string{"events", "histories"}
+	dirs := make(map[string]string, len(groups))
+
+	cwd, _ := os.Getwd()
+	exePath, _ := os.Executable()
+	candidates := []string{cwd}
+	if exePath != "" {
+		candidates = append(candidates, filepath.Dir(exePath))
+	}
+
+	seen := map[string]bool{}
+	for _, base := range candidates {
+		for _, group := range groups {
+			if dirs[group] != "" {
+				continue
+			}
+			path := findContentDirectory(base, group)
+			if path != "" && !seen[path] {
+				dirs[group] = path
+				seen[path] = true
+			}
+		}
+	}
+
+	var missing []string
+	for _, group := range groups {
+		if dirs[group] == "" {
+			missing = append(missing, group)
+		}
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("failed to locate content directories: %s", strings.Join(missing, ", "))
+	}
+	return dirs, nil
+}
+
+func findContentDirectory(baseDir, group string) string {
+	if baseDir == "" {
+		return ""
+	}
+	current := baseDir
+	for i := 0; i < 6; i++ {
+		candidate := filepath.Join(current, group)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+	return ""
+}
+
+func (s *GameService) syncContentDefinitions(dirs map[string]string) error {
+	defs, err := engine.LoadContentEventDefinitions(dirs)
+	if err != nil {
+		return err
+	}
+
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		for _, def := range defs {
+			triggerJSON, err := json.Marshal(def.Trigger)
+			if err != nil {
+				return fmt.Errorf("failed to marshal trigger for %s: %w", def.Key, err)
+			}
+			effectsJSON, err := json.Marshal(def.Effects)
+			if err != nil {
+				return fmt.Errorf("failed to marshal effects for %s: %w", def.Key, err)
+			}
+
+			record := model.ContentEventDefinition{
+				Key:            def.Key,
+				SourceGroup:    def.SourceGroup,
+				SourceFile:     def.SourceFile,
+				EventID:        def.EventID,
+				Title:          def.Title,
+				Description:    def.Description,
+				Type:           def.Type,
+				FireMode:       def.FireMode,
+				CooldownMonths: def.CooldownMonths,
+				Enabled:        true,
+				TriggerSpec:    string(triggerJSON),
+				EffectsSpec:    string(effectsJSON),
+			}
+
+			err = tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "key"}},
+				DoUpdates: clause.AssignmentColumns([]string{"source_group", "source_file", "event_id", "title", "description", "type", "fire_mode", "cooldown_months", "enabled", "trigger_spec", "effects_spec", "updated_at"}),
+			}).Create(&record).Error
+			if err != nil {
+				return fmt.Errorf("failed to upsert content event %s: %w", def.Key, err)
+			}
+		}
+		return nil
+	})
+}
+
+func (s *GameService) loadContentDefinitions() error {
+	var rows []model.ContentEventDefinition
+	if err := s.db.Where("enabled = ?", true).Order("source_group asc, source_file asc, event_id asc").Find(&rows).Error; err != nil {
+		return fmt.Errorf("failed to load content event definitions: %w", err)
+	}
+
+	defs := make([]engine.ContentEventDefinition, 0, len(rows))
+	for _, row := range rows {
+		def := engine.ContentEventDefinition{
+			ID:             row.ID,
+			Key:            row.Key,
+			SourceGroup:    row.SourceGroup,
+			SourceFile:     row.SourceFile,
+			EventID:        row.EventID,
+			Title:          row.Title,
+			Description:    row.Description,
+			Type:           row.Type,
+			FireMode:       row.FireMode,
+			CooldownMonths: row.CooldownMonths,
+		}
+		if err := json.Unmarshal([]byte(row.TriggerSpec), &def.Trigger); err != nil {
+			return fmt.Errorf("failed to parse trigger for %s: %w", row.Key, err)
+		}
+		if err := json.Unmarshal([]byte(row.EffectsSpec), &def.Effects); err != nil {
+			return fmt.Errorf("failed to parse effects for %s: %w", row.Key, err)
+		}
+		if err := engine.ValidateContentEventDefinition(def); err != nil {
+			return fmt.Errorf("invalid stored content event %s: %w", row.Key, err)
+		}
+		defs = append(defs, def)
+	}
+	s.contentDefinitions = defs
+	return nil
+}
+
+func (s *GameService) contentStateSlice() []model.ContentEventState {
+	if len(s.contentStates) == 0 {
+		return nil
+	}
+	states := make([]model.ContentEventState, 0, len(s.contentStates))
+	for _, state := range s.contentStates {
+		states = append(states, state)
+	}
+	sort.Slice(states, func(i, j int) bool {
+		return states[i].EventKey < states[j].EventKey
+	})
+	return states
+}
+
+func (s *GameService) triggerContentEvents(source string) ([]string, []model.StoryEvent) {
+	if !s.hasSession() || len(s.contentDefinitions) == 0 {
+		return nil, nil
+	}
+
+	var logs []string
+	var stories []model.StoryEvent
+	for _, def := range s.contentDefinitions {
+		state := s.contentStates[def.Key]
+		runtime := engine.ContentEventRuntime{
+			Triggered:              state.Triggered,
+			TriggerCount:           state.TriggerCount,
+			LastTriggeredTimestamp: state.LastTriggeredTimestamp,
+		}
+		if !engine.CanTriggerContentEvent(def, s.silo, runtime) {
+			continue
+		}
+
+		story := engine.ApplyContentEvent(def, s.silo)
+		stories = append(stories, story)
+		storyCopy := story
+		s.recordStories([]*model.StoryEvent{&storyCopy}, source)
+		logs = append(logs, "[ContentEvent] "+story.Title)
+
+		state.SiloID = ActiveSiloID
+		state.DefinitionID = def.ID
+		state.EventKey = def.Key
+		state.Triggered = true
+		state.TriggerCount++
+		state.LastTriggeredTimestamp = gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth)
+		s.contentStates[def.Key] = state
+	}
+	return logs, stories
+}
 
 func (s *GameService) endingNarrative() string {
 	if !s.hasSession() {

@@ -46,6 +46,9 @@ func (a *App) startup(ctx context.Context) {
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)
+	if err := a.gameService.BootstrapContent(); err != nil {
+		log.Printf("failed to bootstrap content events: %v", err)
+	}
 	if err := a.gameService.Resume(); err != nil {
 		log.Println("no saved game session to resume:", err)
 	}
