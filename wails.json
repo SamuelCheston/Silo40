@@ -7,6 +7,9 @@
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
+  "postBuildHooks": {
+    "*/*": "sh -c 'if [ -d ./cmd/copyevents ]; then go run ./cmd/copyevents \"${bin}\"; else go run ../../cmd/copyevents \"${bin}\"; fi'"
+  },
   "author": {
     "name": "Samuel",
     "email": "me@samuelcheston.com"

@@ -2,6 +2,8 @@
 
 The build directory is used to house all the build files and assets for your application. 
 
+During `wails build`, the project also copies the root `events/` directory into the built binary directory (`build/bin/events` or the platform-specific binary folder). Runtime content loading prefers the `events/` directory located next to the executable, then falls back to development-time parent directory discovery.
+
 The structure is:
 
 * bin - Output directory

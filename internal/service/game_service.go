@@ -558,12 +558,22 @@ func resolveContentDirectories() (map[string]string, error) {
 
 	cwd, _ := os.Getwd()
 	exePath, _ := os.Executable()
-	candidates := []string{cwd}
+	exeDir := ""
 	if exePath != "" {
-		candidates = append(candidates, filepath.Dir(exePath))
+		exeDir = filepath.Dir(exePath)
 	}
 
-	for _, base := range candidates {
+	// Build artifacts should prefer the events/ directory placed next to the binary.
+	for _, base := range []string{exeDir, cwd} {
+		for group, path := range discoverContentDirectoriesExact(base) {
+			if dirs[group] == "" {
+				dirs[group] = path
+			}
+		}
+	}
+
+	// Keep upward search as a compatibility fallback for dev and older layouts.
+	for _, base := range []string{cwd, exeDir} {
 		for group, path := range discoverContentDirectories(base) {
 			if dirs[group] == "" {
 				dirs[group] = path
@@ -577,9 +587,20 @@ func resolveContentDirectories() (map[string]string, error) {
 	return dirs, nil
 }
 
+func discoverContentDirectoriesExact(baseDir string) map[string]string {
+	if baseDir == "" {
+		return map[string]string{}
+	}
+	return discoverContentDirectoriesFromRoot(filepath.Join(baseDir, "events"), "")
+}
+
 func discoverContentDirectories(baseDir string) map[string]string {
-	dirs := map[string]string{}
 	root := findContentDirectory(baseDir, "events")
+	return discoverContentDirectoriesFromRoot(root, baseDir)
+}
+
+func discoverContentDirectoriesFromRoot(root, baseDir string) map[string]string {
+	dirs := map[string]string{}
 	if root != "" {
 		entries, err := os.ReadDir(root)
 		if err == nil {

@@ -34,6 +34,23 @@ func TestDiscoverContentDirectoriesGroupedLayout(t *testing.T) {
 	}
 }
 
+func TestDiscoverContentDirectoriesExactUsesLocalBuildArtifact(t *testing.T) {
+	root := t.TempDir()
+	parentEvents := filepath.Join(root, "events")
+	localEvents := filepath.Join(root, "build", "bin", "events")
+	if err := os.MkdirAll(filepath.Join(parentEvents, "special"), 0o755); err != nil {
+		t.Fatalf("mkdir parent special: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(localEvents, "special"), 0o755); err != nil {
+		t.Fatalf("mkdir local special: %v", err)
+	}
+
+	dirs := discoverContentDirectoriesExact(filepath.Join(root, "build", "bin"))
+	if got := dirs["special"]; got != filepath.Join(localEvents, "special") {
+		t.Fatalf("expected exact local events dir, got %q", got)
+	}
+}
+
 func TestContentStateForDefinitionFallsBackByEventID(t *testing.T) {
 	svc := &GameService{
 		contentStates: map[string]model.ContentEventState{
