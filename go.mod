@@ -4,6 +4,7 @@ go 1.26.4
 
 require (
 	github.com/coocood/freecache v1.2.7
+	github.com/dop251/goja v0.0.0-20260806115107-493f22071ef6
 	github.com/wailsapp/wails/v2 v2.13.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
@@ -14,7 +15,6 @@ require (
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
-	github.com/dop251/goja v0.0.0-20260806115107-493f22071ef6 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect

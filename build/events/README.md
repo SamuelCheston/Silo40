@@ -1,6 +1,6 @@
 # 文件驱动事件
 
-当前所有文件驱动事件都收敛到 `events/` 根目录下，并按子目录分组。
+当前所有文件驱动事件都收敛到 `events/` 根目录下，并按子目录分组。当前主格式为 `JavaScript`，每个事件文件使用 `defineEvent({...})` 导出一个事件定义。
 
 当前约定的分组包括：
 
@@ -28,6 +28,35 @@
 - `trigger`: 结构化触发条件
 - `effects`: 结构化事件效果列表
 - `player_action`: 仅用于 `events/player_actions/`，声明该动作在 UI 中如何展示与提交
+- `script`: 可选的受限脚本 hook 容器，当前支持：
+  - `canTrigger(ctx) => boolean`
+  - `apply(ctx) => { effects?: ContentEffect[], emit?: string[] }`
+
+最小示例：
+
+```js
+defineEvent({
+  id: "silo1_fallout",
+  title: "一号地堡失联余波",
+  type: "EXTERNAL",
+  fire_mode: "ONCE",
+  trigger: all(
+    siloFlagTrue("silo1_destroyed"),
+    siloMetricGte("cohesion", 0.31),
+  ),
+  effects: [
+    siloMetricDelta("cohesion", -0.05),
+    professionMetricDeltaAll("panic_value", 0.05),
+  ],
+})
+```
+
+`script` hook 约束：
+
+- `script.canTrigger(ctx)` 只负责额外判断，返回 `boolean`
+- `script.apply(ctx)` 不能直接修改 Go 状态；它只能返回额外 `effects` 和 `emit`
+- `emit` 里的事件名必须是运行时事件名，例如 `special:history_burden_awakened`
+- 推荐优先使用结构化 `trigger/effects`；只有复杂条件分支和后续链路才进入 `script`
 
 当前支持的 `trigger.type`：
 
