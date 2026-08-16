@@ -617,8 +617,8 @@ func discoverContentDirectoriesFromRoot(root, baseDir string) map[string]string 
 		}
 
 		// Backward compatibility for the legacy flat layout.
-		hasJSON, err := directoryHasJSONFiles(root)
-		if err == nil && hasJSON && dirs["events"] == "" {
+		hasEventFiles, err := directoryHasContentEventFiles(root)
+		if err == nil && hasEventFiles && dirs["events"] == "" {
 			dirs["events"] = root
 		}
 	}
@@ -651,7 +651,7 @@ func findContentDirectory(baseDir, group string) string {
 	return ""
 }
 
-func directoryHasJSONFiles(dir string) (bool, error) {
+func directoryHasContentEventFiles(dir string) (bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false, err
@@ -660,7 +660,8 @@ func directoryHasJSONFiles(dir string) (bool, error) {
 		if entry.IsDir() {
 			continue
 		}
-		if strings.EqualFold(filepath.Ext(entry.Name()), ".json") {
+		switch strings.ToLower(filepath.Ext(entry.Name())) {
+		case ".json", ".js":
 			return true, nil
 		}
 	}
@@ -685,25 +686,38 @@ func (s *GameService) syncContentDefinitions(dirs map[string]string) error {
 			if err != nil {
 				return fmt.Errorf("failed to marshal effects for %s: %w", def.Key, err)
 			}
+			playerActionJSON := ""
+			if def.PlayerAction != nil {
+				payload, err := json.Marshal(def.PlayerAction)
+				if err != nil {
+					return fmt.Errorf("failed to marshal player_action for %s: %w", def.Key, err)
+				}
+				playerActionJSON = string(payload)
+			}
 
 			record := model.ContentEventDefinition{
-				Key:            def.Key,
-				SourceGroup:    def.SourceGroup,
-				SourceFile:     def.SourceFile,
-				EventID:        def.EventID,
-				Title:          def.Title,
-				Description:    def.Description,
-				Type:           def.Type,
-				FireMode:       def.FireMode,
-				CooldownMonths: def.CooldownMonths,
-				Enabled:        true,
-				TriggerSpec:    string(triggerJSON),
-				EffectsSpec:    string(effectsJSON),
+				Key:              def.Key,
+				SourceGroup:      def.SourceGroup,
+				SourceFile:       def.SourceFile,
+				SourceFormat:     def.SourceFormat,
+				EventID:          def.EventID,
+				Title:            def.Title,
+				Description:      def.Description,
+				Type:             def.Type,
+				FireMode:         def.FireMode,
+				CooldownMonths:   def.CooldownMonths,
+				Enabled:          true,
+				TriggerSpec:      string(triggerJSON),
+				EffectsSpec:      string(effectsJSON),
+				PlayerActionSpec: playerActionJSON,
+				ScriptSource:     def.ScriptSource,
+				ScriptCanTrigger: def.ScriptHooks.CanTrigger,
+				ScriptApply:      def.ScriptHooks.Apply,
 			}
 
 			err = tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "key"}},
-				DoUpdates: clause.AssignmentColumns([]string{"source_group", "source_file", "event_id", "title", "description", "type", "fire_mode", "cooldown_months", "enabled", "trigger_spec", "effects_spec", "updated_at"}),
+				DoUpdates: clause.AssignmentColumns([]string{"source_group", "source_file", "source_format", "event_id", "title", "description", "type", "fire_mode", "cooldown_months", "enabled", "trigger_spec", "effects_spec", "player_action_spec", "script_source", "script_can_trigger", "script_apply", "updated_at"}),
 			}).Create(&record).Error
 			if err != nil {
 				return fmt.Errorf("failed to upsert content event %s: %w", def.Key, err)
@@ -736,18 +750,31 @@ func (s *GameService) loadContentDefinitions() error {
 			Key:            row.Key,
 			SourceGroup:    row.SourceGroup,
 			SourceFile:     row.SourceFile,
+			SourceFormat:   row.SourceFormat,
 			EventID:        row.EventID,
 			Title:          row.Title,
 			Description:    row.Description,
 			Type:           row.Type,
 			FireMode:       row.FireMode,
 			CooldownMonths: row.CooldownMonths,
+			ScriptSource:   row.ScriptSource,
+			ScriptHooks: engine.ContentScriptHooks{
+				CanTrigger: row.ScriptCanTrigger,
+				Apply:      row.ScriptApply,
+			},
 		}
 		if err := json.Unmarshal([]byte(row.TriggerSpec), &def.Trigger); err != nil {
 			return fmt.Errorf("failed to parse trigger for %s: %w", row.Key, err)
 		}
 		if err := json.Unmarshal([]byte(row.EffectsSpec), &def.Effects); err != nil {
 			return fmt.Errorf("failed to parse effects for %s: %w", row.Key, err)
+		}
+		if strings.TrimSpace(row.PlayerActionSpec) != "" {
+			var spec engine.ContentPlayerActionSpec
+			if err := json.Unmarshal([]byte(row.PlayerActionSpec), &spec); err != nil {
+				return fmt.Errorf("failed to parse player_action for %s: %w", row.Key, err)
+			}
+			def.PlayerAction = &spec
 		}
 		if err := engine.ValidateContentEventDefinition(def); err != nil {
 			return fmt.Errorf("invalid stored content event %s: %w", row.Key, err)
@@ -888,7 +915,7 @@ func (s *GameService) bindContentEventHandlers() {
 	for _, def := range s.contentDefinitions {
 		def := def
 		s.contentUnsubscribes = append(s.contentUnsubscribes, s.engine.Bus.Subscribe(engine.ContentEventBusName(def), func(event *engine.GameEvent, ctx *engine.EventContext) {
-			s.handleContentEvent(def, event)
+			s.handleContentEvent(def, event, ctx)
 		}))
 	}
 
@@ -932,7 +959,7 @@ func (s *GameService) emitContentEvent(def engine.ContentEventDefinition, source
 	return ok
 }
 
-func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, event *engine.GameEvent) {
+func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, event *engine.GameEvent, ctx *engine.EventContext) {
 	story := engine.ApplyContentEvent(def, s.silo)
 
 	state, legacyKey := s.contentStateForDefinition(def)
@@ -958,6 +985,54 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		s.recordStories([]*model.StoryEvent{&storyCopy}, source)
 	}
 	event.Data["story_result"] = story
+
+	if !def.ScriptHooks.Apply {
+		return
+	}
+	evalCtx := engine.ContentEvaluationContext{
+		Silo:   s.silo,
+		States: s.contentRuntimeMap(),
+		Action: contentActionFromEvent(event),
+		Runtime: engine.ContentEventRuntime{
+			Triggered:              state.Triggered,
+			TriggerCount:           state.TriggerCount,
+			LastTriggeredTimestamp: state.LastTriggeredTimestamp,
+		},
+	}
+	scriptResult, err := engine.RunContentEventApplyScript(def, evalCtx)
+	if err != nil {
+		s.appendContentLog(event, fmt.Sprintf("[ContentEvent] Script apply failed for %s: %v", def.Key, err))
+		return
+	}
+	engine.ApplyContentEffects(scriptResult.Effects, s.silo)
+	for _, name := range scriptResult.Emit {
+		if !s.emitContentEventByName(name, event, ctx) {
+			s.appendContentLog(event, fmt.Sprintf("[ContentEvent] Script emit target not found: %s", name))
+		}
+	}
+}
+
+func (s *GameService) emitContentEventByName(name string, sourceEvent *engine.GameEvent, ctx *engine.EventContext) bool {
+	for _, def := range s.contentDefinitions {
+		if engine.ContentEventBusName(def) != name {
+			continue
+		}
+		stories, _ := sourceEvent.Data["story_sink"].(*[]model.StoryEvent)
+		logs, _ := sourceEvent.Data["log_sink"].(*[]string)
+		contentSource, _ := sourceEvent.Data["content_source"].(string)
+		action := contentActionFromEvent(sourceEvent)
+		return s.emitContentEvent(def, contentSource, ctx, action, stories, logs)
+	}
+	return false
+}
+
+func (s *GameService) appendContentLog(event *engine.GameEvent, message string) {
+	if event == nil || message == "" {
+		return
+	}
+	if sink, ok := event.Data["log_sink"].(*[]string); ok && sink != nil {
+		*sink = append(*sink, message)
+	}
 }
 
 func (s *GameService) tryEmitFollowupContentEvent(def engine.ContentEventDefinition, sourceEvent *engine.GameEvent, ctx *engine.EventContext) {

@@ -250,21 +250,26 @@ type StoryEventLog struct {
 
 // ContentEventDefinition 文件驱动的事件定义（来自 events/ 下的各个分组目录）
 type ContentEventDefinition struct {
-	ID             uint      `gorm:"primarykey" json:"id"`
-	Key            string    `gorm:"uniqueIndex;size:180" json:"key"`
-	SourceGroup    string    `gorm:"index;size:32" json:"source_group"` // histories / special / crisis / player_actions / legacy events
-	SourceFile     string    `gorm:"size:255" json:"source_file"`
-	EventID        string    `gorm:"index;size:100" json:"event_id"`
-	Title          string    `gorm:"size:120" json:"title"`
-	Description    string    `gorm:"type:text" json:"description"`
-	Type           string    `gorm:"size:32" json:"type"`
-	FireMode       string    `gorm:"size:32" json:"fire_mode"` // ONCE / REPEATABLE
-	CooldownMonths int       `gorm:"default:0" json:"cooldown_months"`
-	Enabled        bool      `gorm:"default:true" json:"enabled"`
-	TriggerSpec    string    `gorm:"type:text" json:"trigger_spec"`
-	EffectsSpec    string    `gorm:"type:text" json:"effects_spec"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID               uint      `gorm:"primarykey" json:"id"`
+	Key              string    `gorm:"uniqueIndex;size:180" json:"key"`
+	SourceGroup      string    `gorm:"index;size:32" json:"source_group"` // histories / special / crisis / player_actions / legacy events
+	SourceFile       string    `gorm:"size:255" json:"source_file"`
+	SourceFormat     string    `gorm:"size:24" json:"source_format"`
+	EventID          string    `gorm:"index;size:100" json:"event_id"`
+	Title            string    `gorm:"size:120" json:"title"`
+	Description      string    `gorm:"type:text" json:"description"`
+	Type             string    `gorm:"size:32" json:"type"`
+	FireMode         string    `gorm:"size:32" json:"fire_mode"` // ONCE / REPEATABLE
+	CooldownMonths   int       `gorm:"default:0" json:"cooldown_months"`
+	Enabled          bool      `gorm:"default:true" json:"enabled"`
+	TriggerSpec      string    `gorm:"type:text" json:"trigger_spec"`
+	EffectsSpec      string    `gorm:"type:text" json:"effects_spec"`
+	PlayerActionSpec string    `gorm:"type:text" json:"player_action_spec"`
+	ScriptSource     string    `gorm:"type:text" json:"script_source"`
+	ScriptCanTrigger bool      `gorm:"default:false" json:"script_can_trigger"`
+	ScriptApply      bool      `gorm:"default:false" json:"script_apply"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // ContentEventState 单局游戏内文件驱动事件的触发状态

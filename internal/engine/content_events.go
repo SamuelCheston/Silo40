@@ -26,6 +26,7 @@ type ContentEventDefinition struct {
 	Key            string
 	SourceGroup    string
 	SourceFile     string
+	SourceFormat   string
 	EventID        string                   `json:"id"`
 	Title          string                   `json:"title"`
 	Description    string                   `json:"description"`
@@ -35,6 +36,14 @@ type ContentEventDefinition struct {
 	Trigger        ContentTrigger           `json:"trigger"`
 	Effects        []ContentEffect          `json:"effects"`
 	PlayerAction   *ContentPlayerActionSpec `json:"player_action,omitempty"`
+	ScriptHooks    ContentScriptHooks       `json:"-"`
+	ScriptSource   string                   `json:"-"`
+}
+
+// ContentScriptHooks lists which restricted JavaScript hooks are present.
+type ContentScriptHooks struct {
+	CanTrigger bool
+	Apply      bool
 }
 
 // ContentTrigger 结构化触发条件。
@@ -125,7 +134,12 @@ func loadContentEventDir(sourceGroup, dir string) ([]ContentEventDefinition, err
 		if walkErr != nil {
 			return walkErr
 		}
-		if d.IsDir() || strings.ToLower(filepath.Ext(path)) != ".json" {
+		if d.IsDir() {
+			return nil
+		}
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".json", ".js":
+		default:
 			return nil
 		}
 
@@ -143,6 +157,14 @@ func loadContentEventDir(sourceGroup, dir string) ([]ContentEventDefinition, err
 }
 
 func loadContentEventFile(sourceGroup, baseDir, path string) ([]ContentEventDefinition, error) {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".js":
+		return loadContentEventJSFile(sourceGroup, baseDir, path)
+	case ".json":
+	default:
+		return nil, fmt.Errorf("unsupported content event file extension %q", filepath.Ext(path))
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read content event file %s: %w", path, err)
@@ -175,6 +197,7 @@ func loadContentEventFile(sourceGroup, baseDir, path string) ([]ContentEventDefi
 		}
 		defs[i].SourceGroup = sourceGroup
 		defs[i].SourceFile = filepath.ToSlash(relPath)
+		defs[i].SourceFormat = "json"
 		defs[i].Key = sourceGroup + ":" + defs[i].EventID
 		normalizeContentEventDefinition(&defs[i])
 		if err := ValidateContentEventDefinition(defs[i]); err != nil {
@@ -272,13 +295,20 @@ func ValidateContentEventDefinition(def ContentEventDefinition) error {
 	default:
 		return fmt.Errorf("unsupported fire_mode %q", def.FireMode)
 	}
-	if err := validateTrigger(def.Trigger); err != nil {
-		return err
+	if def.Trigger.Type != "" {
+		if err := validateTrigger(def.Trigger); err != nil {
+			return err
+		}
+	} else if !def.ScriptHooks.CanTrigger {
+		return fmt.Errorf("missing trigger or script.canTrigger")
 	}
 	for _, effect := range def.Effects {
 		if err := validateEffect(effect); err != nil {
 			return err
 		}
+	}
+	if len(def.Effects) == 0 && !def.ScriptHooks.Apply {
+		return fmt.Errorf("missing effects or script.apply")
 	}
 	if err := validatePlayerActionSpec(def); err != nil {
 		return err
@@ -412,7 +442,17 @@ func canTriggerContentEvent(def ContentEventDefinition, ctx ContentEvaluationCon
 			return false
 		}
 	}
-	return evaluateContentTrigger(def.Trigger, ctx, ignoreActionMatch)
+	if def.Trigger.Type != "" && !evaluateContentTrigger(def.Trigger, ctx, ignoreActionMatch) {
+		return false
+	}
+	if def.ScriptHooks.CanTrigger {
+		ok, err := RunContentEventCanTriggerScript(def, ctx, ignoreActionMatch)
+		if err != nil {
+			return false
+		}
+		return ok
+	}
+	return true
 }
 
 func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext, ignoreActionMatch bool) bool {
@@ -525,9 +565,7 @@ func ContentPlayerActionID(def ContentEventDefinition) string {
 
 // ApplyContentEvent 把事件效果实际施加到地堡状态上。
 func ApplyContentEvent(def ContentEventDefinition, silo *model.Silo) model.StoryEvent {
-	for _, effect := range def.Effects {
-		applyContentEffect(effect, silo)
-	}
+	ApplyContentEffects(def.Effects, silo)
 	return model.StoryEvent{
 		ID:          def.EventID,
 		Category:    normalizeContentCategory(def.SourceGroup),
@@ -619,6 +657,12 @@ func contentStateMatchesTrigger(key string, trigger ContentTrigger) bool {
 		return false
 	}
 	return true
+}
+
+func ApplyContentEffects(effects []ContentEffect, silo *model.Silo) {
+	for _, effect := range effects {
+		applyContentEffect(effect, silo)
+	}
 }
 
 func applyContentEffect(effect ContentEffect, silo *model.Silo) {

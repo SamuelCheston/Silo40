@@ -139,6 +139,74 @@ func TestContentEventsDispatchThroughEventBusByName(t *testing.T) {
 	}
 }
 
+func TestContentScriptApplyCanEmitFollowupEvent(t *testing.T) {
+	svc := &GameService{
+		engine: engine.NewGameEngine(),
+		silo: &model.Silo{
+			CurrentYear:  122,
+			CurrentMonth: 1,
+			Cohesion:     0.5,
+		},
+		agent:         &model.Agent{},
+		contentStates: map[string]model.ContentEventState{},
+		contentDefinitions: []engine.ContentEventDefinition{
+			{
+				ID:          1,
+				Key:         "special:branching_unrest",
+				SourceGroup: "special",
+				EventID:     "branching_unrest",
+				Title:       "Branching Unrest",
+				Effects: []engine.ContentEffect{
+					{Type: "silo_metric_delta", Metric: "legitimacy", Value: -0.05},
+				},
+				ScriptHooks: engine.ContentScriptHooks{Apply: true},
+				ScriptSource: `defineEvent({
+					id: "branching_unrest",
+					title: "Branching Unrest",
+					type: "SOCIAL",
+					fire_mode: "ONCE",
+					effects: [siloMetricDelta("legitimacy", -0.05)],
+					script: {
+						apply(ctx) {
+							if (ctx.silo_metrics.cohesion <= 0.5) {
+								return { emit: ["crisis:deep_unrest"] };
+							}
+							return null;
+						}
+					}
+				})`,
+			},
+			{
+				ID:          2,
+				Key:         "crisis:deep_unrest",
+				SourceGroup: "crisis",
+				EventID:     "deep_unrest",
+				Title:       "Deep Unrest",
+				Effects: []engine.ContentEffect{
+					{Type: "silo_metric_delta", Metric: "cohesion", Value: -0.1},
+				},
+			},
+		},
+	}
+	svc.bindContentEventHandlers()
+
+	var stories []model.StoryEvent
+	var logs []string
+	fired := svc.emitContentEvent(svc.contentDefinitions[0], "TEST", engine.NewEventContext(), nil, &stories, &logs)
+	if !fired {
+		t.Fatalf("expected scripted special event to emit")
+	}
+	if len(stories) != 2 {
+		t.Fatalf("expected script emit to produce a followup event, got %d stories", len(stories))
+	}
+	if stories[1].ID != "deep_unrest" {
+		t.Fatalf("expected followup crisis event, got %+v", stories)
+	}
+	if svc.silo.Cohesion >= 0.5 {
+		t.Fatalf("expected emitted crisis event to change cohesion, got %v", svc.silo.Cohesion)
+	}
+}
+
 func TestAvailablePlayerActionsIncludeScopedContentActions(t *testing.T) {
 	svc := &GameService{
 		engine: engine.NewGameEngine(),

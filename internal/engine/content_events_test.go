@@ -20,29 +20,29 @@ func TestLoadContentEventDefinitions(t *testing.T) {
 		t.Fatalf("mkdir histories: %v", err)
 	}
 
-	eventJSON := `{
-                "id": "history_burden_awakened",
-                "title": "History Burden Awakened",
-                "description": "desc",
-                "type": "social",
-                "fire_mode": "once",
-                "trigger": {"type": "silo_metric_gte", "metric": "history_burden", "value": 0.08},
-                "effects": [{"type": "silo_metric_delta", "metric": "cohesion", "value": -0.02}]
-        }`
-	historyJSON := `{
-                "id": "archive_truth_broadcast",
-                "title": "Archive Truth Broadcast",
-                "description": "desc",
-                "type": "external",
-                "fire_mode": "once",
-                "trigger": {"type": "timestamp_at_or_after", "year": 122, "month": 1},
-                "effects": [{"type": "silo_metric_delta", "metric": "history_burden", "value": 0.08}]
-        }`
+	eventJS := `defineEvent({
+		id: "history_burden_awakened",
+		title: "History Burden Awakened",
+		description: "desc",
+		type: "social",
+		fire_mode: "once",
+		trigger: siloMetricGte("history_burden", 0.08),
+		effects: [siloMetricDelta("cohesion", -0.02)]
+	})`
+	historyJS := `defineEvent({
+		id: "archive_truth_broadcast",
+		title: "Archive Truth Broadcast",
+		description: "desc",
+		type: "external",
+		fire_mode: "once",
+		trigger: timestampAtOrAfter(122, 1),
+		effects: [siloMetricDelta("history_burden", 0.08)]
+	})`
 
-	if err := os.WriteFile(filepath.Join(specialDir, "history_burden_awakened.json"), []byte(eventJSON), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(specialDir, "history_burden_awakened.js"), []byte(eventJS), 0o644); err != nil {
 		t.Fatalf("write event: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(historiesDir, "archive_truth_broadcast.json"), []byte(historyJSON), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(historiesDir, "archive_truth_broadcast.js"), []byte(historyJS), 0o644); err != nil {
 		t.Fatalf("write history: %v", err)
 	}
 
@@ -174,5 +174,98 @@ func TestCanTriggerPlayerActionEvent(t *testing.T) {
 	}
 	if ContentPlayerActionID(def) != "PROPAGANDA_BROADCAST" {
 		t.Fatalf("expected player action id to come from metadata, got %q", ContentPlayerActionID(def))
+	}
+}
+
+func TestCanTriggerContentEventWithScriptHook(t *testing.T) {
+	def, err := parseContentEventJSDefinition(`defineEvent({
+		id: "script_branch",
+		title: "Script Branch",
+		description: "desc",
+		type: "social",
+		fire_mode: "once",
+		script: {
+			canTrigger(ctx) {
+				return ctx.silo_metrics.cohesion < 0.5 && !!ctx.states["special:history_burden_awakened"];
+			}
+		},
+		effects: [siloMetricDelta("legitimacy", -0.02)]
+	})`)
+	if err != nil {
+		t.Fatalf("parse js definition: %v", err)
+	}
+	def.ScriptSource = `defineEvent({
+		id: "script_branch",
+		title: "Script Branch",
+		description: "desc",
+		type: "social",
+		fire_mode: "once",
+		script: {
+			canTrigger(ctx) {
+				return ctx.silo_metrics.cohesion < 0.5 && !!ctx.states["special:history_burden_awakened"];
+			}
+		},
+		effects: [siloMetricDelta("legitimacy", -0.02)]
+	})`
+
+	ok := CanTriggerContentEvent(def, ContentEvaluationContext{
+		Silo: &model.Silo{
+			CurrentYear:  122,
+			CurrentMonth: 1,
+			Cohesion:     0.4,
+		},
+		States: map[string]ContentEventRuntime{
+			"special:history_burden_awakened": {Triggered: true},
+		},
+	})
+	if !ok {
+		t.Fatalf("expected script canTrigger hook to allow the event")
+	}
+}
+
+func TestRunContentEventApplyScript(t *testing.T) {
+	source := `defineEvent({
+		id: "script_apply",
+		title: "Script Apply",
+		description: "desc",
+		type: "social",
+		fire_mode: "once",
+		trigger: siloMetricGte("cohesion", 0.1),
+		script: {
+			apply(ctx) {
+				if (ctx.silo_metrics.cohesion < 0.3) {
+					return {
+						effects: [siloMetricDelta("rebellion", 0.15)],
+						emit: ["crisis:deep_unrest"]
+					};
+				}
+				return {
+					effects: [siloMetricDelta("legitimacy", -0.05)]
+				};
+			}
+		},
+		effects: [siloMetricDelta("cohesion", -0.02)]
+	})`
+	def, err := parseContentEventJSDefinition(source)
+	if err != nil {
+		t.Fatalf("parse js definition: %v", err)
+	}
+	def.ScriptSource = source
+
+	result, err := RunContentEventApplyScript(def, ContentEvaluationContext{
+		Silo: &model.Silo{
+			CurrentYear:  122,
+			CurrentMonth: 1,
+			Cohesion:     0.2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("run apply hook: %v", err)
+	}
+	if len(result.Effects) != 1 || result.Effects[0].Metric != "rebellion" {
+		t.Fatalf("expected rebellion effect from script hook, got %+v", result.Effects)
+	}
+	if len(result.Emit) != 1 || result.Emit[0] != "crisis:deep_unrest" {
+		t.Fatalf("expected deep unrest followup emit, got %+v", result.Emit)
 	}
 }
