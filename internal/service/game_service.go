@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -34,14 +35,15 @@ const (
 )
 
 type GameService struct {
-	db                 *gorm.DB
-	mu                 sync.Mutex
-	engine             *engine.GameEngine
-	silo               *model.Silo
-	agent              *model.Agent
-	eventLogs          []model.StoryEventLog
-	contentDefinitions []engine.ContentEventDefinition
-	contentStates      map[string]model.ContentEventState
+	db                  *gorm.DB
+	mu                  sync.Mutex
+	engine              *engine.GameEngine
+	silo                *model.Silo
+	agent               *model.Agent
+	eventLogs           []model.StoryEventLog
+	contentDefinitions  []engine.ContentEventDefinition
+	contentStates       map[string]model.ContentEventState
+	contentUnsubscribes []func()
 }
 
 func NewGameService(db *gorm.DB) *GameService {
@@ -64,7 +66,11 @@ func (s *GameService) BootstrapContent() error {
 	if err := s.syncContentDefinitions(dirs); err != nil {
 		return err
 	}
-	return s.loadContentDefinitions()
+	if err := s.loadContentDefinitions(); err != nil {
+		return err
+	}
+	s.bindContentEventHandlers()
+	return nil
 }
 
 // ---------- 内部辅助 ----------
@@ -324,6 +330,7 @@ func (s *GameService) Resume() error {
 					s.contentStates[state.EventKey] = state
 				}
 				s.engine = engine.NewGameEngine()
+				s.bindContentEventHandlers()
 				return nil
 			}
 		}
@@ -354,6 +361,7 @@ func (s *GameService) Resume() error {
 		s.contentStates[state.EventKey] = state
 	}
 	s.engine = engine.NewGameEngine()
+	s.bindContentEventHandlers()
 	return nil
 }
 
@@ -371,6 +379,7 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 
 	// 初始化引擎 (清空旧调度器状态)
 	s.engine = engine.NewGameEngine()
+	s.bindContentEventHandlers()
 	s.silo = silo
 	s.agent = agent
 	s.eventLogs = nil
@@ -742,7 +751,9 @@ func (s *GameService) contentStateSlice() []model.ContentEventState {
 
 func (s *GameService) triggerSystemContentEvents(source string) ([]string, []model.StoryEvent) {
 	return s.triggerContentEvents(source, nil, func(def engine.ContentEventDefinition) bool {
-		return def.SourceGroup != "player_actions" && def.SourceGroup != "player_action"
+		return def.SourceGroup != "player_actions" &&
+			def.SourceGroup != "player_action" &&
+			!engine.HasEventTriggeredTrigger(def.Trigger)
 	})
 }
 
@@ -783,7 +794,7 @@ func (s *GameService) triggerContentEvents(source string, action *model.AgentAct
 		if allow != nil && !allow(def) {
 			continue
 		}
-		state, legacyKey := s.contentStateForDefinition(def)
+		state, _ := s.contentStateForDefinition(def)
 		ctx := engine.ContentEvaluationContext{
 			Silo:   s.silo,
 			States: s.contentRuntimeMap(),
@@ -797,23 +808,7 @@ func (s *GameService) triggerContentEvents(source string, action *model.AgentAct
 		if !engine.CanTriggerContentEvent(def, ctx) {
 			continue
 		}
-
-		story := engine.ApplyContentEvent(def, s.silo)
-		stories = append(stories, story)
-		storyCopy := story
-		s.recordStories([]*model.StoryEvent{&storyCopy}, source)
-		logs = append(logs, "[ContentEvent] "+story.Title)
-
-		state.SiloID = ActiveSiloID
-		state.DefinitionID = def.ID
-		state.EventKey = def.Key
-		state.Triggered = true
-		state.TriggerCount++
-		state.LastTriggeredTimestamp = gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth)
-		if legacyKey != "" && legacyKey != def.Key {
-			delete(s.contentStates, legacyKey)
-		}
-		s.contentStates[def.Key] = state
+		s.emitContentEvent(def, source, engine.NewEventContext(), action, &stories, &logs)
 	}
 	return logs, stories
 }
@@ -843,6 +838,118 @@ func (s *GameService) contentStateForDefinition(def engine.ContentEventDefinitio
 		}
 	}
 	return model.ContentEventState{}, ""
+}
+
+func (s *GameService) bindContentEventHandlers() {
+	s.clearContentEventHandlers()
+	if s.engine == nil || s.engine.Bus == nil {
+		return
+	}
+
+	for _, def := range s.contentDefinitions {
+		def := def
+		s.contentUnsubscribes = append(s.contentUnsubscribes, s.engine.Bus.Subscribe(engine.ContentEventBusName(def), func(event *engine.GameEvent, ctx *engine.EventContext) {
+			s.handleContentEvent(def, event)
+		}))
+	}
+
+	for _, def := range s.contentDefinitions {
+		def := def
+		for _, parentEventName := range engine.ContentTriggerEventNames(def) {
+			parentEventName := parentEventName
+			s.contentUnsubscribes = append(s.contentUnsubscribes, s.engine.Bus.Subscribe(parentEventName, func(event *engine.GameEvent, ctx *engine.EventContext) {
+				s.tryEmitFollowupContentEvent(def, event, ctx)
+			}))
+		}
+	}
+}
+
+func (s *GameService) clearContentEventHandlers() {
+	for _, unsubscribe := range s.contentUnsubscribes {
+		if unsubscribe != nil {
+			unsubscribe()
+		}
+	}
+	s.contentUnsubscribes = nil
+}
+
+func (s *GameService) emitContentEvent(def engine.ContentEventDefinition, source string, ctx *engine.EventContext, action *model.AgentAction, stories *[]model.StoryEvent, logs *[]string) bool {
+	if s.engine == nil || s.engine.Bus == nil {
+		return false
+	}
+	data := map[string]interface{}{
+		"silo":           s.silo,
+		"agent":          s.agent,
+		"content_source": source,
+		"story_sink":     stories,
+		"log_sink":       logs,
+	}
+	if action != nil {
+		data["action"] = action
+	}
+	event := engine.CreateEvent("content#"+def.Key+"#"+strconv.Itoa(len(s.eventLogs)+len(*stories)+1), engine.ContentEventBusName(def), data)
+	s.engine.Bus.Emit(event, ctx)
+	_, ok := event.Data["story_result"]
+	return ok
+}
+
+func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, event *engine.GameEvent) {
+	story := engine.ApplyContentEvent(def, s.silo)
+
+	state, legacyKey := s.contentStateForDefinition(def)
+	state.SiloID = ActiveSiloID
+	state.DefinitionID = def.ID
+	state.EventKey = def.Key
+	state.Triggered = true
+	state.TriggerCount++
+	state.LastTriggeredTimestamp = gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth)
+	if legacyKey != "" && legacyKey != def.Key {
+		delete(s.contentStates, legacyKey)
+	}
+	s.contentStates[def.Key] = state
+
+	if sink, ok := event.Data["story_sink"].(*[]model.StoryEvent); ok && sink != nil {
+		*sink = append(*sink, story)
+	}
+	if sink, ok := event.Data["log_sink"].(*[]string); ok && sink != nil {
+		*sink = append(*sink, "[ContentEvent] "+story.Title)
+	}
+	if source, _ := event.Data["content_source"].(string); source != "" {
+		storyCopy := story
+		s.recordStories([]*model.StoryEvent{&storyCopy}, source)
+	}
+	event.Data["story_result"] = story
+}
+
+func (s *GameService) tryEmitFollowupContentEvent(def engine.ContentEventDefinition, sourceEvent *engine.GameEvent, ctx *engine.EventContext) {
+	state, _ := s.contentStateForDefinition(def)
+	evalCtx := engine.ContentEvaluationContext{
+		Silo:   s.silo,
+		States: s.contentRuntimeMap(),
+		Action: contentActionFromEvent(sourceEvent),
+		Runtime: engine.ContentEventRuntime{
+			Triggered:              state.Triggered,
+			TriggerCount:           state.TriggerCount,
+			LastTriggeredTimestamp: state.LastTriggeredTimestamp,
+		},
+	}
+	if !engine.CanTriggerContentEvent(def, evalCtx) {
+		return
+	}
+
+	stories, _ := sourceEvent.Data["story_sink"].(*[]model.StoryEvent)
+	logs, _ := sourceEvent.Data["log_sink"].(*[]string)
+	contentSource, _ := sourceEvent.Data["content_source"].(string)
+	action := contentActionFromEvent(sourceEvent)
+	s.emitContentEvent(def, contentSource, ctx, action, stories, logs)
+}
+
+func contentActionFromEvent(event *engine.GameEvent) *model.AgentAction {
+	if event == nil {
+		return nil
+	}
+	action, _ := event.Data["action"].(*model.AgentAction)
+	return action
 }
 
 func (s *GameService) endingNarrative() string {

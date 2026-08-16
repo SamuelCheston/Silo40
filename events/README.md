@@ -11,6 +11,12 @@
 
 后端会自动扫描 `events/` 下的一级子目录作为事件分组；旧的平铺布局仅作为兼容读取保留。
 
+运行时约定：
+
+- 所有文件驱动事件都会先转换成一个带名字的 `EventBus` 事件，再由对应 handler 应用效果。
+- 推荐使用 `category:event_id` 作为运行时事件名，例如 `special:history_burden_awakened`。
+- `crisis` 事件是 `special` 事件的后续事件，这是一条约定。实现上通常通过 `event_triggered` 监听上游 `special` 事件名来唤起。
+
 当前支持的顶层字段：
 
 - `id`: 事件唯一 ID

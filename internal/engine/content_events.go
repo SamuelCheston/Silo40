@@ -401,6 +401,54 @@ func ApplyContentEvent(def ContentEventDefinition, silo *model.Silo) model.Story
 	}
 }
 
+func ContentEventBusName(def ContentEventDefinition) string {
+	category := normalizeContentCategory(def.SourceGroup)
+	if category == "" {
+		return def.EventID
+	}
+	return category + ":" + def.EventID
+}
+
+func ContentTriggerEventNames(def ContentEventDefinition) []string {
+	names := map[string]bool{}
+	collectContentTriggerEventNames(def, def.Trigger, names)
+	result := make([]string, 0, len(names))
+	for name := range names {
+		result = append(result, name)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func HasEventTriggeredTrigger(trigger ContentTrigger) bool {
+	if trigger.Type == "event_triggered" {
+		return true
+	}
+	for _, child := range trigger.Conditions {
+		if HasEventTriggeredTrigger(child) {
+			return true
+		}
+	}
+	return false
+}
+
+func collectContentTriggerEventNames(def ContentEventDefinition, trigger ContentTrigger, names map[string]bool) {
+	if trigger.Type == "event_triggered" && trigger.EventID != "" {
+		category := trigger.Category
+		if category == "" && normalizeContentCategory(def.SourceGroup) == "crisis" {
+			category = "special"
+		}
+		name := trigger.EventID
+		if category != "" {
+			name = category + ":" + trigger.EventID
+		}
+		names[name] = true
+	}
+	for _, child := range trigger.Conditions {
+		collectContentTriggerEventNames(def, child, names)
+	}
+}
+
 func normalizeContentCategory(group string) string {
 	switch strings.ToLower(strings.TrimSpace(group)) {
 	case "histories", "history":
