@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"log"
 	"os"
 	"silo40/internal/api"
@@ -21,11 +22,14 @@ type App struct {
 	db           *gorm.DB
 	gameService  *service.GameService
 	debugHTTPAPI *api.DebugHTTPServer
+	eventsFS     embed.FS
 }
 
 // NewApp creates a new App application struct
-func NewApp() *App {
-	return &App{}
+func NewApp(events embed.FS) *App {
+	return &App{
+		eventsFS: events,
+	}
 }
 
 // startup is called when the app starts.
@@ -46,7 +50,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)
-	if err := a.gameService.BootstrapContent(); err != nil {
+	if err := a.gameService.BootstrapContent(a.eventsFS); err != nil {
 		log.Printf("failed to bootstrap content events: %v", err)
 	}
 	if err := a.gameService.Resume(); err != nil {

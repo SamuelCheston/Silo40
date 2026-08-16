@@ -1,8 +1,10 @@
 package service
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -55,9 +57,14 @@ func NewGameService(db *gorm.DB) *GameService {
 }
 
 // BootstrapContent 同步文件驱动事件定义到数据库并加载到内存。
-func (s *GameService) BootstrapContent() error {
+func (s *GameService) BootstrapContent(events embed.FS) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// 运行的时候检查同目录有没有 events 目录，没有则释放
+	if err := s.ensureEventsExtracted(events); err != nil {
+		return fmt.Errorf("failed to extract embedded events: %w", err)
+	}
 
 	dirs, err := resolveContentDirectories()
 	if err != nil {
@@ -72,6 +79,50 @@ func (s *GameService) BootstrapContent() error {
 	s.bindContentEventHandlers()
 	return nil
 }
+
+func (s *GameService) ensureEventsExtracted(events embed.FS) error {
+	exePath, _ := os.Executable()
+	if exePath == "" {
+		return nil // Fallback to embedded if executable path is unknown? No, user wants extraction.
+	}
+	exeDir := filepath.Dir(exePath)
+	targetDir := filepath.Join(exeDir, "events")
+
+	// 检查同目录有没有 events 目录
+	if _, err := os.Stat(targetDir); err == nil {
+		return nil // Already exists
+	}
+
+	// 没有则释放
+	return fs.WalkDir(events, "events", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, _ := filepath.Rel("events", path)
+		if relPath == "." {
+			return nil
+		}
+
+		targetPath := filepath.Join(targetDir, relPath)
+		if d.IsDir() {
+			return os.MkdirAll(targetPath, 0o755)
+		}
+
+		// Copy file
+		data, err := events.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			return err
+		}
+
+		return os.WriteFile(targetPath, data, 0o644)
+	})
+}
+
 
 // ---------- 内部辅助 ----------
 
