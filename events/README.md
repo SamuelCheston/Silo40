@@ -27,6 +27,7 @@
 - `cooldown_months`: 可重复事件的冷却月数（可选）
 - `trigger`: 结构化触发条件
 - `effects`: 结构化事件效果列表
+- `player_action`: 仅用于 `events/player_actions/`，声明该动作在 UI 中如何展示与提交
 
 当前支持的 `trigger.type`：
 
@@ -48,7 +49,27 @@
   - `category`: 上游事件分类，例如 `special`
   - `event_id`: 上游事件 ID
 - `player_action_is`: 用于 `player_actions` 目录，要求当前玩家执行的 action 与指定值一致。常用字段：
-  - `action`: 例如 `CONDUCT_PROPAGANDA`
+  - `action`: 可以是内建动作名，例如 `CONDUCT_PROPAGANDA`，也可以是文件驱动动作自己的 `player_action.id`
+
+`player_action` 元数据当前支持的字段：
+
+- `id`: 动作 ID；默认使用事件 `id`
+- `label`: 按钮标题；默认使用事件 `title`
+- `description`: 按钮说明；默认使用事件 `description`
+- `scope`: `common` / `profession` / `profession_group` / `faction_member` / `faction_leader`
+- `profession`: 当 `scope=profession` 时必填
+- `profession_group`: 当 `scope=profession_group` 时必填；当前复用职业的 `ClassType`
+- `action_type`: 前端提交的动作类型；默认是 `PLAYER_EVENT`
+- `target_type`: `NONE` / `DEPT` / `RESOURCE`
+- `ap_cost`: 动作 AP 消耗
+- `duration_months`: 动作执行后推进的月数
+- `unavailable_behavior`: `hide` / `disable`
+
+运行时展示约定：
+
+- 后端会把当前可展示的动作统一整理成 `available_actions`
+- 当前阶段会把静态内建动作和 `player_actions` 文件驱动动作合并后一起返回
+- `faction_member` 作用域的玩家动作暂不启用；`faction_leader` 依据当前 `AgentStats.is_faction_leader` 判定
 
 当前支持的 `effects.type`：
 

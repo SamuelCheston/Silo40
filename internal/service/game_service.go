@@ -442,13 +442,14 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 	s.cacheSnapshot()
 
 	return &model.TickResult{
-		Silo:            s.publicSiloSnapshot(),
-		Agent:           *s.agent,
-		AgentStats:      s.engine.BuildAgentStats(s.agent, s.silo),
-		Logs:            logs,
-		Stories:         stories,
-		GameOver:        s.gameOver(),
-		EndingNarrative: s.endingNarrative(),
+		Silo:             s.publicSiloSnapshot(),
+		Agent:            *s.agent,
+		AgentStats:       s.engine.BuildAgentStats(s.agent, s.silo),
+		AvailableActions: s.availablePlayerActions(),
+		Logs:             logs,
+		Stories:          stories,
+		GameOver:         s.gameOver(),
+		EndingNarrative:  s.endingNarrative(),
 	}, nil
 }
 
@@ -470,7 +471,7 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 	}
 
 	if result.Executed {
-		duration := model.ACTION_DURATIONS[action.Type]
+		duration := s.actionDurationMonths(action)
 		if duration > 0 {
 			for i := 0; i < duration; i++ {
 				l, st := s.engine.UpdateSiloState(s.silo, 1.0/12.0, s.agent)
@@ -514,14 +515,15 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 	s.cacheSnapshot()
 
 	return &model.ActionOutcome{
-		Silo:            s.publicSiloSnapshot(),
-		Agent:           *s.agent,
-		AgentStats:      s.engine.BuildAgentStats(s.agent, s.silo),
-		Result:          result,
-		Logs:            logs,
-		Stories:         stories,
-		GameOver:        s.gameOver(),
-		EndingNarrative: s.endingNarrative(),
+		Silo:             s.publicSiloSnapshot(),
+		Agent:            *s.agent,
+		AgentStats:       s.engine.BuildAgentStats(s.agent, s.silo),
+		AvailableActions: s.availablePlayerActions(),
+		Result:           result,
+		Logs:             logs,
+		Stories:          stories,
+		GameOver:         s.gameOver(),
+		EndingNarrative:  s.endingNarrative(),
 	}, nil
 }
 
@@ -761,6 +763,19 @@ func (s *GameService) executePlayerActionEvents(action model.AgentAction) (bool,
 	if !s.hasSession() {
 		return false, model.ActionResult{}, nil, nil
 	}
+	if action.Type == model.ActionPlayerEvent {
+		def, ok := s.playerActionDefinition(action.ActionID)
+		if !ok {
+			return true, model.ActionResult{Executed: false, Message: "Unknown player action."}, nil, nil
+		}
+		if err := validatePlayerActionTarget(def, action); err != nil {
+			return true, model.ActionResult{Executed: false, Message: err.Error()}, nil, nil
+		}
+		action.Cost = float64(def.PlayerAction.APCost)
+		if s.agent.ActionPoints < action.Cost {
+			return true, model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}, nil, nil
+		}
+	}
 	if s.agent.ActionPoints < action.Cost {
 		return false, model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}, nil, nil
 	}
@@ -769,6 +784,9 @@ func (s *GameService) executePlayerActionEvents(action model.AgentAction) (bool,
 		return def.SourceGroup == "player_actions" || def.SourceGroup == "player_action"
 	})
 	if len(stories) == 0 {
+		if action.Type == model.ActionPlayerEvent {
+			return true, model.ActionResult{Executed: false, Message: "This player action is currently unavailable."}, nil, nil
+		}
 		return false, model.ActionResult{}, nil, nil
 	}
 
@@ -969,7 +987,189 @@ func (s *GameService) buildState() *model.GameState {
 		EndingNarrative:   s.endingNarrative(),
 		VictoryStatus:     s.silo.VictoryStatus,
 		ProfessionActions: engine.GetProfessionActionMeta(s.agent.Profession),
+		AvailableActions:  s.availablePlayerActions(),
 	}
+}
+
+func (s *GameService) actionDurationMonths(action model.AgentAction) int {
+	if action.Type == model.ActionPlayerEvent {
+		if def, ok := s.playerActionDefinition(action.ActionID); ok && def.PlayerAction != nil {
+			return def.PlayerAction.DurationMonths
+		}
+	}
+	return model.ACTION_DURATIONS[action.Type]
+}
+
+func (s *GameService) playerActionDefinition(actionID string) (engine.ContentEventDefinition, bool) {
+	matchID := strings.TrimSpace(actionID)
+	if matchID == "" {
+		return engine.ContentEventDefinition{}, false
+	}
+	for _, def := range s.contentDefinitions {
+		if def.SourceGroup != "player_actions" && def.SourceGroup != "player_action" {
+			continue
+		}
+		if def.PlayerAction == nil {
+			continue
+		}
+		if engine.ContentPlayerActionID(def) == matchID {
+			return def, true
+		}
+	}
+	return engine.ContentEventDefinition{}, false
+}
+
+func validatePlayerActionTarget(def engine.ContentEventDefinition, action model.AgentAction) error {
+	if def.PlayerAction == nil {
+		return fmt.Errorf("player action metadata is missing")
+	}
+	switch def.PlayerAction.TargetType {
+	case "DEPT":
+		if strings.TrimSpace(action.TargetDept) == "" {
+			return fmt.Errorf("Please select a target department.")
+		}
+	case "RESOURCE":
+		if strings.TrimSpace(action.ResourceTarget) == "" {
+			return fmt.Errorf("Please select a target resource.")
+		}
+	}
+	return nil
+}
+
+func (s *GameService) availablePlayerActions() []model.PlayerActionMeta {
+	if !s.hasSession() {
+		return nil
+	}
+	stats := s.engine.BuildAgentStats(s.agent, s.silo)
+	actions := append(s.staticPlayerActions(stats), s.contentPlayerActions(stats)...)
+	sort.Slice(actions, func(i, j int) bool {
+		if actions[i].Group != actions[j].Group {
+			return actions[i].Group < actions[j].Group
+		}
+		if actions[i].Enabled != actions[j].Enabled {
+			return actions[i].Enabled && !actions[j].Enabled
+		}
+		if actions[i].APCost != actions[j].APCost {
+			return actions[i].APCost < actions[j].APCost
+		}
+		return actions[i].Label < actions[j].Label
+	})
+	return actions
+}
+
+func (s *GameService) staticPlayerActions(stats model.AgentStats) []model.PlayerActionMeta {
+	actions := []model.PlayerActionMeta{
+		{ID: string(model.ActionGatherInfo), Source: "static", Label: "Gather Info", Description: "Collect information from a department.", Group: "common", ActionType: model.ActionGatherInfo, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionGatherInfo]), DurationMonths: model.ACTION_DURATIONS[model.ActionGatherInfo], Enabled: true},
+		{ID: string(model.ActionShareInfo), Source: "static", Label: "Share Info", Description: "Share real or fake fragments with a department.", Group: "common", ActionType: model.ActionShareInfo, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionShareInfo]), DurationMonths: model.ACTION_DURATIONS[model.ActionShareInfo], Enabled: true},
+		{ID: string(model.ActionBuildConnection), Source: "static", Label: "Build Network", Description: "Build influence with a department over time.", Group: "common", ActionType: model.ActionBuildConnection, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionBuildConnection]), DurationMonths: model.ACTION_DURATIONS[model.ActionBuildConnection], Enabled: true},
+		{ID: string(model.ActionConductPropaganda), Source: "static", Label: "Propaganda", Description: "Increase your propaganda level.", Group: "common", ActionType: model.ActionConductPropaganda, TargetType: "NONE", APCost: int(model.ACTION_COSTS[model.ActionConductPropaganda]), DurationMonths: model.ACTION_DURATIONS[model.ActionConductPropaganda], Enabled: true},
+		{ID: string(model.ActionInciteRebellion), Source: "static", Label: "Incite Rebellion", Description: "Agitate commoner departments.", Group: "common", ActionType: model.ActionInciteRebellion, TargetType: "NONE", APCost: int(model.ACTION_COSTS[model.ActionInciteRebellion]), DurationMonths: model.ACTION_DURATIONS[model.ActionInciteRebellion], Enabled: true},
+	}
+	for _, def := range engine.GetProfessionActionMeta(s.agent.Profession) {
+		actions = append(actions, model.PlayerActionMeta{
+			ID:             def.ID,
+			Source:         "static",
+			Label:          def.Label,
+			Description:    def.Description,
+			Group:          "profession",
+			ActionType:     model.ActionProfession,
+			TargetType:     def.TargetType,
+			APCost:         def.APCost,
+			DurationMonths: model.ACTION_DURATIONS[model.ActionProfession],
+			Enabled:        true,
+		})
+	}
+	if stats.IsFactionLeader {
+		actions = append(actions, model.PlayerActionMeta{
+			ID:             string(model.ActionPublicizeFaction),
+			Source:         "static",
+			Label:          "Publicize Faction",
+			Description:    "Reveal your faction to the silo and gain prestige.",
+			Group:          "faction_leader",
+			ActionType:     model.ActionPublicizeFaction,
+			TargetType:     "NONE",
+			APCost:         int(model.ACTION_COSTS[model.ActionPublicizeFaction]),
+			DurationMonths: model.ACTION_DURATIONS[model.ActionPublicizeFaction],
+			Enabled:        true,
+		})
+	}
+	return actions
+}
+
+func (s *GameService) contentPlayerActions(stats model.AgentStats) []model.PlayerActionMeta {
+	if len(s.contentDefinitions) == 0 {
+		return nil
+	}
+	var actions []model.PlayerActionMeta
+	for _, def := range s.contentDefinitions {
+		if (def.SourceGroup != "player_actions" && def.SourceGroup != "player_action") || def.PlayerAction == nil {
+			continue
+		}
+		if !s.matchesPlayerActionScope(def, stats) {
+			continue
+		}
+		state, _ := s.contentStateForDefinition(def)
+		ctx := engine.ContentEvaluationContext{
+			Silo:   s.silo,
+			States: s.contentRuntimeMap(),
+			Runtime: engine.ContentEventRuntime{
+				Triggered:              state.Triggered,
+				TriggerCount:           state.TriggerCount,
+				LastTriggeredTimestamp: state.LastTriggeredTimestamp,
+			},
+		}
+		enabled := engine.CanDisplayPlayerAction(def, ctx)
+		if !enabled && def.PlayerAction.UnavailableBehavior == "hide" {
+			continue
+		}
+		actions = append(actions, model.PlayerActionMeta{
+			ID:                  engine.ContentPlayerActionID(def),
+			Source:              "content",
+			EventID:             def.EventID,
+			Label:               def.PlayerAction.Label,
+			Description:         def.PlayerAction.Description,
+			Group:               def.PlayerAction.Scope,
+			ActionType:          model.AgentActionType(def.PlayerAction.ActionType),
+			TargetType:          def.PlayerAction.TargetType,
+			APCost:              def.PlayerAction.APCost,
+			DurationMonths:      def.PlayerAction.DurationMonths,
+			Enabled:             enabled,
+			UnavailableBehavior: def.PlayerAction.UnavailableBehavior,
+		})
+	}
+	return actions
+}
+
+func (s *GameService) matchesPlayerActionScope(def engine.ContentEventDefinition, stats model.AgentStats) bool {
+	if def.PlayerAction == nil {
+		return false
+	}
+	switch def.PlayerAction.Scope {
+	case "common":
+		return true
+	case "profession":
+		return def.PlayerAction.Profession == "" || strings.EqualFold(def.PlayerAction.Profession, s.agent.Profession)
+	case "profession_group":
+		return def.PlayerAction.ProfessionGroup != "" && def.PlayerAction.ProfessionGroup == s.agentProfessionGroup()
+	case "faction_member":
+		return false
+	case "faction_leader":
+		return stats.IsFactionLeader
+	default:
+		return false
+	}
+}
+
+func (s *GameService) agentProfessionGroup() string {
+	if !s.hasSession() || s.silo == nil {
+		return ""
+	}
+	for _, profession := range s.silo.Professions {
+		if profession.Name == s.agent.Profession {
+			return strings.ToUpper(strings.TrimSpace(profession.ClassType))
+		}
+	}
+	return ""
 }
 
 func (s *GameService) recordStories(stories []*model.StoryEvent, source string) {

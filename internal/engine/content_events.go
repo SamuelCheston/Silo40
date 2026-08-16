@@ -26,14 +26,15 @@ type ContentEventDefinition struct {
 	Key            string
 	SourceGroup    string
 	SourceFile     string
-	EventID        string          `json:"id"`
-	Title          string          `json:"title"`
-	Description    string          `json:"description"`
-	Type           string          `json:"type"`
-	FireMode       string          `json:"fire_mode"`
-	CooldownMonths int             `json:"cooldown_months,omitempty"`
-	Trigger        ContentTrigger  `json:"trigger"`
-	Effects        []ContentEffect `json:"effects"`
+	EventID        string                   `json:"id"`
+	Title          string                   `json:"title"`
+	Description    string                   `json:"description"`
+	Type           string                   `json:"type"`
+	FireMode       string                   `json:"fire_mode"`
+	CooldownMonths int                      `json:"cooldown_months,omitempty"`
+	Trigger        ContentTrigger           `json:"trigger"`
+	Effects        []ContentEffect          `json:"effects"`
+	PlayerAction   *ContentPlayerActionSpec `json:"player_action,omitempty"`
 }
 
 // ContentTrigger 结构化触发条件。
@@ -63,6 +64,21 @@ type ContentEffect struct {
 	Profession string  `json:"profession,omitempty"`
 	Value      float64 `json:"value,omitempty"`
 	BoolValue  bool    `json:"bool_value,omitempty"`
+}
+
+// ContentPlayerActionSpec describes how a player action event is shown in UI.
+type ContentPlayerActionSpec struct {
+	ID                  string `json:"id,omitempty"`
+	Label               string `json:"label,omitempty"`
+	Description         string `json:"description,omitempty"`
+	Scope               string `json:"scope,omitempty"`
+	Profession          string `json:"profession,omitempty"`
+	ProfessionGroup     string `json:"profession_group,omitempty"`
+	ActionType          string `json:"action_type,omitempty"`
+	TargetType          string `json:"target_type,omitempty"`
+	APCost              int    `json:"ap_cost,omitempty"`
+	DurationMonths      int    `json:"duration_months,omitempty"`
+	UnavailableBehavior string `json:"unavailable_behavior,omitempty"`
 }
 
 // ContentEventRuntime 单局游戏内的运行时触发状态。
@@ -181,6 +197,7 @@ func normalizeContentEventDefinition(def *ContentEventDefinition) {
 		def.Effects[i].Flag = strings.ToLower(strings.TrimSpace(def.Effects[i].Flag))
 		def.Effects[i].Profession = strings.TrimSpace(def.Effects[i].Profession)
 	}
+	normalizePlayerActionSpec(def)
 }
 
 func normalizeTrigger(trigger *ContentTrigger) {
@@ -197,6 +214,48 @@ func normalizeTrigger(trigger *ContentTrigger) {
 	}
 	for i := range trigger.Conditions {
 		normalizeTrigger(&trigger.Conditions[i])
+	}
+}
+
+func normalizePlayerActionSpec(def *ContentEventDefinition) {
+	if def.PlayerAction == nil {
+		return
+	}
+	def.PlayerAction.ID = strings.TrimSpace(def.PlayerAction.ID)
+	if def.PlayerAction.ID == "" {
+		def.PlayerAction.ID = def.EventID
+	}
+	def.PlayerAction.Label = strings.TrimSpace(def.PlayerAction.Label)
+	if def.PlayerAction.Label == "" {
+		def.PlayerAction.Label = def.Title
+	}
+	def.PlayerAction.Description = strings.TrimSpace(def.PlayerAction.Description)
+	if def.PlayerAction.Description == "" {
+		def.PlayerAction.Description = def.Description
+	}
+	def.PlayerAction.Scope = strings.ToLower(strings.TrimSpace(def.PlayerAction.Scope))
+	if def.PlayerAction.Scope == "" {
+		def.PlayerAction.Scope = "common"
+	}
+	def.PlayerAction.Profession = strings.TrimSpace(def.PlayerAction.Profession)
+	def.PlayerAction.ProfessionGroup = strings.ToUpper(strings.TrimSpace(def.PlayerAction.ProfessionGroup))
+	def.PlayerAction.ActionType = strings.ToUpper(strings.TrimSpace(def.PlayerAction.ActionType))
+	if def.PlayerAction.ActionType == "" {
+		def.PlayerAction.ActionType = string(model.ActionPlayerEvent)
+	}
+	def.PlayerAction.TargetType = strings.ToUpper(strings.TrimSpace(def.PlayerAction.TargetType))
+	if def.PlayerAction.TargetType == "" {
+		def.PlayerAction.TargetType = "NONE"
+	}
+	def.PlayerAction.UnavailableBehavior = strings.ToLower(strings.TrimSpace(def.PlayerAction.UnavailableBehavior))
+	if def.PlayerAction.UnavailableBehavior == "" {
+		def.PlayerAction.UnavailableBehavior = "hide"
+	}
+	if def.PlayerAction.APCost < 0 {
+		def.PlayerAction.APCost = 0
+	}
+	if def.PlayerAction.DurationMonths < 0 {
+		def.PlayerAction.DurationMonths = 0
 	}
 }
 
@@ -220,6 +279,40 @@ func ValidateContentEventDefinition(def ContentEventDefinition) error {
 		if err := validateEffect(effect); err != nil {
 			return err
 		}
+	}
+	if err := validatePlayerActionSpec(def); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validatePlayerActionSpec(def ContentEventDefinition) error {
+	if def.PlayerAction == nil {
+		return nil
+	}
+	switch def.PlayerAction.Scope {
+	case "common", "profession", "profession_group", "faction_member", "faction_leader":
+	default:
+		return fmt.Errorf("unsupported player_action.scope %q", def.PlayerAction.Scope)
+	}
+	switch def.PlayerAction.TargetType {
+	case "NONE", "DEPT", "RESOURCE":
+	default:
+		return fmt.Errorf("unsupported player_action.target_type %q", def.PlayerAction.TargetType)
+	}
+	switch def.PlayerAction.UnavailableBehavior {
+	case "hide", "disable":
+	default:
+		return fmt.Errorf("unsupported player_action.unavailable_behavior %q", def.PlayerAction.UnavailableBehavior)
+	}
+	if def.PlayerAction.ActionType == "" {
+		return fmt.Errorf("player_action.action_type is required")
+	}
+	if def.PlayerAction.Scope == "profession" && def.PlayerAction.Profession == "" {
+		return fmt.Errorf("profession scope requires player_action.profession")
+	}
+	if def.PlayerAction.Scope == "profession_group" && def.PlayerAction.ProfessionGroup == "" {
+		return fmt.Errorf("profession_group scope requires player_action.profession_group")
 	}
 	return nil
 }
@@ -297,6 +390,15 @@ func validateEffect(effect ContentEffect) error {
 
 // CanTriggerContentEvent 判断当前事件是否满足触发条件以及运行时限制。
 func CanTriggerContentEvent(def ContentEventDefinition, ctx ContentEvaluationContext) bool {
+	return canTriggerContentEvent(def, ctx, false)
+}
+
+// CanDisplayPlayerAction checks current availability while ignoring player_action_is.
+func CanDisplayPlayerAction(def ContentEventDefinition, ctx ContentEvaluationContext) bool {
+	return canTriggerContentEvent(def, ctx, true)
+}
+
+func canTriggerContentEvent(def ContentEventDefinition, ctx ContentEvaluationContext, ignoreActionMatch bool) bool {
 	if ctx.Silo == nil {
 		return false
 	}
@@ -310,21 +412,21 @@ func CanTriggerContentEvent(def ContentEventDefinition, ctx ContentEvaluationCon
 			return false
 		}
 	}
-	return evaluateContentTrigger(def.Trigger, ctx)
+	return evaluateContentTrigger(def.Trigger, ctx, ignoreActionMatch)
 }
 
-func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext) bool {
+func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext, ignoreActionMatch bool) bool {
 	switch trigger.Type {
 	case "all":
 		for _, child := range trigger.Conditions {
-			if !evaluateContentTrigger(child, ctx) {
+			if !evaluateContentTrigger(child, ctx, ignoreActionMatch) {
 				return false
 			}
 		}
 		return true
 	case "any":
 		for _, child := range trigger.Conditions {
-			if evaluateContentTrigger(child, ctx) {
+			if evaluateContentTrigger(child, ctx, ignoreActionMatch) {
 				return true
 			}
 		}
@@ -358,7 +460,10 @@ func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext
 		}
 		return false
 	case "player_action_is":
-		return ctx.Action != nil && string(ctx.Action.Type) == trigger.Action
+		if ignoreActionMatch {
+			return true
+		}
+		return ctx.Action != nil && contentActionMatches(ctx.Action, trigger.Action)
 	case "profession_metric_gte_count":
 		count := 0
 		for _, profession := range ctx.Silo.Professions {
@@ -385,6 +490,37 @@ func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext
 	default:
 		return false
 	}
+}
+
+func contentActionMatches(action *model.AgentAction, expected string) bool {
+	if action == nil {
+		return false
+	}
+	target := normalizeContentActionKey(expected)
+	if target == "" {
+		return false
+	}
+	if normalizeContentActionKey(action.ActionID) == target {
+		return true
+	}
+	if normalizeContentActionKey(string(action.Type)) == target {
+		return true
+	}
+	if normalizeContentActionKey(action.ProfessionAction) == target {
+		return true
+	}
+	return false
+}
+
+func normalizeContentActionKey(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
+}
+
+func ContentPlayerActionID(def ContentEventDefinition) string {
+	if def.PlayerAction != nil && def.PlayerAction.ID != "" {
+		return def.PlayerAction.ID
+	}
+	return def.EventID
 }
 
 // ApplyContentEvent 把事件效果实际施加到地堡状态上。

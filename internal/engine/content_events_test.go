@@ -144,15 +144,23 @@ func TestCanTriggerCrisisEventAfterSpecialEvent(t *testing.T) {
 
 func TestCanTriggerPlayerActionEvent(t *testing.T) {
 	silo := &model.Silo{CurrentYear: 122, CurrentMonth: 1}
-	action := model.AgentAction{Type: model.ActionConductPropaganda}
+	action := model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "PROPAGANDA_BROADCAST"}
 	def := ContentEventDefinition{
 		SourceGroup: "player_actions",
 		EventID:     "propaganda_broadcast",
 		Title:       "Propaganda Broadcast",
 		FireMode:    ContentFireModeRepeatable,
+		PlayerAction: &ContentPlayerActionSpec{
+			ID:                  "PROPAGANDA_BROADCAST",
+			Label:               "Propaganda Broadcast",
+			Scope:               "common",
+			ActionType:          string(model.ActionPlayerEvent),
+			TargetType:          "NONE",
+			UnavailableBehavior: "disable",
+		},
 		Trigger: ContentTrigger{
 			Type:   "player_action_is",
-			Action: string(model.ActionConductPropaganda),
+			Action: "PROPAGANDA_BROADCAST",
 		},
 	}
 	if !CanTriggerContentEvent(def, ContentEvaluationContext{
@@ -160,5 +168,11 @@ func TestCanTriggerPlayerActionEvent(t *testing.T) {
 		Action: &action,
 	}) {
 		t.Fatalf("expected player action event to trigger for matching action")
+	}
+	if !CanDisplayPlayerAction(def, ContentEvaluationContext{Silo: silo}) {
+		t.Fatalf("expected player action to stay displayable before a concrete click action exists")
+	}
+	if ContentPlayerActionID(def) != "PROPAGANDA_BROADCAST" {
+		t.Fatalf("expected player action id to come from metadata, got %q", ContentPlayerActionID(def))
 	}
 }

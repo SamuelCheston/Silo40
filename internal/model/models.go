@@ -292,12 +292,14 @@ const (
 	ActionInciteRebellion   AgentActionType = "INCITE_REBELLION"
 	ActionConductPropaganda AgentActionType = "CONDUCT_PROPAGANDA"
 	ActionProfession        AgentActionType = "PROFESSION_ACTION"
+	ActionPlayerEvent       AgentActionType = "PLAYER_EVENT"
 	ActionPublicizeFaction  AgentActionType = "PUBLICIZE_FACTION"
 )
 
 // AgentAction 特工/部门动作请求
 type AgentAction struct {
 	Type             AgentActionType `json:"type"`
+	ActionID         string          `json:"action_id,omitempty"`
 	TargetDept       string          `json:"target_dept,omitempty"`
 	FragmentIds      []string        `json:"fragment_ids,omitempty"`
 	ProfessionAction string          `json:"profession_action,omitempty"`
@@ -338,6 +340,7 @@ type GameState struct {
 	EndingNarrative   string                 `json:"ending_narrative,omitempty"`
 	VictoryStatus     *VictoryStatus         `json:"victory_status,omitempty"`
 	ProfessionActions []ProfessionActionMeta `json:"profession_actions,omitempty"`
+	AvailableActions  []PlayerActionMeta     `json:"available_actions,omitempty"`
 }
 
 // AgentStats 后端下发的 Agent 派生指标，用于前端展示，避免 UI 复算引擎公式
@@ -360,25 +363,27 @@ type AgentStats struct {
 
 // TickResult 时间推进结果
 type TickResult struct {
-	Silo            Silo         `json:"silo"`
-	Agent           Agent        `json:"agent"`
-	AgentStats      AgentStats   `json:"agent_stats"`
-	Logs            []string     `json:"logs"`
-	Stories         []StoryEvent `json:"stories"`
-	GameOver        bool         `json:"game_over"`
-	EndingNarrative string       `json:"ending_narrative,omitempty"`
+	Silo             Silo               `json:"silo"`
+	Agent            Agent              `json:"agent"`
+	AgentStats       AgentStats         `json:"agent_stats"`
+	AvailableActions []PlayerActionMeta `json:"available_actions,omitempty"`
+	Logs             []string           `json:"logs"`
+	Stories          []StoryEvent       `json:"stories"`
+	GameOver         bool               `json:"game_over"`
+	EndingNarrative  string             `json:"ending_narrative,omitempty"`
 }
 
 // ActionOutcome 动作执行结果 (含最新状态)
 type ActionOutcome struct {
-	Silo            Silo         `json:"silo"`
-	Agent           Agent        `json:"agent"`
-	AgentStats      AgentStats   `json:"agent_stats"`
-	Result          ActionResult `json:"result"`
-	Logs            []string     `json:"logs"`
-	Stories         []StoryEvent `json:"stories"`
-	GameOver        bool         `json:"game_over"`
-	EndingNarrative string       `json:"ending_narrative,omitempty"`
+	Silo             Silo               `json:"silo"`
+	Agent            Agent              `json:"agent"`
+	AgentStats       AgentStats         `json:"agent_stats"`
+	AvailableActions []PlayerActionMeta `json:"available_actions,omitempty"`
+	Result           ActionResult       `json:"result"`
+	Logs             []string           `json:"logs"`
+	Stories          []StoryEvent       `json:"stories"`
+	GameOver         bool               `json:"game_over"`
+	EndingNarrative  string             `json:"ending_narrative,omitempty"`
 }
 
 // EventHistoryResult 事件历史查询结果
@@ -395,6 +400,22 @@ type ProfessionActionMeta struct {
 	APCost           int     `json:"ap_cost"`
 	TargetType       string  `json:"target_type"` // NONE / DEPT / RESOURCE
 	SuspicionPenalty float64 `json:"suspicion_penalty"`
+}
+
+// PlayerActionMeta 前端渲染玩家动作列表的统一元数据。
+type PlayerActionMeta struct {
+	ID                  string          `json:"id"`
+	Source              string          `json:"source"`
+	EventID             string          `json:"event_id,omitempty"`
+	Label               string          `json:"label"`
+	Description         string          `json:"description"`
+	Group               string          `json:"group"`
+	ActionType          AgentActionType `json:"action_type"`
+	TargetType          string          `json:"target_type"`
+	APCost              int             `json:"ap_cost"`
+	DurationMonths      int             `json:"duration_months"`
+	Enabled             bool            `json:"enabled"`
+	UnavailableBehavior string          `json:"unavailable_behavior,omitempty"`
 }
 
 // ALL_FRAGMENTS 全部信息碎片
@@ -419,6 +440,7 @@ var ACTION_COSTS = map[AgentActionType]float64{
 	ActionConductPropaganda: 20,
 	ActionPublicizeFaction:  25,
 	ActionProfession:        0, // 实际成本由职业行动注册表决定
+	ActionPlayerEvent:       0, // 实际成本由 content event 元数据决定
 }
 
 // ACTION_DURATIONS 通用动作耗时 (月)
@@ -430,4 +452,5 @@ var ACTION_DURATIONS = map[AgentActionType]int{
 	ActionConductPropaganda: 1,
 	ActionPublicizeFaction:  0, // 立即生效
 	ActionProfession:        1,
+	ActionPlayerEvent:       0,
 }

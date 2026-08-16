@@ -26,6 +26,7 @@ export type StoryEventLog = model.StoryEventLog;
 export type ActionResult = model.ActionResult;
 export type AgentStats = model.AgentStats;
 export type ProfessionActionMeta = model.ProfessionActionMeta;
+export type PlayerActionMeta = model.PlayerActionMeta;
 export type GameState = model.GameState;
 export type TickResult = model.TickResult;
 export type ActionOutcome = model.ActionOutcome;
@@ -39,6 +40,7 @@ export type AgentActionType =
   | "INCITE_REBELLION"
   | "CONDUCT_PROPAGANDA"
   | "PROFESSION_ACTION"
+  | "PLAYER_EVENT"
   | "PUBLICIZE_FACTION";
 
 export type AgentAction = Omit<model.AgentAction, "type"> & {
@@ -52,6 +54,7 @@ export const ACTION_COSTS: Record<AgentActionType, number> = {
   INCITE_REBELLION: 30,
   CONDUCT_PROPAGANDA: 20,
   PROFESSION_ACTION: 0,
+  PLAYER_EVENT: 0,
   PUBLICIZE_FACTION: 25,
 };
 
@@ -62,6 +65,7 @@ export const ACTION_DURATIONS: Record<AgentActionType, number> = {
   INCITE_REBELLION: 2,
   CONDUCT_PROPAGANDA: 1,
   PROFESSION_ACTION: 1,
+  PLAYER_EVENT: 0,
   PUBLICIZE_FACTION: 0,
 };
 

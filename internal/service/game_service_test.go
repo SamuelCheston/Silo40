@@ -121,3 +121,67 @@ func TestContentEventsDispatchThroughEventBusByName(t *testing.T) {
 		t.Fatalf("expected crisis effect to reduce cohesion, got %v", svc.silo.Cohesion)
 	}
 }
+
+func TestAvailablePlayerActionsIncludeScopedContentActions(t *testing.T) {
+	svc := &GameService{
+		engine: engine.NewGameEngine(),
+		silo: &model.Silo{
+			CurrentYear:  122,
+			CurrentMonth: 1,
+			Professions: []model.Profession{
+				{Name: "Mechanical", ClassType: "COMMONER"},
+			},
+		},
+		agent: &model.Agent{
+			Profession: "Mechanical",
+		},
+		contentStates: map[string]model.ContentEventState{},
+		contentDefinitions: []engine.ContentEventDefinition{
+			{
+				Key:         "player_actions:common_broadcast",
+				SourceGroup: "player_actions",
+				EventID:     "common_broadcast",
+				Title:       "Common Broadcast",
+				FireMode:    engine.ContentFireModeRepeatable,
+				PlayerAction: &engine.ContentPlayerActionSpec{
+					ID:                  "COMMON_BROADCAST",
+					Label:               "Common Broadcast",
+					Scope:               "common",
+					ActionType:          string(model.ActionPlayerEvent),
+					TargetType:          "NONE",
+					UnavailableBehavior: "disable",
+				},
+				Trigger: engine.ContentTrigger{Type: "player_action_is", Action: "COMMON_BROADCAST"},
+			},
+			{
+				Key:         "player_actions:commoner_only",
+				SourceGroup: "player_actions",
+				EventID:     "commoner_only",
+				Title:       "Commoner Only",
+				FireMode:    engine.ContentFireModeRepeatable,
+				PlayerAction: &engine.ContentPlayerActionSpec{
+					ID:                  "COMMONER_ONLY",
+					Label:               "Commoner Only",
+					Scope:               "profession_group",
+					ProfessionGroup:     "COMMONER",
+					ActionType:          string(model.ActionPlayerEvent),
+					TargetType:          "NONE",
+					UnavailableBehavior: "disable",
+				},
+				Trigger: engine.ContentTrigger{Type: "player_action_is", Action: "COMMONER_ONLY"},
+			},
+		},
+	}
+
+	actions := svc.availablePlayerActions()
+	seen := map[string]bool{}
+	for _, action := range actions {
+		seen[action.ID] = true
+	}
+	if !seen["COMMON_BROADCAST"] {
+		t.Fatalf("expected common content action to be visible")
+	}
+	if !seen["COMMONER_ONLY"] {
+		t.Fatalf("expected profession_group content action to be visible for COMMONER")
+	}
+}

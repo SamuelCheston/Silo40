@@ -11,7 +11,7 @@ import { SetupPanel } from './components/SetupPanel';
 import { BunkerMap } from './components/BunkerMap';
 import { FactionView } from './components/FactionView';
 import { HeaderStats } from './components/HeaderStats';
-import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS, ProfessionActionMeta, GameState, AgentStats } from './logic/models';
+import { Silo, Agent, AgentAction, AgentActionType, ACTION_COSTS, ACTION_DURATIONS, ALL_FRAGMENTS, GameState, AgentStats, PlayerActionMeta } from './logic/models';
 import { LayoutGrid, Users } from 'lucide-react';
 
 function App() {
@@ -25,15 +25,15 @@ function App() {
     const [silo, setSilo] = useState<Silo | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
     const [agentStats, setAgentStats] = useState<AgentStats | null>(null);
-    const [professionActions, setProfessionActions] = useState<ProfessionActionMeta[]>([]);
+    const [availableActions, setAvailableActions] = useState<PlayerActionMeta[]>([]);
     const [activeView, setActiveView] = useState<'map' | 'factions'>('map');
 
     // Action Form State
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
     const [targetDept, setTargetDept] = useState<string>('');
     const [selectedFragments, setSelectedFragments] = useState<string[]>([]);
-    // Profession Action State
     const [professionActionId, setProfessionActionId] = useState<string>('');
+    const [playerActionId, setPlayerActionId] = useState<string>('');
     const [resourceTarget, setResourceTarget] = useState<string>('');
 
     const toggleFragment = (f: string) => {
@@ -52,25 +52,47 @@ function App() {
         return "亲外";
     };
 
-    // 当前选中的职业专属行动元数据 (由 Go 后端下发，actionType === 'PROFESSION_ACTION' 时非空)
-    const selectedProfessionAction = actionType === 'PROFESSION_ACTION'
-        ? professionActions.find(a => a.id === professionActionId)
-        : undefined;
-    // 目标选择器显示条件：职业行动按 targetType 决定；通用行动排除全局操作
-    const showDeptSelector = actionType === 'PROFESSION_ACTION'
-        ? selectedProfessionAction?.target_type === 'DEPT'
-        : !(actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION' || actionType === 'PUBLICIZE_FACTION');
-    const showResourceSelector = actionType === 'PROFESSION_ACTION' && selectedProfessionAction?.target_type === 'RESOURCE';
+    const groupedActions = availableActions.reduce((acc, action) => {
+        if (!acc[action.group]) {
+            acc[action.group] = [];
+        }
+        acc[action.group].push(action);
+        return acc;
+    }, {} as Record<string, PlayerActionMeta[]>);
+
+    const selectedActionMeta = availableActions.find((action) => {
+        if (action.action_type !== actionType) return false;
+        if (action.action_type === 'PROFESSION_ACTION') return action.id === professionActionId;
+        if (action.action_type === 'PLAYER_EVENT') return action.id === playerActionId;
+        return action.id === actionType;
+    });
+    const showDeptSelector = selectedActionMeta?.target_type === 'DEPT';
+    const showResourceSelector = selectedActionMeta?.target_type === 'RESOURCE';
 
     // 应用后端返回的游戏状态快照
     const applyGameState = (state: GameState) => {
         setSilo(state.silo);
         setAgent(state.agent);
         setAgentStats(state.agent_stats);
-        setProfessionActions(state.profession_actions || []);
+        setAvailableActions(state.available_actions || []);
         setGameStarted(true);
         setShowSetup(false);
     };
+
+    useEffect(() => {
+        if (!availableActions.some((action) => {
+            if (action.action_type !== actionType) return false;
+            if (actionType === 'PROFESSION_ACTION') return action.id === professionActionId;
+            if (actionType === 'PLAYER_EVENT') return action.id === playerActionId;
+            return action.id === actionType;
+        })) {
+            const fallback = availableActions.find(action => action.enabled) || availableActions[0];
+            if (!fallback) return;
+            setActionType(fallback.action_type as AgentActionType);
+            setProfessionActionId(fallback.action_type === 'PROFESSION_ACTION' ? fallback.id : '');
+            setPlayerActionId(fallback.action_type === 'PLAYER_EVENT' ? fallback.id : '');
+        }
+    }, [availableActions, actionType, professionActionId, playerActionId]);
 
     // 启动时恢复进行中的游戏会话 (后端内存/缓存/SQLite 为唯一事实来源)
     useEffect(() => {
@@ -154,6 +176,7 @@ function App() {
             setSilo(result.silo);
             setAgent(result.agent);
             setAgentStats(result.agent_stats);
+            setAvailableActions(result.available_actions || []);
 
             if (result.game_over) {
                 updateResultText(`Game Over: ${result.silo.victory_status?.description || result.ending_narrative}`);
@@ -177,21 +200,22 @@ function App() {
     const handleExecuteAction = async () => {
         if (!silo || !agent) return;
 
-        const isGlobalAction = actionType === 'CONDUCT_PROPAGANDA' || actionType === 'INCITE_REBELLION';
-        const profDef = selectedProfessionAction;
+        const selected = selectedActionMeta;
+        const isGlobalAction = selected?.target_type === 'NONE';
 
-        // 目标校验：职业行动按 targetType；通用行动必须选目标部门
+        // 目标校验统一以后端下发的 action meta 为准
         let actionTarget: string | undefined = targetDept;
-        if (profDef) {
-            if (profDef.target_type === 'DEPT' && !targetDept) {
+        if (selected?.target_type === 'DEPT') {
+            if (!targetDept) {
                 updateResultText("Please select a target department.");
                 return;
             }
-            if (profDef.target_type === 'RESOURCE' && !resourceTarget) {
+        } else if (selected?.target_type === 'RESOURCE') {
+            if (!resourceTarget) {
                 updateResultText("Please select a target resource.");
                 return;
             }
-            actionTarget = profDef.target_type === 'RESOURCE' ? resourceTarget : targetDept;
+            actionTarget = resourceTarget;
         } else if (!isGlobalAction && !targetDept) {
             updateResultText("Please select a target department.");
             return;
@@ -203,12 +227,12 @@ function App() {
 
         const action: AgentAction = {
             type: actionType,
-            // 针对全局操作，不传递 target_dept，避免引擎校验失败
+            action_id: actionType === 'PLAYER_EVENT' ? playerActionId : undefined,
             target_dept: isGlobalAction ? undefined : actionTarget,
             fragment_ids: actionType === 'SHARE_INFO' ? selectedFragments : undefined,
-            profession_action: profDef ? profDef.id : undefined,
-            resource_target: profDef?.target_type === 'RESOURCE' ? resourceTarget : undefined,
-            cost: profDef ? profDef.ap_cost : ACTION_COSTS[actionType]
+            profession_action: actionType === 'PROFESSION_ACTION' ? professionActionId : undefined,
+            resource_target: selected?.target_type === 'RESOURCE' ? resourceTarget : undefined,
+            cost: selected?.ap_cost ?? ACTION_COSTS[actionType]
         };
 
         try {
@@ -217,6 +241,7 @@ function App() {
             setSilo(outcome.silo);
             setAgent(outcome.agent);
             setAgentStats(outcome.agent_stats);
+            setAvailableActions(outcome.available_actions || []);
 
             if (outcome.game_over) {
                 updateResultText(`Game Over: ${outcome.silo.victory_status?.description || outcome.ending_narrative}`);
@@ -227,7 +252,7 @@ function App() {
                 if (outcome.stories.length > 0) {
                     msg += ` | Event [${outcome.stories[0].category || "uncategorized"}]: ${outcome.stories[0].title}`;
                 }
-                const duration = ACTION_DURATIONS[actionType] || 0;
+                const duration = selected?.duration_months ?? ACTION_DURATIONS[actionType] ?? 0;
                 if (duration > 0) {
                     msg += ` (Time passed: ${duration} months)`;
                 }
@@ -239,6 +264,28 @@ function App() {
         } catch (err) {
             updateResultText(`Failed to execute action: ${err}`);
         }
+    };
+
+    const groupOrder = ['common', 'profession', 'profession_group', 'faction_member', 'faction_leader'];
+    const groupTitle: Record<string, string> = {
+        common: 'Common Actions',
+        profession: `Profession Actions: ${agent?.profession || ''}`,
+        profession_group: 'Profession Group Actions',
+        faction_member: 'Faction Member Actions',
+        faction_leader: 'Faction Leader Actions',
+    };
+    const groupColor: Record<string, string> = {
+        common: 'blue',
+        profession: 'purple',
+        profession_group: 'orange',
+        faction_member: 'teal',
+        faction_leader: 'red',
+    };
+    const orderedGroups = groupOrder.filter((group) => (groupedActions[group] || []).length > 0);
+    const selectAction = (action: PlayerActionMeta) => {
+        setActionType(action.action_type as AgentActionType);
+        setProfessionActionId(action.action_type === 'PROFESSION_ACTION' ? action.id : '');
+        setPlayerActionId(action.action_type === 'PLAYER_EVENT' ? action.id : '');
     };
 
     return (
@@ -340,105 +387,46 @@ function App() {
 
                                 {/* Right Side: Operations */}
                                 <VStack gap={6} flex={{ base: "1 1 100%", lg: 1 }} w="full" position="sticky" top="0px">
-                                    {/* Profession Actions Frame */}
-                                    <Box w="full" p={5} bg="purple.50" borderRadius="md" border="1px solid" borderColor="purple.200" boxShadow="sm">
-                                        <Heading size="sm" mb={2} color="purple.800" borderBottom="1px solid" borderColor="purple.200" pb={2}>
-                                            Profession Actions: {agent?.profession}
-                                        </Heading>
-                                        <Text fontSize="xs" color="gray.600" mb={3}>
-                                            Unique actions of your profession. Hover for details.
-                                        </Text>
-                                        <SimpleGrid columns={2} gap={3} w="full">
-                                            {professionActions.map(def => {
-                                                const isSelected = professionActionId === def.id && actionType === 'PROFESSION_ACTION';
-                                                return (
-                                                    <Button
-                                                        key={def.id}
-                                                        variant={isSelected ? "solid" : "outline"}
-                                                        colorPalette={isSelected ? "purple" : "gray"}
-                                                        onClick={() => { setActionType('PROFESSION_ACTION'); setProfessionActionId(def.id); }}
-                                                        h="80px"
-                                                        display="flex"
-                                                        flexDirection="column"
-                                                        justifyContent="center"
-                                                        alignItems="center"
-                                                        whiteSpace="normal"
-                                                        lineHeight="1.2"
-                                                        title={def.description}
-                                                        bg={isSelected ? "purple.500" : "white"}
-                                                        _hover={{ bg: isSelected ? "purple.600" : "gray.50" }}
-                                                    >
-                                                        <Text fontWeight="bold">{def.label}</Text>
-                                                        <Text fontSize="xs" mt={1}>({def.ap_cost} AP)</Text>
-                                                    </Button>
-                                                );
-                                            })}
-                                        </SimpleGrid>
-                                    </Box>
-
                                     {/* Actions Panel */}
                                     <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
                                         <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>Agent Action Interface</Heading>
                                         <VStack gap={5} align="stretch">
-                                            <VStack align="start" gap={2}>
-                                                <Text fontSize="sm" fontWeight="bold" color="gray.700">Department Actions:</Text>
-                                                <SimpleGrid columns={2} gap={3} w="full">
-                                                    {[
-                                                        { value: 'GATHER_INFO', label: 'Gather Info', ap: 10 },
-                                                        { value: 'SHARE_INFO', label: 'Share Info', ap: 20 },
-                                                        { value: 'BUILD_CONNECTION', label: 'Build Network', ap: 15 }
-                                                    ].map((action) => (
-                                                        <Button
-                                                            key={action.value}
-                                                            variant={actionType === action.value ? "solid" : "outline"}
-                                                            colorPalette={actionType === action.value ? "blue" : "gray"}
-                                                            onClick={() => setActionType(action.value as AgentActionType)}
-                                                            h="80px"
-                                                            display="flex"
-                                                            flexDirection="column"
-                                                            justifyContent="center"
-                                                            alignItems="center"
-                                                            whiteSpace="normal"
-                                                            lineHeight="1.2"
-                                                            bg={actionType === action.value ? "blue.500" : "white"}
-                                                            _hover={{ bg: actionType === action.value ? "blue.600" : "gray.50" }}
-                                                        >
-                                                            <Text fontWeight="bold">{action.label}</Text>
-                                                            <Text fontSize="xs" mt={1}>({action.ap} AP)</Text>
-                                                        </Button>
-                                                    ))}
-                                                </SimpleGrid>
-                                            </VStack>
-
-                                            <VStack align="start" gap={2}>
-                                                <Text fontSize="sm" fontWeight="bold" color="red.700">Global Actions:</Text>
-                                                <SimpleGrid columns={2} gap={3} w="full">
-                                                    {[
-                                                        { value: 'CONDUCT_PROPAGANDA', label: 'Propaganda', ap: 20 },
-                                                        { value: 'INCITE_REBELLION', label: 'Incite Rebellion', ap: 30 },
-                                                        ...(agentStats?.is_faction_leader ? [{ value: 'PUBLICIZE_FACTION', label: 'Publicize Faction', ap: 25 }] : [])
-                                                    ].map((action) => (
-                                                        <Button
-                                                            key={action.value}
-                                                            variant={actionType === action.value ? "solid" : "outline"}
-                                                            colorPalette={actionType === action.value ? "red" : "gray"}
-                                                            onClick={() => setActionType(action.value as AgentActionType)}
-                                                            h="80px"
-                                                            display="flex"
-                                                            flexDirection="column"
-                                                            justifyContent="center"
-                                                            alignItems="center"
-                                                            whiteSpace="normal"
-                                                            lineHeight="1.2"
-                                                            bg={actionType === action.value ? "red.500" : "white"}
-                                                            _hover={{ bg: actionType === action.value ? "red.600" : "gray.50" }}
-                                                        >
-                                                            <Text fontWeight="bold">{action.label}</Text>
-                                                            <Text fontSize="xs" mt={1}>({action.ap} AP)</Text>
-                                                        </Button>
-                                                    ))}
-                                                </SimpleGrid>
-                                            </VStack>
+                                            {orderedGroups.map((group) => (
+                                                <VStack key={group} align="start" gap={2}>
+                                                    <Text fontSize="sm" fontWeight="bold" color={`${groupColor[group] || 'gray'}.700`}>
+                                                        {groupTitle[group] || group}
+                                                    </Text>
+                                                    <SimpleGrid columns={2} gap={3} w="full">
+                                                        {(groupedActions[group] || []).map((action) => {
+                                                            const isSelected = selectedActionMeta?.id === action.id && selectedActionMeta?.action_type === action.action_type;
+                                                            const palette = groupColor[group] || 'gray';
+                                                            return (
+                                                                <Button
+                                                                    key={`${action.action_type}:${action.id}`}
+                                                                    variant={isSelected ? "solid" : "outline"}
+                                                                    colorPalette={isSelected ? palette : "gray"}
+                                                                    onClick={() => selectAction(action)}
+                                                                    h="80px"
+                                                                    display="flex"
+                                                                    flexDirection="column"
+                                                                    justifyContent="center"
+                                                                    alignItems="center"
+                                                                    whiteSpace="normal"
+                                                                    lineHeight="1.2"
+                                                                    title={action.description}
+                                                                    disabled={!action.enabled}
+                                                                    opacity={action.enabled ? 1 : 0.55}
+                                                                    bg={isSelected ? `${palette}.500` : "white"}
+                                                                    _hover={{ bg: isSelected ? `${palette}.600` : "gray.50" }}
+                                                                >
+                                                                    <Text fontWeight="bold">{action.label}</Text>
+                                                                    <Text fontSize="xs" mt={1}>({action.ap_cost} AP)</Text>
+                                                                </Button>
+                                                            );
+                                                        })}
+                                                    </SimpleGrid>
+                                                </VStack>
+                                            ))}
 
                                             {showDeptSelector && (
                                                 <VStack align="start" gap={1}>
@@ -500,7 +488,7 @@ function App() {
                                             )}
 
                                             <VStack gap={3} mt={2}>
-                                                <Button colorPalette="blue" w="full" size="lg" onClick={handleExecuteAction} boxShadow="md">
+                                                <Button colorPalette="blue" w="full" size="lg" onClick={handleExecuteAction} boxShadow="md" disabled={!selectedActionMeta || !selectedActionMeta.enabled}>
                                                     Execute Action
                                                 </Button>
                                                 <Button colorPalette="teal" variant="outline" w="full" size="md" onClick={handlePassTime} bg="white">
