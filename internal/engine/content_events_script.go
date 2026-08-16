@@ -58,6 +58,15 @@ function professionMetricDeltaAll(metric, value) {
 function professionIdeologyDeltaAll(ideology, value) {
   return { type: "profession_ideology_delta_all", ideology: ideology, value: value };
 }
+function siloResourceDelta(metric, value) {
+  return { type: "silo_resource_delta", metric: metric, value: value };
+}
+function siloPopulationDelta(value) {
+  return { type: "silo_population_delta", value: value };
+}
+function scheduleEvent(eventId, delayMonths) {
+  return { type: "schedule_event", event_id: eventId, delay_months: delayMonths };
+}
 function siloFlagSet(flag, boolValue) {
   return { type: "silo_flag_set", flag: flag, bool_value: !!boolValue };
 }
@@ -100,8 +109,9 @@ function __contentHookFlags() {
 `
 
 type ContentScriptApplyResult struct {
-	Effects []ContentEffect `json:"effects,omitempty"`
-	Emit    []string        `json:"emit,omitempty"`
+	Effects  []ContentEffect         `json:"effects,omitempty"`
+	Emit     []string                `json:"emit,omitempty"`
+	Schedule []ContentScheduledEvent `json:"schedule,omitempty"`
 }
 
 func loadContentEventJSFile(sourceGroup, baseDir, path string) ([]ContentEventDefinition, error) {
@@ -255,6 +265,7 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 	if ctx.Silo != nil {
 		result["year"] = ctx.Silo.CurrentYear
 		result["month"] = ctx.Silo.CurrentMonth
+		result["total_population"] = ctx.Silo.TotalPopulation
 		result["silo_metrics"] = map[string]float64{
 			"legitimacy":          ctx.Silo.Legitimacy,
 			"cohesion":            ctx.Silo.Cohesion,
@@ -268,6 +279,13 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 		result["silo_flags"] = map[string]bool{
 			"silo1_destroyed": ctx.Silo.Silo1Destroyed,
 		}
+
+		resources := map[string]float64{}
+		for _, r := range ctx.Silo.Resources {
+			resources[r.Type] = r.Amount
+		}
+		result["resources"] = resources
+
 		professions := make([]map[string]interface{}, 0, len(ctx.Silo.Professions))
 		for _, profession := range ctx.Silo.Professions {
 			ideologies := map[string]float64{}

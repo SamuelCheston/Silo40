@@ -66,13 +66,15 @@ type ContentTrigger struct {
 
 // ContentEffect 结构化事件效果。
 type ContentEffect struct {
-	Type       string  `json:"type"`
-	Metric     string  `json:"metric,omitempty"`
-	Flag       string  `json:"flag,omitempty"`
-	Ideology   string  `json:"ideology,omitempty"`
-	Profession string  `json:"profession,omitempty"`
-	Value      float64 `json:"value,omitempty"`
-	BoolValue  bool    `json:"bool_value,omitempty"`
+	Type        string  `json:"type"`
+	Metric      string  `json:"metric,omitempty"`
+	Flag        string  `json:"flag,omitempty"`
+	Ideology    string  `json:"ideology,omitempty"`
+	Profession  string  `json:"profession,omitempty"`
+	Value       float64 `json:"value,omitempty"`
+	BoolValue   bool    `json:"bool_value,omitempty"`
+	DelayMonths int     `json:"delay_months,omitempty"`
+	EventID     string  `json:"event_id,omitempty"`
 }
 
 // ContentPlayerActionSpec describes how a player action event is shown in UI.
@@ -364,10 +366,12 @@ func validateTrigger(trigger ContentTrigger) error {
 			return fmt.Errorf("timestamp_at_or_after requires timestamp or year")
 		}
 		return nil
-	case "silo_metric_gte", "silo_metric_lte":
+	case "silo_metric_gte", "silo_metric_lte", "silo_resource_gte", "silo_resource_lte":
 		if trigger.Metric == "" {
 			return fmt.Errorf("%s requires metric", trigger.Type)
 		}
+		return nil
+	case "silo_population_gte", "silo_population_lte":
 		return nil
 	case "silo_flag_true", "silo_flag_false":
 		if trigger.Flag == "" {
@@ -396,10 +400,12 @@ func validateTrigger(trigger ContentTrigger) error {
 
 func validateEffect(effect ContentEffect) error {
 	switch effect.Type {
-	case "silo_metric_delta":
+	case "silo_metric_delta", "silo_resource_delta":
 		if effect.Metric == "" {
-			return fmt.Errorf("silo_metric_delta requires metric")
+			return fmt.Errorf("%s requires metric", effect.Type)
 		}
+	case "silo_population_delta":
+		// no extra fields required
 	case "profession_metric_delta_all":
 		if effect.Metric == "" {
 			return fmt.Errorf("profession_metric_delta_all requires metric")
@@ -411,6 +417,13 @@ func validateEffect(effect ContentEffect) error {
 	case "silo_flag_set":
 		if effect.Flag == "" {
 			return fmt.Errorf("silo_flag_set requires flag")
+		}
+	case "schedule_event":
+		if effect.EventID == "" {
+			return fmt.Errorf("schedule_event requires event_id")
+		}
+		if effect.DelayMonths <= 0 {
+			return fmt.Errorf("schedule_event requires positive delay_months")
 		}
 	default:
 		return fmt.Errorf("unsupported effect type %q", effect.Type)
@@ -483,6 +496,16 @@ func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext
 	case "silo_metric_lte":
 		value, ok := readSiloMetric(ctx.Silo, trigger.Metric)
 		return ok && value <= trigger.Value
+	case "silo_resource_gte":
+		value, ok := readSiloResource(ctx.Silo, trigger.Metric)
+		return ok && value >= trigger.Value
+	case "silo_resource_lte":
+		value, ok := readSiloResource(ctx.Silo, trigger.Metric)
+		return ok && value <= trigger.Value
+	case "silo_population_gte":
+		return float64(ctx.Silo.TotalPopulation) >= trigger.Value
+	case "silo_population_lte":
+		return float64(ctx.Silo.TotalPopulation) <= trigger.Value
 	case "silo_flag_true":
 		value, ok := readSiloFlag(ctx.Silo, trigger.Flag)
 		return ok && value
@@ -564,15 +587,15 @@ func ContentPlayerActionID(def ContentEventDefinition) string {
 }
 
 // ApplyContentEvent 把事件效果实际施加到地堡状态上。
-func ApplyContentEvent(def ContentEventDefinition, silo *model.Silo) model.StoryEvent {
-	ApplyContentEffects(def.Effects, silo)
+func ApplyContentEvent(def ContentEventDefinition, silo *model.Silo) (model.StoryEvent, []ContentScheduledEvent) {
+	scheduled := ApplyContentEffects(def.Effects, silo)
 	return model.StoryEvent{
 		ID:          def.EventID,
 		Category:    normalizeContentCategory(def.SourceGroup),
 		Title:       def.Title,
 		Description: def.Description,
 		Type:        def.Type,
-	}
+	}, scheduled
 }
 
 func ContentEventBusName(def ContentEventDefinition) string {
@@ -659,16 +682,35 @@ func contentStateMatchesTrigger(key string, trigger ContentTrigger) bool {
 	return true
 }
 
-func ApplyContentEffects(effects []ContentEffect, silo *model.Silo) {
+// ContentScheduledEvent represents an event to be scheduled.
+type ContentScheduledEvent struct {
+	EventID     string
+	DelayMonths int
+}
+
+func ApplyContentEffects(effects []ContentEffect, silo *model.Silo) []ContentScheduledEvent {
+	var scheduled []ContentScheduledEvent
 	for _, effect := range effects {
+		if effect.Type == "schedule_event" {
+			scheduled = append(scheduled, ContentScheduledEvent{
+				EventID:     effect.EventID,
+				DelayMonths: effect.DelayMonths,
+			})
+			continue
+		}
 		applyContentEffect(effect, silo)
 	}
+	return scheduled
 }
 
 func applyContentEffect(effect ContentEffect, silo *model.Silo) {
 	switch effect.Type {
 	case "silo_metric_delta":
 		applySiloMetricDelta(silo, effect.Metric, effect.Value)
+	case "silo_resource_delta":
+		applySiloResourceDelta(silo, effect.Metric, effect.Value)
+	case "silo_population_delta":
+		applySiloPopulationDelta(silo, effect.Value)
 	case "profession_metric_delta_all":
 		for i := range silo.Professions {
 			applyProfessionMetricDelta(&silo.Professions[i], effect.Metric, effect.Value)
@@ -682,7 +724,22 @@ func applyContentEffect(effect ContentEffect, silo *model.Silo) {
 		}
 	case "silo_flag_set":
 		writeSiloFlag(silo, effect.Flag, effect.BoolValue)
+	case "schedule_event":
+		// Handled at the service level where EventBus/Scheduler is available.
 	}
+}
+
+func applySiloResourceDelta(silo *model.Silo, resourceType string, delta float64) {
+	for i := range silo.Resources {
+		if strings.EqualFold(silo.Resources[i].Type, resourceType) {
+			silo.Resources[i].Amount = math.Max(0, silo.Resources[i].Amount+delta)
+			return
+		}
+	}
+}
+
+func applySiloPopulationDelta(silo *model.Silo, delta float64) {
+	silo.TotalPopulation = int(math.Max(0, float64(silo.TotalPopulation)+delta))
 }
 
 func applySiloMetricDelta(silo *model.Silo, metric string, delta float64) {
@@ -713,6 +770,15 @@ func applyProfessionMetricDelta(profession *model.Profession, metric string, del
 	case "productivity":
 		profession.Productivity = math.Max(0, profession.Productivity+delta)
 	}
+}
+
+func readSiloResource(silo *model.Silo, resourceType string) (float64, bool) {
+	for _, r := range silo.Resources {
+		if strings.EqualFold(r.Type, resourceType) {
+			return r.Amount, true
+		}
+	}
+	return 0, false
 }
 
 func readSiloMetric(silo *model.Silo, metric string) (float64, bool) {

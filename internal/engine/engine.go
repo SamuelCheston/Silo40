@@ -214,105 +214,19 @@ func (e *GameEngine) registerSystems() {
 
 // ============ 规则引擎：条件 / 脚本 / 规则 ============
 func (e *GameEngine) registerConditions() {
-	e.ConditionEngine.RegisterMany(map[string]Condition{
-		"supplies_low": func(state *State, event *GameEvent) bool {
-			for _, r := range state.Silo.Resources {
-				if r.Type == "Supplies" && r.Amount < 200 {
-					return true
-				}
-			}
-			return false
-		},
-		"panic_high": func(state *State, event *GameEvent) bool {
-			for _, p := range state.Silo.Professions {
-				if p.PanicValue > 0.7 {
-					return true
-				}
-			}
-			return false
-		},
-		"rebellion_high": func(state *State, event *GameEvent) bool {
-			return state.Silo.Rebellion > 0.6
-		},
-	})
+	// 条件逻辑已外挂到外部事件定义中。
+	e.ConditionEngine.RegisterMany(map[string]Condition{})
 }
 
 func (e *GameEngine) registerScripts() {
-	e.ScriptEngine.RegisterMany(map[string]Script{
-		// 恐慌蔓延 → 亲外度小幅上升
-		"panic_to_ideology": func(event *GameEvent, state *State, bus *EventBus, ctx *EventContext) {
-			for i := range state.Silo.Professions {
-				p := &state.Silo.Professions[i]
-				// 恐慌转化为思潮
-				p.Ideologies[model.IdeologyProForeign] = math.Min(1.0, p.Ideologies[model.IdeologyProForeign]+0.02)
-			}
-			state.Logs = append(state.Logs, "[Rule] 高恐慌情绪转化为对外部世界的好奇。")
-		},
-		// 高叛乱 → 增加额外死亡
-		"rebellion_deaths": func(event *GameEvent, state *State, bus *EventBus, ctx *EventContext) {
-			extra := int(float64(state.Silo.TotalPopulation) * 0.005)
-			state.Silo.TotalPopulation = int(math.Max(0, float64(state.Silo.TotalPopulation-extra)))
-			state.Logs = append(state.Logs, "[Rule] 叛乱冲突造成约 "+itoa(extra)+" 人伤亡。")
-		},
-		// 物资短缺 → 凝聚力缓慢下降
-		"supplies_shortage_cohesion": func(event *GameEvent, state *State, bus *EventBus, ctx *EventContext) {
-			state.Silo.Cohesion = math.Max(0, state.Silo.Cohesion-0.02)
-			state.Logs = append(state.Logs, "[Rule] 物资短缺削弱了地堡的凝聚力。")
-		},
-	})
+	// 规则脚本已外挂到外部事件定义中。
+	e.ScriptEngine.RegisterMany(map[string]Script{})
 }
 
 func (e *GameEngine) registerRules() {
-	rules := []GameRule{
-		{
-			ID: "supplies_shortage_rule",
-			Trigger: struct {
-				EventType string
-				Condition string
-			}{EventType: EVENT_METRICS_UPDATE, Condition: "supplies_low"},
-			Effects: []RuleEffect{
-				{Type: "script", Script: "supplies_shortage_cohesion"},
-				{Type: "script", Script: "panic_to_ideology"},
-			},
-		},
-		{
-			ID: "rebellion_escalation_rule",
-			Trigger: struct {
-				EventType string
-				Condition string
-			}{EventType: EVENT_VICTORY_CHECK, Condition: "rebellion_high"},
-			Effects: []RuleEffect{
-				{Type: "script", Script: "rebellion_deaths"},
-			},
-		},
-		{
-			// 延时事件示例：恐慌过高时，3 个月后触发 "暴乱爆发" 延时事件
-			ID: "panic_storm_delay_rule",
-			Trigger: struct {
-				EventType string
-				Condition string
-			}{EventType: EVENT_VICTORY_CHECK, Condition: "panic_high"},
-			Effects: []RuleEffect{
-				{
-					Type: "schedule_event", DelayMonths: 3,
-					Event: CreateEvent("delayed_riot", "DELAYED_RIOT", map[string]interface{}{}),
-				},
-			},
-		},
-	}
-	e.RuleEngine.RegisterMany(rules)
-
-	// 延时事件订阅：暴乱爆发 → 恐慌加剧
-	e.Bus.Subscribe("DELAYED_RIOT", func(event *GameEvent, ctx *EventContext) {
-		silo, _ := event.Data["silo"].(*model.Silo)
-		if silo == nil {
-			return
-		}
-		for i := range silo.Professions {
-			silo.Professions[i].PanicValue = math.Min(1.0, silo.Professions[i].PanicValue+0.15)
-		}
-		silo.Legitimacy = math.Max(0, silo.Legitimacy-0.1)
-	})
+	// 游戏规则已外挂到 events/rules/ 目录中，
+	// 由 service 层统一加载并响应。
+	e.RuleEngine.RegisterMany([]GameRule{})
 }
 
 // ============ 剧情触发器 ============

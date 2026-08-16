@@ -94,7 +94,7 @@ func TestCanTriggerAndApplyContentEvent(t *testing.T) {
 		t.Fatalf("expected event to trigger")
 	}
 
-	story := ApplyContentEvent(def, silo)
+	story, _ := ApplyContentEvent(def, silo)
 	if story.ID != def.EventID {
 		t.Fatalf("expected story id %q, got %q", def.EventID, story.ID)
 	}

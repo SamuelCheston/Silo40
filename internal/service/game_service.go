@@ -1011,7 +1011,7 @@ func (s *GameService) emitContentEvent(def engine.ContentEventDefinition, source
 }
 
 func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, event *engine.GameEvent, ctx *engine.EventContext) {
-	story := engine.ApplyContentEvent(def, s.silo)
+	story, scheduled := engine.ApplyContentEvent(def, s.silo)
 
 	state, legacyKey := s.contentStateForDefinition(def)
 	state.SiloID = ActiveSiloID
@@ -1037,6 +1037,8 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	}
 	event.Data["story_result"] = story
 
+	s.scheduleContentEvents(scheduled, event, ctx)
+
 	if !def.ScriptHooks.Apply {
 		return
 	}
@@ -1055,12 +1057,51 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		s.appendContentLog(event, fmt.Sprintf("[ContentEvent] Script apply failed for %s: %v", def.Key, err))
 		return
 	}
-	engine.ApplyContentEffects(scriptResult.Effects, s.silo)
+	scheduledFromScript := engine.ApplyContentEffects(scriptResult.Effects, s.silo)
+	s.scheduleContentEvents(scheduledFromScript, event, ctx)
+	s.scheduleContentEvents(scriptResult.Schedule, event, ctx)
+
 	for _, name := range scriptResult.Emit {
 		if !s.emitContentEventByName(name, event, ctx) {
 			s.appendContentLog(event, fmt.Sprintf("[ContentEvent] Script emit target not found: %s", name))
 		}
 	}
+}
+
+func (s *GameService) scheduleContentEvents(scheduled []engine.ContentScheduledEvent, sourceEvent *engine.GameEvent, ctx *engine.EventContext) {
+	if len(scheduled) == 0 || s.engine == nil {
+		return
+	}
+	for _, sch := range scheduled {
+		targetDef, ok := s.findContentDefinition(sch.EventID)
+		if !ok {
+			s.appendContentLog(sourceEvent, fmt.Sprintf("[ContentEvent] Scheduled target not found: %s", sch.EventID))
+			continue
+		}
+
+		now := engine.GameTime{Year: s.silo.CurrentYear, Month: s.silo.CurrentMonth}
+		at := engine.AdvanceTime(now, sch.DelayMonths)
+
+		data := map[string]interface{}{
+			"silo":           s.silo,
+			"agent":          s.agent,
+			"content_source": "SCHEDULED",
+			"story_sink":     sourceEvent.Data["story_sink"],
+			"log_sink":       sourceEvent.Data["log_sink"],
+		}
+		event := engine.CreateEvent("scheduled#"+sch.EventID, engine.ContentEventBusName(targetDef), data)
+		s.engine.ScheduleEvent(event, at)
+		s.appendContentLog(sourceEvent, fmt.Sprintf("[ContentEvent] Scheduled event %s in %d months", sch.EventID, sch.DelayMonths))
+	}
+}
+
+func (s *GameService) findContentDefinition(eventID string) (engine.ContentEventDefinition, bool) {
+	for _, def := range s.contentDefinitions {
+		if def.EventID == eventID || def.Key == eventID {
+			return def, true
+		}
+	}
+	return engine.ContentEventDefinition{}, false
 }
 
 func (s *GameService) emitContentEventByName(name string, sourceEvent *engine.GameEvent, ctx *engine.EventContext) bool {

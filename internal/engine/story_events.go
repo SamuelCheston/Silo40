@@ -25,42 +25,9 @@ type EventEngine struct {
 }
 
 func NewEventEngine() *EventEngine {
-	return &EventEngine{events: []StoryEvent{
-		{
-			ID: "water_leak", Category: "crisis", Title: "供水管线泄漏",
-			Description: "底层机械部报告发生严重水管泄漏，部分楼层供水中断。",
-			Type:        "TECHNICAL",
-			Effects: func(silo *model.Silo) {
-				for i := range silo.Resources {
-					if silo.Resources[i].Type == "Supplies" {
-						silo.Resources[i].Amount -= 500
-					}
-				}
-				silo.Cohesion -= 0.05
-			},
-		},
-		{
-			ID: "food_poisoning", Category: "crisis", Title: "群体性食物中毒",
-			Description: "水培区的一批农产品受到污染，引发大规模恐慌。",
-			Type:        "SOCIAL",
-			Effects: func(silo *model.Silo) {
-				for i := range silo.Professions {
-					silo.Professions[i].PanicValue += 0.1
-				}
-				silo.Legitimacy -= 0.05
-			},
-		},
-		{
-			ID: "outside_signal", Category: "special", Title: "接收到外部信号",
-			Description: "IT部门截获了一段模糊的无线电信号，似乎来自地表或其他地堡。",
-			Type:        "EXTERNAL",
-			Effects: func(silo *model.Silo) {
-				for i := range silo.Professions {
-					silo.Professions[i].Ideologies[model.IdeologyProForeign] += 0.05
-				}
-			},
-		},
-	}}
+	// 随机剧情事件已完全外挂到 events/ 目录中，
+	// 由 Content Loader 动态加载。
+	return &EventEngine{events: []StoryEvent{}}
 }
 
 // TriggerRandomEvent 触发随机剧情事件 (在 EventContext 内发布)
