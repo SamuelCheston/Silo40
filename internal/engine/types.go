@@ -43,6 +43,28 @@ func CreateEvent(id, typ string, data map[string]interface{}) *GameEvent {
 	return &GameEvent{ID: id, Type: typ, Data: data}
 }
 
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	pos := len(buf)
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	for n > 0 {
+		pos--
+		buf[pos] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		pos--
+		buf[pos] = '-'
+	}
+	return string(buf[pos:])
+}
+
 // ============ 全局游戏状态视图 ============
 // State 事件处理器读取/写入的全局状态
 type State struct {
@@ -51,23 +73,11 @@ type State struct {
 	Logs  []string
 }
 
-// ============ 事件上下文 (避免事件风暴) ============
-// EventContext fired: 本链内已触发的事件 id 集合，防止无限循环; depth: 链深度
-type EventContext struct {
-        fired    map[string]bool
-        count    int
-        maxDepth int
-}
+// ============ 事件上下文 ============
+// EventContext 仅携带事件之间共享的元数据。
+// 事件总线不再根据它决定事件能否执行。
+type EventContext struct{}
 
 func NewEventContext() *EventContext {
-	return &EventContext{fired: map[string]bool{}, maxDepth: 20}
-}
-
-func (c *EventContext) CanFire(id string) bool {
-        return c.count < c.maxDepth && !c.fired[id]
-}
-
-func (c *EventContext) MarkFired(id string) {
-	c.fired[id] = true
-        c.count++
+	return &EventContext{}
 }

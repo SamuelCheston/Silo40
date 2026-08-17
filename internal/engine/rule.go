@@ -4,9 +4,9 @@ import "silo40/internal/model"
 
 // RuleEffect 规则效果：数据驱动的描述，运行时由 RuleEngine 解释执行
 type RuleEffect struct {
-	Type   string // script / fire_event / schedule_event
-	Script string
-	Event  *GameEvent
+	Type        string // script / fire_event / schedule_event
+	Script      string
+	Event       *GameEvent
 	DelayMonths int
 }
 
@@ -22,11 +22,11 @@ type GameRule struct {
 
 // RuleEngine 规则引擎：订阅总线所有事件，逐条匹配规则并执行效果
 type RuleEngine struct {
-	bus    *EventBus
-	rules  []GameRule
-	cond   *ConditionEngine
+	bus     *EventBus
+	rules   []GameRule
+	cond    *ConditionEngine
 	scripts *ScriptEngine
-	// OnSchedule 延时效果回调：由 GameEngine 注入，将延时事件送入 Scheduler
+	// OnSchedule 延时效果回调：由上层运行时注入，将结束事件插回主队列
 	OnSchedule func(event *GameEvent, delayMonths int, source *GameEvent)
 	// LastState 兜底状态引用：由 GameEngine 在每次 tick 前刷新
 	LastState *State

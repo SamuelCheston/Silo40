@@ -725,7 +725,7 @@ func applyContentEffect(effect ContentEffect, silo *model.Silo) {
 	case "silo_flag_set":
 		writeSiloFlag(silo, effect.Flag, effect.BoolValue)
 	case "schedule_event":
-		// Handled at the service level where EventBus/Scheduler is available.
+		// Handled at the service level where the runtime can rewrite the main event queue.
 	}
 }
 

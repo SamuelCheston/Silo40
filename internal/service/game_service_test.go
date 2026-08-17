@@ -122,7 +122,7 @@ func TestContentEventsDispatchThroughEventBusByName(t *testing.T) {
 	if !fired {
 		t.Fatalf("expected special event to be emitted through event bus")
 	}
-        svc.drainQueuedEvents()
+	svc.drainQueuedEvents()
 	if len(stories) != 2 {
 		t.Fatalf("expected special event to wake crisis event, got %d stories", len(stories))
 	}
@@ -197,7 +197,7 @@ func TestContentScriptApplyCanEmitFollowupEvent(t *testing.T) {
 	if !fired {
 		t.Fatalf("expected scripted special event to emit")
 	}
-        svc.drainQueuedEvents()
+	svc.drainQueuedEvents()
 	if len(stories) != 2 {
 		t.Fatalf("expected script emit to produce a followup event, got %d stories", len(stories))
 	}
@@ -206,6 +206,52 @@ func TestContentScriptApplyCanEmitFollowupEvent(t *testing.T) {
 	}
 	if svc.silo.Cohesion >= 0.5 {
 		t.Fatalf("expected emitted crisis event to change cohesion, got %v", svc.silo.Cohesion)
+	}
+}
+
+func TestScheduleDelayedEventInsertsAfterExistingAdvance(t *testing.T) {
+	svc := &GameService{
+		engine:        engine.NewGameEngine(),
+		silo:          &model.Silo{CurrentYear: 122, CurrentMonth: 1},
+		agent:         &model.Agent{},
+		delayTasks:    map[string]*delayTask{},
+		contentStates: map[string]model.ContentEventState{},
+	}
+
+	svc.enqueueMonthChains(2, "PASS_TIME:CONTENT")
+	svc.scheduleDelayedEvent(engine.CreateEvent("delay_end#1", "DELAY_END", nil), 1, engine.CreateEvent("start#1", "START", nil))
+
+	snapshot := svc.engine.Bus.Snapshot()
+	advanceIndex, _ := indexAfterNthEventType(snapshot, engine.EVENT_TIME_ADVANCE, 1)
+	if advanceIndex < 0 || advanceIndex >= len(snapshot) {
+		t.Fatalf("expected first TIME_ADVANCE to exist")
+	}
+	if snapshot[advanceIndex].Type != "DELAY_END" {
+		t.Fatalf("expected delay end event after first TIME_ADVANCE, got %s", snapshot[advanceIndex].Type)
+	}
+}
+
+func TestScheduleDelayedEventAppendsMissingMonthChains(t *testing.T) {
+	svc := &GameService{
+		engine:        engine.NewGameEngine(),
+		silo:          &model.Silo{CurrentYear: 122, CurrentMonth: 1},
+		agent:         &model.Agent{},
+		delayTasks:    map[string]*delayTask{},
+		contentStates: map[string]model.ContentEventState{},
+	}
+
+	svc.scheduleDelayedEvent(engine.CreateEvent("delay_end#2", "DELAY_END", nil), 2, engine.CreateEvent("start#2", "START", nil))
+
+	snapshot := svc.engine.Bus.Snapshot()
+	if got := countQueuedEventType(snapshot, engine.EVENT_TIME_ADVANCE); got != 2 {
+		t.Fatalf("expected 2 queued TIME_ADVANCE events, got %d", got)
+	}
+	insertIndex, _ := indexAfterNthEventType(snapshot, engine.EVENT_TIME_ADVANCE, 2)
+	if insertIndex < 0 || insertIndex >= len(snapshot) {
+		t.Fatalf("expected second TIME_ADVANCE anchor to exist")
+	}
+	if snapshot[insertIndex].Type != "DELAY_END" {
+		t.Fatalf("expected delay end event after second TIME_ADVANCE, got %s", snapshot[insertIndex].Type)
 	}
 }
 
