@@ -506,17 +506,15 @@ func politicalFormationTier(tags []string) string {
 			if strings.HasSuffix(tag, ":High") {
 				highCount++
 			}
-			// Note: Medium ProForeign no longer triggers formation threshold (requires 70%+)
 		}
 	}
 
-	if politicalCount < 1 {
-		return ""
-	}
 	if highCount >= 1 {
 		return "formation:high"
 	}
-	// Medium 级别不再直接返回 formation 标识，而是由上层结合领袖状态判定
+	if politicalCount >= 1 {
+		return "formation:medium"
+	}
 	return ""
 }
 

@@ -20,19 +20,20 @@ const (
 )
 
 type MechanicDefinition struct {
-	ID               string  `json:"id"`
-	EventType        string  `json:"event_type,omitempty"`
-	ActionType       string  `json:"action_type,omitempty"`
-	ProfessionAction string  `json:"profession_action,omitempty"`
-	Formula          string  `json:"formula,omitempty"`
-	Profession       string  `json:"profession,omitempty"`
-	Label            string  `json:"label,omitempty"`
-	Description      string  `json:"description,omitempty"`
-	TargetType       string  `json:"target_type,omitempty"`
-	APCost           int     `json:"ap_cost,omitempty"`
-	DurationMonths   int     `json:"duration_months,omitempty"`
-	SuspicionPenalty float64 `json:"suspicion_penalty,omitempty"`
-	ScriptSource     string  `json:"-"`
+	ID               string        `json:"id"`
+	EventType        string        `json:"event_type,omitempty"`
+	ActionType       string        `json:"action_type,omitempty"`
+	ProfessionAction string        `json:"profession_action,omitempty"`
+	Formula          string        `json:"formula,omitempty"`
+	Profession       string        `json:"profession,omitempty"`
+	Label            string        `json:"label,omitempty"`
+	Description      string        `json:"description,omitempty"`
+	TargetType       string        `json:"target_type,omitempty"`
+	APCost           int           `json:"ap_cost,omitempty"`
+	DurationMonths   int           `json:"duration_months,omitempty"`
+	SuspicionPenalty float64       `json:"suspicion_penalty,omitempty"`
+	ScriptSource     string        `json:"-"`
+	compiledProgram  *goja.Program `json:"-"`
 }
 
 type MechanicMutation struct {
@@ -74,6 +75,7 @@ type MechanicEngine struct {
 	byActionType       map[model.AgentActionType]MechanicDefinition
 	byProfessionAction map[string]MechanicDefinition
 	byFormula          map[string]MechanicDefinition
+	preludeProgram     *goja.Program
 	loadErr            error
 }
 
@@ -84,6 +86,14 @@ func NewMechanicEngine() *MechanicEngine {
 		byProfessionAction: map[string]MechanicDefinition{},
 		byFormula:          map[string]MechanicDefinition{},
 	}
+
+	// 预编译 Prelude
+	if prog, err := goja.Compile("mechanic_prelude.js", mechanicPrelude, true); err == nil {
+		m.preludeProgram = prog
+	} else {
+		m.loadErr = fmt.Errorf("failed to compile mechanic prelude: %w", err)
+	}
+
 	if dir := findMechanicsDirectory(); dir != "" {
 		defs, err := LoadMechanicDefinitions(dir)
 		if err != nil {
@@ -154,11 +164,26 @@ func (m *MechanicEngine) CommonActionDefinitions() []MechanicDefinition {
 }
 
 func (m *MechanicEngine) Run(def MechanicDefinition, ctx MechanicContext) (MechanicResult, error) {
-	runtime, defsValue, err := loadMechanicRuntime(def.ScriptSource)
-	if err != nil {
-		return MechanicResult{}, err
+	runtime := goja.New()
+	runtime.SetRandSource(rand.Float64)
+	if m.preludeProgram != nil {
+		if _, err := runtime.RunProgram(m.preludeProgram); err != nil {
+			return MechanicResult{}, err
+		}
 	}
-	scriptObj, err := mechanicObjectByID(runtime, defsValue, def.ID)
+	if def.compiledProgram != nil {
+		if _, err := runtime.RunProgram(def.compiledProgram); err != nil {
+			return MechanicResult{}, err
+		}
+	} else {
+		// 回退到字符串运行 (如果不小心没编译)
+		if _, err := runtime.RunString(def.ScriptSource); err != nil {
+			return MechanicResult{}, err
+		}
+	}
+
+	value := runtime.Get("__mechanicCaptured")
+	scriptObj, err := mechanicObjectByID(runtime, value, def.ID)
 	if err != nil {
 		return MechanicResult{}, err
 	}
@@ -167,14 +192,17 @@ func (m *MechanicEngine) Run(def MechanicDefinition, ctx MechanicContext) (Mecha
 	if !ok {
 		return MechanicResult{}, fmt.Errorf("mechanic %s apply is not a function", def.ID)
 	}
-	value, err := callable(scriptObj, runtime.ToValue(mechanicScriptContext(ctx)))
+
+	res, err := callable(scriptObj, runtime.ToValue(mechanicScriptContext(ctx)))
 	if err != nil {
 		return MechanicResult{}, err
 	}
-	if goja.IsUndefined(value) || goja.IsNull(value) {
+	if goja.IsUndefined(res) || goja.IsNull(res) {
 		return MechanicResult{}, nil
 	}
-	raw, err := json.Marshal(value.Export())
+
+	// 使用 JSON 序列化保证 JSON 标签被正确尊重 (这在单次执行中开销可控)
+	raw, err := json.Marshal(res.Export())
 	if err != nil {
 		return MechanicResult{}, err
 	}
@@ -182,6 +210,8 @@ func (m *MechanicEngine) Run(def MechanicDefinition, ctx MechanicContext) (Mecha
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return MechanicResult{}, err
 	}
+
+	// 统一处理字段格式
 	for i := range result.Mutations {
 		result.Mutations[i].Type = strings.ToLower(strings.TrimSpace(result.Mutations[i].Type))
 		result.Mutations[i].Field = strings.ToLower(strings.TrimSpace(result.Mutations[i].Field))
@@ -193,6 +223,7 @@ func (m *MechanicEngine) Run(def MechanicDefinition, ctx MechanicContext) (Mecha
 		result.Mutations[i].FactionName = strings.TrimSpace(result.Mutations[i].FactionName)
 		result.Mutations[i].ConnectionDept = strings.TrimSpace(result.Mutations[i].ConnectionDept)
 	}
+
 	return result, nil
 }
 
@@ -293,10 +324,22 @@ func loadMechanicFile(path string) ([]MechanicDefinition, error) {
 		return nil, err
 	}
 	source := string(sourceBytes)
-	runtime, _, err := loadMechanicRuntime(source)
+
+	// 预编译脚本
+	prog, err := goja.Compile(filepath.Base(path), source, true)
 	if err != nil {
+		return nil, fmt.Errorf("failed to compile %s: %w", path, err)
+	}
+
+	runtime := goja.New()
+	runtime.SetRandSource(rand.Float64)
+	if _, err := runtime.RunString(mechanicPrelude); err != nil {
 		return nil, err
 	}
+	if _, err := runtime.RunProgram(prog); err != nil {
+		return nil, err
+	}
+
 	exported, err := runtime.RunString("__mechanicExport()")
 	if err != nil {
 		return nil, err
@@ -333,6 +376,7 @@ func loadMechanicFile(path string) ([]MechanicDefinition, error) {
 			return nil, fmt.Errorf("mechanic %s in %s must declare exactly one route key", defs[i].ID, path)
 		}
 		defs[i].ScriptSource = source
+		defs[i].compiledProgram = prog
 	}
 	return defs, nil
 }

@@ -541,6 +541,8 @@ func (e *GameEngine) ExecuteActionInternal(silo *model.Silo, actor ActorRef, act
 	if err != nil {
 		return model.ActionResult{Executed: false, Message: err.Error()}
 	}
+
+	// 脚本未接管时回退到 Go 硬编码实现
 	if view.ActionPoints() < action.Cost {
 		return model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}
 	}
