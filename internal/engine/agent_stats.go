@@ -13,6 +13,21 @@ func (e *GameEngine) BuildAgentStats(agent *model.Agent, silo *model.Silo) model
 	if agent == nil || silo == nil {
 		return model.AgentStats{}
 	}
+	if e.MechanicEngine != nil {
+		if def, ok := e.MechanicEngine.FormulaDefinition("agent_stats"); ok {
+			actor, err := CreateActorView(CreateActorRefForAgent(agent, silo), silo, agent)
+			if err == nil {
+				result, runErr := e.MechanicEngine.Run(def, MechanicContext{
+					Silo:  silo,
+					Agent: agent,
+					Actor: actor,
+				})
+				if runErr == nil && result.Stats != nil {
+					return *result.Stats
+				}
+			}
+		}
+	}
 
 	connValues := connectionsByProfession(agent, silo)
 	totalConnection := 0.0

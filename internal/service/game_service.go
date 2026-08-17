@@ -881,6 +881,17 @@ func resolveContentDirectories() (map[string]string, error) {
 	return dirs, nil
 }
 
+func contentEventDirectories(dirs map[string]string) map[string]string {
+	out := map[string]string{}
+	for group, path := range dirs {
+		switch group {
+		case "histories", "history", "special", "crisis", "player_actions", "player_action", "events":
+			out[group] = path
+		}
+	}
+	return out
+}
+
 func discoverContentDirectoriesExact(baseDir string) map[string]string {
 	if baseDir == "" {
 		return map[string]string{}
@@ -963,7 +974,7 @@ func directoryHasContentEventFiles(dir string) (bool, error) {
 }
 
 func (s *GameService) syncContentDefinitions(dirs map[string]string) error {
-	defs, err := engine.LoadContentEventDefinitions(dirs)
+	defs, err := engine.LoadContentEventDefinitions(contentEventDirectories(dirs))
 	if err != nil {
 		return err
 	}
@@ -1625,12 +1636,38 @@ func (s *GameService) availablePlayerActions() []model.PlayerActionMeta {
 }
 
 func (s *GameService) staticPlayerActions(stats model.AgentStats) []model.PlayerActionMeta {
-	actions := []model.PlayerActionMeta{
-		{ID: string(model.ActionGatherInfo), Source: "static", Label: "Gather Info", Description: "Collect information from a department.", Group: "common", ActionType: model.ActionGatherInfo, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionGatherInfo]), DurationMonths: model.ACTION_DURATIONS[model.ActionGatherInfo], Enabled: true},
-		{ID: string(model.ActionShareInfo), Source: "static", Label: "Share Info", Description: "Share real or fake fragments with a department.", Group: "common", ActionType: model.ActionShareInfo, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionShareInfo]), DurationMonths: model.ACTION_DURATIONS[model.ActionShareInfo], Enabled: true},
-		{ID: string(model.ActionBuildConnection), Source: "static", Label: "Build Network", Description: "Build influence with a department over time.", Group: "common", ActionType: model.ActionBuildConnection, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionBuildConnection]), DurationMonths: model.ACTION_DURATIONS[model.ActionBuildConnection], Enabled: true},
-		{ID: string(model.ActionConductPropaganda), Source: "static", Label: "Propaganda", Description: "Increase your propaganda level.", Group: "common", ActionType: model.ActionConductPropaganda, TargetType: "NONE", APCost: int(model.ACTION_COSTS[model.ActionConductPropaganda]), DurationMonths: model.ACTION_DURATIONS[model.ActionConductPropaganda], Enabled: true},
-		{ID: string(model.ActionInciteRebellion), Source: "static", Label: "Incite Rebellion", Description: "Agitate commoner departments.", Group: "common", ActionType: model.ActionInciteRebellion, TargetType: "NONE", APCost: int(model.ACTION_COSTS[model.ActionInciteRebellion]), DurationMonths: model.ACTION_DURATIONS[model.ActionInciteRebellion], Enabled: true},
+	var actions []model.PlayerActionMeta
+	if s.engine != nil && s.engine.MechanicEngine != nil {
+		for _, def := range s.engine.MechanicEngine.CommonActionDefinitions() {
+			actionType := model.AgentActionType(def.ActionType)
+			group := "common"
+			if actionType == model.ActionPublicizeFaction {
+				if !stats.IsFactionLeader {
+					continue
+				}
+				group = "faction_leader"
+			}
+			actions = append(actions, model.PlayerActionMeta{
+				ID:             def.ID,
+				Source:         "static",
+				Label:          def.Label,
+				Description:    def.Description,
+				Group:          group,
+				ActionType:     actionType,
+				TargetType:     def.TargetType,
+				APCost:         def.APCost,
+				DurationMonths: def.DurationMonths,
+				Enabled:        true,
+			})
+		}
+	} else {
+		actions = []model.PlayerActionMeta{
+			{ID: string(model.ActionGatherInfo), Source: "static", Label: "Gather Info", Description: "Collect information from a department.", Group: "common", ActionType: model.ActionGatherInfo, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionGatherInfo]), DurationMonths: model.ACTION_DURATIONS[model.ActionGatherInfo], Enabled: true},
+			{ID: string(model.ActionShareInfo), Source: "static", Label: "Share Info", Description: "Share real or fake fragments with a department.", Group: "common", ActionType: model.ActionShareInfo, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionShareInfo]), DurationMonths: model.ACTION_DURATIONS[model.ActionShareInfo], Enabled: true},
+			{ID: string(model.ActionBuildConnection), Source: "static", Label: "Build Network", Description: "Build influence with a department over time.", Group: "common", ActionType: model.ActionBuildConnection, TargetType: "DEPT", APCost: int(model.ACTION_COSTS[model.ActionBuildConnection]), DurationMonths: model.ACTION_DURATIONS[model.ActionBuildConnection], Enabled: true},
+			{ID: string(model.ActionConductPropaganda), Source: "static", Label: "Propaganda", Description: "Increase your propaganda level.", Group: "common", ActionType: model.ActionConductPropaganda, TargetType: "NONE", APCost: int(model.ACTION_COSTS[model.ActionConductPropaganda]), DurationMonths: model.ACTION_DURATIONS[model.ActionConductPropaganda], Enabled: true},
+			{ID: string(model.ActionInciteRebellion), Source: "static", Label: "Incite Rebellion", Description: "Agitate commoner departments.", Group: "common", ActionType: model.ActionInciteRebellion, TargetType: "NONE", APCost: int(model.ACTION_COSTS[model.ActionInciteRebellion]), DurationMonths: model.ACTION_DURATIONS[model.ActionInciteRebellion], Enabled: true},
+		}
 	}
 	for _, def := range engine.GetProfessionActionMeta(s.agent.Profession) {
 		actions = append(actions, model.PlayerActionMeta{
@@ -1646,7 +1683,7 @@ func (s *GameService) staticPlayerActions(stats model.AgentStats) []model.Player
 			Enabled:        true,
 		})
 	}
-	if stats.IsFactionLeader {
+	if stats.IsFactionLeader && (s.engine == nil || s.engine.MechanicEngine == nil) {
 		actions = append(actions, model.PlayerActionMeta{
 			ID:             string(model.ActionPublicizeFaction),
 			Source:         "static",

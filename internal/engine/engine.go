@@ -33,6 +33,7 @@ type GameEngine struct {
 	Bus             *EventBus
 	ConditionEngine *ConditionEngine
 	ScriptEngine    *ScriptEngine
+	MechanicEngine  *MechanicEngine
 	RuleEngine      *RuleEngine
 	TriggerEngine   *TriggerEngine
 	EventEngine     *EventEngine
@@ -55,6 +56,7 @@ func NewGameEngine() *GameEngine {
 		Bus:             NewEventBus(),
 		ConditionEngine: NewConditionEngine(),
 		ScriptEngine:    NewScriptEngine(),
+		MechanicEngine:  NewMechanicEngine(),
 		TriggerEngine:   NewTriggerEngine(),
 		EventEngine:     NewEventEngine(),
 		perCapitaConsumption: map[string]float64{
@@ -83,6 +85,7 @@ func NewGameEngine() *GameEngine {
 		},
 	}
 	e.RuleEngine = NewRuleEngine(e.ConditionEngine, e.ScriptEngine, e.Bus)
+	e.applyMechanicMetadata()
 
 	e.registerSystems()
 	e.registerConditions()
@@ -162,33 +165,28 @@ func (e *GameEngine) registerSystems() {
 		}
 	})
 
+	e.Bus.Subscribe(EVENT_APPLY_MUTATION, func(event *GameEvent, ctx *EventContext) {
+		e.applyMutation(event)
+	})
+
 	// --- 特工状态更新 ---
 	e.Bus.Subscribe(EVENT_AGENT_UPDATE, func(event *GameEvent, ctx *EventContext) {
-		silo, _ := event.Data["silo"].(*model.Silo)
-		agent := event.Data["agent"].(*model.Agent)
-		deltaYears := event.Data["deltaYears"].(float64)
-		e.UpdateAgentState(agent, deltaYears, silo, e.logf)
+		e.runEventMechanic(EVENT_AGENT_UPDATE, event, ctx)
 	})
 
 	// --- 资源结算 (含运作条件校验) ---
 	e.Bus.Subscribe(EVENT_RESOURCE_UPDATE, func(event *GameEvent, ctx *EventContext) {
-		silo := event.Data["silo"].(*model.Silo)
-		deltaYears := event.Data["deltaYears"].(float64)
-		e.updateResources(silo, deltaYears)
+		e.runEventMechanic(EVENT_RESOURCE_UPDATE, event, ctx)
 	})
 
 	// --- 地堡指标更新 (倒计时/叛乱/人口) ---
 	e.Bus.Subscribe(EVENT_METRICS_UPDATE, func(event *GameEvent, ctx *EventContext) {
-		silo := event.Data["silo"].(*model.Silo)
-		deltaYears := event.Data["deltaYears"].(float64)
-		e.updateSiloMetrics(silo, deltaYears)
+		e.runEventMechanic(EVENT_METRICS_UPDATE, event, ctx)
 	})
 
 	// --- 思潮演化 ---
 	e.Bus.Subscribe(EVENT_IDEOLOGY_UPDATE, func(event *GameEvent, ctx *EventContext) {
-		silo := event.Data["silo"].(*model.Silo)
-		deltaYears := event.Data["deltaYears"].(float64)
-		e.updateIdeology(silo, deltaYears)
+		e.runEventMechanic(EVENT_IDEOLOGY_UPDATE, event, ctx)
 	})
 
 	// --- NPC 自主行为 (统一 Actor 管线) ---
@@ -201,11 +199,8 @@ func (e *GameEngine) registerSystems() {
 
 	// --- 胜利判定 + 分数结算 ---
 	e.Bus.Subscribe(EVENT_VICTORY_CHECK, func(event *GameEvent, ctx *EventContext) {
+		e.runEventMechanic(EVENT_VICTORY_CHECK, event, ctx)
 		silo := event.Data["silo"].(*model.Silo)
-		agent, _ := event.Data["agent"].(*model.Agent)
-		e.checkVictoryConditions(silo, agent)
-
-		// 游戏结束 → 计算最终评分并发布 GAME_OVER
 		if silo.VictoryStatus != nil && silo.VictoryStatus.Score == nil {
 			silo.VictoryStatus.Score = e.CalculateScore(silo)
 			e.Bus.Emit(CreateEvent("game_over#"+e.nextID(), EVENT_GAME_OVER, map[string]interface{}{
@@ -217,11 +212,22 @@ func (e *GameEngine) registerSystems() {
 	// --- 任意 Actor 动作执行 (玩家/NPC 共用) ---
 	e.Bus.Subscribe(EVENT_ACTOR_ACTION, func(event *GameEvent, ctx *EventContext) {
 		silo := event.Data["silo"].(*model.Silo)
-		actor := event.Data["actor"].(ActorRef)
+		actorRef := event.Data["actor"].(ActorRef)
 		action := event.Data["action"].(model.AgentAction)
 		agent, _ := event.Data["agent"].(*model.Agent)
-		res := e.ExecuteActionInternal(silo, actor, action, agent)
-		e.actionResult = &res
+		actor, err := CreateActorView(actorRef, silo, agent)
+		if err != nil {
+			failed := model.ActionResult{Executed: false, Message: err.Error()}
+			e.actionResult = &failed
+			return
+		}
+		result, err := e.runMechanicForEvent(event, ctx, actor)
+		if err != nil {
+			res := e.ExecuteActionInternal(silo, actorRef, action, agent)
+			e.actionResult = &res
+			return
+		}
+		e.actionResult = result.ActionResult
 	})
 
 	// --- 剧情随机事件效果应用 ---
@@ -396,6 +402,33 @@ func (e *GameEngine) UpdateAgentState(agent *model.Agent, deltaYears float64, si
 func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYears float64, addLog func(string)) {
 	if deltaYears <= 0 {
 		return
+	}
+	if e.MechanicEngine != nil {
+		if def, ok := e.MechanicEngine.EventDefinition(EVENT_AGENT_UPDATE); ok {
+			result, err := e.MechanicEngine.Run(def, MechanicContext{
+				Event: CreateEvent("actor_state#"+e.nextID(), EVENT_AGENT_UPDATE, map[string]interface{}{
+					"silo":       silo,
+					"deltaYears": deltaYears,
+				}),
+				Silo:  silo,
+				Actor: view,
+			})
+			if err == nil {
+				for _, mutation := range result.Mutations {
+					e.applyMutation(CreateEvent("direct_mutation#"+e.nextID(), EVENT_APPLY_MUTATION, map[string]interface{}{
+						"silo":     silo,
+						"actor":    view.Ref,
+						"mutation": mutation,
+					}))
+				}
+				if addLog != nil {
+					for _, entry := range result.Logs {
+						addLog(entry)
+					}
+				}
+				return
+			}
+		}
 	}
 
 	// Medical 被动特质：随时间随机获得信息碎片 (对任意 Actor 生效)
@@ -710,6 +743,9 @@ func (e *GameEngine) executeProfessionAction(silo *model.Silo, view *ActorView, 
 		target = action.ResourceTarget
 	}
 
+	if def.Effect == nil {
+		return model.ActionResult{Executed: false, Message: "Profession action fallback is unavailable."}
+	}
 	result := def.Effect(silo, view, target)
 	if result.Executed {
 		view.SetActionPoints(view.ActionPoints() - def.APCost)
@@ -901,6 +937,14 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 
 // CalculateScore 最终评分结算
 func (e *GameEngine) CalculateScore(silo *model.Silo) *model.GameScore {
+	if e.MechanicEngine != nil {
+		if def, ok := e.MechanicEngine.FormulaDefinition("score"); ok {
+			result, err := e.MechanicEngine.Run(def, MechanicContext{Silo: silo})
+			if err == nil && result.Score != nil {
+				return result.Score
+			}
+		}
+	}
 	survival := silo.TotalPopulation * 1
 
 	diversity := 0
