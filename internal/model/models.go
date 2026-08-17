@@ -391,6 +391,36 @@ type ActionOutcome struct {
 	EndingNarrative  string             `json:"ending_narrative,omitempty"`
 }
 
+// EventQueueState 当前事件队列与完整游戏快照。
+type EventQueueState struct {
+        Silo             Silo               `json:"silo"`
+        Agent            Agent              `json:"agent"`
+        AgentStats       AgentStats         `json:"agent_stats"`
+        AvailableActions []PlayerActionMeta `json:"available_actions,omitempty"`
+        GameOver         bool               `json:"game_over"`
+        EndingNarrative  string             `json:"ending_narrative,omitempty"`
+        PendingEvents    int                `json:"pending_events"`
+        PendingOperation string             `json:"pending_operation,omitempty"`
+}
+
+// EventStepResult 单步处理一个事件后的完整结果。
+type EventStepResult struct {
+        Silo               Silo               `json:"silo"`
+        Agent              Agent              `json:"agent"`
+        AgentStats         AgentStats         `json:"agent_stats"`
+        AvailableActions   []PlayerActionMeta `json:"available_actions,omitempty"`
+        GameOver           bool               `json:"game_over"`
+        EndingNarrative    string             `json:"ending_narrative,omitempty"`
+        PendingEvents      int                `json:"pending_events"`
+        PendingOperation   string             `json:"pending_operation,omitempty"`
+        ProcessedEventID   string             `json:"processed_event_id,omitempty"`
+        ProcessedEventType string             `json:"processed_event_type,omitempty"`
+        OperationComplete  bool               `json:"operation_complete"`
+        Logs               []string           `json:"logs,omitempty"`
+        Stories            []StoryEvent       `json:"stories,omitempty"`
+        ActionResult       *ActionResult      `json:"action_result,omitempty"`
+}
+
 // EventHistoryResult 事件历史查询结果
 type EventHistoryResult struct {
 	Events []StoryEventLog `json:"events"`

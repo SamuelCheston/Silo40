@@ -11,6 +11,7 @@ import (
 // ============ 统一事件类型 (一切行为都是事件) ============
 const (
 	EVENT_TIME_TICK       = "TIME_TICK"       // 时间推进基准
+        EVENT_TIME_ADVANCE    = "TIME_ADVANCE"    // 推进年月
 	EVENT_AGENT_UPDATE    = "AGENT_UPDATE"    // 特工状态更新
 	EVENT_RESOURCE_UPDATE = "RESOURCE_UPDATE" // 资源结算
 	EVENT_METRICS_UPDATE  = "METRICS_UPDATE"  // 地堡指标更新
@@ -109,6 +110,12 @@ func (e *GameEngine) logf(msg string) {
 	e.logs = append(e.logs, msg)
 }
 
+func (e *GameEngine) prepareStepState(silo *model.Silo, agent *model.Agent) {
+        e.logs = []string{}
+        e.tickStories = nil
+        e.RuleEngine.LastState = &State{Silo: silo, Agent: agent, Logs: e.logs}
+}
+
 // ============ 系统注册：一切通过事件总线 ============
 func (e *GameEngine) registerSystems() {
 	// --- 时间推进编排：依次触发各子系统 ---
@@ -141,6 +148,16 @@ func (e *GameEngine) registerSystems() {
 			"silo": silo, "agent": agent,
 		}), ctx)
 	})
+
+        e.Bus.Subscribe(EVENT_TIME_ADVANCE, func(event *GameEvent, ctx *EventContext) {
+                silo := event.Data["silo"].(*model.Silo)
+                if silo.CurrentMonth == 12 {
+                        silo.CurrentMonth = 1
+                        silo.CurrentYear++
+                        return
+                }
+                silo.CurrentMonth++
+        })
 
 	// --- 特工状态更新 ---
 	e.Bus.Subscribe(EVENT_AGENT_UPDATE, func(event *GameEvent, ctx *EventContext) {
@@ -188,9 +205,9 @@ func (e *GameEngine) registerSystems() {
 		// 游戏结束 → 计算最终评分并发布 GAME_OVER
 		if silo.VictoryStatus != nil && silo.VictoryStatus.Score == nil {
 			silo.VictoryStatus.Score = e.CalculateScore(silo)
-			e.Bus.Emit(CreateEvent("game_over#"+e.nextID(), EVENT_GAME_OVER, map[string]interface{}{
+                        e.Bus.Emit(CreateEvent("game_over#"+e.nextID(), EVENT_GAME_OVER, map[string]interface{}{
 				"silo": silo,
-			}), NewEventContext())
+                        }), ctx)
 		}
 	})
 
@@ -237,20 +254,93 @@ func (e *GameEngine) registerTriggers() {
 
 // ============ 对外接口 ============
 
-// SubmitAction 统一动作入口：玩家与 NPC 共用同一执行管线
-func (e *GameEngine) SubmitAction(actor ActorRef, silo *model.Silo, action model.AgentAction, agent *model.Agent) model.ActionResult {
+// EnqueueAction 统一动作入口：玩家与 NPC 共用同一执行管线。
+func (e *GameEngine) EnqueueAction(actor ActorRef, silo *model.Silo, action model.AgentAction, agent *model.Agent) {
 	e.actionResult = nil
-	ctx := NewEventContext()
-	e.RuleEngine.LastState = &State{Silo: silo, Agent: agent, Logs: e.logs}
-
-	e.Bus.Emit(CreateEvent("action#"+e.nextID(), EVENT_ACTOR_ACTION, map[string]interface{}{
+        e.Bus.Publish(CreateEvent("action#"+e.nextID(), EVENT_ACTOR_ACTION, map[string]interface{}{
 		"silo": silo, "actor": actor, "action": action, "agent": agent,
-	}), ctx)
+        }))
+}
 
-	if e.actionResult != nil {
-		return *e.actionResult
-	}
-	return model.ActionResult{Executed: false, Message: "Unknown error."}
+// EnqueueTimeTick 将一个时间推进事件放入队列。
+func (e *GameEngine) EnqueueTimeTick(silo *model.Silo, deltaYears float64, agent *model.Agent) {
+        e.Bus.Publish(CreateEvent("tick#"+e.nextID(), EVENT_TIME_TICK, map[string]interface{}{
+                "silo": silo, "agent": agent, "deltaYears": deltaYears,
+        }))
+}
+
+// EnqueueTimeAdvance 将时间递增事件放入队列。
+func (e *GameEngine) EnqueueTimeAdvance(silo *model.Silo) {
+        e.Bus.Publish(CreateEvent("tick_advance#"+e.nextID(), EVENT_TIME_ADVANCE, map[string]interface{}{
+                "silo": silo,
+        }))
+}
+
+// EnqueueInstantResolution 将无需推进月份的回合收尾事件放入队列。
+func (e *GameEngine) EnqueueInstantResolution(silo *model.Silo, agent *model.Agent) {
+        e.Bus.Publish(CreateEvent("npc_actions#"+e.nextID(), EVENT_NPC_ACTIONS, map[string]interface{}{
+                "silo": silo, "agent": agent, "deltaYears": 0.0,
+        }))
+        e.Bus.Publish(CreateEvent("victory_check#"+e.nextID(), EVENT_VICTORY_CHECK, map[string]interface{}{
+                "silo": silo, "agent": agent,
+        }))
+}
+
+// EnqueuePostTick 将 tick 结束后的引擎内 follow-up 事件放入队列。
+func (e *GameEngine) EnqueuePostTick(silo *model.Silo, agent *model.Agent) {
+        ctx := NewEventContext()
+        e.Scheduler.Tick(GameTime{Year: silo.CurrentYear, Month: silo.CurrentMonth}, e.Bus)
+        state := &State{Silo: silo, Agent: agent, Logs: e.logs}
+        e.RuleEngine.LastState = state
+        e.TriggerEngine.Evaluate(e.Bus, ctx, state)
+        story := e.EventEngine.TriggerRandomEvent(silo, e.Bus, ctx)
+        if story != nil {
+                e.tickStories = append(e.tickStories, story)
+        }
+}
+
+// Step 处理队列中的下一个事件，并返回该事件与本步日志。
+func (e *GameEngine) Step(silo *model.Silo, agent *model.Agent) (*GameEvent, []string, []*model.StoryEvent) {
+        e.prepareStepState(silo, agent)
+        event := e.Bus.Step()
+        if event == nil {
+                return nil, nil, nil
+        }
+        return event, e.RuleEngine.LastState.Logs, e.tickStories
+}
+
+// Drain 处理当前队列中的所有事件。
+func (e *GameEngine) Drain(silo *model.Silo, agent *model.Agent) ([]string, []*model.StoryEvent) {
+        var logs []string
+        var stories []*model.StoryEvent
+        for e.Bus.Pending() > 0 {
+                _, stepLogs, stepStories := e.Step(silo, agent)
+                logs = append(logs, stepLogs...)
+                stories = append(stories, stepStories...)
+        }
+        return logs, stories
+}
+
+// ConsumeActionResult 读取并清空最近一次动作结果。
+func (e *GameEngine) ConsumeActionResult() *model.ActionResult {
+        if e.actionResult == nil {
+                return nil
+        }
+        res := *e.actionResult
+        e.actionResult = nil
+        return &res
+}
+
+// SubmitAction 兼容旧的同步动作入口。
+func (e *GameEngine) SubmitAction(actor ActorRef, silo *model.Silo, action model.AgentAction, agent *model.Agent) model.ActionResult {
+        e.EnqueueAction(actor, silo, action, agent)
+        e.Drain(silo, agent)
+        if e.actionResult != nil {
+                res := *e.actionResult
+                e.actionResult = nil
+                return res
+        }
+        return model.ActionResult{Executed: false, Message: "Unknown error."}
 }
 
 // ExecuteAgentAction 玩家动作入口
@@ -262,33 +352,13 @@ func (e *GameEngine) ExecuteAgentAction(silo *model.Silo, agent *model.Agent, ac
 // UpdateSiloState 推进一个游戏时间片：发布 TIME_TICK 并结算延时/剧情/随机事件
 // 返回收集的日志与触发的剧情事件
 func (e *GameEngine) UpdateSiloState(silo *model.Silo, deltaYears float64, agent *model.Agent) ([]string, []*model.StoryEvent) {
-	e.tickStories = nil
-	e.logs = []string{}
-	ctx := NewEventContext()
-
-	// 刷新规则引擎状态视图 (规则/脚本将日志写入 state.logs)
-	state := &State{Silo: silo, Agent: agent, Logs: e.logs}
-	e.RuleEngine.LastState = state
-
-	// 1. 时间推进 (各系统订阅响应)
-	e.Bus.Emit(CreateEvent("tick#"+e.nextID(), EVENT_TIME_TICK, map[string]interface{}{
-		"silo": silo, "agent": agent, "deltaYears": deltaYears,
-	}), ctx)
-
-	// 2. 调度器：触发到期延时事件
-	e.Scheduler.Tick(GameTime{Year: silo.CurrentYear, Month: silo.CurrentMonth}, e.Bus)
-
-	// 3. 剧情触发器：条件检查
-	e.TriggerEngine.Evaluate(e.Bus, ctx, state)
-
-	// 4. 随机剧情事件
-	story := e.EventEngine.TriggerRandomEvent(silo, e.Bus, ctx)
-	if story != nil {
-		e.tickStories = append(e.tickStories, story)
-	}
-
-	// 脚本/触发器可能对 state.Logs 触发 append 扩容，返回最新引用
-	return e.RuleEngine.LastState.Logs, e.tickStories
+        e.EnqueueTimeTick(silo, deltaYears, agent)
+        logs, stories := e.Drain(silo, agent)
+        e.EnqueuePostTick(silo, agent)
+        postLogs, postStories := e.Drain(silo, agent)
+        logs = append(logs, postLogs...)
+        stories = append(stories, postStories...)
+        return logs, stories
 }
 
 // ScheduleEvent 注册延时事件到调度器

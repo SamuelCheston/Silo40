@@ -54,9 +54,9 @@ type State struct {
 // ============ 事件上下文 (避免事件风暴) ============
 // EventContext fired: 本链内已触发的事件 id 集合，防止无限循环; depth: 链深度
 type EventContext struct {
-	fired    map[string]bool
-	depth    int
-	maxDepth int
+        fired    map[string]bool
+        count    int
+        maxDepth int
 }
 
 func NewEventContext() *EventContext {
@@ -64,9 +64,10 @@ func NewEventContext() *EventContext {
 }
 
 func (c *EventContext) CanFire(id string) bool {
-	return c.depth < c.maxDepth && !c.fired[id]
+        return c.count < c.maxDepth && !c.fired[id]
 }
 
 func (c *EventContext) MarkFired(id string) {
 	c.fired[id] = true
+        c.count++
 }

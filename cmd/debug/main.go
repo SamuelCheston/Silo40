@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"silo40/internal/engine"
-	"silo40/internal/model"
 )
 
 func main() {

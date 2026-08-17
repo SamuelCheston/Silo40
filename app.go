@@ -99,9 +99,24 @@ func (a *App) PassTime(months int) (*model.TickResult, error) {
 	return a.gameService.PassTime(months)
 }
 
+// BeginPassTime 入队一个时间推进操作。
+func (a *App) BeginPassTime(months int) (*model.EventQueueState, error) {
+        return a.gameService.BeginPassTime(months)
+}
+
 // ExecuteAction 执行玩家动作；耗时动作自动推进对应月份
 func (a *App) ExecuteAction(action model.AgentAction) (*model.ActionOutcome, error) {
 	return a.gameService.ExecuteAction(action)
+}
+
+// BeginAction 入队一个玩家动作。
+func (a *App) BeginAction(action model.AgentAction) (*model.EventQueueState, error) {
+        return a.gameService.BeginAction(action)
+}
+
+// ProcessNextEvent 处理队列中的下一个事件。
+func (a *App) ProcessNextEvent() (*model.EventStepResult, error) {
+        return a.gameService.ProcessNextEvent()
 }
 
 // GetEndingNarrative 获取结局叙事文案

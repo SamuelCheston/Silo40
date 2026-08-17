@@ -122,6 +122,7 @@ func TestContentEventsDispatchThroughEventBusByName(t *testing.T) {
 	if !fired {
 		t.Fatalf("expected special event to be emitted through event bus")
 	}
+        svc.drainQueuedEvents()
 	if len(stories) != 2 {
 		t.Fatalf("expected special event to wake crisis event, got %d stories", len(stories))
 	}
@@ -196,6 +197,7 @@ func TestContentScriptApplyCanEmitFollowupEvent(t *testing.T) {
 	if !fired {
 		t.Fatalf("expected scripted special event to emit")
 	}
+        svc.drainQueuedEvents()
 	if len(stories) != 2 {
 		t.Fatalf("expected script emit to produce a followup event, got %d stories", len(stories))
 	}

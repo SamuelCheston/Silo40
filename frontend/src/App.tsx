@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useState, useEffect } from 'react';
 import './App.css';
-import { CreateGame, GetGameState, HasActiveGame, PassTime, ExecuteAction } from "../wailsjs/go/main/App";
+import { CreateGame, GetGameState, HasActiveGame, BeginPassTime, BeginAction, ProcessNextEvent } from "../wailsjs/go/main/App";
 import { Box, Button, Heading, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
 import { ProgressBar, ProgressRoot } from './components/ui/progress';
 import { Tooltip } from './components/ui/tooltip';
@@ -27,6 +27,8 @@ function App() {
     const [agentStats, setAgentStats] = useState<AgentStats | null>(null);
     const [availableActions, setAvailableActions] = useState<PlayerActionMeta[]>([]);
     const [activeView, setActiveView] = useState<'map' | 'factions'>('map');
+    const [pendingEvents, setPendingEvents] = useState(0);
+    const [pendingOperation, setPendingOperation] = useState('');
 
     // Action Form State
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
@@ -75,6 +77,19 @@ function App() {
         setAgent(state.agent);
         setAgentStats(state.agent_stats);
         setAvailableActions(state.available_actions || []);
+        setPendingEvents(0);
+        setPendingOperation('');
+        setGameStarted(true);
+        setShowSetup(false);
+    };
+
+    const applyEventState = (state: any) => {
+        setSilo(state.silo);
+        setAgent(state.agent);
+        setAgentStats(state.agent_stats);
+        setAvailableActions(state.available_actions || []);
+        setPendingEvents(state.pending_events || 0);
+        setPendingOperation(state.pending_operation || '');
         setGameStarted(true);
         setShowSetup(false);
     };
@@ -172,25 +187,9 @@ function App() {
         if (!silo || !agent) return;
 
         try {
-            const result = await PassTime(1); // 每次点击过 1 个月，结算在 Go 完成
-            setSilo(result.silo);
-            setAgent(result.agent);
-            setAgentStats(result.agent_stats);
-            setAvailableActions(result.available_actions || []);
-
-            if (result.game_over) {
-                updateResultText(`Game Over: ${result.silo.victory_status?.description || result.ending_narrative}`);
-            } else if (result.stories.length > 0) {
-                const story = result.stories[0];
-                updateResultText(`Event Occurred [${story.category || "uncategorized"}]: ${story.title}`);
-            } else {
-                const prefix = `Year ${result.silo.current_year} Month ${result.silo.current_month}. `;
-                if (result.logs.length > 0) {
-                    updateResultText(`${prefix}Rumors: ${result.logs.join(' | ')}`);
-                } else {
-                    updateResultText(`${prefix}The silo was relatively quiet.`);
-                }
-            }
+            const state = await BeginPassTime(1);
+            applyEventState(state);
+            updateResultText(`Queued 1 month. Pending events: ${state.pending_events}. Use Process Next Event to advance the queue.`);
         } catch (err) {
             updateResultText(`Failed to advance time: ${err}`);
         }
@@ -236,33 +235,44 @@ function App() {
         };
 
         try {
-            const outcome = await ExecuteAction(action);
-
-            setSilo(outcome.silo);
-            setAgent(outcome.agent);
-            setAgentStats(outcome.agent_stats);
-            setAvailableActions(outcome.available_actions || []);
-
-            if (outcome.game_over) {
-                updateResultText(`Game Over: ${outcome.silo.victory_status?.description || outcome.ending_narrative}`);
-            } else if (!outcome.result.executed) {
-                updateResultText(`Action failed: ${outcome.result.message}`);
-            } else {
-                let msg = outcome.result.message;
-                if (outcome.stories.length > 0) {
-                    msg += ` | Event [${outcome.stories[0].category || "uncategorized"}]: ${outcome.stories[0].title}`;
-                }
-                const duration = selected?.duration_months ?? ACTION_DURATIONS[actionType] ?? 0;
-                if (duration > 0) {
-                    msg += ` (Time passed: ${duration} months)`;
-                }
-                if (outcome.logs.length > 0) {
-                    msg += ` | NPC Activity: ${outcome.logs.join(', ')}`;
-                }
-                updateResultText(msg);
-            }
+            const state = await BeginAction(action);
+            applyEventState(state);
+            updateResultText(`Queued action ${action.type}. Pending events: ${state.pending_events}. Use Process Next Event to continue.`);
         } catch (err) {
             updateResultText(`Failed to execute action: ${err}`);
+        }
+    };
+
+    const handleProcessNextEvent = async () => {
+        if (!gameStarted) return;
+
+        try {
+            const step = await ProcessNextEvent();
+            applyEventState(step);
+
+            if (step.game_over) {
+                updateResultText(`Game Over: ${step.silo.victory_status?.description || step.ending_narrative}`);
+                return;
+            }
+
+            let message = `Processed ${step.processed_event_type || "event"}`;
+            if (step.action_result) {
+                message += ` | ${step.action_result.executed ? "Action" : "Action failed"}: ${step.action_result.message}`;
+            }
+            if (step.stories?.length > 0) {
+                message += ` | Event [${step.stories[0].category || "uncategorized"}]: ${step.stories[0].title}`;
+            }
+            if (step.logs?.length > 0) {
+                message += ` | Logs: ${step.logs.join(' | ')}`;
+            }
+            if (step.operation_complete) {
+                message += ` | Operation complete.`;
+            } else {
+                message += ` | Pending events: ${step.pending_events}.`;
+            }
+            updateResultText(message);
+        } catch (err) {
+            updateResultText(`Failed to process next event: ${err}`);
         }
     };
 
@@ -488,12 +498,18 @@ function App() {
                                             )}
 
                                             <VStack gap={3} mt={2}>
-                                                <Button colorPalette="blue" w="full" size="lg" onClick={handleExecuteAction} boxShadow="md" disabled={!selectedActionMeta || !selectedActionMeta.enabled}>
-                                                    Execute Action
+                                                <Button colorPalette="blue" w="full" size="lg" onClick={handleExecuteAction} boxShadow="md" disabled={pendingEvents > 0 || !selectedActionMeta || !selectedActionMeta.enabled}>
+                                                    Queue Action
                                                 </Button>
-                                                <Button colorPalette="teal" variant="outline" w="full" size="md" onClick={handlePassTime} bg="white">
-                                                    Pass 1 Month
+                                                <Button colorPalette="teal" variant="outline" w="full" size="md" onClick={handlePassTime} bg="white" disabled={pendingEvents > 0}>
+                                                    Queue 1 Month
                                                 </Button>
+                                                <Button colorPalette="orange" w="full" size="md" onClick={handleProcessNextEvent} disabled={pendingEvents <= 0}>
+                                                    Process Next Event
+                                                </Button>
+                                                <Text fontSize="xs" color="gray.600">
+                                                    Queue: {pendingEvents} pending{pendingOperation ? ` | ${pendingOperation}` : ''}
+                                                </Text>
                                             </VStack>
                                         </VStack>
                                     </Box>
