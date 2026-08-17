@@ -73,6 +73,7 @@ type delayTask struct {
 	EndEventID   string
 	DelayMonths  int
 	Status       string
+	Event        *engine.GameEvent
 }
 
 func NewGameService(db *gorm.DB) *GameService {
@@ -541,33 +542,25 @@ func (s *GameService) advancePendingOperationAfterDrain() {
 			s.pendingOperation = nil
 			return
 		}
-		if op.ActionDuration > 0 {
-			s.enqueueMonthChains(op.ActionDuration, "ACTION:"+string(op.Action.Type)+":CONTENT")
+
+		duration := s.actionDurationMonths(*op.Action)
+		if duration > 0 {
+			op.RemainingMonths = duration
 			op.Phase = phaseQueued
 			return
 		}
-		s.enqueueActionCompletion("ACTION:" + string(op.Action.Type) + ":CONTENT")
+
+		// 瞬时动作：执行即时结算并触发内容
+		s.engine.EnqueueInstantResolution(s.silo, s.agent)
+		s.engine.Bus.Publish(s.engine.CreateTimeContentEvent(s.silo, s.agent, "ACTION:"+string(op.Action.Type)+":CONTENT"))
 		op.Phase = phaseQueued
 	case phaseQueued:
+		if op.RemainingMonths > 0 {
+			// 仍有剩余月份，保持 phaseQueued，等待下一轮 ProcessNextEvent 触发 runOneMonth
+			return
+		}
 		s.pendingOperation = nil
 	}
-}
-
-func (s *GameService) enqueueMonthChains(months int, source string) {
-	if s.engine == nil || months <= 0 {
-		return
-	}
-	for i := 0; i < months; i++ {
-		s.engine.EnqueueMonthChain(s.silo, s.agent, source)
-	}
-}
-
-func (s *GameService) enqueueActionCompletion(source string) {
-	if s.engine == nil {
-		return
-	}
-	s.engine.EnqueueInstantResolution(s.silo, s.agent)
-	s.engine.Bus.Publish(s.engine.CreateTimeContentEvent(s.silo, s.agent, source))
 }
 
 func (s *GameService) nextDelayTaskID() string {
@@ -576,7 +569,7 @@ func (s *GameService) nextDelayTaskID() string {
 }
 
 func (s *GameService) scheduleDelayedEvent(event *engine.GameEvent, delayMonths int, source *engine.GameEvent) {
-	if s.engine == nil || s.engine.Bus == nil || event == nil || delayMonths <= 0 {
+	if s.engine == nil || event == nil || delayMonths < 0 {
 		return
 	}
 
@@ -597,22 +590,26 @@ func (s *GameService) scheduleDelayedEvent(event *engine.GameEvent, delayMonths 
 		EndEventID:   cloned.ID,
 		DelayMonths:  delayMonths,
 		Status:       "scheduled",
+		Event:        cloned,
 	}
 
-	snapshot := s.engine.Bus.Snapshot()
-	advanceCount := countQueuedEventType(snapshot, engine.EVENT_TIME_ADVANCE)
-	if advanceCount < delayMonths {
-		s.enqueueMonthChains(delayMonths-advanceCount, "DELAY:CONTENT")
-		snapshot = s.engine.Bus.Snapshot()
+	// 如果延迟为 0，立即触发
+	if delayMonths == 0 {
+		s.engine.Bus.Publish(cloned)
 	}
+}
 
-	insertIndex, anchorID := indexAfterNthEventType(snapshot, engine.EVENT_TIME_ADVANCE, delayMonths)
-	if insertIndex < 0 {
-		insertIndex = len(snapshot)
+func (s *GameService) checkDelayedEvents() {
+	for _, task := range s.delayTasks {
+		if task.Status != "scheduled" {
+			continue
+		}
+		task.DelayMonths--
+		if task.DelayMonths <= 0 {
+			task.Status = "triggered"
+			s.engine.Bus.Publish(task.Event)
+		}
 	}
-	cloned.Data["delay_anchor_event_id"] = anchorID
-	insertIndex = advancePastAnchoredDelayEvents(snapshot, insertIndex, anchorID)
-	s.engine.Bus.InsertAt(insertIndex, cloned)
 }
 
 func (s *GameService) markDelayTaskIfCompleted(processed *engine.GameEvent) {
@@ -643,7 +640,6 @@ func (s *GameService) BeginPassTime(months int) (*model.EventQueueState, error) 
 		Phase:           phaseQueued,
 		RemainingMonths: months,
 	}
-	s.enqueueMonthChains(months, "PASS_TIME:CONTENT")
 	s.cacheSnapshot()
 	return s.buildQueueState(), nil
 }
@@ -671,12 +667,15 @@ func (s *GameService) BeginAction(action model.AgentAction) (*model.EventQueueSt
 			return nil, fmt.Errorf("%s", result.Message)
 		}
 		op.ActionResult = &result
-		if op.ActionDuration > 0 {
+		duration := op.ActionDuration
+		if duration > 0 {
+			op.RemainingMonths = duration
 			op.Phase = phaseQueued
-			s.enqueueMonthChains(op.ActionDuration, "ACTION:"+string(action.Type)+":CONTENT")
 		} else {
 			op.Phase = phaseQueued
-			s.enqueueActionCompletion("ACTION:" + string(action.Type) + ":CONTENT")
+			// 瞬时动作内容触发
+			s.engine.EnqueueInstantResolution(s.silo, s.agent)
+			s.engine.Bus.Publish(s.engine.CreateTimeContentEvent(s.silo, s.agent, "ACTION:"+string(action.Type)+":CONTENT"))
 		}
 	} else {
 		op.Phase = phaseActionRoot
@@ -696,6 +695,17 @@ func (s *GameService) ProcessNextEvent() (*model.EventStepResult, error) {
 	}
 
 	s.seedPendingOperation()
+
+	// 如果队列为空但还有剩余月份，推进一个月
+	if s.engine.Bus.Pending() == 0 && s.pendingOperation != nil && s.pendingOperation.RemainingMonths > 0 {
+		source := "PASS_TIME:CONTENT"
+		if s.pendingOperation.Kind == "action" {
+			source = "ACTION:" + string(s.pendingOperation.Action.Type) + ":CONTENT"
+		}
+		s.runOneMonth(source)
+		s.pendingOperation.RemainingMonths--
+	}
+
 	processed, logs, stories := s.engine.Step(s.silo, s.agent)
 	if processed == nil {
 		return nil, fmt.Errorf("no pending event")
@@ -729,6 +739,19 @@ func (s *GameService) ProcessNextEvent() (*model.EventStepResult, error) {
 	return s.buildStepResult(processed, stepLogs, stepStories, complete), nil
 }
 
+func (s *GameService) runOneMonth(source string) ([]string, []model.StoryEvent) {
+	s.checkDelayedEvents()
+	logs, stories := s.engine.UpdateSiloState(s.silo, 1.0/12.0, s.agent, source)
+	
+	storyList := make([]model.StoryEvent, 0, len(stories))
+	for _, st := range stories {
+		if st != nil {
+			storyList = append(storyList, *st)
+		}
+	}
+	return logs, storyList
+}
+
 // PassTime 推进 months 个月，返回 tick 结果
 func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 	s.mu.Lock()
@@ -737,8 +760,14 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 		return nil, fmt.Errorf("no active game session")
 	}
 
-	s.enqueueMonthChains(months, "PASS_TIME:CONTENT")
-	logs, stories := s.drainQueuedEvents()
+	var allLogs []string
+	var allStories []model.StoryEvent
+
+	for i := 0; i < months; i++ {
+		logs, stories := s.runOneMonth("PASS_TIME:CONTENT")
+		allLogs = append(allLogs, logs...)
+		allStories = append(allStories, stories...)
+	}
 
 	// 关键节点：游戏结束 → 落库
 	if s.gameOver() {
@@ -753,8 +782,8 @@ func (s *GameService) PassTime(months int) (*model.TickResult, error) {
 		Agent:            *s.agent,
 		AgentStats:       s.engine.BuildAgentStats(s.agent, s.silo),
 		AvailableActions: s.availablePlayerActions(),
-		Logs:             logs,
-		Stories:          stories,
+		Logs:             allLogs,
+		Stories:          allStories,
 		GameOver:         s.gameOver(),
 		EndingNarrative:  s.endingNarrative(),
 	}, nil
@@ -768,17 +797,17 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 		return nil, fmt.Errorf("no active game session")
 	}
 
-	var logs []string
-	var stories []model.StoryEvent
+	var allLogs []string
+	var allStories []model.StoryEvent
 	handledByContent, result, playerActionLogs, playerActionStories := s.executePlayerActionEvents(action)
-	logs = append(logs, playerActionLogs...)
-	stories = append(stories, playerActionStories...)
+	allLogs = append(allLogs, playerActionLogs...)
+	allStories = append(allStories, playerActionStories...)
 	if !handledByContent {
 		actor := engine.CreateActorRefForAgent(s.agent, s.silo)
 		s.engine.EnqueueAction(actor, s.silo, action, s.agent)
 		actionLogs, actionStories := s.drainQueuedEvents()
-		logs = append(logs, actionLogs...)
-		stories = append(stories, actionStories...)
+		allLogs = append(allLogs, actionLogs...)
+		allStories = append(allStories, actionStories...)
 		if consumed := s.engine.ConsumeActionResult(); consumed != nil {
 			result = *consumed
 		} else {
@@ -788,16 +817,19 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 
 	if result.Executed {
 		duration := s.actionDurationMonths(action)
+		source := "ACTION:" + string(action.Type) + ":CONTENT"
 		if duration > 0 {
-			s.enqueueMonthChains(duration, "ACTION:"+string(action.Type)+":CONTENT")
-			moreLogs, moreStories := s.drainQueuedEvents()
-			logs = append(logs, moreLogs...)
-			stories = append(stories, moreStories...)
+			for i := 0; i < duration; i++ {
+				logs, stories := s.runOneMonth(source)
+				allLogs = append(allLogs, logs...)
+				allStories = append(allStories, stories...)
+			}
 		} else {
-			s.enqueueActionCompletion("ACTION:" + string(action.Type) + ":CONTENT")
+			s.engine.EnqueueInstantResolution(s.silo, s.agent)
+			s.engine.Bus.Publish(s.engine.CreateTimeContentEvent(s.silo, s.agent, source))
 			moreLogs, moreStories := s.drainQueuedEvents()
-			logs = append(logs, moreLogs...)
-			stories = append(stories, moreStories...)
+			allLogs = append(allLogs, moreLogs...)
+			allStories = append(allStories, moreStories...)
 		}
 	}
 
@@ -814,8 +846,8 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 		AgentStats:       s.engine.BuildAgentStats(s.agent, s.silo),
 		AvailableActions: s.availablePlayerActions(),
 		Result:           result,
-		Logs:             logs,
-		Stories:          stories,
+		Logs:             allLogs,
+		Stories:          allStories,
 		GameOver:         s.gameOver(),
 		EndingNarrative:  s.endingNarrative(),
 	}, nil

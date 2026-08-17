@@ -8,21 +8,21 @@ import (
 	"silo40/internal/model"
 )
 
-// ============ 统一事件类型 (一切行为都是事件) ============
+// ============ 核心流水线事件 (程序流，不再由总线驱动) ============
 const (
-	EVENT_TIME_TICK       = "TIME_TICK"       // 时间推进基准
-	EVENT_TIME_POST_TICK  = "TIME_POST_TICK"  // 月结算后的 follow-up
-	EVENT_TIME_CONTENT    = "TIME_CONTENT"    // 月结算后的系统内容事件
-	EVENT_TIME_ADVANCE    = "TIME_ADVANCE"    // 推进年月
 	EVENT_AGENT_UPDATE    = "AGENT_UPDATE"    // 特工状态更新
 	EVENT_RESOURCE_UPDATE = "RESOURCE_UPDATE" // 资源结算
 	EVENT_METRICS_UPDATE  = "METRICS_UPDATE"  // 地堡指标更新
 	EVENT_IDEOLOGY_UPDATE = "IDEOLOGY_UPDATE" // 思潮演化
-	EVENT_NPC_ACTIONS     = "NPC_ACTIONS"     // NPC 自主行为
 	EVENT_VICTORY_CHECK   = "VICTORY_CHECK"   // 胜利判定
-	EVENT_STORY_EVENT     = STORY_EVENT_TYPE  // 剧情随机事件
-	EVENT_ACTOR_ACTION    = "ACTOR_ACTION"    // 任意 Actor (玩家/NPC) 动作
-	EVENT_GAME_OVER       = "GAME_OVER"       // 游戏结束
+)
+
+// ============ 领域事件 (由总线驱动，解耦业务逻辑) ============
+const (
+	EVENT_TIME_CONTENT = "TIME_CONTENT" // 内容系统触发信号
+	EVENT_ACTOR_ACTION = "ACTOR_ACTION" // Actor 动作执行
+	EVENT_STORY_EVENT  = STORY_EVENT_TYPE
+	EVENT_GAME_OVER    = "GAME_OVER"
 )
 
 // GameEngine 事件驱动版游戏引擎
@@ -110,106 +110,9 @@ func (e *GameEngine) prepareStepState(silo *model.Silo, agent *model.Agent) {
 	e.RuleEngine.LastState = &State{Silo: silo, Agent: agent, Logs: e.logs}
 }
 
-// ============ 系统注册：一切通过事件总线 ============
+// ============ 系统注册：领域事件 ============
 func (e *GameEngine) registerSystems() {
-	// --- 时间推进编排：依次触发各子系统 ---
-	e.Bus.Subscribe(EVENT_TIME_TICK, func(event *GameEvent, ctx *EventContext) {
-		silo := event.Data["silo"].(*model.Silo)
-		agent, _ := event.Data["agent"].(*model.Agent)
-		deltaYears := event.Data["deltaYears"].(float64)
-
-		e.Bus.Emit(CreateEvent("agent_update#"+e.nextID(), EVENT_AGENT_UPDATE, map[string]interface{}{
-			"silo": silo, "agent": agent, "deltaYears": deltaYears,
-		}), ctx)
-
-		e.Bus.Emit(CreateEvent("resource_update#"+e.nextID(), EVENT_RESOURCE_UPDATE, map[string]interface{}{
-			"silo": silo, "deltaYears": deltaYears,
-		}), ctx)
-
-		e.Bus.Emit(CreateEvent("ideology_update#"+e.nextID(), EVENT_IDEOLOGY_UPDATE, map[string]interface{}{
-			"silo": silo, "deltaYears": deltaYears,
-		}), ctx)
-
-		e.Bus.Emit(CreateEvent("npc_actions#"+e.nextID(), EVENT_NPC_ACTIONS, map[string]interface{}{
-			"silo": silo, "agent": agent, "deltaYears": deltaYears,
-		}), ctx)
-
-		e.Bus.Emit(CreateEvent("metrics_update#"+e.nextID(), EVENT_METRICS_UPDATE, map[string]interface{}{
-			"silo": silo, "deltaYears": deltaYears,
-		}), ctx)
-
-		e.Bus.Emit(CreateEvent("victory_check#"+e.nextID(), EVENT_VICTORY_CHECK, map[string]interface{}{
-			"silo": silo, "agent": agent,
-		}), ctx)
-	})
-
-	e.Bus.Subscribe(EVENT_TIME_ADVANCE, func(event *GameEvent, ctx *EventContext) {
-		silo := event.Data["silo"].(*model.Silo)
-		if silo.CurrentMonth == 12 {
-			silo.CurrentMonth = 1
-			silo.CurrentYear++
-			return
-		}
-		silo.CurrentMonth++
-	})
-
-	e.Bus.Subscribe(EVENT_TIME_POST_TICK, func(event *GameEvent, ctx *EventContext) {
-		silo := event.Data["silo"].(*model.Silo)
-		agent, _ := event.Data["agent"].(*model.Agent)
-		state := &State{Silo: silo, Agent: agent, Logs: e.logs}
-		e.RuleEngine.LastState = state
-		e.TriggerEngine.Evaluate(e.Bus, ctx, state)
-		story := e.EventEngine.TriggerRandomEvent(silo, e.Bus, ctx)
-		if story != nil {
-			e.tickStories = append(e.tickStories, story)
-		}
-	})
-
-	e.Bus.Subscribe(EVENT_APPLY_MUTATION, func(event *GameEvent, ctx *EventContext) {
-		e.applyMutation(event)
-	})
-
-	// --- 特工状态更新 ---
-	e.Bus.Subscribe(EVENT_AGENT_UPDATE, func(event *GameEvent, ctx *EventContext) {
-		e.runEventMechanic(EVENT_AGENT_UPDATE, event, ctx)
-	})
-
-	// --- 资源结算 (含运作条件校验) ---
-	e.Bus.Subscribe(EVENT_RESOURCE_UPDATE, func(event *GameEvent, ctx *EventContext) {
-		e.runEventMechanic(EVENT_RESOURCE_UPDATE, event, ctx)
-	})
-
-	// --- 地堡指标更新 (倒计时/叛乱/人口) ---
-	e.Bus.Subscribe(EVENT_METRICS_UPDATE, func(event *GameEvent, ctx *EventContext) {
-		e.runEventMechanic(EVENT_METRICS_UPDATE, event, ctx)
-	})
-
-	// --- 思潮演化 ---
-	e.Bus.Subscribe(EVENT_IDEOLOGY_UPDATE, func(event *GameEvent, ctx *EventContext) {
-		e.runEventMechanic(EVENT_IDEOLOGY_UPDATE, event, ctx)
-	})
-
-	// --- NPC 自主行为 (统一 Actor 管线) ---
-	e.Bus.Subscribe(EVENT_NPC_ACTIONS, func(event *GameEvent, ctx *EventContext) {
-		silo := event.Data["silo"].(*model.Silo)
-		agent, _ := event.Data["agent"].(*model.Agent)
-		deltaYears := event.Data["deltaYears"].(float64)
-		e.RunNpcTurn(silo, agent, deltaYears, e.logf)
-	})
-
-	// --- 胜利判定 + 分数结算 ---
-	e.Bus.Subscribe(EVENT_VICTORY_CHECK, func(event *GameEvent, ctx *EventContext) {
-		e.runEventMechanic(EVENT_VICTORY_CHECK, event, ctx)
-		silo := event.Data["silo"].(*model.Silo)
-		if silo.VictoryStatus != nil && silo.VictoryStatus.Score == nil {
-			silo.VictoryStatus.Score = e.CalculateScore(silo)
-			e.Bus.Emit(CreateEvent("game_over#"+e.nextID(), EVENT_GAME_OVER, map[string]interface{}{
-				"silo": silo,
-			}), ctx)
-		}
-	})
-
-	// --- 任意 Actor 动作执行 (玩家/NPC 共用) ---
+	// --- 领域事件：任意 Actor 动作执行 (玩家/NPC 共用) ---
 	e.Bus.Subscribe(EVENT_ACTOR_ACTION, func(event *GameEvent, ctx *EventContext) {
 		silo := event.Data["silo"].(*model.Silo)
 		actorRef := event.Data["actor"].(ActorRef)
@@ -230,11 +133,19 @@ func (e *GameEngine) registerSystems() {
 		e.actionResult = result.ActionResult
 	})
 
+	// --- 领域事件：游戏结束通告 ---
+	e.Bus.Subscribe(EVENT_GAME_OVER, func(event *GameEvent, ctx *EventContext) {
+		// 这里可以添加全局游戏结束逻辑，如记录存档或发送通知
+	})
+
 	// --- 剧情随机事件效果应用 ---
 	e.Bus.Subscribe(EVENT_STORY_EVENT, func(event *GameEvent, ctx *EventContext) {
 		silo := event.Data["silo"].(*model.Silo)
 		story := event.Data["story"].(*StoryEvent)
-		story.Effects(silo)
+		// 剧情效果现在也推荐通过 Mechanic 脚本实现，但这里保留直接执行以兼容旧定义
+		if story.Effects != nil {
+			story.Effects(silo)
+		}
 	})
 }
 
@@ -271,61 +182,26 @@ func (e *GameEngine) EnqueueAction(actor ActorRef, silo *model.Silo, action mode
 	}))
 }
 
-// EnqueueTimeTick 将一个时间推进事件放入队列。
-func (e *GameEngine) EnqueueTimeTick(silo *model.Silo, deltaYears float64, agent *model.Agent) {
-	e.Bus.Publish(e.CreateTimeTickEvent(silo, deltaYears, agent))
-}
-
-func (e *GameEngine) CreateTimeTickEvent(silo *model.Silo, deltaYears float64, agent *model.Agent) *GameEvent {
-	return CreateEvent("tick#"+e.nextID(), EVENT_TIME_TICK, map[string]interface{}{
-		"silo": silo, "agent": agent, "deltaYears": deltaYears,
-	})
-}
-
-func (e *GameEngine) CreateTimePostTickEvent(silo *model.Silo, agent *model.Agent) *GameEvent {
-	return CreateEvent("post_tick#"+e.nextID(), EVENT_TIME_POST_TICK, map[string]interface{}{
-		"silo": silo, "agent": agent,
-	})
-}
-
 func (e *GameEngine) CreateTimeContentEvent(silo *model.Silo, agent *model.Agent, source string) *GameEvent {
 	return CreateEvent("time_content#"+e.nextID(), EVENT_TIME_CONTENT, map[string]interface{}{
 		"silo": silo, "agent": agent, "content_source": source,
 	})
 }
 
-// EnqueueTimeAdvance 将时间递增事件放入队列。
-func (e *GameEngine) EnqueueTimeAdvance(silo *model.Silo) {
-	e.Bus.Publish(e.CreateTimeAdvanceEvent(silo))
-}
-
-func (e *GameEngine) CreateTimeAdvanceEvent(silo *model.Silo) *GameEvent {
-	return CreateEvent("tick_advance#"+e.nextID(), EVENT_TIME_ADVANCE, map[string]interface{}{
-		"silo": silo,
-	})
-}
-
-// EnqueueInstantResolution 将无需推进月份的回合收尾事件放入队列。
+// EnqueueInstantResolution 结算一次回合产生的领域事件 (如 NPC 行为、胜利判定)。
+// 注意：这不推进游戏时间。
 func (e *GameEngine) EnqueueInstantResolution(silo *model.Silo, agent *model.Agent) {
-	e.Bus.Publish(CreateEvent("npc_actions#"+e.nextID(), EVENT_NPC_ACTIONS, map[string]interface{}{
-		"silo": silo, "agent": agent, "deltaYears": 0.0,
-	}))
-	e.Bus.Publish(CreateEvent("victory_check#"+e.nextID(), EVENT_VICTORY_CHECK, map[string]interface{}{
-		"silo": silo, "agent": agent,
-	}))
-}
-
-// EnqueuePostTick 将 tick 结束后的引擎内 follow-up 事件放入队列。
-func (e *GameEngine) EnqueuePostTick(silo *model.Silo, agent *model.Agent) {
-	e.Bus.Publish(e.CreateTimePostTickEvent(silo, agent))
-}
-
-// EnqueueMonthChain 将完整月份推进链放入队列。
-func (e *GameEngine) EnqueueMonthChain(silo *model.Silo, agent *model.Agent, contentSource string) {
-	e.Bus.Publish(e.CreateTimeTickEvent(silo, 1.0/12.0, agent))
-	e.Bus.Publish(e.CreateTimePostTickEvent(silo, agent))
-	e.Bus.Publish(e.CreateTimeContentEvent(silo, agent, contentSource))
-	e.Bus.Publish(e.CreateTimeAdvanceEvent(silo))
+	ctx := NewEventContext()
+	// NPC 回合
+	e.RunNpcTurn(silo, agent, 0, e.logf)
+	// 胜负判定
+	e.runEventMechanic(EVENT_VICTORY_CHECK, e.CreateVictoryCheckEvent(silo, agent), ctx)
+	if silo.VictoryStatus != nil && silo.VictoryStatus.Score == nil {
+		silo.VictoryStatus.Score = e.CalculateScore(silo)
+		e.Bus.Publish(CreateEvent("game_over#"+e.nextID(), EVENT_GAME_OVER, map[string]interface{}{
+			"silo": silo,
+		}))
+	}
 }
 
 // Step 处理队列中的下一个事件，并返回该事件与本步日志。
@@ -378,12 +254,96 @@ func (e *GameEngine) ExecuteAgentAction(silo *model.Silo, agent *model.Agent, ac
 	return e.SubmitAction(actor, silo, action, agent)
 }
 
-// UpdateSiloState 推进一个游戏时间片：发布 TIME_TICK 并结算延时/剧情/随机事件
-// 返回收集的日志与触发的剧情事件
-func (e *GameEngine) UpdateSiloState(silo *model.Silo, deltaYears float64, agent *model.Agent) ([]string, []*model.StoryEvent) {
-	e.EnqueueTimeTick(silo, deltaYears, agent)
+// UpdateSiloState 推进一个游戏时间片：执行结算流水线并处理产生的领域事件。
+func (e *GameEngine) UpdateSiloState(silo *model.Silo, deltaYears float64, agent *model.Agent, source string) ([]string, []*model.StoryEvent) {
+	e.prepareStepState(silo, agent)
+
+	// 1. 执行结算流水线 (程序逻辑)
+	e.runTickPipeline(silo, agent, deltaYears, source)
+
+	// 2. 处理产生的领域事件 (如随机剧情、规则引擎触发)
 	logs, stories := e.Drain(silo, agent)
+
 	return logs, stories
+}
+
+func (e *GameEngine) runTickPipeline(silo *model.Silo, agent *model.Agent, deltaYears float64, source string) {
+	ctx := NewEventContext()
+
+	// 按照确定性的顺序执行各个子系统 (程序逻辑)
+	// 1. 特工状态更新
+	e.runEventMechanic(EVENT_AGENT_UPDATE, e.CreateAgentUpdateEvent(silo, agent, deltaYears), ctx)
+
+	// 2. 资源结算
+	e.runEventMechanic(EVENT_RESOURCE_UPDATE, e.CreateResourceUpdateEvent(silo, deltaYears), ctx)
+
+	// 3. 思潮演化
+	e.runEventMechanic(EVENT_IDEOLOGY_UPDATE, e.CreateIdeologyUpdateEvent(silo, deltaYears), ctx)
+
+	// 4. NPC 自主行为
+	e.RunNpcTurn(silo, agent, deltaYears, e.logf)
+
+	// 5. 地堡指标更新
+	e.runEventMechanic(EVENT_METRICS_UPDATE, e.CreateMetricsUpdateEvent(silo, deltaYears), ctx)
+
+	// 6. 胜负判定
+	e.runEventMechanic(EVENT_VICTORY_CHECK, e.CreateVictoryCheckEvent(silo, agent), ctx)
+	if silo.VictoryStatus != nil && silo.VictoryStatus.Score == nil {
+		silo.VictoryStatus.Score = e.CalculateScore(silo)
+		e.Bus.Publish(CreateEvent("game_over#"+e.nextID(), EVENT_GAME_OVER, map[string]interface{}{
+			"silo": silo,
+		}))
+	}
+
+	// 7. 时间推进
+	if silo.CurrentMonth == 12 {
+		silo.CurrentMonth = 1
+		silo.CurrentYear++
+	} else {
+		silo.CurrentMonth++
+	}
+
+	// 8. 后置处理 (规则引擎 / 触发器 / 随机事件)
+	state := &State{Silo: silo, Agent: agent, Logs: e.logs}
+	e.RuleEngine.LastState = state
+	e.TriggerEngine.Evaluate(e.Bus, ctx, state)
+	story := e.EventEngine.TriggerRandomEvent(silo, e.Bus, ctx)
+	if story != nil {
+		e.tickStories = append(e.tickStories, story)
+	}
+
+	// 9. 触发内容事件 (由 GameService 监听并处理)
+	e.Bus.Publish(e.CreateTimeContentEvent(silo, agent, source))
+}
+
+func (e *GameEngine) CreateAgentUpdateEvent(silo *model.Silo, agent *model.Agent, deltaYears float64) *GameEvent {
+	return CreateEvent("agent_update#"+e.nextID(), EVENT_AGENT_UPDATE, map[string]interface{}{
+		"silo": silo, "agent": agent, "deltaYears": deltaYears,
+	})
+}
+
+func (e *GameEngine) CreateResourceUpdateEvent(silo *model.Silo, deltaYears float64) *GameEvent {
+	return CreateEvent("resource_update#"+e.nextID(), EVENT_RESOURCE_UPDATE, map[string]interface{}{
+		"silo": silo, "deltaYears": deltaYears,
+	})
+}
+
+func (e *GameEngine) CreateIdeologyUpdateEvent(silo *model.Silo, deltaYears float64) *GameEvent {
+	return CreateEvent("ideology_update#"+e.nextID(), EVENT_IDEOLOGY_UPDATE, map[string]interface{}{
+		"silo": silo, "deltaYears": deltaYears,
+	})
+}
+
+func (e *GameEngine) CreateMetricsUpdateEvent(silo *model.Silo, deltaYears float64) *GameEvent {
+	return CreateEvent("metrics_update#"+e.nextID(), EVENT_METRICS_UPDATE, map[string]interface{}{
+		"silo": silo, "deltaYears": deltaYears,
+	})
+}
+
+func (e *GameEngine) CreateVictoryCheckEvent(silo *model.Silo, agent *model.Agent) *GameEvent {
+	return CreateEvent("victory_check#"+e.nextID(), EVENT_VICTORY_CHECK, map[string]interface{}{
+		"silo": silo, "agent": agent,
+	})
 }
 
 // UpdateAgentState 特工状态更新：包装为统一 Actor 状态结算
@@ -415,11 +375,8 @@ func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYe
 			})
 			if err == nil {
 				for _, mutation := range result.Mutations {
-					e.applyMutation(CreateEvent("direct_mutation#"+e.nextID(), EVENT_APPLY_MUTATION, map[string]interface{}{
-						"silo":     silo,
-						"actor":    view.Ref,
-						"mutation": mutation,
-					}))
+					// 直接应用物理变更
+					e.ApplyMutation(silo, nil, view.Ref, mutation)
 				}
 				if addLog != nil {
 					for _, entry := range result.Logs {

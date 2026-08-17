@@ -15,10 +15,6 @@ import (
 	"github.com/dop251/goja"
 )
 
-const (
-	EVENT_APPLY_MUTATION = "APPLY_MUTATION"
-)
-
 type MechanicDefinition struct {
 	ID               string        `json:"id"`
 	EventType        string        `json:"event_type,omitempty"`
@@ -684,25 +680,22 @@ func (e *GameEngine) applyMechanicMutations(event *GameEvent, mutations []Mechan
 			actorRef = CreateActorRefForAgent(agent, silo)
 		}
 	}
+
+	silo, _ := event.Data["silo"].(*model.Silo)
+	agent, _ := event.Data["agent"].(*model.Agent)
+
 	for _, mutation := range mutations {
-		e.Bus.Emit(CreateEvent("mutation#"+e.nextID(), EVENT_APPLY_MUTATION, map[string]interface{}{
-			"silo":     event.Data["silo"],
-			"agent":    event.Data["agent"],
-			"actor":    actorRef,
-			"mutation": mutation,
-		}), ctx)
+		// 直接应用变更
+		e.ApplyMutation(silo, agent, actorRef, mutation)
 	}
 }
 
-func (e *GameEngine) applyMutation(event *GameEvent) {
-	silo, _ := event.Data["silo"].(*model.Silo)
-	agent, _ := event.Data["agent"].(*model.Agent)
-	actorRef, _ := event.Data["actor"].(ActorRef)
-	mutation, _ := event.Data["mutation"].(MechanicMutation)
+func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRef ActorRef, mutation MechanicMutation) {
 	var actor *ActorView
 	if silo != nil && actorRef.Kind != "" {
 		actor, _ = CreateActorView(actorRef, silo, agent)
 	}
+
 	switch mutation.Type {
 	case "actor_metric_delta":
 		e.applyActorMetricDelta(actor, mutation.Field, mutation.Value)

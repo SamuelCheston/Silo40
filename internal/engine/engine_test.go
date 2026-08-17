@@ -32,15 +32,9 @@ func TestEngineSmoke(t *testing.T) {
 
 	// 推进 120 个月 (10 年)
 	for i := 0; i < 120; i++ {
-		logs, stories := e.UpdateSiloState(silo, 1.0/12.0, agent)
+		logs, stories := e.UpdateSiloState(silo, 1.0/12.0, agent, "TEST")
 		_ = logs
 		_ = stories
-		if silo.CurrentMonth == 12 {
-			silo.CurrentMonth = 1
-			silo.CurrentYear++
-		} else {
-			silo.CurrentMonth++
-		}
 	}
 
 	if silo.TotalPopulation <= 0 {
