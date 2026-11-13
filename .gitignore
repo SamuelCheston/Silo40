@@ -1,0 +1,72 @@
+# Go
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with Lit
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Wails
+build/bin/
+build/playable/
+build/windows/
+build/darwin/
+build/linux/
+frontend/dist/
+wails.log
+
+# Frontend
+frontend/node_modules/
+frontend/.DS_Store
+frontend/dist
+frontend/dist-ssr
+frontend/*.local
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Silo40 runtime data and generated output
+silo40.db
+outputs/
+build/
+.playable-data/
+.screenshots/
+.trae/
+
+# Local-only reference material: never commit these paths.
+docs/research/01-worldbuilding.md
+docs/research/02-timeline.md
+docs/research/03-characters-and-factions.md
+docs/research/04-books-vs-show.md
+docs/research/05-game-adaptation-motifs.md
+docs/research/06-silo40-event-plan.md
+docs/research/local/
+docs/local/
+references/local/
+frontend/src/references/
+/research/
+/notes/
+/.local-references/
+/local-references/

@@ -1,0 +1,55 @@
+# Minimal Wails CI: install frontend deps, build the app with the Wails CLI
+# (the wailsjs bindings are committed under frontend/wailsjs/ and refreshed in
+# place; builds the frontend and the Go binary), then vet and test the Go
+# side. Runs on every push/PR to main.
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Check public content
+      run: |
+        python3 scripts/check_public_content.py --self-test
+        python3 scripts/check_public_content.py --all
+
+    - name: Set up Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+
+    - name: Install Linux build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+    - name: Install Wails CLI
+      run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+
+    - name: Build app (bindings + frontend + Go binary)
+      run: wails build
+
+    - name: Vet
+      run: go vet ./...
+
+    - name: Test
+      run: go test ./...

@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "initial_stage": "arrival",
+  "default_visibility": "locked",
+  "stages": [
+    { "id": "arrival", "when": {} },
+    { "id": "first_signal", "when": { "event_completed": "player_action:action_gather_info" } },
+    { "id": "archive_awakened", "when": { "event_completed": "player_action:action_share_info" } }
+  ],
+  "actions": [
+    {
+      "id": "action_gather_info",
+      "unlock": {},
+      "available": {}
+    },
+    {
+      "id": "action_share_info",
+      "unlock": { "stage_at_least": "first_signal" },
+      "available": { "metric": "known_fragments", "min": 1 },
+      "reason": "需要至少 1 个已知碎片"
+    },
+    {
+      "id": "action_build_connection",
+      "unlock": { "stage_at_least": "first_signal" },
+      "available": {}
+    },
+    {
+      "id": "action_conduct_propaganda",
+      "unlock": { "relation": "Mayor", "min": 0.15 },
+      "available": { "stage_at_least": "first_signal" },
+      "reason": "需要先建立驻地阶段进度"
+    },
+    {
+      "id": "action_incite_rebellion",
+      "unlock": { "metric": "political_prestige", "min": 60 },
+      "available": { "relation": "Mayor", "min": 0.25 },
+      "reason": "需要 Mayor 关系达到 0.25"
+    },
+    {
+      "id": "action_publicize_faction",
+      "unlock": { "stage_at_least": "archive_awakened" },
+      "available": { "metric": "political_prestige", "min": 80 },
+      "reason": "需要政治威望达到 80"
+    },
+    {
+      "action_type": "PROFESSION_ACTION",
+      "unlock": { "stage_at_least": "first_signal" },
+      "available": {}
+    },
+    {
+      "id": "STATION_INTEL",
+      "unlock": { "stage_at_least": "first_signal" },
+      "available": {}
+    },
+    {
+      "id": "STATION_INFILTRATE",
+      "unlock": { "stage_at_least": "archive_awakened" },
+      "available": { "relation": "Mechanical", "min": 0.2 },
+      "reason": "需要 Mechanical 关系达到 0.20"
+    },
+    {
+      "id": "STATION_DECEIVE",
+      "unlock": { "stage_at_least": "archive_awakened" },
+      "available": { "metric": "propaganda_level", "min": 1 },
+      "reason": "需要宣传力度达到 1"
+    },
+    {
+      "id": "STATION_TRADE",
+      "unlock": { "relation": "Supply", "min": 0.2 },
+      "available": { "stage_at_least": "first_signal" },
+      "reason": "需要先建立驻地阶段进度"
+    },
+    {
+      "id": "SILO1_INTEL",
+      "unlock": { "stage_at_least": "first_signal" },
+      "available": {}
+    },
+    {
+      "id": "SILO1_DECEIVE",
+      "unlock": { "stage_at_least": "archive_awakened" },
+      "available": { "metric": "propaganda_level", "min": 1 },
+      "reason": "需要宣传力度达到 1"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+.bunker-map-container {
+    border: 2px solid #E2E8F0;
+    /* Single small-blur shadow: keeps the depth cue while staying cheap to
+       re-rasterize under software rendering (WebKitGTK non-GPU fallback). */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.bunker-silo-structure {
+    background: #F7FAFC;
+}
+
+.class-elite {
+    min-height: 250px;
+    background: linear-gradient(180deg, #FAF5FF 0%, #FFFFFF 100%);
+}
+
+.class-commoner {
+    min-height: 450px;
+    background: linear-gradient(180deg, #F0FFF4 0%, #FFFFFF 100%);
+}
