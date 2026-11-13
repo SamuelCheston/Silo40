@@ -2,16 +2,12 @@
 
 本仓库只发布项目源码、项目原创机制与文案，以及已确认属于小说的事实层材料。任何影视改编独有的人名、组织名、情节、工艺、场景、对照研究笔记与外部资料汇编均不得入库。自动扫描是发布门禁，不构成法律意见或绝对版权保证。
 
+`docs/research/01-worldbuilding.md` 至 `06-silo40-event-plan.md` 属于公开文档，已按抽象化口径改写：只保留设定结构、数值关系与机制位，不写具体人名、组织名、集数或纪年。它们不再列入本地专用路径；扫描器仍对其执行内容级检查。
+
 ## 只存本地、不得入库
 
 以下路径由 `.gitignore` 按路径拦截：
 
-- `docs/research/01-worldbuilding.md`
-- `docs/research/02-timeline.md`
-- `docs/research/03-characters-and-factions.md`
-- `docs/research/04-books-vs-show.md`
-- `docs/research/05-game-adaptation-motifs.md`
-- `docs/research/06-silo40-event-plan.md`
 - `docs/research/local/`
 - `docs/local/`
 - `references/local/`

@@ -107,14 +107,7 @@ RULES = (
     ),
 )
 
-LOCAL_ONLY_FILES = {
-    "docs/research/01-worldbuilding.md",
-    "docs/research/02-timeline.md",
-    "docs/research/03-characters-and-factions.md",
-    "docs/research/04-books-vs-show.md",
-    "docs/research/05-game-adaptation-motifs.md",
-    "docs/research/06-silo40-event-plan.md",
-}
+LOCAL_ONLY_FILES = set()
 
 LOCAL_ONLY_PREFIXES = (
     "docs/research/local/",
