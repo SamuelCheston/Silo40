@@ -56,6 +56,7 @@ type GameService struct {
 	contentStates       map[uint]map[string]model.ContentEventState // siloID -> 事件触发状态
 	contentUnsubscribes []func()
 	actionGates         actionGateRuntime
+	relicCatalog        relicCatalogRuntime
 	delayCounter        int
 	delayTasks          map[string]*delayTask
 	pendingOperation    *pendingOperation

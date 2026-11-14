@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 
 	"silo40/internal/model"
@@ -55,20 +53,7 @@ type actionGateRuntime struct {
 	byType            map[string]actionGate
 }
 
-func actionGateConfigPath(dirs map[string]string) (string, error) {
-	if dir := dirs["mechanics"]; dir != "" {
-		return filepath.Join(filepath.Dir(dir), "action_gates.json"), nil
-	}
-	groups := make([]string, 0, len(dirs))
-	for group := range dirs {
-		groups = append(groups, group)
-	}
-	sort.Strings(groups)
-	if len(groups) == 0 {
-		return "", fmt.Errorf("no content directories for action gates")
-	}
-	return filepath.Join(filepath.Dir(dirs[groups[0]]), "action_gates.json"), nil
-}
+// actionGateConfigPath lives in relic_catalog.go (shared rootConfigPath).
 
 // loadActionGates is production-only content bootstrapping. Legacy mechanism
 // tests that do not call it retain their original ungated fixtures.
