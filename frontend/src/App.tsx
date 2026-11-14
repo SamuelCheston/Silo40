@@ -146,15 +146,19 @@ function App() {
     }, []);
 
     const drainOperation = useCallback(async () => {
+        let last: any = null;
         for (let i = 0; i < 256; i++) {
             const step = await ProcessNextEvent();
-            applyEventState(step);
-            if (step.operation_complete) {
-                await refreshEventHistory();
-                return step;
-            }
+            last = step;
+            if (step.operation_complete) break;
         }
-        throw new Error('Operation exceeded 256 event steps; save was not attempted.');
+        if (!last || !last.operation_complete) {
+            throw new Error('Operation exceeded 256 event steps; save was not attempted.');
+        }
+        // 只在最终步应用状态：中间事件步不触发整树重渲染，避免一次操作多次重渲染。
+        applyEventState(last);
+        await refreshEventHistory();
+        return last;
     }, [applyEventState, refreshEventHistory]);
 
     const handleNewGame = useCallback(() => {
