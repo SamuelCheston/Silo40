@@ -11,7 +11,7 @@
 
 | id | 分组 | 时间子窗 | 主题 | 机制内核 | 触发 | 效果（持久杠杆） | 与既有事件的区别 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `neighbor_silo_silence` | histories | Y124M1 起（脚本里程碑） | 旧断联同盟里的邻堡逐个失联——当年 Silo 40 带头断联、随后在轰炸中毁灭，如今网络在它派出的特工眼前死去 | 脚本里程碑抬升历史包袱与叛乱，为 Y130 大结局铺弧 | `timestampAtOrAfter(124,1)`，ONCE | hb +0.05、rebellion +0.04、全部门 panic +0.04 | `archive_truth_broadcast` 是堡内档案真相；本事件是**外部网络**信号；`silo1_destroyed_signal` 是 Y130 的结果，本事件是其前兆 |
+| `neighbor_silo_silence` | histories | Y124M1 起（脚本里程碑） | 旧断联同盟里的邻堡逐个失联——当年 Silo 40 带头断联、随后在坍塌处置与清扫中毁灭，如今网络在它派出的特工眼前死去 | 脚本里程碑抬升历史包袱与叛乱，为 Y130 大结局铺弧 | `timestampAtOrAfter(124,1)`，ONCE | hb +0.05、rebellion +0.04、全部门 panic +0.04 | `archive_truth_broadcast` 是堡内档案真相；本事件是**外部网络**信号；`silo1_destroyed_signal` 是 Y130 的结果，本事件是其前兆 |
 | `silo1_ultimatum` | histories | Y126M1 起（脚本里程碑） | Silo 1 经旧协议通道发来定向警告：终止信号测试 | 大威胁立即压顶 + 3 月后"适应与积怨"分流（受创泄压的镜像） | `timestampAtOrAfter(126,1)`，ONCE | panic +0.08、rebellion +0.06、`schedule_event(ultimatum_aftermath, 3)` | 既有事件无一涉及 Silo 1 的**主动施压**（失联是它的下场，不是它的动作） |
 | `ultimatum_aftermath` | special | Y126M4 前后（纯调度） | 恐慌回落（适应），怨气沉淀 | 延迟档：威胁后恐慌泄压、叛乱续涨 | 纯调度 | panic −0.04、rebellion +0.05 | — |
 | `archive_purge_order` | special | hb ≥0.12 后（基线 ~Y124M2：broadcast 0.08 + 邻堡 0.05） | IT 对觉醒发动二次档案清洗 | 历史包袱的"对抗性操作"：清洗立即降 hb，但埋下反弹 | `siloMetricGte("history_burden", 0.12)`，ONCE | hb −0.06、rebellion +0.05、panic +0.06、`schedule_event(purge_backlash, 4)` | `history_burden_awakened` 是 hb 的**读出**；本事件是 hb 的**反向操作**（抹除），构成拉锯 |

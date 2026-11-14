@@ -10,7 +10,7 @@
 | **《越岭》** | 成规模的人已经离开，并在另一处开始安排第二天的物资、照护与生产 | 叛乱值到顶、闸门打开、先遣队出发，或只有主角独自抵达 |
 | **《无人裁决》** | 权威覆灭到来时，覆灭前已经存在的开放公共生活使驻地没有立即回到封闭裁决 | 把通讯静默当覆灭，用覆灭后的恐慌补开放资格，或把无人裁决写成外部从此安全 |
 
-三条好结局共同保留的不是“玩家赢下了地堡”，而是 the Errand 的去英雄化结果：
+三条好结局共同保留的不是“玩家赢下了地堡”，而是 the Witness 的去英雄化结果：
 
 - 《共证》里，传播链不再需要原宿主，更不需要玩家成为新总部；
 - 《越岭》里，逃出者不再需要玩家替他们生活；
@@ -31,8 +31,8 @@
 
 ## 3. 主要依据
 
-- 前史、玩家身份、唤醒、40 号扩散与物理轰炸顺序、流散边界：[silo40-backstory.md](../silo40-backstory.md)。
-- the Errand 的目标、优先顺序、五阶段叙事与机制映射：[silo40-doctrine.md](../silo40-doctrine.md)。
+- 前史、玩家身份、唤醒、40 号扩散与 2212 年坍塌处置、2345 年后续清扫的顺序、流散边界：[silo40-backstory.md](../silo40-backstory.md)。
+- the Witness 的目标、完成判据与任务失效判据：[silo40-witness.md](../silo40-witness.md)。
 - 世界观中的部门、外部与跨堡信息隔离、重置和终止机制：[01-worldbuilding.md](../../research/01-worldbuilding.md)。
 - 三条胜利路线、资格闸、互斥与四类主体仲裁：[12-ending-system-design.md](../../research/12-ending-system-design.md)。其中《共证》的旧定义由本轮用户指定的新定义取代，其余路线资格不因本拆分改变。
 - 信息事实／解释／观察、独立来源与公开证据：[11-information-fragments-design.md](../../research/11-information-fragments-design.md)。
