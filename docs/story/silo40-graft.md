@@ -16,14 +16,14 @@
 - **40 号攻破了 1 号的系统。**《Shift》Second Shift ch.43 明写："silo forty had hacked the system"，1 号方面判断只有叛变的 IT 主管（"a rogue head of IT"）才具备这种专业与权限；发现时"camera feeds were cut, every failsafe had already been severed"；随后"darkness started to spread to other silos"，多处设施被从 1 号切断（《Dust》ch.52 回顾："They had cut several facilities off from silo one"）。
 - **1 号握有覆盖所有地堡的中央档案。**《Dust》ch.52 写 1 号内部设有 Records（"the major happenings of every silo were tallied and entered into the servers"）与 Population Control；Donald 在 2212 年靠猜一个名字（Karma）就在数据库里检索到 Helen 在 Silo 2 的完整一生（《Shift》Second Shift）；《Shift》Third Shift ch.72 写 Donald 从一个座位即可调看 18 号全部居民的摄像画面。
 - **档案被改写、互换、重填在原著里有先例。** Anna 在 2052 年偷换了 Donald 与 Mick Webb 的分配（《Shift》First Shift）；Donald 与 Thurman 的身份记录在档案中被互换（《Shift》Third Shift，2345 年被发现）；2212 年 18 号重置时记录被整体抹除、全堡投药，起义从此只作为传说存在（《Shift》Second Shift）；Bernard 在起义后"监督把上次起义删掉的一切重新灌回数据盘"（《Wool》3 ch.13）。
-- **各堡 IT 主管知道 1 号的存在并服从专线。**继任仪式（Rite）、指令与任命都经这条线路下达（《Wool》5 ch.15；《Shift》Third Shift ch.89）。
+- **各堡专线的另一头，在 IT 主管看来是一套系统。**继任仪式（Rite）、指令与任命都经这条线路下达（《Wool》5 ch.15；《Shift》Third Shift ch.89）；1 号刻意用软件掩盖值班的更换——"The silo heads need not know when one man went off shift and another replaced him. It was always the same voice, the same person, as far as they were concerned."（《Shift》Third Shift ch.89）。主管们向它提问、听它的答复、被它以 safeguard 警告，都当作系统在运作；背后有活人在指挥，是极少数主管花一辈子才参悟出来的事。
 
 ### 1.2 这套权限能做到什么【外推】
 
 建立在"攻破 1 号系统"这一原著事实之上，以下为外推的能力清单：
 
 - **写中央档案**：在 1 号的 Records / Population Control 数据中增删条目，与读取档案（前史已有设定）是同一权限的两面。
-- **向目标堡写入户籍**：1 号的专线平时就向下传达指令、任命与数据要求，各堡 IT 把来自该线路的流量当作合法中央流量。40 号冒用这条通道，把整段户籍以"中央档案回填/例行更正"的形态推进目标堡的 IT 系统。
+- **向目标堡写入户籍**：1 号的专线平时就向下传达指令、任命与数据要求，各堡 IT 把来自该线路的流量当作那套系统的例行流量。40 号冒用这条通道，把整段户籍以"中央档案回填/例行更正"的形态推进目标堡的 IT 系统。
 - **挑选目标堡**：借 1 号的实时数据判断哪些堡当前仍在运转、人口与配额状况如何——这是"约三十座目标堡"估算的依据来源。
 - **配合进入**：在目标堡制造短暂的摄像盲区、维护窗口与气闸循环空档（外推自原著"切断 camera feeds"的能力），为抵达者开一条不被看见的门。
 
@@ -86,13 +86,17 @@
 
 ### 4.1 查，就是暴露
 
-先澄清一个原著事实：各堡 IT 主管**本来就知道 1 号存在**（继任仪式与专线，§1.1）。所以直接下令追查暴露的不是"1 号存在"这件事本身，而是更致命的三件事：
+先固定认知基线（§1.1）：各堡专线的另一头，在 IT 主任看来只是一台机器、一套系统——他们向它提问、听它的答复、被它以 safeguard 警告，都当作系统在运作。1 号用声音掩盖刻意维持这一点（《Shift》Third Shift ch.89）；背后坐着真人在指挥，是极少数主任花一辈子才参悟出来的事，绝大多数人至死不知。
+
+所以 1 号一旦直接下令让各堡追查这些人，暴露的首要就是这件事：**这么多堡的背后，是同一个活人在指挥。** 例行指令还能解释成系统或规程的输出，一场针对具体个人的跨堡追查却解释不了——它必须说明为什么是这些人、"系统"凭什么认识他们、是谁在做判断。各堡主任一旦开始怀疑声音背后是活人，整套秩序的地基就松了：对系统的服从会变成对人的审视，而人是可以被怀疑、被欺骗、被反抗的。
+
+在此之上，才叠加三项附加损失：
 
 1. **1 号的中央档案被一个叛堡攻破过**——全知是可以被伪造的；
 2. **镇压并不彻底**，40 号的人可能还活在各地堡里——反抗有出路；
 3. **档案不可信**——每座堡的 IT 都会开始自查手里的记录，怀疑一旦散开就收不回。
 
-若追查命令绕过 IT、经市长或司法系统下达，则进一步把"1 号存在"扩散到全堡居民——那是更大的暴露。
+若追查命令绕过 IT、经市长或司法系统下达，则进一步把"指挥堡存在"扩散到全堡居民——那是更大的暴露。
 
 原著依据：1 号的一贯政策是彻底保密。"The silo heads in the rest of the facilities hadn't even been told of the calamity"，连图上都不画红叉；"Thurman and the others had kept the outbreak a secret, didn't want to cause a panic"（《Shift》Second Shift ch.43；《Dust》ch.52 回顾）。
 
@@ -145,7 +149,8 @@
 | 40 号攻破 1 号系统、切断馈送与保险、波及多堡 | 【原著】（《Shift》Second Shift ch.43；《Dust》ch.52） |
 | 1 号中央档案覆盖所有地堡（Records、Population Control、跨堡检索、全摄像调看） | 【原著】（《Dust》ch.52；《Shift》Second/Third Shift） |
 | 档案可被改写、互换、重填、整体抹除 | 【原著】（Anna 换分配；Donald/Thurman 身份互换；18 号重置；Bernard 重灌数据盘） |
-| 各堡 IT 知道 1 号存在并服从专线 | 【原著】（《Wool》5 ch.15；《Shift》Third Shift ch.89） |
+| 各堡专线的另一头在 IT 主任看来是系统/声音；1 号用软件掩盖值班更换、隐藏真人 | 【原著】（《Wool》5 ch.15；《Shift》Third Shift ch.89） |
+| 背后是活人在指挥，极少数主任花一辈子才参悟，绝大多数至死不知 | 【项目设定】（基于原著的信息不对称与声音掩盖） |
 | 1 号对 40 号事件向各堡保密、监视人手不足、技术带宽有限 | 【原著】（《Shift》Second Shift ch.43；《Dust》ch.52） |
 | 40 号借中央通道向目标堡批量写入户籍 | 【外推】 |
 | 一次回填整段人生、平庸/自洽/单薄三原则 | 【外推】 |
@@ -163,7 +168,7 @@
 - 《Shift》Second Shift：2212 年 Donald 在数据库中检索到 Helen（Karma Brewer）在 Silo 2 的记录；18 号重置抹除记录。
 - 《Shift》Third Shift ch.69、73、74：2312 年"40"线路应答；Donald 确认其为另一座 silo；2345 年签署 bombing run。ch.72：单座调看全堡居民画面。ch.85 前后：Donald 发现档案中自己与 Thurman 的身份被互换。
 - 《Dust》ch.52：Records 与 Population Control；"camera on every street corner, but not enough people watching the feeds"；Anna 被 40 号集群占用近一年；"cut several facilities off from silo one"；Thurman 等人对疫情保密。
-- 《Wool》3 ch.13：Bernard 监督重灌被删数据。《Wool》5 ch.15：Lukas 经专线接受 1 号继任仪式。
+- 《Wool》3 ch.13：Bernard 监督重灌被删数据。《Wool》5 ch.15：Lukas 经专线接受中央声音的继任仪式；同场在 1 号一侧即《Shift》Third Shift ch.89——软件掩盖声音，"The silo heads need not know when one man went off shift and another replaced him"。
 
 ### 项目文件（只读引用，未修改）
 

@@ -19,7 +19,7 @@
 | 2212–2345 | Donald 沉睡期间，档案中他与 Thurman 的身份被互换（Anna 的手笔） | 《Shift》 |
 | 2312 | **Silo 17 陷落**：叛乱中 16 岁的 **Jimmy Parker** 被父亲（IT 高层）锁进服务器室下的暗堡；双亲身亡；气闸被开、Silo 1 关堡；Jimmy 与猫 Shadow 独活，成为 **Solo** | 《Shift》Third Shift: Pact |
 | ~2342 | **Allison**（Silo 18 治安官 Holston 之妻）发现外景画面造假，要求出去，清洁后死亡 | 《Wool》第一部背景 |
-| 2345 | **正篇**：Holston 出堡清洁死亡；Mayor **Jahns** 与副手 **Marnes** 下行招募机械师 **Juliette Nichols** 任治安官；**Bernard**（IT 主管）毒杀 Marnes 水壶、Jahns 误饮身亡；Bernard 依 Pact 接任代理市长；Juliette 的好友 **Walker** 暗中用优质材料制作防护服；Juliette 拒洁、翻过山丘抵达 Silo 17 遇见 Solo；Mechanical 起义被 Bernard 血腥镇压；Bernard 承认杀害机械师 George；**Lukas Kyle** 接任 IT 主管（由 Donald 远程 induction）；Donald 发现 2052 调包真相、毒杀 Anna，并发现隐藏 Pact：**只有一座地堡能活**；Donald 唤醒真 Thurman、开枪击伤后重新冷冻，唤醒 Charlotte，与 Silo 18 建立联络 | 《Wool》+《Shift》Third Shift |
+| 2345 | **正篇**：Holston 出堡清洁死亡；Mayor **Jahns** 与副手 **Marnes** 下行招募机械师 **Juliette Nichols** 任治安官；**Bernard**（IT 主管）毒杀 Marnes 水壶、Jahns 误饮身亡；Bernard 依 Pact 接任代理市长；Juliette 的好友 **Walker** 暗中用优质材料制作防护服；Juliette 拒洁、翻过山丘抵达 Silo 17 遇见 Solo；Mechanical 起义被 Bernard 血腥镇压；Bernard 承认杀害机械师 George；**Lukas Kyle** 接任 IT 主管（由 Donald 远程 induction；Lukas 并不知道线那头的声音背后是谁）；Donald 发现 2052 调包真相、毒杀 Anna，并发现隐藏 Pact：**只有一座地堡能活**；Donald 唤醒真 Thurman、开枪击伤后重新冷冻，唤醒 Charlotte，与 Silo 18 建立联络 | 《Wool》+《Shift》Third Shift |
 | 2345 之后 | **《Dust》**：Juliette 任市长，启动掘进机挖向 Silo 17；Donald 与 Charlotte 修复无人机，发现山外有绿地；Anna 尸体被发现，Thurman 复醒重夺 Silo 1；Silo 18 暴乱，Thurman 以纳米虫终止该堡，**Lukas 死亡**，约 200 人经隧道逃入 Silo 17，**Shirly 封死隧道**；Darcy 掩护 Charlotte 出逃牺牲；Donald 中枪后引爆，**与 Silo 1、Thurman 同归于尽**；Juliette 带幸存者走出毒尘带，抵达 **Seed**：空气可呼吸、生态已恢复 | 《Dust》 |
 | 2550 | 原定 **E-Day**：计算机算法选出唯一胜出地堡回归地表，其余全部终止（该计划随 Silo 1 毁灭而作废） | 《Shift》Third Shift（Wikipedia “Silo (series)” 转述） |
 

@@ -8,7 +8,7 @@
 
 【原著】（档案内容形态与专线存在）
 - Silo 1 的资料中被明确写到的内容：**隐藏的 Pact**（终局：四十九堡最后只留一个，其余连同 Silo 1 全部终止；E-Day 定于 2550 年，由算法选出胜出堡）、**各堡评分/排名**（为长期适配性打分）、**事故复盘**（Troy 撰写的 Silo 12 报告）、**the Order**（处置程序手册）。（《Shift》Second/Third Shift；Wikipedia "Silo (series)" Shift 段；Astromech #18）
-- 各堡 IT 与 Silo 1 之间存在**指挥专线**：每堡 IT 主管由 Shepherd induction，在服务器机房经隐秘线路接受指令；Silo 1"看得见每座堡的数据、听得到每条 IT 线路"。（Astromech "Every Known Silo" §chain of command、§Silo 1）
+- 各堡 IT 与 Silo 1 之间存在**指挥专线**：每堡 IT 主管经隐秘线路接受"线那头的声音"的继任考核与指令（《Wool》5 ch.15；《Shift》Third Shift ch.89）；在主管看来，那头的声音是一套系统——1 号用软件掩盖值班更换，背后是活人在指挥这一点，只有极少数主管花一辈子才参悟出来。Silo 1"看得见每座堡的数据、听得到每条 IT 线路"。（Astromech "Every Known Silo" §chain of command、§Silo 1）
 - 该通讯链路**双向可用**：Solo 在 Silo 17 教 Juliette 呼叫其他地堡，她由此联系上 Silo 18 的 Lukas。（《Wool》4–5）
 - Silo 1 能察觉地堡异常并作出反应：正篇中"清洁者走出画面"即触发 Silo 1 唤醒值班者处置。（《Shift》Third Shift）
 
