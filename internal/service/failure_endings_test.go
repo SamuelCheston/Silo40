@@ -101,6 +101,39 @@ func TestResetEndingNarrative(t *testing.T) {
 	}
 }
 
+// TestFractureEndingNarrative locks 29-failure-endings §5: the FRACTURE
+// settlement tells the self-destruction story (anger without organization)
+// and reports what is left — people, energy, floors: technically alive,
+// tomorrow gone. The omen side is already covered by the shipped chain tests
+// (fracture_infrastructure precedes fracture_confirmed).
+func TestFractureEndingNarrative(t *testing.T) {
+	svc, station, _ := weightedEndingFixture("FRACTURE")
+	station.VictoryStatus.IsWon = false
+	station.TotalPopulation = 2400
+	station.Resources = []model.Resource{{Type: "Energy", Amount: 120}}
+	station.Floors = []model.Floor{
+		{Zone: "Upper", Stability: 0.5},
+		{Zone: "Lower", Stability: 0.2},
+	}
+	svc.contentStates = map[uint]map[string]model.ContentEventState{
+		station.ID: {fractureFactKey: {SiloID: station.ID, EventKey: fractureFactKey, Triggered: true}},
+	}
+
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingFracture {
+		t.Fatalf("expected FRACTURE selection, got %+v", decision)
+	}
+	if !strings.Contains(decision.Reason, "《断层》成立") {
+		t.Fatalf("narrative missing: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "期待跑得比组织快") {
+		t.Fatalf("what-went-wrong beat missing: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "仍有居民 2400 人，剩余能源 120，楼层平均稳定度 0.35") {
+		t.Fatalf("post-failure settlement line missing: %q", decision.Reason)
+	}
+}
+
 // TestNormalcyHardensFires locks the EXCLUSIONIST omen (29-failure-endings
 // §2.1): from relative Y3 on, once four departments' loyalty stands above the
 // public-dominance bar, the hardening heartbeat lights and records that

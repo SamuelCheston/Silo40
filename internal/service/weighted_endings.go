@@ -141,7 +141,7 @@ var endingDescriptions = map[string]string{
 	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者：警察服从、幕后威势退场，司法部不归属市长、也没有回到 IT 手里——《人治》成立。",
 	endingExclusionist: "什么都没有毁灭，也什么都没有改变。封闭秩序不是靠镇压守住的，是靠习惯：证人老去，接收者调离，封闭的叙事逐年硬化，始终没有遇到它的对抗版本。危机到来时驻地集体选择了旧规则，是自愿的——提供可核验替代方案的最后窗口，就这样安静地关上了。任务没有战败，它失去了战场。《深闭》成立。",
 	endingReset:        "驻地安静而有序——重置总是伴随'恢复正常'。有人喊邻居的名字，对方迟疑了一下才应答；新刷的墙面盖住了旧刻痕；官方记录里只有一次'燃气事故'，或者什么都没有。减口、抹忆与清档系统性完成了：你的任务赖以继续的公共事实，与能核验它们的人，被一并拆除。征兆其实从未缺席——变长的档案'维护'窗口、远超平常的请领、深夜的人数清点——它们被当成了噪音，或者反制窗口被花在了别处。你输掉的不是一场对抗，是整块记忆。《遗忘》成立。",
-	endingFracture:     "叛乱与损耗造成了不可逆的维存崩溃，且没有独立幸存的逃出群体——《断层》成立。",
+	endingFracture:     "撕碎驻地的不是攻击，是它自己的手。无人控制的破坏落到了维生基础上：轮班断裂，部门停止共享，关键岗位弃守——愤怒达到了它的目的，目的却跟着塌了。你点燃的是愤怒，没有来得及建起接住它的组织：期待跑得比组织快，而维存是一张协作网，每撕掉一条网眼，都不会因为任何一方'胜利'而自动复原。驻地的灯一层一层熄灭，不是因为攻击，是因为没有人再在开关旁边。《断层》成立。",
 	endingDeath:        "没有任何可确认的幸存社会——《寂堡》成立。",
 	endingCompromised:  "特工身份彻底暴露，任务不可继续——《除名》成立。",
 }
@@ -379,7 +379,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		return s.finishArbitration(decision)
 	case fractureFact && !escapeAlive:
 		decision.Selected = endingFracture
-		decision.Reason = "P0.3 断层：fracture_confirmed 事实键成立，先于除名与历史加权。"
+		decision.Reason = endingDescriptions[endingFracture] + fractureSettlementLine(station)
 		return s.finishArbitration(decision)
 	case trigger == endingCompromised:
 		decision.Selected = endingCompromised
@@ -568,4 +568,25 @@ func (s *GameService) finishArbitration(decision *model.EndingDecision) *model.E
 		s.world.LastEndingAudit = decision
 	}
 	return decision
+}
+
+// fractureSettlementLine reports what is left after the maintenance collapse:
+// the people, the energy, the floors. Failure does not erase the world — the
+// station is technically alive and has lost its tomorrow (05-fracture §5).
+func fractureSettlementLine(station *model.Silo) string {
+	energy := 0.0
+	for _, res := range station.Resources {
+		if res.Type == "Energy" {
+			energy = res.Amount
+		}
+	}
+	stability := 0.0
+	if len(station.Floors) > 0 {
+		for _, floor := range station.Floors {
+			stability += floor.Stability
+		}
+		stability /= float64(len(station.Floors))
+	}
+	return fmt.Sprintf("断层之后驻地仍有居民 %d 人，剩余能源 %.0f，楼层平均稳定度 %.2f——技术上还活着，已经失去了明天。",
+		station.TotalPopulation, energy, stability)
 }
