@@ -1292,7 +1292,15 @@ func (e *GameEngine) applyWeightedEnding(eventType string, silo *model.Silo, age
 	}
 	silo.VictoryStatus.Type = decision.Selected
 	silo.VictoryStatus.IsWon = !isHardFailureEnding(decision.Selected)
-	silo.VictoryStatus.Description = "多主体终局仲裁：" + decision.Selected + "。" + decision.Reason
+	// The arbitrator now writes the settlement narrative into Reason
+	// (weighted_endings.go endingDescriptions); the ending screen renders
+	// Description, so the story replaces the score formula. Empty Reason
+	// falls back to the composed audit line (25-information-endgame §2.2).
+	if decision.Reason != "" {
+		silo.VictoryStatus.Description = decision.Reason
+	} else {
+		silo.VictoryStatus.Description = "多主体终局仲裁：" + decision.Selected + "。"
+	}
 	silo.VictoryStatus.Decision = decision
 }
 
