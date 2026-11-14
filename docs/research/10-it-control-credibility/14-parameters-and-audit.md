@@ -38,5 +38,5 @@
 
 **衰减多久**：冲击值无衰减、无残留；决定"窗口多长"的是 W 向 `W_eq` 的自然回归（半衰期 8 月），上式已含。
 
-**为什么"持续施压但无决定性事件"到不了 18**：日常压力只把 W 拉向 `W_eq`，而谷底带 25–32 > 18；普通冲击队列受 ±12/月 上限且供给受 AP 经济约束（如 expose −8 需间隔 ≥3 月、AP≥40），瞬时下探会在数月内回升。全服务跑验（种子 421、20 月、只发布一份核心证据的技巧策略）实测 `minW=33.78`、`maxLowStreak=0`、决定性冲击记录为空；加上一次决定性事件（第二份合格公开事实登记）后冲击落地、约章锁定、`regime=PACT`。两个方向分别由 `TestCovenantConvergenceDailyPressureAloneFails` 与 `TestCovenantConvergenceDecisiveEventSucceeds` 锁定；引擎层机制由 `decisive_shocks_test.go` 锁定。
+**为什么"持续施压但无决定性事件"到不了 18**：日常压力只把 W 拉向 `W_eq`，而谷底带 25–32 > 18；普通冲击队列受 ±12/月 上限且供给受 AP 经济约束（合并后 AP 经济取信息线 36/年，expose 间隔 ≥3 月），瞬时下探会在数月内回升。全服务跑验（种子 421、32 月、只发布一份核心证据的技巧策略）实测 `minW=38.57`、`maxLowStreak=0`、决定性冲击记录为空；同一策略先把 W 压到谷底带、再发布第二份合格公开事实（= 大规模公开证据冲击）后约章锁定、`regime=PACT`（实测冲击落地时 W 已磨至谷底，锁定后 `finalW≈7`）。两个方向分别由 `TestCovenantConvergenceDailyPressureAloneFails` 与 `TestCovenantConvergenceDecisiveEventSucceeds` 锁定；引擎层机制由 `decisive_shocks_test.go` 锁定。注意冲击必须落在已被日常压力磨低的威势上：W 仍在高位时单次 −24 击不穿 18（这正是"先有持续施压、后有决定性事件"的数值表达）。
 

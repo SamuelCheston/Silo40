@@ -58,7 +58,9 @@ func TestCovenantConvergenceDailyPressureAloneFails(t *testing.T) {
 	shares := map[string]int{}
 	startAbs := station.CurrentYear*12 + station.CurrentMonth
 
-	for gameMonth := 0; gameMonth <= 20; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
+	// 32 months at the merged 36/yr AP economy (same stretch as the §7.4
+	// calibration window).
+	for gameMonth := 0; gameMonth <= 32; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
 		if station.Rebellion < 0.2 {
 			station.Rebellion = 0.2
 		}
@@ -84,7 +86,7 @@ func TestCovenantConvergenceDailyPressureAloneFails(t *testing.T) {
 
 		// Same everyday pressure as the full calibration: capability checks and
 		// fact circulation with spare AP.
-		if exposes < 5 && gameMonth-lastExposeMonth >= 3 && svc.agent.ActionPoints >= 40 &&
+		if exposes < 8 && gameMonth-lastExposeMonth >= 3 && svc.agent.ActionPoints >= 25 &&
 			playerCoreBelief(svc, "Judicial_1") >= 0.6 {
 			mustAct(t, svc, "expose_execution_failure", 20)
 			exposes++
@@ -92,7 +94,7 @@ func TestCovenantConvergenceDailyPressureAloneFails(t *testing.T) {
 		}
 		for _, dept := range []string{"Mechanical", "Supply"} {
 			for _, fact := range []string{"Judicial_1", "Judicial_3"} {
-				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 50 || shares[dept+":"+fact] >= 2 {
+				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 || shares[dept+":"+fact] >= 2 {
 					continue
 				}
 				outcome, err := svc.ExecuteAction(model.AgentAction{
@@ -145,8 +147,11 @@ func TestCovenantConvergenceDailyPressureAloneFails(t *testing.T) {
 }
 
 // TestCovenantConvergenceDecisiveEventSucceeds 锁定"决定性事件促成约章"：
-// 同一策略发布两份核心证据；第二份登记触发大规模公开证据冲击，W 被击穿
-// 日常谷底并持续低于约章门，PactLocked 成立。
+// 裁决的情形是"日常压力＋一次决定性事件"——先用同一技巧策略持续施压
+// (只发布第一份核心证据、核查/曝光/流通把 W 压向日常谷底)，等 W 落到谷底
+// 带后再发布第二份核心证据；第二份登记触发大规模公开证据冲击，击穿谷底
+// 并持续低于约章门，PactLocked 成立。(冲击量级按谷底带推导，见
+// 14-parameters-and-audit.md §9.1：冲击必须落在已被日常压力磨低的威势上。)
 func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 	svc := calibrationService(t, 421)
 	station := svc.silo
@@ -165,35 +170,51 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 	exposes, lastExposeMonth := 0, -3
 	shares := map[string]int{}
 	startAbs := station.CurrentYear*12 + station.CurrentMonth
+	decisiveFired := false
 
-	for gameMonth := 0; gameMonth <= 28 && !station.Authority.Judicial.PactLocked; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
+	// Phase 1 (daily pressure) runs until W reaches the trough band; phase 2
+	// then publishes the second core fact as the decisive event.
+	for gameMonth := 0; gameMonth <= 60 && !station.Authority.Judicial.PactLocked; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
 		if station.Rebellion < 0.2 {
 			station.Rebellion = 0.2
 		}
 		if station.DeptTension < 0.3 {
 			station.DeptTension = 0.3
 		}
+		troughReached := station.Authority.W <= 34
 
-		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
-			if playerCoreBelief(svc, fact) >= 0.85 && !factVerified(station, fact) && svc.agent.ActionPoints >= 15 {
-				tryAct(t, svc, "verify_evidence", 15)
-				break
-			}
+		// Verify/publish: Judicial_1 as soon as ready; Judicial_2 only once the
+		// daily pressure has reached the trough (the decisive blow).
+		if playerCoreBelief(svc, "Judicial_1") >= 0.85 && !factVerified(station, "Judicial_1") &&
+			svc.agent.ActionPoints >= 15 {
+			tryAct(t, svc, "verify_evidence", 15)
+		}
+		if troughReached && decisiveFired == false && playerCoreBelief(svc, "Judicial_2") >= 0.85 &&
+			!factVerified(station, "Judicial_2") && svc.agent.ActionPoints >= 15 {
+			tryAct(t, svc, "verify_evidence", 15)
 		}
 		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+			if fact == "Judicial_2" && !troughReached {
+				continue
+			}
 			if playerCoreBelief(svc, fact) >= 0.9 && factVerified(station, fact) &&
 				!factPublished(station, fact) && svc.agent.ActionPoints >= 20 {
-				tryAct(t, svc, "publish_evidence", 20)
+				if tryAct(t, svc, "publish_evidence", 20) && fact == "Judicial_2" {
+					decisiveFired = true
+				}
 				break
 			}
 		}
+
+		// Investigate whichever chain is behind (both must eventually reach the
+		// publish floor; the second one waits for the trough to be published).
 		if svc.agent.ActionPoints >= 15 &&
 			(playerCoreBelief(svc, "Judicial_1") < 0.9 || playerCoreBelief(svc, "Judicial_2") < 0.9) &&
 			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
 			mustAct(t, svc, "investigate_dispatch", 15)
 		}
 
-		if exposes < 5 && gameMonth-lastExposeMonth >= 3 && svc.agent.ActionPoints >= 40 &&
+		if exposes < 8 && gameMonth-lastExposeMonth >= 3 && svc.agent.ActionPoints >= 25 &&
 			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
 			mustAct(t, svc, "expose_execution_failure", 20)
 			exposes++
@@ -201,7 +222,7 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 		}
 		for _, dept := range []string{"Mechanical", "Supply"} {
 			for _, fact := range []string{"Judicial_1", "Judicial_2", "Judicial_3"} {
-				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 50 || shares[dept+":"+fact] >= 2 {
+				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 || shares[dept+":"+fact] >= 2 {
 					continue
 				}
 				outcome, err := svc.ExecuteAction(model.AgentAction{
@@ -220,10 +241,15 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 	}
 
 	j := station.Authority.Judicial
-	t.Logf("decisive: finalW=%.2f Q=%.4f qualifying=%d pact=%.3f regime=%s shocks=%+v applied=%d",
+	t.Logf("decisive: finalW=%.2f Q=%.4f qualifying=%d pact=%.3f regime=%s shocks=%+v applied=%d decisiveFired=%v",
 		station.Authority.W, j.PublicEvidenceQ, j.IndependentPublicFacts, j.Pact, j.Regime,
-		station.Authority.DecisiveShocks, station.Authority.DecisiveApplied)
+		station.Authority.DecisiveShocks, station.Authority.DecisiveApplied, decisiveFired)
 
+	if !decisiveFired {
+		t.Fatalf("the second publication never happened: W=%.2f beliefs=(%.2f, %.2f) evidence=%+v",
+			station.Authority.W, playerCoreBelief(svc, "Judicial_1"), playerCoreBelief(svc, "Judicial_2"),
+			station.PublicEvidence)
+	}
 	if !j.PactLocked {
 		t.Fatalf("decisive event did not converge the covenant: W=%.2f Q=%.4f facts=%d pact=%.3f shocks=%+v",
 			station.Authority.W, j.PublicEvidenceQ, j.IndependentPublicFacts, j.Pact, station.Authority.DecisiveShocks)

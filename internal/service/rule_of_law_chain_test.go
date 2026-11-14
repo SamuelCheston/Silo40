@@ -108,10 +108,10 @@ func TestRuleOfLawLineContentLoads(t *testing.T) {
 		}
 	}
 	for actionID, key := range map[string]string{
-		"CHARTER_CONTACT_OFFER":  "player_actions:charter_contact_offer",
-		"CHARTER_CONTACT_ACCEPT": "player_actions:charter_contact_accept",
+		"CHARTER_CONTACT_OFFER":   "player_actions:charter_contact_offer",
+		"CHARTER_CONTACT_ACCEPT":  "player_actions:charter_contact_accept",
 		"CHARTER_CONTACT_DECLINE": "player_actions:charter_contact_decline",
-		"CHARTER_CONTACT_DEFER":  "player_actions:charter_contact_defer",
+		"CHARTER_CONTACT_DEFER":   "player_actions:charter_contact_defer",
 	} {
 		def, ok := defs[key]
 		if !ok {
@@ -329,9 +329,12 @@ func TestRuleOfLawGuardBranches(t *testing.T) {
 // through the real gates: the breach ignites from circulation, the contact
 // card unlocks through the Judicial relation, the accept choice schedules the
 // guard, and the drafting heartbeat convenes the charter. Qualification supply
-// (Q and independent facts via the shared bailiff chain) must land. The final
-// lock (W <= 18) waits for the parallel-track W shock channel, so it is
-// asserted only if the window actually opens during the run (27-spec §3).
+// (Q and independent facts via the shared bailiff chain) must land through the
+// player-driven verify/publish route. Publishing the second qualifying fact is
+// itself the large-scale-evidence decisive shock, but the lock still needs the
+// shock to land on a W already ground down by everyday pressure — this line
+// runs no expose campaign, so the window is asserted only if it actually
+// opens during the run (27-spec §3).
 func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "rule-of-law-playable.db"))
 	req := threeSiloRequest(2401)
@@ -388,6 +391,25 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 	// shared supply chain alive). Deterministic policy, no policy RNG.
 	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
 	windowOpenAt := 0
+	// Qualification supply lands through the player-driven publication route
+	// (the former auto-publish scaffold was replaced by the sabotage batch's
+	// verify/publish actions — the scaffold's own TODO anticipated this):
+	// investigate both dispatch chains, verify, then publish. Publishing the
+	// second qualifying fact is itself the large-scale-evidence decisive
+	// shock, so the W window below can now open in a real run.
+	beliefOf := func(factID string) float64 {
+		if belief := engine.BeliefFor(svc.agent, factID); belief != nil {
+			return belief.B
+		}
+		return 0
+	}
+	attempt := func(actionID string, cost float64) bool {
+		if svc.agent.ActionPoints < cost {
+			return false
+		}
+		outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: actionID})
+		return err == nil && outcome.Result.Executed
+	}
 	for month := 1; month <= 100 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance RULE_OF_LAW line at month %d: %v", month, err)
@@ -399,6 +421,40 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 			svc.silo.Authority.Judicial.PublicEvidenceQ >= 0.85 &&
 			svc.silo.Authority.Judicial.IndependentPublicFacts >= 2 {
 			windowOpenAt = month
+		}
+
+		// Reserve the AP for a pending chain step: circulation (share cost 3)
+		// otherwise drains the whole monthly income and the 20-AP publication
+		// never gets funded.
+		publishable, verifiable := false, false
+		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+			if beliefOf(fact) >= 0.9 && factVerified(svc.silo, fact) && !factPublished(svc.silo, fact) {
+				publishable = true
+			}
+			if beliefOf(fact) >= 0.85 && !factVerified(svc.silo, fact) {
+				verifiable = true
+			}
+		}
+		reserve := 0.0
+		switch {
+		case publishable:
+			reserve = 20
+		case verifiable:
+			reserve = 15
+		}
+
+		if svc.silo.Rebellion < 0.7 {
+			if verifiable && svc.agent.ActionPoints >= 15 {
+				attempt("verify_evidence", 15)
+			}
+			if publishable && svc.agent.ActionPoints >= 20 {
+				attempt("publish_evidence", 20)
+			}
+			if (beliefOf("Judicial_1") < 0.9 || beliefOf("Judicial_2") < 0.9) &&
+				(beliefOf("Judicial_1") >= 0.6 || beliefOf("Judicial_2") >= 0.6) &&
+				svc.agent.ActionPoints >= 15+reserve {
+				attempt("investigate_dispatch", 15)
+			}
 		}
 
 		ap := svc.agent.ActionPoints
@@ -414,7 +470,7 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 			}); err == nil && outcome.Result.Executed {
 				// keep the station alive
 			}
-		case ap >= shareCost:
+		case ap-reserve >= shareCost:
 			dept := neediestDepartment(svc.silo)
 			fragment, ok := strongestShareableFactFor(svc.agent, departmentByAddress(svc.silo, dept))
 			if ok {
@@ -422,13 +478,13 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 					Type: model.ActionShareInfo, TargetDept: dept, FragmentIds: []string{fragment},
 				}); err == nil && outcome.Result.Executed {
 					// circulation feeds the drafting heartbeat
-				} else if ap >= gatherCost {
+				} else if ap-reserve >= gatherCost {
 					svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 				}
-			} else if ap >= gatherCost {
+			} else if ap-reserve >= gatherCost {
 				svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 			}
-		case ap >= gatherCost:
+		case ap-reserve >= gatherCost:
 			svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 		}
 	}
