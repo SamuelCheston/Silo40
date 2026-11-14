@@ -38,6 +38,7 @@
 | --- | --- | --- |
 | [10-it-control-credibility.md](./10-it-control-credibility.md) | 幕后威势、二元关键联盟、处置规程、三方附着、分层确信、检测分类与可打穿平衡目标 | IT/Judicial/Mayor、信息、隐蔽维护与介入机制设计 |
 | [12-ending-system-design.md](./12-ending-system-design.md) | 三条胜利路线、好／中性／坏结局谱系、资格闸、互斥排序与四类主体仲裁 | 结局定名、结局判定与多实体加权设计 |
+| [13-ideology-axes-design.md](./13-ideology-axes-design.md) | 五条二元思潮轴、复合族命名、开放联盟、玩家推动与自然漂移、TIME 资格映射 | 思潮系统、派系聚类、行动影响与结局资格设计 |
 
 ## 同类机制对照
 
