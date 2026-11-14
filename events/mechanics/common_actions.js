@@ -19,15 +19,32 @@ defineMechanics([
         return { action_result: { executed: false, message: "Target department not found." } };
       }
       const unknown = unknownFragmentsFrom(ctx, target);
-      if (unknown.length === 0) {
-        return { action_result: { executed: false, message: "Your department already knows everything about " + target + "." } };
+      // 复核路径 (修复6)：目标部门的新材料枯竭后，探查不再生效新碎片，但
+      // 反复核验已知材料仍能加深特工自己的确信 (23 节点设计 I-1"第三次趋近
+      // 确定但永不为 1")。没有这条路径，本部门域碎片不足的职业 (如 Supply/
+      // Mechanical 域只有 2 份) 无法把 B_player 抬到分享吸收有效的强度，
+      // 《共证》线对它们事实上不可赢。抽样结构与正常路径一致 (同一 RNG 流)。
+      let recheck = false;
+      let pool = unknown;
+      if (pool.length === 0) {
+        const knownSet = actorKnownSet(ctx);
+        pool = (profession.all_fragments || []).filter(function (fragment) {
+          return knownSet[fragment];
+        });
+        if (pool.length === 0) {
+          return { action_result: { executed: false, message: "Your department already knows everything about " + target + "." } };
+        }
+        recheck = true;
       }
       // 单次获取 (10-it-control-credibility §3.4)：先抽碎片再滚获取概率，
       // 两次抽样都走单一 RNG 流。失败不产生确信，只结算 AP/检测/戒备。
-      const fragment = unknown[randomInt(unknown.length)];
+      const fragment = pool[randomInt(pool.length)];
       const channel = gatherChannelFor(ctx, target);
       const ownDept = ctx.actor.profession === target;
-      const deviation = ownDept ? 0 : INFO_CFG.gather_deviation;
+      // 复核是定向核验已持有材料：偏离强度减半 (TODO(balance))。跨域复核仍比
+      // 本部门复核难——不抹平职业差异，只避免警戒度螺旋把弱关系职业的深化
+      // 通道彻底封死 (职业横评：Mechanical/Police 因此卡在第三份碎片)。
+      const deviation = ownDept ? 0 : INFO_CFG.gather_deviation * (recheck ? 0.5 : 1);
       const mismatch = mismatchFor(ctx, target, deviation);
       const alert = profession.alertness || 0;
       const related = relatedF(ctx, fragment);
@@ -37,7 +54,8 @@ defineMechanics([
       const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
       const sampled = detection === "SAMPLED";
       if (randomFloat() >= p) {
-        mutations.push({ type: "profession_alertness_delta", profession: target, value: INFO_CFG.alert_on_failed_probe });
+        // 复核失败的戒备抬升减半 (TODO(balance))：重读已见过的材料没有新痕迹。
+        mutations.push({ type: "profession_alertness_delta", profession: target, value: INFO_CFG.alert_on_failed_probe * (recheck ? 0.5 : 1) });
         if (sampled) {
           const fit = ownDept ? INFO_CFG.probe_fit_own : INFO_CFG.probe_fit_cross;
           mutations.push({
@@ -54,7 +72,11 @@ defineMechanics([
       mutations.push({
         type: "actor_belief_observe",
         fragment,
-        observation: "gather:" + fragment,
+        // 复核的观察 ID 带年月后缀：ObserveFact 按 observation_id 去重，
+        // 固定 ID 会让重复核验被当成重放而静默无效。
+        observation: recheck
+          ? "gather:" + fragment + ":recheck:" + ctx.silo.current_year + "-" + ctx.silo.current_month
+          : "gather:" + fragment,
         reliability: channel.reliability_c,
         related_f: related,
         independence: 1,
@@ -69,7 +91,12 @@ defineMechanics([
       }
       return {
         mutations,
-        action_result: { executed: true, message: "Observed new material on " + fragment + " from " + target + " via " + channel.id + " (chance " + Math.round(p * 100) + "%)." },
+        action_result: {
+          executed: true,
+          message: recheck
+            ? "Re-examined the material on " + fragment + " against " + target + "'s records via " + channel.id + ". Your conviction deepens."
+            : "Observed new material on " + fragment + " from " + target + " via " + channel.id + " (chance " + Math.round(p * 100) + "%).",
+        },
       };
     },
   },
