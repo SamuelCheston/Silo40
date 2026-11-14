@@ -14,6 +14,7 @@
 | [06 扩展指南](06-extending.md) | 加事件、行动、门控、operation、结局和楼层的实际路径 |
 | [07 存档与兼容](07-save-compatibility.md) | v7、legacy→v5 升级链、v5/v6 拒绝、三堡对象图与恢复范围 |
 | [08 确定性与已知问题](08-determinism-known-issues.md) | 单 RNG、阶段排序、KI-1/KI-2、v7 parity 与当前限制 |
+| [ADR · 架构决策记录](adr/README.md) | 决策为什么这么定、否掉了什么、代价是什么；按裁决时间索引 |
 
 ## 推荐阅读路径
 
