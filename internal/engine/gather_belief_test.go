@@ -123,6 +123,51 @@ func TestGatherInfoMinesTargetUnsampled(t *testing.T) {
 	}
 }
 
+// TestGatherInfoRecheckDeepensKnownBelief locks 修复6: once a department's
+// new material is exhausted, Gather switches to re-checking known material
+// and deepens the agent's existing belief instead of dead-ending. Without
+// this path professions whose home domain holds only two fragments (Supply,
+// Mechanical, Police, Medical) can never raise B_player high enough for
+// share absorption to be effective — the 《共证》 line was de facto unwinnable
+// for them (职业横评).
+func TestGatherInfoRecheckDeepensKnownBelief(t *testing.T) {
+	prev := rng
+	SetRNG(rand.New(rand.NewSource(42)))
+	defer SetRNG(prev)
+
+	e := NewGameEngine()
+	silo := CreateInitialSilo("Recheck Silo", 122, nil)
+	agent := CreateInitialAgent("SupplyAgent", "Supply", nil, silo)
+	// Supply domain carries exactly two fragments, both known from the start:
+	// the new-material pool is exhausted on the very first probe.
+	if len(agent.KnownFragments) != 2 {
+		t.Fatalf("expected the Supply agent to start with 2 fragments, got %v", agent.KnownFragments)
+	}
+	SeedLegacyBeliefs(agent)
+	fragment := agent.KnownFragments[0]
+	before := BeliefFor(agent, fragment).B
+
+	deepened := false
+	for month := 1; month <= 10 && !deepened; month++ {
+		silo.CurrentMonth = month
+		res := e.ExecuteAgentAction(silo, agent, model.AgentAction{
+			Type: model.ActionGatherInfo, TargetDept: "Supply", Cost: 2,
+		})
+		if !res.Executed {
+			t.Fatalf("re-check probe rejected: %s", res.Message)
+		}
+		if strings.Contains(res.Message, "already knows everything") {
+			t.Fatalf("exhausted department must switch to re-check instead of failing: %s", res.Message)
+		}
+		if BeliefFor(agent, fragment).B > before {
+			deepened = true
+		}
+	}
+	if !deepened {
+		t.Fatal("re-check never deepened the known fragment belief")
+	}
+}
+
 // TestShareInfoRequiresBeliefFloor locks §3.6: material below the rumor floor
 // (B < 0.30) is private suspicion and cannot be shared as a fact.
 func TestShareInfoRequiresBeliefFloor(t *testing.T) {

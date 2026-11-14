@@ -8,7 +8,7 @@
 
 | 节点 | 分组 | 触发 | 分岔与含义 | 效果（封闭集） | 后续 |
 | --- | --- | --- | --- | --- | --- |
-| `normalcy_hardens` | special，REPEATABLE cd12 | `all(timestampAtOrAfter(3,1), professionIdeologyGteCount("loyalty", 0.6, 4))`（相对 Y3 起） | 惯性滑入的可读节点：封闭忠诚取得公共主导；每次点火说明"又一年没有改变" | `history_burden −0.02`、`rebellion −0.02`（sim 校准起点；历史正在被常态化） | 计数即叙事 |
+| `normalcy_hardens` | special，REPEATABLE cd12 | `all(timestampAtOrAfter(3,1), professionIdeologyGteCount("loyalty", 0.6, 4))`（相对 Y3 起） | 惯性滑入的可读节点：封闭忠诚取得公共主导；每次点火说明"又一年没有改变" | `history_burden −0.02`、`rebellion −0.02`（sim 校准起点；历史正在被常态化） | 计数即叙事；仍在 `arrival` 时打开终局仲裁 |
 
 结算时的死后复制分岔由仲裁读取结算前状态完成：覆灭结算时若封闭仍主导（或无其他合格新秩序），《深闭》作为非胜利收束输出，结局画面表现"本地权力接管封闭逻辑"。覆灭之后不安排任何接管、余波内容环节。
 
@@ -28,7 +28,7 @@
 
 ## 4. 与结局判定的对接
 
-- `EXCLUSIONIST` 已在仲裁候选（机制底座已扩为六候选），无 G1 缺口。
+- `EXCLUSIONIST` 已在仲裁候选（机制底座已扩为六候选）。`normalcy_hardens` 事实在且仅在 `ProgressStage == "arrival"` 时允许 nil-status 仲裁，修复零操作新局只有征兆、没有终局请求的断链；其他路线已经激活时仍由各自真实终局请求进入统一仲裁。
 - 资格读法（已实现）：人口加权 cohort 思潮中忠诚压过亲外即封闭主导；覆灭结算时若无其他合格新秩序，也作为非胜利历史收束。`profession_ideology_gte_count` 读的是部门派生视图，可放心用作内容条件（作者手册 §8）。
 - 同分顺序中 `EXCLUSIONIST` 垫底：只要任何其他候选合格，本线就让位——这与"默认落点"的叙事身份一致。
 
