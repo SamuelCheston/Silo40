@@ -88,12 +88,17 @@
       "id": "CHARTER_CONTACT_OFFER",
       "unlock": {
         "all": [
-          { "event_completed": "special:order_chain_breach" },
-          { "relation": "Judicial", "min": 0.2 }
+          { "relation": "Judicial", "min": 0.2 },
+          {
+            "any": [
+              { "event_completed": "special:order_chain_breach" },
+              { "event_completed": "player_actions:succession_seed_procedure" }
+            ]
+          }
         ]
       },
       "available": {},
-      "reason": "需要先点亮规则断点，并与司法侧建立最低信任（初始校准值）"
+      "reason": "需要规则断点或《人治》埋下的程序种子，并与司法侧建立最低信任（初始校准值）"
     },
     {
       "id": "CHARTER_CONTACT_ACCEPT",
@@ -117,6 +122,41 @@
       "id": "RESET_COUNTERMEASURE_OFFER",
       "unlock": { "event_completed": "crisis:reset_omen_requisition" },
       "available": {}
+    },
+    {
+      "id": "LEGITIMACY_SURVEY",
+      "unlock": {
+        "all": [
+          { "stage_at_least": "first_signal" },
+          { "relation": "Mayor", "min": 0.15 }
+        ]
+      },
+      "available": {},
+      "reason": "需要驻地阶段进度，并与市长圈层建立最低信任（初始校准值）"
+    },
+    {
+      "id": "MAYOR_ALLY_ACCEPT",
+      "unlock": { "event_completed": "player_actions:legitimacy_survey" },
+      "available": {},
+      "reason": "需要先完成正统性调查接触"
+    },
+    {
+      "id": "MAYOR_ALLY_BYPASS",
+      "unlock": { "event_completed": "player_actions:legitimacy_survey" },
+      "available": {},
+      "reason": "需要先完成正统性调查接触"
+    },
+    {
+      "id": "SUCCESSION_PURE_RULE",
+      "unlock": { "event_completed": "special:mayor_public_stand" },
+      "available": {},
+      "reason": "需要先有至少一次公开担当时刻"
+    },
+    {
+      "id": "SUCCESSION_SEED_PROCEDURE",
+      "unlock": { "event_completed": "special:mayor_public_stand" },
+      "available": {},
+      "reason": "需要先有至少一次公开担当时刻"
     }
   ]
 }
