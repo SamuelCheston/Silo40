@@ -14,7 +14,7 @@
 
 Silo 40 在 2212 年已经被毁，不生成可运转实体，不参加结局投票、贡献或仲裁。玩家是它派出的特工；Silo 40 只提供任务来源与历史包袱。
 
-结局的“好／中性／坏”以 **the Errand 的任务目标、玩家能否继续任务、驻地或逃出群体能否存续** 为评价口径，不代表对每个居民价值观作道德判决：
+结局的“好／中性／坏”以 **the Witness 的任务目标、玩家能否继续任务、驻地或逃出群体能否存续** 为评价口径，不代表对每个居民价值观作道德判决：
 
 - **好结局**：只包括本轮给定的三条胜利路线，不增设第四种胜利。
 - **中性结局**：社会仍然存续，任务取得局部成果或形成暂时收束，但没有完成三条胜利路线。
@@ -475,7 +475,7 @@ Silo 1 的贡献是**外部权力结构对历史可能性的影响**，不是参
 6. 不改变 Silo 18 正典人物、事件时序或独立结局规则。
 7. 不使用改编侧独有的人物、组织、情节、工艺或场景，也不创造原书之外的人物姓名。
 8. 本轮不写事件链、具体行动顺序、数值门槛、权重系数或 AP 攻略。
-9. 主动隐退暂不设为独立主结局，遵守 the Errand 当前“任务失效不新增结局类型”的约束；它只能作为其他主结局的个人尾声，若未来要改成独立结局需另行修订该约束。
+9. 主动隐退暂不设为独立主结局，遵守 the Witness 当前“任务失效不新增结局类型”的约束；它只能作为其他主结局的个人尾声，若未来要改成独立结局需另行修订该约束。
 
 ## 11. 主要依据
 
@@ -486,4 +486,4 @@ Silo 1 的贡献是**外部权力结构对历史可能性的影响**，不是参
 - 信息与公共证据：[11-information-fragments-design.md](./11-information-fragments-design.md)。
 - Silo 1 控制与终止边界：[silo1-control-design.md](../../references/silo1-control-design.md)。
 - 原著时间线、重置、集体逃离、Silo 1 覆灭与 Seed：[02-timeline.md](./02-timeline.md)、[01-worldbuilding.md](./01-worldbuilding.md)。
-- Silo 40 已毁、不生成实体及任务边界：[silo40-backstory.md](../story/silo40-backstory.md)、[silo40-doctrine.md](../story/silo40-doctrine.md)。
+- Silo 40 已毁、不生成实体及任务边界：[silo40-backstory.md](../story/silo40-backstory.md)、[silo40-witness.md](../story/silo40-witness.md)。
