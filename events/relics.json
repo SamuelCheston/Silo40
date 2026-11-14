@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "spawn": { "min": 6, "max": 9 },
+  "locations": [
+    { "id": "sealed_vault", "name": "地下封存设施", "zone": "Lower", "dept": "" },
+    { "id": "old_warehouse", "name": "旧仓库", "zone": "Lower", "dept": "Supply" },
+    { "id": "recycling", "name": "回收站", "zone": "Lower", "dept": "Supply" },
+    { "id": "residential", "name": "居住区", "zone": "Mid", "dept": "" },
+    { "id": "private_stash", "name": "私人藏点", "zone": "Mid", "dept": "" },
+    { "id": "folk_books", "name": "民间藏书点", "zone": "Mid", "dept": "" },
+    { "id": "book_depot", "name": "旧书仓", "zone": "Lower", "dept": "" },
+    { "id": "evidence_room", "name": "司法部证物库", "zone": "Upper", "dept": "Judicial" },
+    { "id": "it_vault", "name": "IT 密室", "zone": "Upper", "dept": "IT" },
+    { "id": "it_archive", "name": "IT 档案点", "zone": "Upper", "dept": "IT" }
+  ],
+  "relics": [
+    {
+      "id": "sealed_hard_drive",
+      "name": "封存硬盘",
+      "description": "大革命前加密存储介质，可能载有多堡技术资料与历史档案。最高违禁品，持有即重罪。",
+      "category": "storage_medium",
+      "locations": ["sealed_vault", "old_warehouse", "recycling"],
+      "weight": 1,
+      "effects": { "suspicion_level": 0.1 },
+      "fragments": ["IT_3"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "archive_shard",
+      "name": "多堡档案残片",
+      "description": "残损的只读存储片，内容指向其它地堡的存在。无法单独解读，需与旧版书籍组合鉴定。",
+      "category": "storage_medium",
+      "locations": ["sealed_vault", "old_warehouse"],
+      "weight": 1,
+      "effects": { "suspicion_level": 0.08 },
+      "fragments": ["IT_4"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "registration_locket",
+      "name": "登记挂坠盒",
+      "description": "旧时期随身饰品，内衬登记编号。登记制度存在的实物旁证，未登记持有按一般实物处理。",
+      "category": "personal_item",
+      "locations": ["residential", "old_warehouse", "private_stash"],
+      "weight": 5,
+      "effects": {},
+      "fragments": ["Judicial_1"],
+      "confiscable": true,
+      "registrable": true
+    },
+    {
+      "id": "engraved_watch",
+      "name": "刻字旧表",
+      "description": "机械旧表，表背刻有私人赠言。可登记合法化的少数物品之一，本身不指向上层控制方。",
+      "category": "personal_item",
+      "locations": ["residential", "private_stash", "recycling"],
+      "weight": 6,
+      "effects": { "political_prestige": 0.02 },
+      "fragments": ["Judicial_2"],
+      "confiscable": false,
+      "registrable": true
+    },
+    {
+      "id": "ration_tin",
+      "name": "旧纪元口粮罐",
+      "description": "大革命前的密封口粮罐，印着已废止的配给标识。来源年代与私人关系的日常旁证。",
+      "category": "daily_goods",
+      "locations": ["residential", "old_warehouse", "recycling"],
+      "weight": 9,
+      "effects": {},
+      "fragments": ["Supply_1"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "prewar_packaging",
+      "name": "前朝商品包装",
+      "description": "成批的旧时期商品包装纸，印有地表城市的商业图案。未登记持有可能违法，无直接上层信息。",
+      "category": "daily_goods",
+      "locations": ["residential", "recycling", "private_stash"],
+      "weight": 10,
+      "effects": {},
+      "fragments": ["Supply_2"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "image_reader",
+      "name": "影像读取器",
+      "description": "可读取旧影像的手持设备，具体内容取决于残留影像。需要可用设备与读取能力，未登记持有违法。",
+      "category": "imaging_device",
+      "locations": ["old_warehouse", "recycling", "sealed_vault"],
+      "weight": 3,
+      "effects": { "suspicion_level": 0.05 },
+      "fragments": ["Police_1"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "maintenance_lens",
+      "name": "检修记录仪",
+      "description": "旧时期设备检修用的记录镜头，残留片段可能拍到不应存在的区域活动。",
+      "category": "imaging_device",
+      "locations": ["old_warehouse", "sealed_vault"],
+      "weight": 4,
+      "effects": {},
+      "fragments": ["Mechanical_1"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "old_world_atlas",
+      "name": "旧世界地图册",
+      "description": "大革命前的地理图册，描绘的地名与现状叙事不符。支持「旧世界叙事被改写」，接触依赖民间保存网络。",
+      "category": "geography_book",
+      "locations": ["folk_books", "book_depot", "sealed_vault"],
+      "weight": 4,
+      "effects": { "history_burden": 0.03 },
+      "fragments": ["Agricultural_1"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "travel_journal",
+      "name": "旅行手记",
+      "description": "旧时期旅行者的手写札记，记录地表日常生活细节。持有违法，可被司法部没收。",
+      "category": "geography_book",
+      "locations": ["folk_books", "private_stash", "book_depot"],
+      "weight": 5,
+      "effects": {},
+      "fragments": ["Mayor_3"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "banned_novel",
+      "name": "禁毁小说",
+      "description": "登记清单之外的旧版文学作品，按本地书籍登记与关联案件判定，不预设一律违法。",
+      "category": "old_book",
+      "locations": ["book_depot", "private_stash", "evidence_room"],
+      "weight": 3,
+      "effects": {},
+      "fragments": ["Judicial_3"],
+      "confiscable": true,
+      "registrable": false
+    },
+    {
+      "id": "decoding_reference",
+      "name": "解码参考书",
+      "description": "旧版工具书，页边留有批注。与加密存储介质组合可产生解码观察，是鉴定链的关键材料。",
+      "category": "old_book",
+      "locations": ["book_depot", "it_archive", "evidence_room"],
+      "weight": 2,
+      "effects": { "suspicion_level": 0.04 },
+      "fragments": ["IT_1"],
+      "confiscable": true,
+      "registrable": false
+    }
+  ]
+}
