@@ -624,6 +624,9 @@ type Relic struct {
 	SourceDept    string             `gorm:"size:50" json:"source_dept"`
 	DiscoveryYear int                `json:"discovery_year"`
 	Effects       map[string]float64 `gorm:"type:text;serializer:json" json:"effects"`
+	// LocationTag 开局实例化时为该遗物选定的藏匿位置，引用清单位置词表
+	// (events/relics.json locations[].id)。未被发现/没收前一直停留在此地。
+	LocationTag string `gorm:"size:64" json:"location_tag,omitempty"`
 
 	// 归属关系
 	AgentID      *uint `gorm:"index" json:"agent_id,omitempty"`      // 如果被特工私吞
