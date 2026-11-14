@@ -138,7 +138,7 @@ var endingDescriptions = map[string]string{
 	endingRebellion:    "有组织的不满转化为了实际离开：一个成规模的群体在堡外继续存续——《越岭》成立。",
 	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。第一次按约章裁决的案件里，裁决者引用约章与公开证据，而不是等待上级指示；隐蔽调度不再能进入执行——法警第一次问'依据哪一条'。约章有本地主人，以不可被单方收回的程序锁定；你坐在旁听席，不在裁决席。约章法庭迟早会遇到一个它回答不了的问题——'这条命令到底从哪里来'——答案通向专线与控制网的另一端，但本结局停在这个问题被第一次提出之前。《公议》成立。",
 	endingTime:         "一号地堡权威覆灭，驻地仍有形成历史的能力，覆灭前夕的思潮具备面向外部的一极——《无人裁决》成立。",
-	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者：警察服从、幕后威势退场，司法部不归属市长、也没有回到 IT 手里——《人治》成立。",
+	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者。一次危机由他的个人判断收束：那道无人能解释来源的旧命令摆在桌上，他没有向居民解释全部，只以本地责任公开拒绝执行；法警没有去执行它——司法部没有站在 IT 一边，哪怕它也没有站到他一边。当夜驻地安静，居民安睡在他们并不完全理解的秩序里。这个秩序会随一个人老去，而居民此刻不需要知道更多：被保护的睡眠，与一个知道代价的守夜人。《人治》成立。",
 	endingExclusionist: "什么都没有毁灭，也什么都没有改变。封闭秩序不是靠镇压守住的，是靠习惯：证人老去，接收者调离，封闭的叙事逐年硬化，始终没有遇到它的对抗版本。危机到来时驻地集体选择了旧规则，是自愿的——提供可核验替代方案的最后窗口，就这样安静地关上了。任务没有战败，它失去了战场。《深闭》成立。",
 	endingReset:        "驻地安静而有序——重置总是伴随'恢复正常'。有人喊邻居的名字，对方迟疑了一下才应答；新刷的墙面盖住了旧刻痕；官方记录里只有一次'燃气事故'，或者什么都没有。减口、抹忆与清档系统性完成了：你的任务赖以继续的公共事实，与能核验它们的人，被一并拆除。征兆其实从未缺席——变长的档案'维护'窗口、远超平常的请领、深夜的人数清点——它们被当成了噪音，或者反制窗口被花在了别处。你输掉的不是一场对抗，是整块记忆。《遗忘》成立。",
 	endingFracture:     "撕碎驻地的不是攻击，是它自己的手。无人控制的破坏落到了维生基础上：轮班断裂，部门停止共享，关键岗位弃守——愤怒达到了它的目的，目的却跟着塌了。你点燃的是愤怒，没有来得及建起接住它的组织：期待跑得比组织快，而维存是一张协作网，每撕掉一条网眼，都不会因为任何一方'胜利'而自动复原。驻地的灯一层一层熄灭，不是因为攻击，是因为没有人再在开关旁边。《断层》成立。",
@@ -565,6 +565,9 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		narrative += fmt.Sprintf("结算时驻地仍有居民 %d 人，正统性 %.2f——驻地仍在运转，死掉的是改变的可能。",
 			station.TotalPopulation, station.MayorLegitimacy())
 	}
+	if best == endingPersonalRule {
+		narrative += personalRuleSettlementLine(station)
+	}
 	decision.Reason = narrative
 	return s.finishArbitration(decision)
 }
@@ -614,6 +617,30 @@ func compromisedSettlementLine(station *model.Silo) string {
 	}
 	return fmt.Sprintf("驻地继续运转：%d 名居民，%d 个部门仍在履职，部门信念层里仍有 %d 份可被引用的事实——你教过的方法还在被人使用，只是没有人知道它来自哪里。",
 		station.TotalPopulation, len(station.Professions), shareableFacts)
+}
+
+// personalRuleSettlementLine reports the order's factual basis at
+// settlement: police obedience, the mayor's personal legitimacy, the
+// withdrawn W, and the judicial three-state position — the Judicial never
+// belongs to the mayor (ADR-0005), its stance is not an establishment
+// condition. A locked charter coexists with personal rule; on ties the
+// fixed order yields to RULE_OF_LAW (30-personal-rule-nodes §6).
+func personalRuleSettlementLine(station *model.Silo) string {
+	var regimeNote string
+	switch station.Authority.Judicial.Regime {
+	case "PACT":
+		regimeNote = "附着约章"
+	case "SWING":
+		regimeNote = "处于争夺态"
+	default:
+		regimeNote = station.Authority.Judicial.Regime
+	}
+	line := fmt.Sprintf("结算时：警察服从 %.2f，市长正统性 %.2f，幕后威势 W=%.1f，司法部%s——它永不归属市长，其立场也不是成立条件。",
+		station.Authority.PoliceObedience, station.MayorLegitimacy(), station.Authority.W, regimeNote)
+	if station.Authority.Judicial.PactLocked {
+		line += "公开约章与人治并存：两种秩序同时成立，本次加权倾向人治一侧；同分时按既定序让《公议》。"
+	}
+	return line
 }
 
 // deathNarrative composes the P0.1 settlement story (07-death §4): a
