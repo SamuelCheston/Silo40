@@ -8,13 +8,13 @@
 
 | 节点 | 分组 | 触发 | 分岔与抉择 | 效果（封闭集） | 后续 |
 | --- | --- | --- | --- | --- | --- |
-| `departure_willingness` | special，ONCE | `all(timestampAtOrAfter(123,1), professionMetricGteCount("panic_value", 0.5, 3))` | 抉择 R-A 的前置：离开意愿出现，尚不是队伍 | `rebellion +0.03`、`history_burden +0.02`（sim 校准起点） | 路线调查解锁 |
+| `departure_willingness` | special，ONCE | `all(timestampAtOrAfter(1,1), professionMetricGteCount("panic_value", 0.5, 3))`（相对 Y1 起） | 抉择 R-A 的前置：离开意愿出现，尚不是队伍 | `rebellion +0.03`、`history_burden +0.02`（sim 校准起点） | 路线调查解锁 |
 | `route_survey_offer` | 门控接触卡 | 解锁：`stage_at_least first_signal` + `relation Mechanical min 0.2` + `event_completed departure_willingness` | 接触方是 Mechanical 联系人（既有实体，不新增组织）；可接、拒、暂缓 | 完成键三选一 | 接受后解锁步骤 |
 | `route_survey_step` | player_actions | `all(event_triggered route_survey_offer 接受键, playerActionIs(机械/矿业职务))` | 抉择 R-B 的机制投影：路线信息公开程度由后续宣传选择承担 | 职务主结果照常 | `route_confirmed` |
 | `route_confirmed` | special，ONCE | `event_triggered("player_action","route_survey_step")` | 先遣事实成立 | `rebellion +0.04` | 解锁先遣派遣 |
 | `advance_party_dispatch` | player_actions，ONCE | 门控：`event_completed route_confirmed` | 抉择 R-E 的前奏 | 完成键 | `schedule_event(advance_party_report, 4)` |
 | `advance_party_report` | crisis，纯调度 | `canTrigger: () => false` | `apply` 守卫：若期间 `event_triggered("crisis","lower_deck_collapse")` 则路线受损分支 | 完好分支：`rebellion +0.04`；受损分支：`panic_value +0.05` | 开窗前置 |
-| 开窗 | 既有行动与事件 | Incite Rebellion（情境化）＋ `underground_coordination`（rebellion≥0.62 且 Y126+） | 抉择 R-D：有序占用撤离通道（低结构损耗）对立于全面暴乱（高损耗） | 叛乱滚雪球由既有节点承担 | 分批撤离前置 |
+| 开窗 | 既有行动与事件 | Incite Rebellion（情境化）＋ `underground_coordination`（rebellion≥0.62 且相对 Y4+） | 抉择 R-D：有序占用撤离通道（低结构损耗）对立于全面暴乱（高损耗） | 叛乱滚雪球由既有节点承担 | 分批撤离前置 |
 | 分批撤离与外部存续 | — | — | — | **缺口 G5**：无逃出群体模型，堡外存续无法结算 | 见 §3 |
 
 ## 2. 分支与改道

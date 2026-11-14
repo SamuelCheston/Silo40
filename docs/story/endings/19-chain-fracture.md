@@ -8,10 +8,10 @@
 
 | 节点 | 分组 | 触发 | 分岔与含义 | 效果（封闭集） | 后续 |
 | --- | --- | --- | --- | --- | --- |
-| 既有升级节点 | — | `underground_coordination`（rebellion≥0.62 且 Y126+）、`delayed_riot`、`rebellion_escalation`、各资源危机链 | 抉择 C-A 的机制背景：借乱局还是止损，决定叛乱预算怎么花 | 既有 | 本线入口 |
-| `fracture_infrastructure` | crisis，ONCE | `all(siloMetricGte("rebellion", 0.8), timestampAtOrAfter(125,1))` | 第一次无人控制的重大破坏落到维生基础上 | `floorStabilityDelta("Lower", −0.25)`、`siloResourceDelta("Energy", −400)`、`panic_value +0.06`（sim 校准起点） | 不可逆点前置 |
+| 既有升级节点 | — | `underground_coordination`（rebellion≥0.62 且相对 Y4+）、`delayed_riot`、`rebellion_escalation`、各资源危机链 | 抉择 C-A 的机制背景：借乱局还是止损，决定叛乱预算怎么花 | 既有 | 本线入口 |
+| `fracture_infrastructure` | crisis，ONCE | `all(siloMetricGte("rebellion", 0.8), timestampAtOrAfter(3,1))`（相对 Y3 起） | 第一次无人控制的重大破坏落到维生基础上 | `floorStabilityDelta("Lower", −0.25)`、`siloResourceDelta("Energy", −400)`、`panic_value +0.06`（sim 校准起点） | 不可逆点前置 |
 | `fracture_point_of_no_return` | crisis，ONCE | `any(all({silo_resource_lte Energy 0}, siloMetricGte("rebellion", 0.9)), all({silo_population_lte 3000}, siloMetricGte("rebellion", 0.8)))`（裸对象触发器） | 不可逆点：维生基础跌破恢复线 | `emit ["special:fracture_confirmed"]` | 完成事实 |
-| `fracture_confirmed` | special，纯调度 | `canTrigger: () => false` | 维存崩溃事实键：只被上一节点唤起 | `history_burden +0.03` | 供终局仲裁读取（G1） |
+| `fracture_confirmed` | special，纯调度 | `canTrigger: () => false` | 维存崩溃事实键：只被上一节点唤起 | `history_burden +0.03` | 供终局仲裁读取（已实现） |
 
 ## 2. 分支与改道
 
@@ -29,9 +29,9 @@
 
 ## 4. 与结局判定的对接
 
-- 现状代码没有 FRACTURE 候选；`rebellion ≥ 1.0` 直接判 REBELLION——占位语义与本线直接冲突：无逃离的总叛乱在设计口径下是《断层》不是《越岭》。修正属缺口 G9。
-- `fracture_confirmed` 事实键是仲裁预留读取点（G1）。硬失败护栏不被《共证》《无人裁决》高分覆盖。
+- 机制底座已实现 FRACTURE 候选：仲裁读取 `special:fracture_confirmed` 事实键（P0.3）；`victory_check` 对叛乱触发只**请求终局评估**，无逃离的高叛乱由仲裁落向《断层》或继续模拟，不再直接判《越岭》。
+- 硬失败护栏不被《共证》《无人裁决》高分覆盖；先检查逃出群体（最小状态基础已落地，完整逃离模型未实装，见 roadmap）。
 
 ## 5. 能力缺口
 
-G1（FRACTURE 候选缺失）、G5（逃出群体例外判定）、G9（REBELLION 占位语义修正）、G8（终局画面展示）。
+G8（终局画面展示）。逃出群体例外判定依赖完整逃离模型（roadmap，未实装）。原 G1/G9 已随机制底座落地。

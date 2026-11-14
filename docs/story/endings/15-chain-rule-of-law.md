@@ -13,7 +13,7 @@
 | `charter_contact_accept` | player_actions | 玩家选择 | — | 完成键 | `schedule_event(charter_window_expiry, 6)` |
 | `charter_draft_step` | player_actions | `all(event_triggered 接受键, playerActionIs(Share Info))`，需两次 | 抉择 L-C：约章由本地人起草，玩家供证不代笔 | 职务结果照常 | `charter_draft_convened` |
 | `charter_draft_convened` | special，ONCE | `event_triggered("player_action","charter_draft_step")`（`trigger_count ≥ 2`） | 起草会议召开 | `history_burden +0.03`（sim 校准起点） | 锁定日解锁 |
-| `charter_lock_day` | special，ONCE | `all(event_triggered charter_draft_convened, timestampAtOrAfter(127,1))` | 抉择 L-D：妥协版本对不可逆锁定 | `rebellion −0.04`、`panic_value −0.04`（sim 校准起点） | **缺口 G2**：锁定事实（`PactLocked`）无内容写入入口 |
+| `charter_lock_day` | special，ONCE | `all(event_triggered charter_draft_convened, timestampAtOrAfter(5,1))`（相对 Y5 起） | 抉择 L-D：妥协版本对不可逆锁定 | `rebellion −0.04`、`panic_value −0.04`（sim 校准起点） | **缺口 G2**：锁定事实（`PactLocked`）无内容写入入口 |
 | `charter_window_expiry` | crisis，纯调度 | `canTrigger: () => false` | 守卫：`charter_lock_day` 已触发则空转；未触发则动能流失 | 未锁定分支：`rebellion +0.04`、`panic_value +0.04`（sim 校准起点） | — |
 
 ## 2. 分支与改道
