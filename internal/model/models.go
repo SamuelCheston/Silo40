@@ -439,6 +439,7 @@ type Silo struct {
 	Mayor           MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`             // 现任 Mayor 个人正统性
 	Authority       ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`         // IT 幕后威势与 Judicial 附着
 	EscapedGroup    EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`     // 已离开且可能存续的堡外群体 (G5)
+	TopStance       TopStanceState          `gorm:"type:text;serializer:json" json:"top_stance"`        // 顶层立场 (16 §3.2)：内部状态，仲裁不读
 	PreFallSnapshot PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
 	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
 	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
@@ -501,6 +502,42 @@ func (s *Silo) SetMayorLegitimacy(value float64) {
 	s.Mayor.Initialized = true
 	s.Mayor.Legitimacy = value
 	s.Legitimacy = value
+}
+
+// 顶层立场三档 (16 §3.2 裁决 C/D、ADR-0008)：市长与 IT 对逃离的立场。
+// 零值 ("") 与 block 同义，与旧档语义一致 (升级后零值 = 阻挠)。
+// 立场是内部状态：不是玩家按钮、不是显式判定闸，仲裁不读它；它只塑形
+// 出发结算的输入 (防护服/物资/监控/通道)，结算的唯一读取对象是逃出人数。
+const (
+	TopStanceBlock     = "block"     // 阻挠：封闸、执法追缉、审计反制 → 人数趋 0
+	TopStanceNonBlock  = "nonblock"  // 不阻挠：不阻止逃离；暗中准备可行，无顶层资源与掩护
+	TopStanceCooperate = "cooperate" // 配合：开防护服库、放物资、压 1 号监控 → 带走更多
+)
+
+// TopStanceState 顶层立场 (16 §3.2)：由带权重的随机决策产生，随机源走地堡
+// 种子 (引擎单一 RNG 流)；权重读既有状态 (MayorLegitimacy、叛乱、W、Silo 1
+// 状态、保障可信度)，但不被状态锁死——不存在强制阈值。磋商是持续过程：
+// 立场可反复重估 (随状态漂移)，包括回摆到阻挠 (玉石俱焚)；最后一刻妥协也算。
+// 读现任市长那一刻的立场 (裁决 E)，不读职位归属。
+type TopStanceState struct {
+	Initialized bool    `json:"initialized"`
+	Mayor       string  `json:"mayor"`       // ∈ ""(=block)/block/nonblock/cooperate
+	IT          string  `json:"it"`          // 同上
+	Guarantee   float64 `json:"guarantee"`   // 叛乱方保障可信度 (0-1)：赦免谈判、职能保留等承诺
+	Reevaluations int   `json:"reevaluations"` // 审计：带权重随机重估累计次数
+}
+
+// MayorStance / ITStance 读那一刻的立场，零值归一为阻挠。
+func (s TopStanceState) MayorStance() string { return normalizeTopStance(s.Mayor) }
+func (s TopStanceState) ITStance() string    { return normalizeTopStance(s.IT) }
+
+func normalizeTopStance(v string) string {
+	switch v {
+	case TopStanceNonBlock, TopStanceCooperate:
+		return v
+	default:
+		return TopStanceBlock
+	}
 }
 
 // EscapeGroup 逃出群体模型 (G5)：已经离开驻地、在堡外可能存续的人口。

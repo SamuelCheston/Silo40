@@ -120,6 +120,12 @@ function escapeGroupDepart(count, scope) {
 function escapeGroupStatus(boolValue, scope) {
   return __withScope({ type: "escape_group_status", bool_value: !!boolValue }, scope);
 }
+function topStanceReeval(actor) {
+  return { type: "top_stance_reeval", flag: actor || "both" };
+}
+function topStanceGuarantee(delta) {
+  return { type: "top_stance_guarantee", value: delta || 0 };
+}
 function completePlayerAction(actionId) {
   return { type: "player_action_complete", action: actionId };
 }
@@ -382,6 +388,15 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			"initialized": ctx.Silo.EscapedGroup.Initialized,
 			"population":  ctx.Silo.EscapedGroup.Population,
 			"surviving":   ctx.Silo.EscapedGroup.Surviving,
+		}
+		// 16 §3.2 (ADR-0008)：顶层立场只读视图。立场是内部状态：内容可读它
+		// 塑形准备动作的可得性 (阻挠下修服被审计、配合下库开启)，但永不作为
+		// 玩家交互选项，也不进仲裁。
+		result["top_stance"] = map[string]interface{}{
+			"initialized": ctx.Silo.TopStance.Initialized,
+			"mayor":       ctx.Silo.TopStance.MayorStance(),
+			"it":          ctx.Silo.TopStance.ITStance(),
+			"guarantee":   ctx.Silo.TopStance.Guarantee,
 		}
 
 		resources := map[string]float64{}

@@ -547,6 +547,17 @@ func validateEffect(effect ContentEffect) error {
 		// G5: move population out of the silo into a surviving escape group.
 	case "escape_group_status":
 		// G5: mark the escape group surviving or destroyed (bool_value).
+	case "top_stance_reeval":
+		// 16 §3.2 (ADR-0008): weighted-random re-evaluation of the top stance
+		// of mayor/it/both (flag). Internal state; never a player option.
+		switch effect.Flag {
+		case "mayor", "it", "both":
+		default:
+			return fmt.Errorf("top_stance_reeval requires flag mayor|it|both")
+		}
+	case "top_stance_guarantee":
+		// 16 §3.2: raise (or lower) the credibility of the rebels' guarantees;
+		// weight input of the stance decision, clamped to [0,1] at apply time.
 	case "player_action_complete":
 		// 玩家完成键写入路径 (18 分册 copies_distributed 一类节点)：内容事件
 		// 由此写入 player_action:<action> 完成键，服务层负责落状态并发总线事件。
@@ -1085,6 +1096,18 @@ func applyContentEffectScoped(effect ContentEffect, sc *ScopeContext) {
 			writeWorldFlag(sc, effect.Flag, effect.BoolValue)
 			return
 		}
+	case "top_stance_reeval":
+		// 16 §3.2：立场重估只作用于驻地 (self)；权重输入含世界事实
+		// (Silo 1 命令源)，因此在 scoped 层施加。随机源走引擎单一 RNG 流。
+		if sc.Self != nil {
+			ReevalTopStance(sc.Self, sc.World, effect.Flag)
+		}
+		return
+	case "top_stance_guarantee":
+		if sc.Self != nil {
+			addTopStanceGuarantee(sc.Self, effect.Value)
+		}
+		return
 	}
 
 	targets := resolveScope(sc, effect.Scope)
