@@ -283,13 +283,14 @@ func (s *GameService) fireCrossEvent(entry model.CrossEvent, logs *[]string, sto
 		})
 		s.currentSilo = target
 		s.currentAgent = s.agents[target.ID]
-		localStories := []model.StoryEvent{}
-		localLogs := []string{}
-		if s.emitContentEvent(def, "CROSS_SIGNAL", engine.NewEventContext(), nil, &localStories, &localLogs) {
+		// 传 nil 作为 story/log 汇点：handleContentEvent 会同时把故事写进
+		// story_sink 与 step_story_sink，若这里再提供 story_sink，同一故事会被
+		// drainQueuedEvents 经 step_stories 再收一次，月度反馈里跨堡故事因此翻倍
+		// (持久化历史走 recordStories 单份，本就正确)。只经 drain 收一次，与月度
+		// 本地通道的取值方式对齐。
+		if s.emitContentEvent(def, "CROSS_SIGNAL", engine.NewEventContext(), nil, nil, nil) {
 			moreLogs, moreStories := s.drainQueuedEvents()
-			*logs = append(*logs, localLogs...)
 			*logs = append(*logs, moreLogs...)
-			*stories = append(*stories, localStories...)
 			*stories = append(*stories, moreStories...)
 		}
 		s.currentSilo = nil
