@@ -2,6 +2,7 @@ package service
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -375,6 +376,11 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 			circulationActions++
 		}
 	}
+	// Per-pair share cap (same anti-deadlock as the §7.4 calibration): a fact
+	// that does not absorb past the floor for one department (repeat-penalty
+	// stall) must not be re-shared forever while other departments wait for a
+	// third fact — the loop gathers instead and grows the portfolio.
+	shareAttempts := map[string]int{}
 	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
@@ -397,14 +403,32 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		case svc.silo.Rebellion >= 0.7:
 			// Lie low while rebellion runs hot.
 		case ap >= shareCost && month >= 4:
-			dept := neediestDepartment(svc.silo)
-			fragment, ok := strongestShareableFactFor(svc.agent, departmentByAddress(svc.silo, dept))
-			if ok {
+			// Neediest-first over ALL departments, skipping capped pairs: a fact
+			// that stalls below the floor for one department (repeat penalty)
+			// must neither be re-shared forever nor block the portfolio's other
+			// facts from reaching that department.
+			order := append([]model.Profession(nil), svc.silo.Professions...)
+			sort.SliceStable(order, func(i, j int) bool {
+				return informationHeldFacts(&order[i]) < informationHeldFacts(&order[j])
+			})
+			shared := false
+			for i := range order {
+				dept := &order[i]
+				fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
+					return shareAttempts[dept.Name+":"+fact] >= 2
+				})
+				if !ok {
+					continue
+				}
+				shareAttempts[dept.Name+":"+fragment]++
 				attemptCirculation(model.AgentAction{
-					Type: model.ActionShareInfo, TargetDept: dept,
+					Type: model.ActionShareInfo, TargetDept: dept.Name,
 					FragmentIds: []string{fragment},
 				})
-			} else if ap >= gatherCost {
+				shared = true
+				break
+			}
+			if !shared && ap >= gatherCost {
 				attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 			}
 		case ap >= buildCost && month < 12:
@@ -458,4 +482,41 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	if outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"}); err == nil {
 		t.Fatalf("terminal INFORMATION state accepted another action: %+v", outcome.Result)
 	}
+}
+
+// informationHeldFacts counts a department's facts at or above the sharing
+// floor (QualRumor) — the neediness ordering key for the circulation loop.
+func informationHeldFacts(prof *model.Profession) int {
+	count := 0
+	for _, belief := range prof.Beliefs {
+		if belief.B >= engine.DefaultInformationConfig().QualRumor {
+			count++
+		}
+	}
+	return count
+}
+
+// strongestShareableFactExcluding is strongestShareableFactFor with an
+// exclusion predicate on the fact ID (used to skip capped pairs).
+func strongestShareableFactExcluding(agent *model.Agent, dept *model.Profession, skip func(string) bool) (string, bool) {
+	held := map[string]bool{}
+	if dept != nil {
+		for _, belief := range dept.Beliefs {
+			if belief.B >= engine.DefaultInformationConfig().QualRumor {
+				held[belief.FactID] = true
+			}
+		}
+	}
+	best := ""
+	bestB := 0.0
+	for _, belief := range agent.Beliefs {
+		if belief.B < engine.DefaultInformationConfig().QualRumor || held[belief.FactID] || (skip != nil && skip(belief.FactID)) {
+			continue
+		}
+		if belief.B > bestB || (belief.B == bestB && belief.FactID < best) {
+			best = belief.FactID
+			bestB = belief.B
+		}
+	}
+	return best, best != ""
 }

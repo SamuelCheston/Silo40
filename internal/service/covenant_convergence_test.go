@@ -181,6 +181,18 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 		if station.DeptTension < 0.3 {
 			station.DeptTension = 0.3
 		}
+		// Skilled play answers the RESET omens (census -> requisition ->
+		// execution) with the countermeasure route; without it the long
+		// pressure campaign dies to 《遗忘》 before the covenant window.
+		progressResetCountermeasureForRoute(t, svc, func(action model.AgentAction) {
+			if _, err := svc.ExecuteAction(action); err != nil {
+				t.Logf("countermeasure step %+v deferred: %v", action, err)
+			}
+		})
+		if svc.gameOver() {
+			break
+		}
+
 		troughReached := station.Authority.W <= 34
 
 		// Verify/publish: Judicial_1 as soon as ready; Judicial_2 only once the
