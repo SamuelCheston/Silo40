@@ -75,6 +75,12 @@
       "unlock": { "stage_at_least": "archive_awakened" },
       "available": { "metric": "propaganda_level", "min": 1 },
       "reason": "需要宣传力度达到 1"
+    },
+    {
+      "id": "RECEIVER_VERIFY_ACCOMPANY",
+      "unlock": { "event_completed": "player_action:action_share_info" },
+      "available": { "relation": "Judicial", "min": 0.1 },
+      "reason": "需要先完成一次分享，并与司法侧建立最低信任（初始校准值）"
     }
   ]
 }
