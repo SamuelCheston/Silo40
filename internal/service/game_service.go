@@ -3519,9 +3519,20 @@ func (s *GameService) recordStories(stories []*model.StoryEvent, source string) 
 	if siloID == 0 {
 		siloID = ActiveSiloID
 	}
+	// 多堡下邻堡的内容点火走谣言过滤：日常琐碎留在邻堡，值得传的改写成
+	// "听到的版本"。情报产品/行动回执/正典链条等玩家视角记录不受影响。
+	gated := s.multiSilo() && isContentFiringSource(source) && siloID != s.world.PlayerSiloID
 	for _, story := range stories {
 		if story == nil {
 			continue
+		}
+		recorded := story
+		if gated {
+			perceived, ok := s.perceiveNeighborStory(*story, simSilo)
+			if !ok {
+				continue
+			}
+			recorded = &perceived
 		}
 		entry := model.StoryEventLog{
 			SiloID:      siloID,
@@ -3529,11 +3540,11 @@ func (s *GameService) recordStories(stories []*model.StoryEvent, source string) 
 			Year:        simSilo.CurrentYear,
 			Month:       simSilo.CurrentMonth,
 			Source:      source,
-			EventID:     story.ID,
-			Category:    story.Category,
-			Title:       story.Title,
-			Description: story.Description,
-			Type:        story.Type,
+			EventID:     recorded.ID,
+			Category:    recorded.Category,
+			Title:       recorded.Title,
+			Description: recorded.Description,
+			Type:        recorded.Type,
 		}
 		s.eventLogs = append(s.eventLogs, entry)
 		// 世界 tick 下为玩家堡分流本月日志 (LLM gating 输入)。

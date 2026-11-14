@@ -828,6 +828,7 @@ func ApplyContentEventScoped(def ContentEventDefinition, sc *ScopeContext) (mode
 		Title:       def.Title,
 		Description: def.Description,
 		Type:        def.Type,
+		FireMode:    string(def.FireMode),
 	}, scheduled
 }
 
