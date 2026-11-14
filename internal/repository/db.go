@@ -44,6 +44,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		&model.Faction{},
 		&model.Agent{},
 		&model.Connection{},
+		&model.Relic{},
 		&model.StoryEventLog{},
 		&model.ContentEventDefinition{},
 		&model.ContentEventState{},
