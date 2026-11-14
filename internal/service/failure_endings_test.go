@@ -203,6 +203,82 @@ func TestCompromisedOmenChainFires(t *testing.T) {
 	}
 }
 
+// TestDeathEndingNarrativeVariants locks 29-failure-endings §7: the DEATH
+// settlement names the cause (which step went wrong), keeps the restrained
+// final moment, and reports what remains — the escape attempt that did not
+// survive, the outside world, the facility.
+func TestDeathEndingNarrativeVariants(t *testing.T) {
+	// Variant A: remote termination (Silo 1 settlement fact), Silo 1 alive.
+	svc, station, _ := weightedEndingFixture("TIME")
+	svc.contentStates = map[uint]map[string]model.ContentEventState{
+		station.ID: {terminationFactKey: {SiloID: station.ID, EventKey: terminationFactKey, Triggered: true}},
+	}
+	station.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 40, Surviving: false}
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingDeath {
+		t.Fatalf("expected DEATH selection, got %+v", decision)
+	}
+	for _, want := range []string{
+		"终止来自控制网的另一端",
+		"《寂堡》成立",
+		"曾有 40 人离开，但他们没能存续到最后",
+		"这座驻地被标记为已处理",
+	} {
+		if !strings.Contains(decision.Reason, want) {
+			t.Fatalf("termination variant missing %q: %q", want, decision.Reason)
+		}
+	}
+
+	// Variant B: safeguard ceiling — the station's own last device.
+	svc2, station2, _ := weightedEndingFixture("DEATH")
+	station2.VictoryStatus.IsWon = false
+	station2.SafeguardRisk = 1.0
+	decision2 := svc2.resolveWeightedEnding(station2, svc2.agent)
+	if decision2 == nil || decision2.Selected != endingDeath {
+		t.Fatalf("expected DEATH by safeguard, got %+v", decision2)
+	}
+	if !strings.Contains(decision2.Reason, "保障机制在冲突中被触发") {
+		t.Fatalf("safeguard cause missing: %q", decision2.Reason)
+	}
+
+	// Variant C: sustenance silence — population exhausted, no war.
+	svc3, station3, _ := weightedEndingFixture("DEATH")
+	station3.VictoryStatus.IsWon = false
+	decision3 := svc3.resolveWeightedEnding(station3, svc3.agent)
+	if decision3 == nil || decision3.Selected != endingDeath {
+		t.Fatalf("expected DEATH by exhaustion, got %+v", decision3)
+	}
+	if !strings.Contains(decision3.Reason, "最后一班没有人接") {
+		t.Fatalf("sustenance-silence cause missing: %q", decision3.Reason)
+	}
+	if !strings.Contains(decision3.Reason, "驻地仍然矗立") {
+		t.Fatalf("facility-remains line missing: %q", decision3.Reason)
+	}
+}
+
+// TestSafeguardProtocolWarmingFires locks the DEATH safeguard omen
+// (29-failure-endings §2.5): the warning lights on the existing monthly
+// channel once safeguard risk crosses the bar, and stays silent below it.
+func TestSafeguardProtocolWarmingFires(t *testing.T) {
+	boot := bootstrapRealContent(t)
+
+	svc := chainTestService(pickContentDef(t, boot, "special:safeguard_protocol_warming"))
+	svc.silo.SafeguardRisk = 0.65
+	svc.queueSystemContentEvents("TEST")
+	svc.drainQueuedEvents()
+	if !contentTriggered(svc, "special:safeguard_protocol_warming") {
+		t.Fatal("safeguard omen did not fire above the risk bar")
+	}
+
+	svc2 := chainTestService(pickContentDef(t, boot, "special:safeguard_protocol_warming"))
+	svc2.silo.SafeguardRisk = 0.3
+	svc2.queueSystemContentEvents("TEST")
+	svc2.drainQueuedEvents()
+	if contentTriggered(svc2, "special:safeguard_protocol_warming") {
+		t.Fatal("safeguard omen fired below the risk bar")
+	}
+}
+
 // TestNormalcyHardensFires locks the EXCLUSIONIST omen (29-failure-endings
 // §2.1): from relative Y3 on, once four departments' loyalty stands above the
 // public-dominance bar, the hardening heartbeat lights and records that

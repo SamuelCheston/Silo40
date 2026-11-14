@@ -142,7 +142,7 @@ var endingDescriptions = map[string]string{
 	endingExclusionist: "什么都没有毁灭，也什么都没有改变。封闭秩序不是靠镇压守住的，是靠习惯：证人老去，接收者调离，封闭的叙事逐年硬化，始终没有遇到它的对抗版本。危机到来时驻地集体选择了旧规则，是自愿的——提供可核验替代方案的最后窗口，就这样安静地关上了。任务没有战败，它失去了战场。《深闭》成立。",
 	endingReset:        "驻地安静而有序——重置总是伴随'恢复正常'。有人喊邻居的名字，对方迟疑了一下才应答；新刷的墙面盖住了旧刻痕；官方记录里只有一次'燃气事故'，或者什么都没有。减口、抹忆与清档系统性完成了：你的任务赖以继续的公共事实，与能核验它们的人，被一并拆除。征兆其实从未缺席——变长的档案'维护'窗口、远超平常的请领、深夜的人数清点——它们被当成了噪音，或者反制窗口被花在了别处。你输掉的不是一场对抗，是整块记忆。《遗忘》成立。",
 	endingFracture:     "撕碎驻地的不是攻击，是它自己的手。无人控制的破坏落到了维生基础上：轮班断裂，部门停止共享，关键岗位弃守——愤怒达到了它的目的，目的却跟着塌了。你点燃的是愤怒，没有来得及建起接住它的组织：期待跑得比组织快，而维存是一张协作网，每撕掉一条网眼，都不会因为任何一方'胜利'而自动复原。驻地的灯一层一层熄灭，不是因为攻击，是因为没有人再在开关旁边。《断层》成立。",
-	endingDeath:        "没有任何可确认的幸存社会——《寂堡》成立。",
+	endingDeath:        "驻地的最后时刻不是爆炸，是顺序：灯、门、静默。没有人剩下可以承接任何东西——里面没有人知道结束他们的东西叫什么。《寂堡》成立。",
 	endingCompromised:  "你的身份先于任务死去了。每一次深度行动都在纸面上留下与过去对不上的痕迹：某年的空缺，某段对不上的履历，某次回指到你自己的暴露。痕迹从一开始就在那里，你一直赌下一次行动是最后一次——直到复查到来。抹除以本地名义包装：来历存疑、刑事罪名，或者无声失踪；没有人会知道你真正是什么。驻地以'一个来历存疑的人'的名义归档——档案合上的声音，就是任务合上的声音。《除名》成立。",
 }
 
@@ -370,7 +370,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	switch {
 	case deathFact && !escapeAlive:
 		decision.Selected = endingDeath
-		decision.Reason = "P0.1 寂堡：无可确认的幸存社会，先于一切历史加权。"
+		decision.Reason = deathNarrative(s, station, trigger, terminationFact, strikeFact)
 		return s.finishArbitration(decision)
 	case resetFact && !escapeAlive:
 		decision.Selected = endingReset
@@ -606,4 +606,38 @@ func compromisedSettlementLine(station *model.Silo) string {
 	}
 	return fmt.Sprintf("驻地继续运转：%d 名居民，%d 个部门仍在履职，部门信念层里仍有 %d 份可被引用的事实——你教过的方法还在被人使用，只是没有人知道它来自哪里。",
 		station.TotalPopulation, len(station.Professions), shareableFacts)
+}
+
+// deathNarrative composes the P0.1 settlement story (07-death §4): a
+// cause-specific sentence (which step went wrong), the restrained final
+// moment, and what remains — the escape attempt that did not survive, the
+// outside world, the facility itself. The residual-response motif is allowed
+// but promises nothing.
+func deathNarrative(s *GameService, station *model.Silo, trigger string, terminationFact, strikeFact bool) string {
+	var cause string
+	switch {
+	case terminationFact:
+		cause = "终止来自控制网的另一端——驻地的偏离招来了处置：外溢与高调叛乱送出的可操作观察，最终换来了这次关闭。"
+	case strikeFact:
+		cause = "侦察确认了责任链，物理摧毁随之到来——分渠道结算里，这是几乎无解的渠道：干扰一种终止手段，不豁免物理手段。"
+	case trigger == endingDeath && station.SafeguardRisk >= 1.0:
+		cause = "驻地自身的保障机制在冲突中被触发——旧秩序的最后装置，杀死了它要保护的驻地。过度干预把风险推到了封顶。"
+	default:
+		cause = "没有战争。最后一班没有人接——人口在叛乱、流失与沉寂里耗尽，驻地再也凑不齐下一轮轮值。"
+	}
+	narrative := cause + endingDescriptions[endingDeath]
+	if g := station.EscapedGroup; g.Initialized && g.Population > 0 && !g.Surviving {
+		narrative += fmt.Sprintf("曾有 %d 人离开，但他们没能存续到最后——逃离成了残酷的注脚。", g.Population)
+	}
+	if s.world != nil && !s.world.Silo1.Alive {
+		narrative += "外面同样寂静：1 号地堡已经覆灭，没有人来清点这份寂静。"
+	} else {
+		narrative += "控制网的某一端，这座驻地被标记为已处理；Pact 的计数减一。"
+	}
+	if strikeFact {
+		narrative += "堡体不再矗立，原地只剩残骸的形状。几十年后也许有人会碰到一条还给出微弱应答的线路——但那不是胜利，不改变这个结局。"
+	} else {
+		narrative += "驻地仍然矗立——作为正常运转的地堡，覆灭了。几十年后也许有人会碰到一条还给出微弱应答的线路——但那不是胜利，不改变这个结局。"
+	}
+	return narrative
 }
