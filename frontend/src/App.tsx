@@ -306,6 +306,16 @@ function App() {
         faction_member: 'teal',
         faction_leader: 'red',
     };
+    // 每个动作分组在目标里的意义：玩家要能回答"我为什么要做这些"。
+    const groupNote: Record<string, string> = {
+        common: '流通的主干动词：取材料（Gather）、交材料（Share）、建信任（Build）。《共证》线靠它们推进。',
+        profession: '职务动作是你的合法外壳与就近渠道：维持岗位身份，部分动作能直接取得或深化材料。',
+        profession_group: '职务圈层的协同动作：以岗位身份为掩护，做单人做不了的事。',
+        station: '针对驻地的行动：把本地关系转化为可核验的结果。',
+        silo1: '面向 1 号的有限通道：只有情报与欺骗——驻地的事要经驻地自己的手。',
+        faction_member: '派系成员动作：以公开身份参与派系议程。',
+        faction_leader: '派系领袖动作：公开位置换来的杠杆，用之前想好暴露的代价。',
+    };
     const orderedGroups = useMemo(() => groupOrder.filter((group) => (groupedActions[group] || []).length > 0), [groupedActions]);
     const selectAction = useCallback((action: PlayerActionMeta) => {
         setActionType(action.action_type as AgentActionType);
@@ -462,6 +472,9 @@ function App() {
                                                     <Text fontSize="sm" fontWeight="bold" color={`${groupColor[group] || 'gray'}.700`}>
                                                         {groupTitle[group] || group}
                                                     </Text>
+                                                    {groupNote[group] && (
+                                                        <Text fontSize="xs" color="gray.500">{groupNote[group]}</Text>
+                                                    )}
                                                     <SimpleGrid columns={2} gap={3} w="full">
                                                         {(groupedActions[group] || []).map((action) => {
                                                             const isSelected = selectedActionMeta?.id === action.id && selectedActionMeta?.action_type === action.action_type;
@@ -536,6 +549,11 @@ function App() {
                                                 <>
                                                     <VStack align="start" gap={1}>
                                                         <Text fontSize="sm" fontWeight="bold" color="gray.700">Fragments to Share (Real & Fake):</Text>
+                                                        {(agent?.known_fragments?.length || 0) === 0 && (
+                                                            <Text fontSize="xs" color="orange.700">
+                                                                你还没有任何可作为事实分享的材料——先用「Gather Info」把确信提到 B ≥ 0.30，材料才够格离手。
+                                                            </Text>
+                                                        )}
                                                         <HStack wrap="wrap" gap={2} maxH="200px" overflowY="auto" p={2} border="1px solid" borderColor="gray.200" borderRadius="md" w="full">
                                                             {allFragments.map(f => {
                                                                 const isSelected = selectedFragments.includes(f);
@@ -582,7 +600,7 @@ function App() {
                                     <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
                                         <Heading size="sm" mb={3} color="gray.800">情报与故事记录</Heading>
                                         <VStack align="stretch" gap={3} maxH="360px" overflowY="auto">
-                                            {eventHistory.length === 0 && <Text fontSize="sm" color="gray.500">推进月份后，截获的信号与事件会保留在这里。</Text>}
+                                            {eventHistory.length === 0 && <Text fontSize="sm" color="gray.500">还没有任何记录。你的第一次「Gather Info」与第一次分享会写下最早的条目；此后截获的信号与事件都保留在这里。</Text>}
                                             {eventHistory.map(event => (
                                                 <Box key={`${event.timestamp}:${event.silo_id}:${event.event_id}`} p={3} bg="white" borderRadius="md" borderLeft="3px solid" borderColor="blue.300">
                                                     <Text fontSize="xs" color="gray.500">Y{event.year} M{event.month} · {world?.silos?.find((ref: any) => ref.id === event.silo_id)?.name || `Silo ${event.silo_id}`} · {event.category}</Text>
