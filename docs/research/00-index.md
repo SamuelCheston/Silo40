@@ -17,6 +17,7 @@
 | [04-books-vs-show.md](./04-books-vs-show.md) | 原著与改编的结构差异、人物功能改写、同类节点处理差异、机制层差异、可借鉴增量 | 避免混用两套设定；识别可复用机制 |
 | [05-game-adaptation-motifs.md](./05-game-adaptation-motifs.md) | 可改编桥段、事件母题、结局模板与现有事件的映射 | 新事件与结局设计的选题库 |
 | [06-silo40-event-plan.md](./06-silo40-event-plan.md) | Silo 40 事件清单、量化校准、验证回归、互调结果与待决项 | 事件分批实现、数值校准与 sim 对照 |
+| [../story/silo40-good-endings.md](../story/silo40-good-endings.md) | 《共证》《越岭》《无人裁决》的剧情台阶、玩家抉择、终局画面与三线交叉拆台 | 好结局事件链写作、原创边界与结局资格叙事对接 |
 
 ## 内容实现与工程
 
