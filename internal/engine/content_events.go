@@ -98,6 +98,13 @@ type ContentEffect struct {
 	// Action 仅用于 player_action_complete：写入的玩家完成键动作 ID
 	// (服务层加 "player_action:" 前缀，如 reset_countermeasure_done)。
 	Action string `json:"action,omitempty"`
+	// Observer 仅用于 belief_observe："player" / "residents" / 部门名。
+	Observer string `json:"observer,omitempty"`
+	// Reliability/Provenance/Coverage 服务于 belief_observe 与
+	// public_evidence_register (§3.5/§3.7)。
+	Reliability float64 `json:"reliability,omitempty"`
+	Provenance  float64 `json:"provenance,omitempty"`
+	Coverage    float64 `json:"coverage,omitempty"`
 }
 
 // ContentPlayerActionSpec describes how a player action event is shown in UI.
@@ -263,6 +270,7 @@ func normalizeContentEventDefinition(def *ContentEventDefinition) {
 		def.Effects[i].Zone = strings.TrimSpace(def.Effects[i].Zone)
 		def.Effects[i].EventID = strings.TrimSpace(def.Effects[i].EventID)
 		def.Effects[i].Action = strings.TrimSpace(def.Effects[i].Action)
+		def.Effects[i].Observer = strings.TrimSpace(def.Effects[i].Observer)
 	}
 	normalizePlayerActionSpec(def)
 }
@@ -537,6 +545,22 @@ func validateEffect(effect ContentEffect) error {
 		// 由此写入 player_action:<action> 完成键，服务层负责落状态并发总线事件。
 		if strings.TrimSpace(effect.Action) == "" {
 			return fmt.Errorf("player_action_complete requires action")
+		}
+	case "belief_observe":
+		// §3.3/§3.5：向观察者层注入一次事实观察 (玩家/部门/具名人物)。
+		if strings.TrimSpace(effect.Fragment) == "" {
+			return fmt.Errorf("belief_observe requires fragment")
+		}
+		if strings.TrimSpace(effect.Observer) == "" {
+			return fmt.Errorf("belief_observe requires observer")
+		}
+	case "public_evidence_register":
+		// §3.7：登记公开证据 (provenance/coverage)；Q 与独立事实资格只读登记。
+		if strings.TrimSpace(effect.Fragment) == "" {
+			return fmt.Errorf("public_evidence_register requires fragment")
+		}
+		if effect.Provenance <= 0 || effect.Coverage <= 0 {
+			return fmt.Errorf("public_evidence_register requires positive provenance and coverage")
 		}
 	default:
 		return fmt.Errorf("unsupported effect type %q", effect.Type)
@@ -849,8 +873,23 @@ type ScopeContext struct {
 	// CompletionKeys 收集 player_action_complete 效果的动作 ID (服务层写入
 	// 完成键并发总线事件)；nil = 无处投递 (引擎内直调时静默跳过)。
 	CompletionKeys *[]string
+	// BeliefObservations 收集 belief_observe 效果 (服务层落信念，因为玩家
+	// agent 不在施加期的 silo 域内)；nil = 无处投递。
+	BeliefObservations *[]BeliefObservationRequest
+	// PublicEvidenceWrites 收集 public_evidence_register 效果；nil = 无处投递。
+	PublicEvidenceWrites *[]model.PublicEvidenceRecord
 	// Errors 收集目标解析失败等显式错误 (对齐 07 §12：不静默丢弃)。
 	Errors *[]string
+}
+
+// BeliefObservationRequest 一次 belief_observe 效果的落库请求。ObservationID
+// 由服务层按事件键生成 (内容事件不重放，同一事件同一事实只记一次)。
+type BeliefObservationRequest struct {
+	Observer      string // "player" / "residents" / 部门名
+	FactID        string
+	ObservationID string
+	Reliability   float64
+	Independence  float64
 }
 
 // CrossSignalRequest 一次 cross_signal 效果产生的跨堡投递请求。
@@ -885,6 +924,25 @@ func ApplyContentEffectsScoped(effects []ContentEffect, sc *ScopeContext) []Cont
 			action := strings.TrimSpace(effect.Action)
 			if action != "" && sc != nil && sc.CompletionKeys != nil {
 				*sc.CompletionKeys = append(*sc.CompletionKeys, action)
+			}
+			continue
+		case "belief_observe":
+			if sc != nil && sc.BeliefObservations != nil && strings.TrimSpace(effect.Fragment) != "" {
+				*sc.BeliefObservations = append(*sc.BeliefObservations, BeliefObservationRequest{
+					Observer:     strings.TrimSpace(effect.Observer),
+					FactID:       strings.TrimSpace(effect.Fragment),
+					Reliability:  effect.Reliability,
+					Independence: 1,
+				})
+			}
+			continue
+		case "public_evidence_register":
+			if sc != nil && sc.PublicEvidenceWrites != nil && strings.TrimSpace(effect.Fragment) != "" {
+				*sc.PublicEvidenceWrites = append(*sc.PublicEvidenceWrites, model.PublicEvidenceRecord{
+					FactID:     strings.TrimSpace(effect.Fragment),
+					Provenance: effect.Provenance,
+					Coverage:   effect.Coverage,
+				})
 			}
 			continue
 		}

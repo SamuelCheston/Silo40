@@ -140,3 +140,9 @@ trigger: { type: "silo_population_lte", value: 6000 },
 - `player_action_complete`（`action` = 动作 ID；写入 `player_action:<action>`
   完成键并发同名总线事件，供 `event_triggered` 与行动门控读取。JS helper：
   `completePlayerAction(actionId)`）
+- `belief_observe`（`observer` = `"player"` / `"residents"` / 部门名；
+  `fragment` = 事实 ID；`reliability` = 渠道可靠度。向观察者信念层注入一次
+  观察，走统一的吸收公式。JS helper：`beliefObserve(observer, fragment, reliability)`）
+- `public_evidence_register`（`fragment` = 事实 ID；`provenance` / `coverage`
+  ∈ (0,1]。登记公开证据；`Q` 与独立公开事实资格只读登记。JS helper：
+  `publicEvidenceRegister(fragment, provenance, coverage)`）

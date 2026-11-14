@@ -474,6 +474,23 @@ func (s *GameService) statesMapFor(siloID uint) map[string]model.ContentEventSta
 	return states
 }
 
+// seedBeliefLayers 旧档兼容：为全部特工按 KnownFragments 保守补种信念层
+// (10-it-control-credibility §3.3)。新档无已知碎片时为空操作；不升存档版本。
+// 堡 ID 升序遍历，确定性。
+func (s *GameService) seedBeliefLayers() {
+	if s.agent != nil {
+		engine.SeedLegacyBeliefs(s.agent)
+	}
+	ids := make([]uint, 0, len(s.agents))
+	for siloID := range s.agents {
+		ids = append(ids, siloID)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	for _, siloID := range ids {
+		engine.SeedLegacyBeliefs(s.agents[siloID])
+	}
+}
+
 func (s *GameService) cacheSnapshot() {
 	if cache.GlobalCache == nil || !s.hasSession() {
 		return
@@ -857,6 +874,7 @@ func (s *GameService) Resume() error {
 				s.lastActionResult = nil
 				s.delayTasks = map[string]*delayTask{}
 				s.receivedSignals = map[uint][]string{}
+				s.seedBeliefLayers()
 				s.bindEngineRuntime()
 				if err := s.resumeLlmAdvisor(); err != nil {
 					return err
@@ -966,6 +984,7 @@ func (s *GameService) Resume() error {
 	s.lastActionResult = nil
 	s.delayTasks = map[string]*delayTask{}
 	s.receivedSignals = map[uint][]string{}
+	s.seedBeliefLayers()
 	s.bindEngineRuntime()
 	if err := s.resumeLlmAdvisor(); err != nil {
 		return err
@@ -1181,6 +1200,7 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	s.delayTasks = map[string]*delayTask{}
 	s.pendingOperation = nil
 	s.lastActionResult = nil
+	s.seedBeliefLayers()
 
 	// LLM advisor: fresh timeline — wipe the previous game's log, record the
 	// initial participation level, arm gating for month 1.
@@ -1432,6 +1452,93 @@ func (s *GameService) writeCompletionKeysFromEffects(siloID uint, actionIDs []st
 		}
 		seen[key] = true
 		s.writeCompletionKey(siloID, key)
+	}
+}
+
+// applyBeliefObservations 落地 belief_observe 效果 (子项 3)。观察 ID 按
+// "content:<事件键>:<事实>#<序>" 生成：同一事件对同一事实的多次观察按序编号
+// (都可吸收)，跨事件天然去重。相关事实强度按接收方自身信念层计算。
+func (s *GameService) applyBeliefObservations(siloID uint, eventKey string, requests []engine.BeliefObservationRequest) {
+	if len(requests) == 0 {
+		return
+	}
+	silo := s.siloByID(siloID)
+	if silo == nil && s.silo != nil && s.silo.ID == siloID {
+		silo = s.silo
+	}
+	if silo == nil {
+		return
+	}
+	cfg := engine.DefaultInformationConfig()
+	agent := s.agents[siloID]
+	if agent == nil {
+		agent = s.agent
+	}
+	obsCount := map[string]int{}
+	for _, req := range requests {
+		if strings.TrimSpace(req.FactID) == "" {
+			continue
+		}
+		obsCount[req.FactID]++
+		obsID := "content:" + eventKey + ":" + req.FactID + "#" + strconv.Itoa(obsCount[req.FactID])
+		switch {
+		case req.Observer == "player":
+			if agent == nil {
+				continue
+			}
+			absorbObservationInto(cfg, &agent.Beliefs, req, obsID)
+		case req.Observer == "residents":
+			for i := range silo.Residents {
+				resident := &silo.Residents[i]
+				if !resident.Alive || resident.Influence <= 0 {
+					continue
+				}
+				absorbObservationInto(cfg, &resident.Beliefs, req, obsID)
+			}
+		default: // 部门名
+			for i := range silo.Professions {
+				prof := &silo.Professions[i]
+				if prof.Name != req.Observer {
+					continue
+				}
+				absorbObservationInto(cfg, &prof.Beliefs, req, obsID)
+				break
+			}
+		}
+	}
+}
+
+func absorbObservationInto(cfg engine.InformationConfig, beliefs *[]model.FactBelief, req engine.BeliefObservationRequest, obsID string) {
+	belief := engine.EnsureBeliefIn(beliefs, req.FactID)
+	if belief == nil {
+		return
+	}
+	related := engine.RelatedFIn(beliefs, req.FactID)
+	independence := req.Independence
+	if independence <= 0 {
+		independence = cfg.IndependenceNew
+	}
+	strength := engine.AbsorptionStrength(cfg, req.Reliability, related, independence)
+	engine.ObserveFact(cfg, belief, engine.FragmentSpecFor(req.FactID), obsID, strength)
+}
+
+// applyPublicEvidenceWrites 落地 public_evidence_register 效果 (§3.7)：登记
+// 时间取本堡当前日历；同一事实重复登记只抬高 provenance/coverage。
+func (s *GameService) applyPublicEvidenceWrites(siloID uint, records []model.PublicEvidenceRecord) {
+	if len(records) == 0 {
+		return
+	}
+	silo := s.siloByID(siloID)
+	if silo == nil && s.silo != nil && s.silo.ID == siloID {
+		silo = s.silo
+	}
+	if silo == nil {
+		return
+	}
+	for _, record := range records {
+		record.Year = silo.CurrentYear
+		record.Month = silo.CurrentMonth
+		engine.RegisterPublicEvidence(silo, record)
 	}
 }
 
@@ -2215,6 +2322,27 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 			return fmt.Errorf("unknown profession action %q", action.ProfessionAction)
 		}
 		action.Cost = def.APCost
+	case model.ActionGatherInfo:
+		// §8.1：AP 与怀疑独立。探查成本随目标部门规范冲突上浮
+		// (ceil(base·(1+0.5·mismatch)))，与检测/怀疑结算分离。
+		base, ok := model.ACTION_COSTS[model.ActionGatherInfo]
+		if !ok {
+			return fmt.Errorf("unknown action type %q", action.Type)
+		}
+		cfg := engine.DefaultInformationConfig()
+		mismatch := 0.0
+		if silo := s.playerActionSilo(); silo != nil && s.agent != nil &&
+			action.TargetDept != "" && action.TargetDept != s.agent.Profession {
+			var target *model.Profession
+			for i := range silo.Professions {
+				if silo.Professions[i].Name == action.TargetDept {
+					target = &silo.Professions[i]
+					break
+				}
+			}
+			mismatch = engine.Mismatch(cfg.GatherDeviation, engine.DeptNorm(target))
+		}
+		action.Cost = engine.APCostWithMismatch(cfg, base, mismatch)
 	default:
 		cost, ok := model.ACTION_COSTS[action.Type]
 		if !ok {
@@ -2499,13 +2627,20 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	simSilo := s.simSilo()
 	siloID := s.simSiloID()
 	completionKeys := []string{}
+	beliefRequests := []engine.BeliefObservationRequest{}
+	evidenceWrites := []model.PublicEvidenceRecord{}
 	scopeCtx := s.scopeContextFor(simSilo)
 	scopeCtx.CompletionKeys = &completionKeys
+	scopeCtx.BeliefObservations = &beliefRequests
+	scopeCtx.PublicEvidenceWrites = &evidenceWrites
 	story, scheduled := engine.ApplyContentEventScoped(def, scopeCtx)
 	s.flushScopeResults(scopeCtx, event)
 	// 硬伤 #4：结构化效果里的 player_action_complete 在此落地 (写完成键并发
 	// 总线事件)，与脚本效果各自独立结算。
 	s.writeCompletionKeysFromEffects(siloID, completionKeys)
+	// 子项 3：信念观察与公开证据登记经服务层落地 (玩家 agent 不在施加期 silo 域内)。
+	s.applyBeliefObservations(siloID, def.Key, beliefRequests)
+	s.applyPublicEvidenceWrites(siloID, evidenceWrites)
 
 	state, legacyKey := s.contentStateForDefinition(def)
 	state.SiloID = siloID
@@ -2564,11 +2699,17 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		return
 	}
 	scriptCompletionKeys := []string{}
+	scriptBeliefRequests := []engine.BeliefObservationRequest{}
+	scriptEvidenceWrites := []model.PublicEvidenceRecord{}
 	scriptScopeCtx := s.scopeContextFor(simSilo)
 	scriptScopeCtx.CompletionKeys = &scriptCompletionKeys
+	scriptScopeCtx.BeliefObservations = &scriptBeliefRequests
+	scriptScopeCtx.PublicEvidenceWrites = &scriptEvidenceWrites
 	scheduledFromScript := engine.ApplyContentEffectsScoped(scriptResult.Effects, scriptScopeCtx)
 	s.flushScopeResults(scriptScopeCtx, event)
 	s.writeCompletionKeysFromEffects(siloID, scriptCompletionKeys)
+	s.applyBeliefObservations(siloID, def.Key, scriptBeliefRequests)
+	s.applyPublicEvidenceWrites(siloID, scriptEvidenceWrites)
 	s.scheduleContentEvents(scheduledFromScript, event, ctx)
 	s.scheduleContentEvents(scriptResult.Schedule, event, ctx)
 
