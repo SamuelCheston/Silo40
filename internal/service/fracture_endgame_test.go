@@ -37,6 +37,10 @@ func TestFractureEndingPlayableFromNewGame(t *testing.T) {
 
 	deceives := 0
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
+		progressResetCountermeasureForRoute(t, svc, execute)
+		if svc.gameOver() {
+			break
+		}
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
 		if deceive != nil && deceive.Enabled && svc.agent.ActionPoints >= float64(deceive.APCost) {
 			execute(model.AgentAction{Type: model.ActionStationOperation, ActionID: StationOpDeceive})
