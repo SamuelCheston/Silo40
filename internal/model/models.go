@@ -150,6 +150,22 @@ type PendingRequirement struct {
 	ActivatedMonth int    `json:"activated_month"`
 }
 
+// ItAuthorityState 本地 IT 权威的二元联盟与隐蔽维护运行时状态 (§5)。
+// 联盟只有 Judicial 法警与 IT 内部两块；R_op 是内部操作资源与可隐蔽支配
+// 法警时间的统一抽象。
+type ItAuthorityState struct {
+	Initialized bool    `json:"initialized"`
+	ROp         float64 `json:"r_op"` // [0,100]，每月 +8 收入，动作消耗按弱势成本曲线
+	// 每组的忠诚拆为常规与恐惧两个分量：l_g = clamp01(L+F)。恐惧短期便宜、
+	// 长期脆弱 (月回归 8%，常规 3%)。
+	BailiffLoyalty    float64  `json:"bailiff_loyalty"`
+	BailiffFear       float64  `json:"bailiff_fear"`
+	ITInternalLoyalty float64  `json:"it_internal_loyalty"`
+	ITInternalFear    float64  `json:"it_internal_fear"`
+	DispatchCount     int      `json:"dispatch_count"`         // 法警调度次数 (暴露事实编号用)
+	LastActions       []string `json:"last_actions,omitempty"` // 审计：最近动作 (升序追加，截断保留)
+}
+
 // ProtocolState 堡级 Protocol 运行时状态 (持久化)。
 type ProtocolState struct {
 	ConfigVersion     int                  `json:"config_version"`
@@ -166,8 +182,8 @@ type ProtocolState struct {
 	G                 float64              `json:"g"`              // 主任对上层控制方的认知 (§6.4)
 	// DirectorBeliefs 主任对上层控制方相关事实 (Order_*) 的信念；G 由其聚合。
 	// 三类生成器 (§6.5) 只经观察推进它，不直接改 G/W/E/Q。
-	DirectorBeliefs   []FactBelief         `json:"director_beliefs,omitempty"`
-	ChannelOpen       bool                 `json:"channel_open"`   // 控制通道仅在介入链开启
+	DirectorBeliefs []FactBelief `json:"director_beliefs,omitempty"`
+	ChannelOpen     bool         `json:"channel_open"` // 控制通道仅在介入链开启
 }
 
 // Connection 各部门人脉值
@@ -416,7 +432,9 @@ type Silo struct {
 	PublicEvidence []PublicEvidenceRecord `gorm:"type:text;serializer:json" json:"public_evidence,omitempty"`
 	// Protocol Order 条款运行时状态 (子项 4)：believed 副本、偏离记录、介入链
 	// 与主任认知 G。真实条款由加载器持有，不持久化、不可伪造。
-	Protocol           ProtocolState      `gorm:"type:text;serializer:json" json:"protocol"`
+	Protocol ProtocolState `gorm:"type:text;serializer:json" json:"protocol"`
+	// ItAuthority 本地 IT 权威的二元联盟与隐蔽维护状态 (子项 5)。
+	ItAuthority        ItAuthorityState   `gorm:"type:text;serializer:json" json:"it_authority"`
 	Cohesion           float64            `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
 	Rebellion          float64            `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
 	DeptTension        float64            `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)

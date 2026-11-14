@@ -20,6 +20,24 @@
       "description": "禁止清理必需报告与留档记录。"
     },
     {
+      "id": "P-03",
+      "version": 1,
+      "category": "prohibition",
+      "forbidden_action": "unauthorized_disappearance",
+      "severity": "major",
+      "intervention_points": 0.6,
+      "description": "禁止未经授权的处置性消失；人员处置必须有留档依据。"
+    },
+    {
+      "id": "P-04",
+      "version": 1,
+      "category": "prohibition",
+      "forbidden_action": "evidence_forgery",
+      "severity": "major",
+      "intervention_points": 0.6,
+      "description": "禁止伪造必需报告与留档材料。"
+    },
+    {
       "id": "R-01",
       "version": 1,
       "category": "required_response",
