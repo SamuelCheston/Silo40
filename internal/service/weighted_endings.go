@@ -136,7 +136,7 @@ func outcomeWeight(weights endingOutcomeWeights, outcome string) float64 {
 // appended by the arbitrator, not encoded as separate endings (结局体系 12 §6.1).
 var endingDescriptions = map[string]string{
 	endingInformation:  "核心真相已经成为跨部门、可独立复核的公共事实：它有了自己的来源说明、自己的核验路径、自己的保管人。你的沉默、离开或失忆，都不再能把它收回——链不再需要你，这正是任务要的结果。驻地之外是否有人接过这份事实，只写进结算，不改变这个结局。《共证》成立。",
-	endingRebellion:    "有组织的不满转化为了实际离开：一个成规模的群体在堡外继续存续——《越岭》成立。",
+	endingRebellion:    "有组织的不满转化为了实际离开：一个成规模的群体沿着被证明过的路走了出去，在堡外继续存续。终局不是闸门打开的那一刻，而是抵达后的第二次公开清点——有人核对下一班物资，有人照顾伤者，有人开始安排第二天的维护与生产。新社会的轮班表由他们自己改写，表上没有你的名字。人真的走出去了，也真的开始过自己必须负责的生活——《越岭》成立。",
 	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。第一次按约章裁决的案件里，裁决者引用约章与公开证据，而不是等待上级指示；隐蔽调度不再能进入执行——法警第一次问'依据哪一条'。约章有本地主人，以不可被单方收回的程序锁定；你坐在旁听席，不在裁决席。约章法庭迟早会遇到一个它回答不了的问题——'这条命令到底从哪里来'——答案通向专线与控制网的另一端，但本结局停在这个问题被第一次提出之前。《公议》成立。",
 	endingTime:         "按 Protocol 应当到来的复核没有到来，控制通道不再给出下一项处置。桌上的旧命令第一次没有后续签批，谁也不能再用下一道外部指令推迟选择。在覆灭之前就已存在的公开质询场所里，有人把那份旧命令放到桌上，问它今天是否仍然适用；没有人能从控制网另一端得到答案。争论没有立即停止，外面也没有因此变得安全——但讨论继续下去，不需要谁替全堡批准。你坐在其中，不是新裁决者。《无人裁决》成立：不是世界终于给出正确答案，而是唯一垄断裁决权的来源消失时，这里已经具备不被另一套封闭答案立即吞没的公共条件。",
 	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者。一次危机由他的个人判断收束：那道无人能解释来源的旧命令摆在桌上，他没有向居民解释全部，只以本地责任公开拒绝执行；法警没有去执行它——司法部没有站在 IT 一边，哪怕它也没有站到他一边。当夜驻地安静，居民安睡在他们并不完全理解的秩序里。这个秩序会随一个人老去，而居民此刻不需要知道更多：被保护的睡眠，与一个知道代价的守夜人。《人治》成立。",
@@ -445,7 +445,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	case deathFact || resetFact || fractureFact:
 		// escapeAlive == true here: the local fall becomes a pyrrhic epilogue.
 		decision.Selected = endingRebellion
-		decision.Reason = "逃出群体已先成立并存续：原驻地的毁灭/重置/崩坏只作《越岭》惨胜尾声。"
+		decision.Reason = "逃出群体已先成立并存续：原驻地的毁灭/重置/崩坏只作《越岭》惨胜尾声。" + rebellionSettlementLine(station)
 		return s.finishArbitration(decision)
 	}
 
@@ -626,6 +626,9 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if best == endingTime {
 		narrative += timeSettlementLine(s, station)
 	}
+	if best == endingRebellion {
+		narrative += rebellionSettlementLine(station)
+	}
 	decision.Reason = narrative
 	return s.finishArbitration(decision)
 }
@@ -637,6 +640,31 @@ func (s *GameService) finishArbitration(decision *model.EndingDecision) *model.E
 		s.world.LastEndingAudit = decision
 	}
 	return decision
+}
+
+// rebellionSettlementLine reports the departure facts as settled: how many
+// left, how many survived the road, whether the group is fragile, and what
+// remains behind. It reads only EscapedGroup and station population — the
+// same facts arbitration reads (ADR-0008: stances and ledgers never reach
+// the settlement screen).
+func rebellionSettlementLine(station *model.Silo) string {
+	g := station.EscapedGroup
+	if !g.Initialized || g.Population <= 0 {
+		return ""
+	}
+	loss := g.Departed - g.Population
+	if loss < 0 {
+		loss = 0
+	}
+	line := fmt.Sprintf("本局共有 %d 人出发，%d 人幸存落地，路上损耗 %d 人。", g.Departed, g.Population, loss)
+	if g.Fragile {
+		line += "群体的存续是脆弱的：照护、补给或追踪的压力在他们身上留下了印记。"
+	}
+	if g.DepartedYear > 0 {
+		line += fmt.Sprintf("他们于 %d 年 %d 月离开。", g.DepartedYear, g.DepartedMonth)
+	}
+	line += fmt.Sprintf("驻地仍有居民 %d 人——离开没有掏空驻地，只是让社会关系的延续在堡外成了事实。", station.TotalPopulation)
+	return line
 }
 
 // fractureSettlementLine reports what is left after the maintenance collapse:

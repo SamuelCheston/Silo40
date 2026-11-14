@@ -2,7 +2,7 @@
 
 > [返回总索引](../silo40-good-endings.md) · [通用前提](./00-common.md) · [三线交叉](./04-crossovers.md) · [机制接口](./05-mechanics.md)
 >
-> 【裁决标注】**逃出群体与逃离模型本轮不做**：最小状态基础（`EscapedGroup` 与仲裁例外读取）已随机制底座落地，但路线事实、分批撤离与堡外存续的完整结算未实装，已登 roadmap。本分册台阶是剧情设计；事件链侧依赖逃离模型的节点只预留注释，不写成可运行内容。
+> 【裁决标注 · 部分取代】准备侧已按 [16 准备度换算设计](../../research/16-preparation-outcome-design.md) 的 Layer 0/1 落地：四节点事件链、顶层立场（三档带权随机）、准备账本与出发结算点的最小级联已实装（[36](../endings/36-rebellion-nodes.md)／[37](../endings/37-rebellion-event-spec.md) 分册）。R-5 之后的堡外月度维持、追踪四档与群体质量加权仍属 Layer 2（roadmap）；本分册台阶作为剧情设计不变。
 
 ## 1. 路线命题与原著边界
 

@@ -3,6 +3,7 @@ package service
 import (
 	"math/rand"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
@@ -393,6 +394,65 @@ func TestEscapeLedgerNotReadByArbitration(t *testing.T) {
 	}
 	if !inPool {
 		t.Fatalf("a surviving escape group must qualify REBELLION: %+v", decision2.Excluded)
+	}
+}
+
+// TestRebellionEndingNarrative locks the REBELLION settlement presentation:
+// the ending screen tells the second-roll-call story with the departure
+// facts (departed/survived/fragile/what remains), and the pyrrhic branch
+// keeps the same settlement line when the origin station falls afterwards.
+func TestRebellionEndingNarrative(t *testing.T) {
+	newGroupStation := func() (*GameService, *model.Silo) {
+		svc, station, _ := weightedEndingFixture("REBELLION")
+		station.TotalPopulation = 5000
+		station.EscapedGroup = model.EscapeGroup{
+			Initialized: true, Population: 120, Departed: 150, Surviving: true,
+			DepartedYear: 126, DepartedMonth: 3,
+		}
+		svc.agent.PoliticalPrestige = 100
+		return svc, station
+	}
+
+	// 正常成立：资格读群体存续，叙事读同一组事实。
+	svc, station := newGroupStation()
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingRebellion {
+		t.Fatalf("expected REBELLION selection, got %+v", decision)
+	}
+	for _, want := range []string{
+		"《越岭》成立",
+		"第二次公开清点",
+		"表上没有你的名字",
+		"本局共有 150 人出发，120 人幸存落地，路上损耗 30 人",
+		"他们于 126 年 3 月离开",
+		"驻地仍有居民 5000 人",
+	} {
+		if !strings.Contains(decision.Reason, want) {
+			t.Fatalf("narrative missing %q: %q", want, decision.Reason)
+		}
+	}
+
+	// 脆弱群体：结算行标注脆弱。
+	svc2, station2 := newGroupStation()
+	station2.EscapedGroup.Fragile = true
+	decision2 := svc2.resolveWeightedEnding(station2, svc2.agent)
+	if decision2.Selected != endingRebellion || !strings.Contains(decision2.Reason, "脆弱的") {
+		t.Fatalf("fragile group must carry the fragile settlement line: %+v", decision2)
+	}
+
+	// 惨胜尾声：原驻地毁灭，存续群体不被追溯判死，结算行仍在。
+	svc3, station3 := newGroupStation()
+	svc3.contentStates = map[uint]map[string]model.ContentEventState{
+		station3.ID: {terminationFactKey: {SiloID: station3.ID, EventKey: terminationFactKey, Triggered: true}},
+	}
+	decision3 := svc3.resolveWeightedEnding(station3, svc3.agent)
+	if decision3 == nil || decision3.Selected != endingRebellion {
+		t.Fatalf("death fact with a surviving group must settle as pyrrhic REBELLION, got %+v", decision3)
+	}
+	for _, want := range []string{"惨胜尾声", "本局共有 150 人出发"} {
+		if !strings.Contains(decision3.Reason, want) {
+			t.Fatalf("pyrrhic narrative missing %q: %q", want, decision3.Reason)
+		}
 	}
 }
 
