@@ -301,6 +301,22 @@ func allDepartmentsHoldFragments(station *model.Silo) bool {
 	return true
 }
 
+// beliefCoverageFactCount 修复7：跨部门统计信念浓度达到分享地板的事实总数。
+// 与 allDepartmentsHoldFragments 读同一层、同一地板——资格重锚到信念层后，
+// 玩家加权贡献也必须读同一层 (旧 KnownFragments 层不再被 Share Info 写入)。
+func beliefCoverageFactCount(station *model.Silo) int {
+	qualRumor := engine.DefaultInformationConfig().QualRumor
+	count := 0
+	for _, prof := range station.Professions {
+		for _, belief := range prof.Beliefs {
+			if belief.B >= qualRumor {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 // personalRuleEligible implements the G12 ruling (02-personal-rule §4,
 // 16-chain-personal-rule §4): PERSONAL_RULE rests on police obedience and the
 // Mayor's personal legitimacy. The Judicial never attaches to the Mayor, so no
@@ -464,7 +480,11 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	accumulator.add("player", playerID, agent.Name, config.PlayerBase, 1)
 	prestige := agent.PoliticalPrestige / config.PrestigeScale
 	accumulator.add("player", playerID, agent.Name, config.PlayerPerPrestige, prestige)
-	accumulator.add("player", playerID, agent.Name, config.PlayerPerFragment, float64(len(agent.KnownFragments)))
+	// 修复7：碎片贡献重锚到信念覆盖 (beliefCoverageFactCount)。旧口径读
+	// agent.KnownFragments——该层不再被 Share Info 写入，低威望职业完成全部门
+	// 信念门后贡献仍只有零点几分，会被 Silo 1 存续期的 EXCLUSIONIST 固定贡献
+	// 以毫厘压过 (职业横评 Mechanical-40：3.985 vs 3.996)。
+	accumulator.add("player", playerID, agent.Name, config.PlayerPerFragment, float64(beliefCoverageFactCount(station)))
 	accumulator.add("player", playerID, agent.Name, config.PlayerPerPropaganda, agent.PropagandaLevel)
 	accumulator.add("player", playerID, agent.Name, config.PlayerPerSpilloverSilo, float64(s.spilloverSiloCount(station.ID)))
 
