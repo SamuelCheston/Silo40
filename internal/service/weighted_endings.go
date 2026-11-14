@@ -138,7 +138,7 @@ var endingDescriptions = map[string]string{
 	endingInformation:  "核心真相已经成为跨部门、可独立复核的公共事实：它有了自己的来源说明、自己的核验路径、自己的保管人。你的沉默、离开或失忆，都不再能把它收回——链不再需要你，这正是任务要的结果。驻地之外是否有人接过这份事实，只写进结算，不改变这个结局。《共证》成立。",
 	endingRebellion:    "有组织的不满转化为了实际离开：一个成规模的群体在堡外继续存续——《越岭》成立。",
 	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。第一次按约章裁决的案件里，裁决者引用约章与公开证据，而不是等待上级指示；隐蔽调度不再能进入执行——法警第一次问'依据哪一条'。约章有本地主人，以不可被单方收回的程序锁定；你坐在旁听席，不在裁决席。约章法庭迟早会遇到一个它回答不了的问题——'这条命令到底从哪里来'——答案通向专线与控制网的另一端，但本结局停在这个问题被第一次提出之前。《公议》成立。",
-	endingTime:         "一号地堡权威覆灭，驻地仍有形成历史的能力，覆灭前夕的思潮具备面向外部的一极——《无人裁决》成立。",
+	endingTime:         "按 Protocol 应当到来的复核没有到来，控制通道不再给出下一项处置。桌上的旧命令第一次没有后续签批，谁也不能再用下一道外部指令推迟选择。在覆灭之前就已存在的公开质询场所里，有人把那份旧命令放到桌上，问它今天是否仍然适用；没有人能从控制网另一端得到答案。争论没有立即停止，外面也没有因此变得安全——但讨论继续下去，不需要谁替全堡批准。你坐在其中，不是新裁决者。《无人裁决》成立：不是世界终于给出正确答案，而是唯一垄断裁决权的来源消失时，这里已经具备不被另一套封闭答案立即吞没的公共条件。",
 	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者。一次危机由他的个人判断收束：那道无人能解释来源的旧命令摆在桌上，他没有向居民解释全部，只以本地责任公开拒绝执行；法警没有去执行它——司法部没有站在 IT 一边，哪怕它也没有站到他一边。当夜驻地安静，居民安睡在他们并不完全理解的秩序里。这个秩序会随一个人老去，而居民此刻不需要知道更多：被保护的睡眠，与一个知道代价的守夜人。《人治》成立。",
 	endingExclusionist: "什么都没有毁灭，也什么都没有改变。封闭秩序不是靠镇压守住的，是靠习惯：证人老去，接收者调离，封闭的叙事逐年硬化，始终没有遇到它的对抗版本。危机到来时驻地集体选择了旧规则，是自愿的——提供可核验替代方案的最后窗口，就这样安静地关上了。任务没有战败，它失去了战场。《深闭》成立。",
 	endingReset:        "驻地安静而有序——重置总是伴随'恢复正常'。有人喊邻居的名字，对方迟疑了一下才应答；新刷的墙面盖住了旧刻痕；官方记录里只有一次'燃气事故'，或者什么都没有。减口、抹忆与清档系统性完成了：你的任务赖以继续的公共事实，与能核验它们的人，被一并拆除。征兆其实从未缺席——变长的档案'维护'窗口、远超平常的请领、深夜的人数清点——它们被当成了噪音，或者反制窗口被花在了别处。你输掉的不是一场对抗，是整块记忆。《遗忘》成立。",
@@ -591,6 +591,9 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if best == endingPersonalRule {
 		narrative += personalRuleSettlementLine(station)
 	}
+	if best == endingTime {
+		narrative += timeSettlementLine(s, station)
+	}
 	decision.Reason = narrative
 	return s.finishArbitration(decision)
 }
@@ -663,6 +666,33 @@ func personalRuleSettlementLine(station *model.Silo) string {
 	if station.Authority.Judicial.PactLocked {
 		line += "公开约章与人治并存：两种秩序同时成立，本次加权倾向人治一侧；同分时按既定序让《公议》。"
 	}
+	return line
+}
+
+// timeSettlementLine reports the facts the TIME ending stands on and what
+// remains after the fall (03-time §3, 33-time-nodes §2): the pre-fall
+// snapshot that passed the open gate, whatever reached other silos (residual
+// responses — no promises), and the population that stays to answer for
+// itself. Failure does not erase the world; even victory leaves a silence.
+func timeSettlementLine(s *GameService, station *model.Silo) string {
+	snap := station.PreFallSnapshot
+	axis := snap.DominantAxis
+	switch axis {
+	case model.IdeologyProForeign:
+		axis = "亲外"
+	case model.IdeologyLoyalty:
+		axis = "忠诚"
+	}
+	line := fmt.Sprintf("覆灭前夕快照：亲外 %.2f 对忠诚 %.2f（主导轴：%s），快照人口 %d——硬条件在结算瞬间定格。",
+		snap.Ideologies[model.IdeologyProForeign], snap.Ideologies[model.IdeologyLoyalty], axis, snap.Population)
+	sent := s.spilloverSignalCount(station.ID)
+	reached := s.spilloverSiloCount(station.ID)
+	if sent == 0 {
+		line += "外面：本局没有信号送出驻地——外部保持沉默。"
+	} else {
+		line += fmt.Sprintf("外面：本局共有 %d 条信号送出驻地，到达 %d 座他堡——残余应答不是建制恢复，也不许诺。", sent, reached)
+	}
+	line += fmt.Sprintf("驻地内仍有居民 %d 人，从今天起，没有人再替他们签批。", station.TotalPopulation)
 	return line
 }
 

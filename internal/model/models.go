@@ -692,6 +692,10 @@ type ContentEventDefinition struct {
 	Type             string    `gorm:"size:32" json:"type"`
 	FireMode         string    `gorm:"size:32" json:"fire_mode"` // ONCE / REPEATABLE
 	CooldownMonths   int       `gorm:"default:0" json:"cooldown_months"`
+	// DeadlineYear / DeadlineMonth mirror the engine definition's force-raise
+	// fallback (硬伤 #3): an untriggered event past its deadline fires once.
+	DeadlineYear     int       `gorm:"default:0" json:"deadline_year"`
+	DeadlineMonth    int       `gorm:"default:0" json:"deadline_month"`
 	Enabled          bool      `gorm:"default:true" json:"enabled"`
 	TriggerSpec      string    `gorm:"type:text" json:"trigger_spec"`
 	EffectsSpec      string    `gorm:"type:text" json:"effects_spec"`
