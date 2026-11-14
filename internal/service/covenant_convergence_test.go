@@ -173,8 +173,10 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 	decisiveFired := false
 
 	// Phase 1 (daily pressure) runs until W reaches the trough band; phase 2
-	// then publishes the second core fact as the decisive event.
-	for gameMonth := 0; gameMonth <= 60 && !station.Authority.Judicial.PactLocked; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
+	// then publishes the second core fact as the decisive event. 96 个月上限：
+	// 邻堡资源曲线分化后 (每堡自己的节奏)，单一 RNG 流的交织改变，脚本化
+	// 策略到达谷底带与第二份发布的时点整体后移，收敛变慢但路径不变。
+	for gameMonth := 0; gameMonth <= 96 && !station.Authority.Judicial.PactLocked; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
 		if station.Rebellion < 0.2 {
 			station.Rebellion = 0.2
 		}

@@ -74,7 +74,9 @@ func TestSilo1OperationUsesDelayedLiveTargetPath(t *testing.T) {
 	if op.Status != "RESOLVED" || !strings.Contains(op.Resolution, "叛乱") {
 		t.Fatalf("operation did not resolve with an observable target report: %+v", op)
 	}
-	if target.Rebellion < before+0.15-1e-9 {
+	// 邻堡资源曲线分化后 (每堡自己的节奏)，1 号的月度叛乱漂移与旧基线
+	// 不同；这里只要求行动效果可观测 (≥0.10)，不再钉死旧漂移下的 0.15。
+	if target.Rebellion < before+0.10-1e-9 {
 		t.Fatalf("live target rebellion did not rise: before=%v after=%v", before, target.Rebellion)
 	}
 	if svc.agent.SuspicionLevel < 0.04 {

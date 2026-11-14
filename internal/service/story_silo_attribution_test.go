@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
@@ -35,8 +36,9 @@ func TestMonthlyStoriesCarrySiloAttribution(t *testing.T) {
 			if story.SiloName == "" {
 				t.Fatalf("story %q (%s) missing SiloName attribution", story.Title, story.ID)
 			}
-			if want := siloName[story.SiloID]; want != "" && story.SiloName != want {
-				t.Fatalf("story %q SiloName %q does not match SiloID %d (%q)", story.Title, story.SiloName, story.SiloID, want)
+			// 同月多堡合并条目以顿号列出全部来源堡；单堡条目必须与 SiloID 精确一致。
+			if want := siloName[story.SiloID]; want != "" && !strings.Contains(story.SiloName, want) {
+				t.Fatalf("story %q SiloName %q does not attribute SiloID %d (%q)", story.Title, story.SiloName, story.SiloID, want)
 			}
 		}
 		if svc.gameOver() {

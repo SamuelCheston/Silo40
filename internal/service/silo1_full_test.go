@@ -19,6 +19,35 @@ func threeSiloRequest(seed int64) model.CreateGameRequest {
 	}
 }
 
+// TestPeerSilosStartWithDivergentResources locks 每堡自己的节奏：三座堡的
+// 初始资源库存互不相同（驻地标准、1 号充足、18 号老化），资源阈值类危机
+// 因此不会三堡同月齐发。差异是确定性常量，不消耗 RNG。
+func TestPeerSilosStartWithDivergentResources(t *testing.T) {
+	amount := func(silo *model.Silo, resourceType string) float64 {
+		for _, resource := range silo.Resources {
+			if resource.Type == resourceType {
+				return resource.Amount
+			}
+		}
+		return -1
+	}
+	station := createAssignedStation(99, 122, nil)
+	silo1 := createSilo1(122)
+	silo18 := createSilo18(122)
+	for _, resourceType := range []string{"Energy", "Materials", "Supplies"} {
+		a, b, c := amount(station, resourceType), amount(silo1, resourceType), amount(silo18, resourceType)
+		if a == b || b == c || a == c {
+			t.Errorf("%s: initial amounts must diverge across silos (station=%v silo1=%v silo18=%v)", resourceType, a, b, c)
+		}
+	}
+	if amount(silo18, "Materials") >= amount(station, "Materials") {
+		t.Errorf("aging silo 18 must start with less material than the station")
+	}
+	if amount(silo1, "Materials") <= amount(station, "Materials") {
+		t.Errorf("central silo 1 must start with more material than the station")
+	}
+}
+
 func TestFullSilo1RunsAsPeerAndEmitsSignals(t *testing.T) {
 	svc := newTwoSiloService(t, filepath.Join(t.TempDir(), "peer.db"))
 	if _, err := svc.CreateGame(threeSiloRequest(51)); err != nil {

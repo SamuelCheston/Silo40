@@ -112,6 +112,12 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 	}
 	s.monthPlayerLogs = nil
 
+	// 邻堡感知过滤：邻堡日常琐碎不进入玩家视野，值得传出的改写成谣言版本；
+	// 同月重复条目 (多堡副本/跨堡同名信号) 再合并成一条汇总，不靠堡名前缀
+	// 堆文本墙。
+	stories = s.perceiveMonthStories(stories)
+	stories = mergeNeighborStoryCopies(stories)
+
 	return logs, stories
 }
 
