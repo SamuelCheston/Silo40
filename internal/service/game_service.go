@@ -1541,15 +1541,16 @@ func (s *GameService) writeCompletionKey(siloID uint, key string) {
 	if agent == nil {
 		agent = s.agent
 	}
-	// The event type is the completion key itself (e.g.
-	// "player_action:action_share_info"), matching the names that
-	// ContentTriggerEventNames derives for event_triggered subscriptions.
+	// 事件类型使用 "completion:" + 完成键 (如
+	// "completion:player_action:action_share_info")：与内容事件总线名
+	// (player_action:<id>) 分离，防止完成键发布把同名内容事件自我重触发；
+	// 订阅方在 bindContentEventHandlers 里按同一规则挂接。
 	data := map[string]interface{}{
 		"silo":           silo,
 		"agent":          agent,
 		"content_source": "COMPLETION:" + key,
 	}
-	s.engine.Bus.Publish(engine.CreateEvent("completion#"+key+"#"+strconv.Itoa(len(s.eventLogs)+1), key, data))
+	s.engine.Bus.Publish(engine.CreateEvent("completion#"+key+"#"+strconv.Itoa(len(s.eventLogs)+1), "completion:"+key, data))
 }
 
 // writeCompletionKeysFromEffects applies player_action_complete effects (硬伤
@@ -1568,8 +1569,8 @@ func (s *GameService) writeCompletionKeysFromEffects(siloID uint, actionIDs []st
 }
 
 // applyBeliefObservations 落地 belief_observe 效果 (子项 3)。观察 ID 按
-// "content:<事件键>:<事实>#<序>" 生成：同一事件对同一事实的多次观察按序编号
-// (都可吸收)，跨事件天然去重。相关事实强度按接收方自身信念层计算。
+// "content:<事件键>:<事实>#<该接收方已有同前缀观察数+1>" 生成：跨事件去重，
+// REPEATABLE 事件的重复观察按序编号、不互相吞 (收益递减由吸收公式负责)。
 func (s *GameService) applyBeliefObservations(siloID uint, eventKey string, requests []engine.BeliefObservationRequest) {
 	if len(requests) == 0 {
 		return
@@ -1586,26 +1587,29 @@ func (s *GameService) applyBeliefObservations(siloID uint, eventKey string, requ
 	if agent == nil {
 		agent = s.agent
 	}
-	obsCount := map[string]int{}
 	for _, req := range requests {
 		if strings.TrimSpace(req.FactID) == "" {
 			continue
 		}
-		obsCount[req.FactID]++
-		obsID := "content:" + eventKey + ":" + req.FactID + "#" + strconv.Itoa(obsCount[req.FactID])
+		obsPrefix := "content:" + eventKey + ":" + req.FactID + "#"
 		switch {
 		case req.Observer == "player":
 			if agent == nil {
 				continue
 			}
-			absorbObservationInto(cfg, &agent.Beliefs, req, obsID)
+			absorbObservationInto(cfg, &agent.Beliefs, req, obsPrefix)
 		case req.Observer == "residents":
 			for i := range silo.Residents {
 				resident := &silo.Residents[i]
 				if !resident.Alive || resident.Influence <= 0 {
 					continue
 				}
-				absorbObservationInto(cfg, &resident.Beliefs, req, obsID)
+				absorbObservationInto(cfg, &resident.Beliefs, req, obsPrefix)
+			}
+		case req.Observer == "departments":
+			// 公开传播 (§3.7 coverage)：全部部门按部门层吸收。
+			for i := range silo.Professions {
+				absorbObservationInto(cfg, &silo.Professions[i].Beliefs, req, obsPrefix)
 			}
 		default: // 部门名
 			for i := range silo.Professions {
@@ -1613,25 +1617,30 @@ func (s *GameService) applyBeliefObservations(siloID uint, eventKey string, requ
 				if prof.Name != req.Observer {
 					continue
 				}
-				absorbObservationInto(cfg, &prof.Beliefs, req, obsID)
+				absorbObservationInto(cfg, &prof.Beliefs, req, obsPrefix)
 				break
 			}
 		}
 	}
 }
 
-func absorbObservationInto(cfg engine.InformationConfig, beliefs *[]model.FactBelief, req engine.BeliefObservationRequest, obsID string) {
+func absorbObservationInto(cfg engine.InformationConfig, beliefs *[]model.FactBelief, req engine.BeliefObservationRequest, obsPrefix string) {
 	belief := engine.EnsureBeliefIn(beliefs, req.FactID)
 	if belief == nil {
 		return
 	}
-	related := engine.RelatedFIn(beliefs, req.FactID)
+	seq := 1
+	for _, obs := range belief.Observations {
+		if strings.HasPrefix(obs, obsPrefix) {
+			seq++
+		}
+	}
 	independence := req.Independence
 	if independence <= 0 {
 		independence = cfg.IndependenceNew
 	}
-	strength := engine.AbsorptionStrength(cfg, req.Reliability, related, independence)
-	engine.ObserveFact(cfg, belief, engine.FragmentSpecFor(req.FactID), obsID, strength)
+	strength := engine.AbsorptionStrength(cfg, req.Reliability, engine.RelatedFIn(beliefs, req.FactID), independence)
+	engine.ObserveFact(cfg, belief, engine.FragmentSpecFor(req.FactID), obsPrefix+strconv.Itoa(seq), strength)
 }
 
 // applyPublicEvidenceWrites 落地 public_evidence_register 效果 (§3.7)：登记
@@ -1652,6 +1661,84 @@ func (s *GameService) applyPublicEvidenceWrites(siloID uint, records []model.Pub
 		record.Month = silo.CurrentMonth
 		engine.RegisterPublicEvidence(silo, record)
 	}
+}
+
+// applyVerifiedFacts 落地 evidence_verify 效果：核验名单按 ID 升序去重。
+func (s *GameService) applyVerifiedFacts(siloID uint, facts []string) {
+	if len(facts) == 0 {
+		return
+	}
+	silo := s.siloByID(siloID)
+	if silo == nil && s.silo != nil && s.silo.ID == siloID {
+		silo = s.silo
+	}
+	if silo == nil {
+		return
+	}
+	for _, fact := range facts {
+		exists := false
+		for _, existing := range silo.VerifiedEvidence {
+			if existing == fact {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			silo.VerifiedEvidence = append(silo.VerifiedEvidence, fact)
+		}
+	}
+	sort.Strings(silo.VerifiedEvidence)
+}
+
+// applyWShocks 落地 authority_w_shock 效果：进入冲击队列，下一次月度权威
+// 更新消费一次 (单月合计 cap ±12 在消费处执行)。
+func (s *GameService) applyWShocks(siloID uint, shocks []float64) {
+	if len(shocks) == 0 {
+		return
+	}
+	silo := s.siloByID(siloID)
+	if silo == nil && s.silo != nil && s.silo.ID == siloID {
+		silo = s.silo
+	}
+	if silo == nil {
+		return
+	}
+	for _, value := range shocks {
+		engine.QueueAuthorityShock(silo, value)
+	}
+}
+
+// applyAllianceDeltas 落地 alliance_loyalty_delta 效果 (§5.1)：只作用于二元
+// 联盟两组忠诚，其他部门结构性不可收买、也不受此类冲击。
+func (s *GameService) applyAllianceDeltas(siloID uint, deltas []engine.AllianceLoyaltyDelta) {
+	if len(deltas) == 0 {
+		return
+	}
+	silo := s.siloByID(siloID)
+	if silo == nil && s.silo != nil && s.silo.ID == siloID {
+		silo = s.silo
+	}
+	if silo == nil {
+		return
+	}
+	for _, delta := range deltas {
+		switch delta.Group {
+		case "bailiff":
+			silo.ItAuthority.BailiffLoyalty = clampUnit01(silo.ItAuthority.BailiffLoyalty + delta.Value)
+		case "it_internal":
+			silo.ItAuthority.ITInternalLoyalty = clampUnit01(silo.ItAuthority.ITInternalLoyalty + delta.Value)
+		}
+	}
+}
+
+func clampUnit01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
 }
 
 func (s *GameService) nextDelayTaskID() string {
@@ -2504,7 +2591,16 @@ func (s *GameService) queuePlayerActionEvents(action model.AgentAction) (bool, m
 	}
 
 	count, logs, stories, fired := s.queueContentEvents("ACTION:"+string(action.Type)+":PLAYER_EVENT", &action, func(def engine.ContentEventDefinition) bool {
-		return def.SourceGroup == "player_actions" || def.SourceGroup == "player_action"
+		if def.SourceGroup != "player_actions" && def.SourceGroup != "player_action" {
+			return false
+		}
+		// 提交的玩家动作只点火与之匹配的那一个动作事件；同组其他动作即使
+		// canTrigger 通过也不搭车 (否则一次提交会连带执行多个动作)。
+		// 职业动作仍按 player_action_is 触发器匹配 (接触链步骤节点)。
+		if action.Type == model.ActionPlayerEvent {
+			return engine.ContentPlayerActionID(def) == action.ActionID
+		}
+		return true
 	})
 	_ = logs
 	_ = stories
@@ -2694,10 +2790,16 @@ func (s *GameService) bindContentEventHandlers() {
 	for _, def := range s.contentDefinitions {
 		def := def
 		for _, parentEventName := range engine.ContentTriggerEventNames(def) {
-			parentEventName := parentEventName
-			s.contentUnsubscribes = append(s.contentUnsubscribes, s.engine.Bus.Subscribe(parentEventName, func(event *engine.GameEvent, ctx *engine.EventContext) {
-				s.tryEmitFollowupContentEvent(def, event, ctx)
-			}))
+			// 后续链有两个唤醒源：父内容事件点火 (事件本名) 与完成键发布
+			// ("completion:" 命名空间——完成键类型若与 player_actions 组内容
+			// 事件总线名同名会造成自我重触发，必须分离)。
+			names := []string{parentEventName, "completion:" + parentEventName}
+			for _, name := range names {
+				name := name
+				s.contentUnsubscribes = append(s.contentUnsubscribes, s.engine.Bus.Subscribe(name, func(event *engine.GameEvent, ctx *engine.EventContext) {
+					s.tryEmitFollowupContentEvent(def, event, ctx)
+				}))
+			}
 		}
 	}
 }
@@ -2764,10 +2866,16 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	completionKeys := []string{}
 	beliefRequests := []engine.BeliefObservationRequest{}
 	evidenceWrites := []model.PublicEvidenceRecord{}
+	verifiedFacts := []string{}
+	wShocks := []float64{}
+	allianceDeltas := []engine.AllianceLoyaltyDelta{}
 	scopeCtx := s.scopeContextFor(simSilo)
 	scopeCtx.CompletionKeys = &completionKeys
 	scopeCtx.BeliefObservations = &beliefRequests
 	scopeCtx.PublicEvidenceWrites = &evidenceWrites
+	scopeCtx.VerifiedFacts = &verifiedFacts
+	scopeCtx.WShocks = &wShocks
+	scopeCtx.AllianceDeltas = &allianceDeltas
 	story, scheduled := engine.ApplyContentEventScoped(def, scopeCtx)
 	s.flushScopeResults(scopeCtx, event)
 	// 硬伤 #4：结构化效果里的 player_action_complete 在此落地 (写完成键并发
@@ -2776,6 +2884,10 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	// 子项 3：信念观察与公开证据登记经服务层落地 (玩家 agent 不在施加期 silo 域内)。
 	s.applyBeliefObservations(siloID, def.Key, beliefRequests)
 	s.applyPublicEvidenceWrites(siloID, evidenceWrites)
+	// 子项 6：核验登记、威势冲击与联盟忠诚冲击。
+	s.applyVerifiedFacts(siloID, verifiedFacts)
+	s.applyWShocks(siloID, wShocks)
+	s.applyAllianceDeltas(siloID, allianceDeltas)
 
 	state, legacyKey := s.contentStateForDefinition(def)
 	state.SiloID = siloID
@@ -2836,15 +2948,24 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptCompletionKeys := []string{}
 	scriptBeliefRequests := []engine.BeliefObservationRequest{}
 	scriptEvidenceWrites := []model.PublicEvidenceRecord{}
+	scriptVerifiedFacts := []string{}
+	scriptWShocks := []float64{}
+	scriptAllianceDeltas := []engine.AllianceLoyaltyDelta{}
 	scriptScopeCtx := s.scopeContextFor(simSilo)
 	scriptScopeCtx.CompletionKeys = &scriptCompletionKeys
 	scriptScopeCtx.BeliefObservations = &scriptBeliefRequests
 	scriptScopeCtx.PublicEvidenceWrites = &scriptEvidenceWrites
+	scriptScopeCtx.VerifiedFacts = &scriptVerifiedFacts
+	scriptScopeCtx.WShocks = &scriptWShocks
+	scriptScopeCtx.AllianceDeltas = &scriptAllianceDeltas
 	scheduledFromScript := engine.ApplyContentEffectsScoped(scriptResult.Effects, scriptScopeCtx)
 	s.flushScopeResults(scriptScopeCtx, event)
 	s.writeCompletionKeysFromEffects(siloID, scriptCompletionKeys)
 	s.applyBeliefObservations(siloID, def.Key, scriptBeliefRequests)
 	s.applyPublicEvidenceWrites(siloID, scriptEvidenceWrites)
+	s.applyVerifiedFacts(siloID, scriptVerifiedFacts)
+	s.applyWShocks(siloID, scriptWShocks)
+	s.applyAllianceDeltas(siloID, scriptAllianceDeltas)
 	s.scheduleContentEvents(scheduledFromScript, event, ctx)
 	s.scheduleContentEvents(scriptResult.Schedule, event, ctx)
 

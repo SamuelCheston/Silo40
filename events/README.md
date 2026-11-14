@@ -7,8 +7,8 @@
 - `events/histories/`: 历史事件
 - `events/special/`: 条件性特殊事件
 - `events/crisis/`: 危机事件
-- `events/player_actions/`: 玩家操作事件（管线就绪、内容未启用：服务端已完整支持
-  `player_action` 元数据、成本结算、耗时与 `player_action_is` 触发器，当前尚无该目录与内容文件）
+- `events/player_actions/`: 玩家操作事件（管线与内容均已启用：拆台路线的调查/
+  执行失败/核验/发布动作，见 10-it-control-credibility §7.4）
 
 后端会自动扫描 `events/` 下的一级子目录作为事件分组；旧的平铺布局仅作为兼容读取保留。
 
@@ -146,3 +146,7 @@ trigger: { type: "silo_population_lte", value: 6000 },
 - `public_evidence_register`（`fragment` = 事实 ID；`provenance` / `coverage`
   ∈ (0,1]。登记公开证据；`Q` 与独立公开事实资格只读登记。JS helper：
   `publicEvidenceRegister(fragment, provenance, coverage)`）
+- `evidence_verify`（`fragment` = 事实 ID。把事实记入已核验名单，是
+  provenance=1.0 发布的前置。JS helper：`evidenceVerify(fragment)`）
+- `authority_w_shock`（`value` = 冲击值。进入威势冲击队列 Σδe，下一次月度
+  权威更新消费一次，单月合计 cap ±12。JS helper：`authorityWShock(value)`）

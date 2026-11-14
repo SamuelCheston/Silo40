@@ -129,6 +129,15 @@ function beliefObserve(observer, fragment, reliability) {
 function publicEvidenceRegister(fragment, provenance, coverage) {
   return { type: "public_evidence_register", fragment: fragment, provenance: provenance, coverage: coverage };
 }
+function evidenceVerify(fragment) {
+  return { type: "evidence_verify", fragment: fragment };
+}
+function authorityWShock(value) {
+  return { type: "authority_w_shock", value: value };
+}
+function allianceLoyaltyDelta(group, value) {
+  return { type: "alliance_loyalty_delta", observer: group, value: value };
+}
 function __contentStrip(value) {
   if (Array.isArray(value)) {
     return value.map(__contentStrip);
@@ -465,6 +474,8 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			evidenceIDs = append(evidenceIDs, record.FactID)
 		}
 		result["public_evidence"] = evidenceIDs
+		// 已核验名单可读 (发布前置)。
+		result["verified_evidence"] = append([]string(nil), ctx.Silo.VerifiedEvidence...)
 	}
 	states := map[string]map[string]interface{}{}
 	for key, runtime := range ctx.States {

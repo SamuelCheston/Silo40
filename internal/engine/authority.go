@@ -160,12 +160,21 @@ func AdvanceAuthorityMonthly(silo *model.Silo) {
 	// 幕僚与其他部门不进入 K。
 	InitializeItAuthority(silo)
 	alliance := &silo.ItAuthority
+	// §4 人事连续性 P：IT 内部倒戈与法警指挥链断裂是负向人事压力
+	// (TODO(balance): 门槛与斜率为 sim 起点)。
+	personnel := 0.0
+	if alliance.ITInternalLoyalty < 0.4 {
+		personnel -= (0.4 - alliance.ITInternalLoyalty) * 2.5
+	}
+	if alliance.BailiffLoyalty < 0.3 {
+		personnel -= (0.3 - alliance.BailiffLoyalty) * 2.0
+	}
 	inputs := AuthorityInputs{
 		BailiffLoyalty:    clamp01(alliance.BailiffLoyalty + alliance.BailiffFear),
 		ITInternalLoyalty: clamp01(alliance.ITInternalLoyalty + alliance.ITInternalFear),
 		Exposure:          info.Exposure,
 		Delivery:          1 - 2*professionPanic(silo, "Judicial"),
-		Personnel:         0, // No personnel-continuity observable exists in v8.
+		Personnel:         personnel,
 		ExternalSignal:    0, // Rare external signals are a later content input.
 	}
 	AdvanceAuthority(silo, inputs)

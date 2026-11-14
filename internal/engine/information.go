@@ -183,7 +183,7 @@ func DefaultInformationConfig() InformationConfig {
 		PactFactProvenance: 0.8,
 		PactFactCoverage:   0.60,
 
-		QECore:    0.25,
+		QECore:    0.30,
 		QESupport: 0.10,
 		QPCore:    0.60,
 		QPSupport: 0.20,

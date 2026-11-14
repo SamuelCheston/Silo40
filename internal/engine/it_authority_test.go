@@ -3,6 +3,7 @@ package engine
 import (
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"silo40/internal/model"
@@ -64,7 +65,7 @@ func TestItAuthorityInitializationAndIncome(t *testing.T) {
 	}
 	// Exhaust resources: no action, income only.
 	state.ROp = 0
-	e.RunITAuthorityMonthly(silo)
+	e.RunITAuthorityMonthly(silo, nil)
 	if state.ROp != 8 {
 		t.Fatalf("depleted R_op must recover by the income 8, got %v", state.ROp)
 	}
@@ -80,7 +81,7 @@ func TestItCounterattackDecaysWithResources(t *testing.T) {
 	silo := CreateInitialSilo("IT Fixture", 122, nil)
 	InitializeItAuthority(silo)
 	silo.ItAuthority.ROp = 9 // below the 12 threshold: low-intensity only
-	e.RunITAuthorityMonthly(silo)
+	e.RunITAuthorityMonthly(silo, nil)
 	for _, id := range silo.ItAuthority.LastActions {
 		for _, action := range ItActionCatalog() {
 			if action.ID != id {
@@ -176,7 +177,7 @@ func TestProtocolDisposalProtectsAndRestores(t *testing.T) {
 		{ClauseID: "O-02", Kind: DeviationUnmet, Open: true},
 		{ClauseID: "O-01", Kind: DeviationUnmet, Open: true},
 	}
-	e.executeItAction(silo, ItAction{ID: "protocol_disposal", BaseCost: 7, WShock: 2, RSDelta: -0.04})
+	e.executeItAction(silo, nil, ItAction{ID: "protocol_disposal", BaseCost: 7, WShock: 2, RSDelta: -0.04})
 	if math.Abs(silo.SafeguardRisk-0.16) > 1e-12 {
 		t.Fatalf("safeguard after protective disposal = %v, want 0.16", silo.SafeguardRisk)
 	}
@@ -187,6 +188,43 @@ func TestProtocolDisposalProtectsAndRestores(t *testing.T) {
 		if dev.ClauseID == "O-02" && !dev.Open {
 			t.Fatalf("later unmet (O-02) must stay open: %+v", silo.Protocol.Deviations)
 		}
+	}
+}
+
+// TestItCounterattacksOnlyUnderVisibleThreat locks §7.4/§5.5: counters never
+// fire without a visible player threat; once public evidence exists they
+// outscore maintenance and hit the player (suspicion) deterministically.
+func TestItCounterattacksOnlyUnderVisibleThreat(t *testing.T) {
+	e := NewGameEngine()
+	silo := CreateInitialSilo("Counter Fixture", 122, nil)
+	InitializeAuthorityState(silo, false)
+	InitializeItAuthority(silo)
+	agent := &model.Agent{ID: 1, SiloID: silo.ID}
+
+	e.RunITAuthorityMonthly(silo, agent)
+	for _, id := range silo.ItAuthority.LastActions {
+		if strings.HasPrefix(id, "counter_") {
+			t.Fatalf("counter without visible threat: %s", id)
+		}
+	}
+
+	silo.PublicEvidence = []model.PublicEvidenceRecord{{FactID: "Judicial_1", Provenance: 1, Coverage: 0.9}}
+	silo.ItAuthority.ROp = 80 // enough for two counter actions this month
+	suspicionBefore := agent.SuspicionLevel
+	e.RunITAuthorityMonthly(silo, agent)
+
+	foundCounter := false
+	for _, id := range silo.ItAuthority.LastActions {
+		if strings.HasPrefix(id, "counter_") {
+			foundCounter = true
+		}
+	}
+	if !foundCounter {
+		t.Fatalf("visible threat must trigger a counterattack: %+v", silo.ItAuthority.LastActions)
+	}
+	if agent.SuspicionLevel <= suspicionBefore {
+		t.Fatalf("investigation counter must raise player suspicion: %v -> %v",
+			suspicionBefore, agent.SuspicionLevel)
 	}
 }
 
@@ -210,7 +248,7 @@ func TestQuietDisappearanceConflictsWithProtocol(t *testing.T) {
 	EnsureProtocolInitialized(silo, clauses, version)
 	silo.Authority.Judicial.Regime = "SWING"
 
-	e.executeItAction(silo, ItAction{ID: "quiet_disappearance", BaseCost: 12, WShock: 6, RegimeAverting: true})
+	e.executeItAction(silo, nil, ItAction{ID: "quiet_disappearance", BaseCost: 12, WShock: 6, RegimeAverting: true})
 
 	dev := findDeviation(&silo.Protocol, "P-03", DeviationViolation)
 	if dev == nil || !dev.Open {
