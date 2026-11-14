@@ -873,6 +873,11 @@ type InformationProgress struct {
 	Departments   []DepartmentFactCoverage `json:"departments"`
 	GateFactCount int                      `json:"gate_fact_count"`
 	BeliefFloor   float64                  `json:"belief_floor"`
+	// 终止链读数 (开局自解释)：任务判据三要求驻地不再受 Silo 1 单方
+	// 终止链支配。先兆出现与反制成立都是内容状态里既有的事实，这里只读
+	// 下发，让目标卡能回答"终止链现在怎样"。
+	ResetOmenSeen           bool `json:"reset_omen_seen"`
+	ResetCountermeasureDone bool `json:"reset_countermeasure_done"`
 }
 
 // AgentStats 后端下发的 Agent 派生指标，用于前端展示，避免 UI 复算引擎公式

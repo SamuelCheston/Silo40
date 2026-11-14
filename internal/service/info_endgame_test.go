@@ -408,3 +408,32 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		t.Fatalf("terminal INFORMATION state accepted another action: %+v", outcome.Result)
 	}
 }
+
+// TestInformationProgressExposesTerminationChain locks the 开局自解释目标卡
+// 判据三读数: the termination-chain omen and the established countermeasure
+// are facts already present in content state; informationProgress only reads
+// them through (no RNG), so the mission card can answer "终止链现在怎样".
+func TestInformationProgressExposesTerminationChain(t *testing.T) {
+	svc := chainTestService()
+	progress := svc.informationProgress()
+	if progress == nil {
+		t.Fatal("informationProgress returned nil")
+	}
+	if progress.ResetOmenSeen || progress.ResetCountermeasureDone {
+		t.Fatalf("fresh game must not report termination-chain progress: %+v", progress)
+	}
+	svc.statesMapFor(svc.silo.ID)["crisis:reset_omen_requisition"] = model.ContentEventState{
+		SiloID: svc.silo.ID, EventKey: "crisis:reset_omen_requisition", Triggered: true,
+	}
+	progress = svc.informationProgress()
+	if !progress.ResetOmenSeen || progress.ResetCountermeasureDone {
+		t.Fatalf("omen must read before the countermeasure: %+v", progress)
+	}
+	svc.statesMapFor(svc.silo.ID)["player_action:reset_countermeasure_done"] = model.ContentEventState{
+		SiloID: svc.silo.ID, EventKey: "player_action:reset_countermeasure_done", Triggered: true,
+	}
+	progress = svc.informationProgress()
+	if !progress.ResetOmenSeen || !progress.ResetCountermeasureDone {
+		t.Fatalf("countermeasure completion must read: %+v", progress)
+	}
+}
