@@ -12,7 +12,7 @@ arrival
   → archive_awakened
 ```
 
-- 成功 Gather Info 才进入 `first_signal`。
+- 任一基础职务产生**首份有效本地 Observation** 才进入 `first_signal`；不存在专用的收集情报按钮。
 - 成功 Share Info 才进入 `archive_awakened`。
 - 此后不新增剧情 stage，继续由关系、威望、宣传、部门状态、事件完成情况和跨堡行动门控承接。
 
@@ -29,18 +29,18 @@ arrival
 
 | 现有内容 | 当前门控要点 | 剧情中的正确用法 |
 | --- | --- | --- |
-| Gather Info | 开局可用 | 获得本地观察，不直接获得全堡确信，也不让普通居民凭空获得外堡知识 |
-| Share Info | `first_signal`；至少一个已知碎片 | 让材料进入部门与人物网络；成功后才推进 `archive_awakened`；《共证》还须继续形成方法与外部复制 |
-| Build Connection | `first_signal` | 建立核验、复制、撤离或长期公共讨论所需的部门关系与日常掩护 |
-| Conduct Propaganda | Mayor 关系达到既有解锁条件，且已到 `first_signal` | 扩大公开主张；不能替代独立证据、组织能力、开放人口或隐匿存活，也不是《共证》的默认最优解 |
-| Incite Rebellion | 政治威望与 Mayor 关系达到既有门控 | 形成公开动荡；只有转化为实际逃离才支持《越岭》，并可能破坏《共证》的宿主隐匿 |
-| Publicize Faction | `archive_awakened` 与既有威望门控，且仍受派系代表条件约束 | 让公开派系承担政治表达；不是任何一条好结局的必备按钮，公开化还会提高《共证》的暴露风险 |
-| STATION_INTEL／SILO1_INTEL | `first_signal` | 确认本地或 Silo 1 的实际状态，避免把传闻当权威事实 |
+| 基础职务（九职业各一项） | 常驻，开局即可履行 | 职务主结果独立成立，材料作为伴随 Observation 产生；首份有效本地 Observation 推进 `first_signal`。不存在专用收集情报按钮 |
+| Share Info | `first_signal`；至少一份已知材料 | 把材料向具体对象出示、转述或交付；成功后才推进 `archive_awakened`；《共证》还须继续形成方法与外部复制 |
+| Build Network | `first_signal` | 帮具体的人做具体的事，建立核验、复制、撤离或长期公共讨论所需的部门关系与日常掩护 |
+| Conduct Propaganda | Mayor 关系达到既有解锁条件，且已到 `first_signal` | 在具体受众与渠道中传播指定版本；不能替代独立证据、组织能力、开放人口或隐匿存活，也不是《共证》的默认最优解 |
+| Incite Rebellion | 政治威望与 Mayor 关系达到既有门控 | 推动既有主体在具体时机提出诉求；只有转化为实际逃离才支持《越岭》，并可能破坏《共证》的宿主隐匿 |
+| Publicize Faction | `archive_awakened` 与既有威望门控，且仍受派系代表条件约束 | 在具体公开场合支持既有派系；不是任何一条好结局的必备按钮，公开化还会提高《共证》的暴露风险 |
+| 进阶职务（九职业各一项） | 按阶段、履历或关系解锁 | 带来新权限或处置方式（合规搜查后的 Arrest、档案阶段后的 Cover-Up 等），伴随更高层级的 Observation 渠道 |
 | STATION_INFILTRATE | `archive_awakened` 与 Mechanical 关系门控 | 可制造本地合法性、凝聚力与部门紧张后果，不能被写成无代价“开门”或隐匿 |
-| STATION_DECEIVE／SILO1_DECEIVE | `archive_awakened` 与宣传门控 | 提高目标叛乱、恐慌与亲外；同时必须承认 Exposure、反间谍和驻地后果，不能直接填写完整复合思潮 |
-| STATION_TRADE | Supply 关系门控与 `first_signal` | 消耗驻地 Supplies，换取合法性、凝聚力与玩家威望，可服务宿主长期存续，但不自动产生开放思潮 |
+| STATION_DECEIVE／SILO1_DECEIVE | `archive_awakened` 与宣传门控 | 向指定链路投放指定伪造材料；同时必须承认 Exposure、反间谍和驻地后果，不能直接填写完整复合思潮 |
+| STATION_TRADE | Supply 关系门控与 `first_signal` | 与具体联系人交换具体物品和承诺，可服务宿主长期存续，但不自动产生开放思潮 |
 
-本文不新增行动，也不要求玩家按固定次序使用它们。某些剧情事实若当前机制尚不能表达，应作为内容落地前的资格缺口处理，不能用文案假装已经结算。
+专用情报入口（Gather Info、STATION_INTEL、SILO1_INTEL）已由现行行动设计移除，不以另一个名字复活：本地状态确认改由职务伴随 Observation 与既有信道事件承担，上层控制方状态改由权威世界事实与受限信道事件（如通牒链、覆灭信号）抵达。本文不新增行动，也不要求玩家按固定次序使用它们。某些剧情事实若当前机制尚不能表达，应作为内容落地前的资格缺口处理，不能用文案假装已经结算。
 
 ## 3. 部门与派系不能写成固定战队
 
