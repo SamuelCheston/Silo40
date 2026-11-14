@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"silo40/internal/engine"
 	"silo40/internal/model"
 )
 
@@ -262,4 +263,61 @@ func compileRelicCatalog(file relicFile) (relicCatalogRuntime, error) {
 		Relics:      file.Relics,
 		TotalWeight: totalWeight,
 	}, nil
+}
+
+// seedStationRelics 按清单为玩家堡实例化开局遗物。只在 CreateGame 对
+// 玩家被分配堡调用一次：一号 / 十八号等受保护堡绝不注入。抽取经引擎
+// 单一 RNG 流并按清单文件声明顺序消费，保证同种子同清单可复现。
+// 清单未加载（旧机制测试路径）时为空操作，RNG 行为逐位不变。
+// 实例化把定义拷贝为独立 Relic 行落库，存档持有行的快照而非文件引用：
+// 之后改动清单只影响新局，不会断裂旧档。
+func (s *GameService) seedStationRelics(silo *model.Silo, startYear int) {
+	catalog := s.relicCatalog
+	if !catalog.Enabled || len(catalog.Relics) == 0 || catalog.TotalWeight <= 0 {
+		return
+	}
+	count := catalog.Spawn.Min
+	if span := catalog.Spawn.Max - catalog.Spawn.Min; span > 0 {
+		count += engine.DrawIntn(span + 1)
+	}
+	for i := 0; i < count; i++ {
+		def := pickRelicDefinition(catalog)
+		location := catalog.Locations[def.Locations[engine.DrawIntn(len(def.Locations))]]
+		silo.Relics = append(silo.Relics, model.Relic{
+			SiloID:      silo.ID,
+			Name:        def.Name,
+			Description: def.Description,
+			SourceDept:  location.Dept,
+			// DiscoveryYear 记开局年：遗物随开局入世；未来的发现/
+			// 没收流程若改手再覆写实际年份。
+			DiscoveryYear: startYear,
+			Effects:       copyRelicEffects(def.Effects),
+			LocationTag:   location.ID,
+		})
+	}
+}
+
+// pickRelicDefinition 按权重抽取一条定义。沿文件声明顺序线性消耗权重，
+// 绝不遍历 map，保证确定性。
+func pickRelicDefinition(catalog relicCatalogRuntime) relicDefinition {
+	roll := engine.DrawFloat64() * float64(catalog.TotalWeight)
+	for _, def := range catalog.Relics {
+		roll -= float64(def.Weight)
+		if roll < 0 {
+			return def
+		}
+	}
+	return catalog.Relics[len(catalog.Relics)-1]
+}
+
+// copyRelicEffects 深拷贝 effects，避免多条遗物共享同一底层 map。
+func copyRelicEffects(in map[string]float64) map[string]float64 {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]float64, len(in))
+	for metric, value := range in {
+		out[metric] = value
+	}
+	return out
 }

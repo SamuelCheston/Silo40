@@ -203,20 +203,35 @@ func TestActionGateAPReasonKeepsFraction(t *testing.T) {
 	}
 }
 
-func TestSyncActionGateConfigRefreshesExistingDirectory(t *testing.T) {
+func TestSyncRootContentConfigsRefreshesExistingDirectory(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "action_gates.json")
-	if err := os.WriteFile(path, []byte("stale"), 0o644); err != nil {
-		t.Fatalf("seed stale config: %v", err)
+	for _, name := range []string{"action_gates.json", "relics.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("stale"), 0o644); err != nil {
+			t.Fatalf("seed stale %s: %v", name, err)
+		}
 	}
-	content := []byte(`{"version":1}`)
-	embedded := fstest.MapFS{"events/action_gates.json": {Data: content}}
-	if err := syncActionGateConfig(embedded, dir); err != nil {
-		t.Fatalf("sync config: %v", err)
+	gateContent := []byte(`{"version":1}`)
+	relicContent := []byte(`{"version":1,"spawn":{"min":0,"max":0},"locations":[],"relics":[]}`)
+	embedded := fstest.MapFS{
+		"events/action_gates.json": {Data: gateContent},
+		"events/relics.json":       {Data: relicContent},
 	}
-	got, err := os.ReadFile(path)
-	if err != nil || string(got) != string(content) {
-		t.Fatalf("packaged config was not refreshed: %q err=%v", got, err)
+	if err := syncRootContentConfigs(embedded, dir); err != nil {
+		t.Fatalf("sync configs: %v", err)
+	}
+	for name, content := range map[string][]byte{"action_gates.json": gateContent, "relics.json": relicContent} {
+		got, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil || string(got) != string(content) {
+			t.Fatalf("packaged %s was not refreshed: %q err=%v", name, got, err)
+		}
+	}
+}
+
+func TestSyncRootContentConfigsFailsClosedOnMissingEmbeddedFile(t *testing.T) {
+	dir := t.TempDir()
+	embedded := fstest.MapFS{"events/action_gates.json": {Data: []byte(`{"version":1}`)}}
+	if err := syncRootContentConfigs(embedded, dir); err == nil || !strings.Contains(err.Error(), "relics.json") {
+		t.Fatalf("missing embedded relic catalog must fail the sync, got: %v", err)
 	}
 }
 

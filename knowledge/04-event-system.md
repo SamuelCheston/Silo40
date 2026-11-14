@@ -7,14 +7,15 @@
 | `defineEvent` | `events/histories|special|crisis|rules|player_actions/` | 条件、日历、行动和后续事件 |
 | `defineMechanics` | `events/mechanics/` | 月度公式、通用/职业行动、stats 和评分 |
 | action gate JSON | `events/action_gates.json` | 阶段与行动可见/可用，不定义效果 |
+| relic catalog JSON | `events/relics.json` | 遗物定义与位置词表，开局实例化，不定义事件 |
 
 Silo 18 N1–N9 不是普通 `defineEvent`，而是 Go 中的强制正典节点表；跨堡 operation 也是 Go 固定定义。不要用新增 JS 事件冒充这两类能力。
 
 ## 2. 加载与发布约束
 
-启动时优先使用二进制同目录 events；缺失才释放嵌入副本。`syncActionGateConfig` 还会把内嵌注册表同步到已有 events 目录，所以修改源 `action_gates.json` 后要重新构建。
+启动时优先使用二进制同目录 events；缺失才释放嵌入副本。`syncRootContentConfigs` 还会把内嵌根级配置（`action_gates.json`、`relics.json`）同步到已有 events 目录，所以修改源配置后要重新构建。
 
-内容定义经校验 upsert 到 SQLite，失效定义禁用，启用项按分组/文件/ID 排序。普通内容白名单不含 mechanics；action_gates.json 作为配置单独读取，不被当作剧情文件。
+内容定义经校验 upsert 到 SQLite，失效定义禁用，启用项按分组/文件/ID 排序。普通内容白名单不含 mechanics；action_gates.json 与 relics.json 作为根级配置单独读取，不被当作剧情文件。
 
 生产缺 action gate 配置会 fail-closed；试玩脚本也拒绝缺文件的旧包。普通内容 Bootstrap 错误在 GUI 启动层记录日志，因此开发与 CI 必须运行内容守卫，不能只看窗口是否出现。
 
