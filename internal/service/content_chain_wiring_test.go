@@ -3,6 +3,7 @@ package service
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
@@ -266,5 +267,48 @@ func TestDeadlineAndCompletionHelperLoadFromJS(t *testing.T) {
 	}
 	if len(def.Effects) != 1 || def.Effects[0].Type != "player_action_complete" || def.Effects[0].Action != "reset_countermeasure_done" {
 		t.Fatalf("completePlayerAction helper produced %+v", def.Effects)
+	}
+}
+
+// TestPlayerEventFeedbackCarriesEventStory locks 修复1: executing a
+// PLAYER_EVENT action must return the fired event's title and narrative in the
+// action receipt, not the opaque "Triggered player action event." The story
+// itself only lands in history after the drain, so the receipt text is built
+// from the definition to stay readable at execution time.
+func TestPlayerEventFeedbackCarriesEventStory(t *testing.T) {
+	def := chainFixtureDef("player_actions", "receiver_verify_accompany",
+		engine.ContentTrigger{Type: "player_action_is", Action: "RECEIVER_VERIFY_ACCOMPANY"},
+		[]engine.ContentEffect{{Type: "silo_metric_delta", Metric: "history_burden", Value: 0.01}},
+	)
+	def.Title = "陪同回查"
+	def.Description = "你陪第一位接收者把材料重新查了一遍：来源、缺口、可以核验的部分。"
+	def.PlayerAction = &engine.ContentPlayerActionSpec{
+		ID:          "RECEIVER_VERIFY_ACCOMPANY",
+		Label:       "陪同回查",
+		ActionType:  string(model.ActionPlayerEvent),
+		TargetType:  "NONE",
+		Scope:       "common",
+		APCost:      2,
+	}
+	svc := chainTestService(def)
+	svc.agent.ActionPoints = 10
+
+	handled, result, err := svc.queuePlayerActionEvents(model.AgentAction{
+		Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY", Cost: 2,
+	})
+	if err != nil || !handled {
+		t.Fatalf("player event action not handled: handled=%v err=%v", handled, err)
+	}
+	if !result.Executed {
+		t.Fatalf("player event action not executed: %+v", result)
+	}
+	if !strings.Contains(result.Message, "陪同回查") {
+		t.Fatalf("receipt lost the event title: %q", result.Message)
+	}
+	if !strings.Contains(result.Message, "重新查了一遍") {
+		t.Fatalf("receipt lost the event narrative: %q", result.Message)
+	}
+	if strings.Contains(result.Message, "Triggered player action event") {
+		t.Fatalf("receipt fell back to system jargon: %q", result.Message)
 	}
 }

@@ -165,7 +165,14 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	if receiver == nil || !receiver.Enabled {
 		t.Fatalf("receiver verification never became available through real gates: %+v", receiver)
 	}
-	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY"})
+	// 修复1 回归：真实内容下执行回执必须复述事件故事，不能退回系统黑话。
+	outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY"})
+	if err != nil || !outcome.Result.Executed {
+		t.Fatalf("receiver verification failed: %+v (%v)", outcome.Result, err)
+	}
+	if !strings.Contains(outcome.Result.Message, "陪同回查") {
+		t.Fatalf("receiver verification receipt lost its story: %q", outcome.Result.Message)
+	}
 
 	circulationActions := 0
 	attemptCirculation := func(action model.AgentAction) {
