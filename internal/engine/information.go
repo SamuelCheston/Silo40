@@ -3,6 +3,7 @@ package engine
 import (
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"silo40/internal/model"
@@ -83,6 +84,23 @@ type InformationConfig struct {
 	ProbeRecord        float64 // 探查的记录档 (匿名日志)
 	ProbeVisibility    float64 // 探查者的 V_identity
 	LegacySeedB        float64 // 旧档已知碎片的保守补种确信
+
+	// §3.3 E 聚合的组权重分配 (TODO(balance))：部门层按人口份额分得
+	// DepartmentWeightMass，具名人物层按影响力份额分得 ResidentWeightMass。
+	DepartmentWeightMass float64
+	ResidentWeightMass   float64
+
+	// §3.7 Q 与独立公开事实资格门槛。
+	PactFactBelief     float64 // B_Judicial ≥ 0.85
+	PactFactProvenance float64 // provenance ≥ 0.8
+	PactFactCoverage   float64 // coverage ≥ 0.60
+
+	// 事实证据权重 (TODO(balance)：sim 起点；§4 核心事实 qE=0.20–0.30，
+	// §3.7 核心法警调度事实 qP=0.60)。
+	QECore    float64
+	QESupport float64
+	QPCore    float64
+	QPSupport float64
 }
 
 // DefaultInformationConfig 的参数除结构常量外全部是 sim 起点；调整须按
@@ -144,8 +162,28 @@ func DefaultInformationConfig() InformationConfig {
 		ProbeRecord:        1.0,
 		ProbeVisibility:    1.0,
 		LegacySeedB:        0.65,
+
+		DepartmentWeightMass: 0.75,
+		ResidentWeightMass:   0.25,
+
+		PactFactBelief:     0.85,
+		PactFactProvenance: 0.8,
+		PactFactCoverage:   0.60,
+
+		QECore:    0.25,
+		QESupport: 0.10,
+		QPCore:    0.60,
+		QPSupport: 0.20,
 	}
 }
+
+// 公开证据来源等级 (§3.7)。
+const (
+	ProvenancePrivate   = 0.0 // 私人猜疑
+	ProvenanceRumor     = 0.3 // 匿名传闻
+	ProvenanceTestimony = 0.6 // 公开证词/未核验记录
+	ProvenanceVerified  = 1.0 // 已核验档案或市面可查原始记录
+)
 
 // 版本 ID：解释分支的稳定键 (子项 3 的 E 归因读 it_directed 的 attribution)。
 const (
@@ -166,6 +204,8 @@ type FragmentSpec struct {
 	ID       string
 	Domain   string
 	Versions []FragmentVersion // 按 ID 升序
+	QE       float64           // 曝光聚合权重 (§3.3/§4)
+	QP       float64           // 公开证据聚合权重 (§3.7)
 }
 
 // fragmentCatalog 由 ALL_FRAGMENTS 确定性派生：IT/Judicial 域碎片带
@@ -175,6 +215,7 @@ type FragmentSpec struct {
 var fragmentCatalog = buildFragmentCatalog()
 
 func buildFragmentCatalog() map[string]FragmentSpec {
+	cfg := DefaultInformationConfig()
 	specs := map[string]FragmentSpec{}
 	for _, fragment := range model.ALL_FRAGMENTS {
 		domain := fragment
@@ -182,11 +223,18 @@ func buildFragmentCatalog() map[string]FragmentSpec {
 			domain = fragment[:idx]
 		}
 		var versions []FragmentVersion
+		qe, qp := 0.0, 0.0
 		switch domain {
 		case "IT", "Judicial":
 			versions = []FragmentVersion{
 				{ID: VersionITDirected, Prior: 0.5, Likelihood: 0.75, Attribution: 1},
 				{ID: VersionMundane, Prior: 0.5, Likelihood: 0.25, Attribution: 0},
+			}
+			qe, qp = cfg.QESupport, cfg.QPSupport
+			// 两份核心"法警受 IT 直接调度"证据事实 (§4/§7.4)。
+			// TODO(content): 子项 6 的完整证据链内容落地后以专门事实 ID 替换。
+			if fragment == "Judicial_1" || fragment == "Judicial_2" {
+				qe, qp = cfg.QECore, cfg.QPCore
 			}
 		default:
 			versions = []FragmentVersion{
@@ -194,7 +242,7 @@ func buildFragmentCatalog() map[string]FragmentSpec {
 			}
 		}
 		sort.Slice(versions, func(i, j int) bool { return versions[i].ID < versions[j].ID })
-		specs[fragment] = FragmentSpec{ID: fragment, Domain: domain, Versions: versions}
+		specs[fragment] = FragmentSpec{ID: fragment, Domain: domain, Versions: versions, QE: qe, QP: qp}
 	}
 	return specs
 }
@@ -281,32 +329,48 @@ func ObserveFact(cfg InformationConfig, belief *model.FactBelief, spec FragmentS
 	return true
 }
 
-// BeliefFor 按事实 ID 查信念；不存在返回 nil。
-func BeliefFor(agent *model.Agent, factID string) *model.FactBelief {
-	if agent == nil {
+// BeliefIn 在信念列表里按事实 ID 查找；不存在返回 nil。
+func BeliefIn(beliefs *[]model.FactBelief, factID string) *model.FactBelief {
+	if beliefs == nil {
 		return nil
 	}
-	for i := range agent.Beliefs {
-		if agent.Beliefs[i].FactID == factID {
-			return &agent.Beliefs[i]
+	for i := range *beliefs {
+		if (*beliefs)[i].FactID == factID {
+			return &(*beliefs)[i]
 		}
 	}
 	return nil
 }
 
-// EnsureBelief 查或建信念条目 (新建时按目录先验初始化 π)。
-func EnsureBelief(agent *model.Agent, factID string) *model.FactBelief {
-	if agent == nil || factID == "" {
+// EnsureBeliefIn 查或建信念条目 (新建时按目录先验初始化 π)。
+func EnsureBeliefIn(beliefs *[]model.FactBelief, factID string) *model.FactBelief {
+	if beliefs == nil || factID == "" {
 		return nil
 	}
-	if belief := BeliefFor(agent, factID); belief != nil {
+	if belief := BeliefIn(beliefs, factID); belief != nil {
 		return belief
 	}
-	agent.Beliefs = append(agent.Beliefs, model.FactBelief{
+	*beliefs = append(*beliefs, model.FactBelief{
 		FactID:   factID,
 		Versions: InitialVersions(FragmentSpecFor(factID)),
 	})
-	return &agent.Beliefs[len(agent.Beliefs)-1]
+	return &(*beliefs)[len(*beliefs)-1]
+}
+
+// BeliefFor 按事实 ID 查玩家信念；不存在返回 nil。
+func BeliefFor(agent *model.Agent, factID string) *model.FactBelief {
+	if agent == nil {
+		return nil
+	}
+	return BeliefIn(&agent.Beliefs, factID)
+}
+
+// EnsureBelief 查或建玩家信念条目。
+func EnsureBelief(agent *model.Agent, factID string) *model.FactBelief {
+	if agent == nil {
+		return nil
+	}
+	return EnsureBeliefIn(&agent.Beliefs, factID)
 }
 
 // SeedLegacyBeliefs 旧档兼容：KnownFragments 里没有信念条目的碎片按
@@ -327,16 +391,16 @@ func SeedLegacyBeliefs(agent *model.Agent) {
 	}
 }
 
-// RelatedF §3.4：max_k related(f,k)·B_k,p，只取最强相关项。相关度取同域 1、
+// RelatedFIn §3.4：max_k related(f,k)·B_k，只取最强相关项。相关度取同域 1、
 // 跨域 0 (TODO(balance): 相关图之后可细化)。
-func RelatedF(agent *model.Agent, fragmentID string) float64 {
-	if agent == nil {
+func RelatedFIn(beliefs *[]model.FactBelief, fragmentID string) float64 {
+	if beliefs == nil {
 		return 0
 	}
 	domain := FragmentSpecFor(fragmentID).Domain
 	best := 0.0
-	for i := range agent.Beliefs {
-		belief := &agent.Beliefs[i]
+	for i := range *beliefs {
+		belief := &(*beliefs)[i]
 		if belief.FactID == fragmentID || FragmentSpecFor(belief.FactID).Domain != domain {
 			continue
 		}
@@ -345,6 +409,172 @@ func RelatedF(agent *model.Agent, fragmentID string) float64 {
 		}
 	}
 	return best
+}
+
+// RelatedF 玩家信念层的相关事实强度。
+func RelatedF(agent *model.Agent, fragmentID string) float64 {
+	if agent == nil {
+		return 0
+	}
+	return RelatedFIn(&agent.Beliefs, fragmentID)
+}
+
+// AbsorbSharedFact §3.6 分享接收：分享强度作为观察强度进入接收方信念。
+// 同一来源首次分享按独立来源计，其后同源转述按 0.25 折减；观察 ID 按计数
+// 编号，重复分享仍有衰减收益而非完全无效。
+func AbsorbSharedFact(cfg InformationConfig, beliefs *[]model.FactBelief, factID, sourceTag string, strength float64) bool {
+	belief := EnsureBeliefIn(beliefs, factID)
+	if belief == nil {
+		return false
+	}
+	prefix := "share:" + sourceTag + ":" + factID + ":"
+	k := 0
+	for _, obs := range belief.Observations {
+		if strings.HasPrefix(obs, prefix) {
+			k++
+		}
+	}
+	independence := cfg.IndependenceNew
+	if k > 0 {
+		independence = cfg.IndependenceRe
+	}
+	obsID := prefix + strconv.Itoa(k+1)
+	spec := FragmentSpecFor(factID)
+	return ObserveFact(cfg, belief, spec, obsID, clamp01(strength)*independence)
+}
+
+// RegisterPublicEvidence §3.7：登记/更新一份公开证据。同一事实只登记一次，
+// 再次公开只能抬高 provenance/coverage (确定性取大)。
+func RegisterPublicEvidence(silo *model.Silo, record model.PublicEvidenceRecord) {
+	if silo == nil || strings.TrimSpace(record.FactID) == "" {
+		return
+	}
+	record.FactID = strings.TrimSpace(record.FactID)
+	record.Provenance = clamp01(record.Provenance)
+	record.Coverage = clamp01(record.Coverage)
+	for i := range silo.PublicEvidence {
+		if silo.PublicEvidence[i].FactID == record.FactID {
+			if record.Provenance > silo.PublicEvidence[i].Provenance {
+				silo.PublicEvidence[i].Provenance = record.Provenance
+			}
+			if record.Coverage > silo.PublicEvidence[i].Coverage {
+				silo.PublicEvidence[i].Coverage = record.Coverage
+			}
+			return
+		}
+	}
+	silo.PublicEvidence = append(silo.PublicEvidence, record)
+}
+
+// InformationEnvironment 一次月度结算里的信息环境快照。
+type InformationEnvironment struct {
+	ExposureNow       float64  // E_now (§3.3 聚合，未取高水位)
+	Exposure          float64  // max(上月 E, E_now)：曝光高水位不自动消退
+	PublicEvidenceQ   float64  // Q (§3.7)
+	QualifyingFacts   int      // 满足 covenant 独立事实门槛的数量
+	QualifyingFactIDs []string // 满足门槛的事实 ID (升序)
+}
+
+// ComputeInformationEnvironment §3.3/§3.7：E 只在部门层与具名人物层聚合
+// (玩家自己的 B 不直接进入)；Q 只读 Judicial 层信念与已登记公开证据。
+// 部门按人口份额、具名人物按影响力份额分组权重 (TODO(balance))；全部按
+// 稳定顺序遍历，确定性。
+func ComputeInformationEnvironment(silo *model.Silo) InformationEnvironment {
+	cfg := DefaultInformationConfig()
+	env := InformationEnvironment{}
+	if silo == nil {
+		return env
+	}
+
+	type beliefGroup struct {
+		weight  float64
+		beliefs *[]model.FactBelief
+	}
+	var groups []beliefGroup
+
+	totalPopulation := 0
+	for i := range silo.Professions {
+		totalPopulation += silo.Professions[i].Population
+	}
+	if totalPopulation > 0 {
+		for i := range silo.Professions {
+			prof := &silo.Professions[i]
+			weight := cfg.DepartmentWeightMass * float64(prof.Population) / float64(totalPopulation)
+			if weight > 0 {
+				groups = append(groups, beliefGroup{weight: weight, beliefs: &prof.Beliefs})
+			}
+		}
+	}
+
+	totalInfluence := 0.0
+	for i := range silo.Residents {
+		if silo.Residents[i].Alive && silo.Residents[i].Influence > 0 {
+			totalInfluence += silo.Residents[i].Influence
+		}
+	}
+	if totalInfluence > 0 {
+		for i := range silo.Residents {
+			resident := &silo.Residents[i]
+			if !resident.Alive || resident.Influence <= 0 {
+				continue
+			}
+			weight := cfg.ResidentWeightMass * resident.Influence / totalInfluence
+			groups = append(groups, beliefGroup{weight: weight, beliefs: &resident.Beliefs})
+		}
+	}
+
+	// E_now：按 ALL_FRAGMENTS 的目录序逐事实聚合。
+	eNow := 0.0
+	for _, factID := range model.ALL_FRAGMENTS {
+		spec := FragmentSpecFor(factID)
+		if spec.QE <= 0 {
+			continue
+		}
+		groupSum := 0.0
+		for _, group := range groups {
+			belief := BeliefIn(group.beliefs, factID)
+			if belief == nil {
+				continue
+			}
+			attribution := 0.0
+			for _, version := range spec.Versions {
+				attribution += belief.Versions[version.ID] * version.Attribution
+			}
+			groupSum += group.weight * belief.B * attribution
+		}
+		eNow += spec.QE * groupSum
+	}
+	env.ExposureNow = clamp01(eNow)
+	env.Exposure = math.Max(clamp01(silo.Authority.E), env.ExposureNow)
+
+	// Q：只读 Judicial 层信念 × 已登记公开证据。
+	var judicialBeliefs *[]model.FactBelief
+	for i := range silo.Professions {
+		if silo.Professions[i].Name == "Judicial" {
+			judicialBeliefs = &silo.Professions[i].Beliefs
+			break
+		}
+	}
+	q := 0.0
+	for _, record := range silo.PublicEvidence {
+		spec := FragmentSpecFor(record.FactID)
+		if spec.QP <= 0 {
+			continue
+		}
+		bJudicial, piDirected := 0.0, 0.0
+		if belief := BeliefIn(judicialBeliefs, record.FactID); belief != nil {
+			bJudicial = belief.B
+			piDirected = belief.Versions[VersionITDirected]
+		}
+		q += spec.QP * bJudicial * piDirected * clamp01(record.Provenance) * clamp01(record.Coverage)
+		if bJudicial >= cfg.PactFactBelief && record.Provenance >= cfg.PactFactProvenance && record.Coverage >= cfg.PactFactCoverage {
+			env.QualifyingFacts++
+			env.QualifyingFactIDs = append(env.QualifyingFactIDs, record.FactID)
+		}
+	}
+	env.PublicEvidenceQ = clamp01(q)
+	sort.Strings(env.QualifyingFactIDs)
+	return env
 }
 
 // FProf 职业与材料域适配。

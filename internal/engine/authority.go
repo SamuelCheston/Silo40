@@ -139,14 +139,27 @@ func AssignMayorHolder(silo *model.Silo, holderName string) bool {
 }
 
 // AdvanceAuthorityMonthly reads current observables and advances exactly one month.
+// Exposure is the belief-derived conspiracy exposure high-water mark (§3.3),
+// NOT safeguard risk; public-evidence Q and the independent-fact count come
+// from the judicial belief layer and the public-evidence registry (§3.7).
 func AdvanceAuthorityMonthly(silo *model.Silo) {
 	if silo == nil {
 		return
 	}
+	info := ComputeInformationEnvironment(silo)
+	judicial := &silo.Authority.Judicial
+	judicial.PublicEvidenceQ = info.PublicEvidenceQ
+	judicial.IndependentPublicFacts = info.QualifyingFacts
+	judicial.PublicFactKeys = info.QualifyingFactIDs
+	if info.QualifyingFacts > 0 {
+		// Structural qualification: public evidence exists. The numeric gates
+		// (W/Q/fact count) still decide the pact transition.
+		judicial.PactQualified = true
+	}
 	inputs := AuthorityInputs{
 		BailiffLoyalty:    professionLoyalty(silo, "Judicial"),
 		ITInternalLoyalty: professionLoyalty(silo, "IT"),
-		Exposure:          clamp01(silo.SafeguardRisk),
+		Exposure:          info.Exposure,
 		Delivery:          1 - 2*professionPanic(silo, "Judicial"),
 		Personnel:         0, // No personnel-continuity observable exists in v8.
 		ExternalSignal:    0, // Rare external signals are a later content input.

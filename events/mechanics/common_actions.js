@@ -89,58 +89,33 @@ defineMechanics([
       if (!profession) {
         return { action_result: { executed: false, message: "Target department not found." } };
       }
-      const known = actorKnownSet(ctx);
-      let unexplainedCount = 0;
       for (const fragment of fragmentIds) {
-        if (!known[fragment]) {
-          unexplainedCount += 1;
-        }
         // §3.6 行动资格：B < 0.30 的材料只是私人笔记，不能作为事实分享。
         if (beliefB(ctx, fragment) < INFO_CFG.qual_rumor) {
           return { action_result: { executed: false, message: fragment + " is still private suspicion (belief below " + INFO_CFG.qual_rumor + "); it cannot be shared as a fact." } };
         }
       }
+      // §3.6 分享接收：强度 = B_player·transmit_c·receptivity_g。接收方得到的是
+      // 信念强度而不是曝光——私下确信永远不直接进 E/Q (§3.3)。
+      // TODO(balance): transmit/receptivity 为 sim 起点。
       const connectionValue = actorConnectionTo(ctx, target);
-      let acceptanceRate = 0.1 + ((profession.ideologies || {}).pro_foreign || 0) + connectionValue - unexplainedCount * 0.1;
-      acceptanceRate = clamp(acceptanceRate, 0.05, 1.0);
-
+      const transmit = 0.5 + 0.5 * connectionValue;
+      const receptivity = 0.5 + 0.5 * ((profession.ideologies || {}).pro_foreign || 0);
       const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
-      if (unexplainedCount > 0) {
-        const suspicionPenalty = unexplainedCount * 0.1 + Math.pow(unexplainedCount, 1.5) * 0.05;
-        mutations.push({ type: "actor_metric_delta", field: "suspicion_level", value: suspicionPenalty });
-      }
-
-      if (randomFloat() > acceptanceRate) {
-        return {
-          mutations,
-          action_result: {
-            executed: true,
-            message: "Attempted to share info with " + profession.name + ", but they rejected it! (Acceptance rate was " + Math.floor(acceptanceRate * 100) + "%)",
-          },
-        };
-      }
-
-      let added = 0;
-      const targetKnown = {};
-      for (const fragment of profession.known_fragments || []) {
-        targetKnown[fragment] = true;
-      }
       for (const fragment of fragmentIds) {
-        if (!targetKnown[fragment]) {
-          mutations.push({ type: "profession_fragment_add", profession: profession.name, fragment });
-          targetKnown[fragment] = true;
-          added += 1;
-        }
-      }
-      mutations.push({ type: "profession_metric_set", profession: profession.name, field: "panic_value", value: clampUnit((profession.panic_value || 0) + 0.05 + unexplainedCount * 0.05) });
-      if (connectionValue >= 0.3) {
-        mutations.push({ type: "profession_ideology_delta", profession: profession.name, ideology: "pro_foreign", value: 0.02 + unexplainedCount * 0.02 });
+        mutations.push({
+          type: "profession_belief_absorb",
+          profession: profession.name,
+          fragment: fragment,
+          source: "player",
+          value: beliefB(ctx, fragment) * transmit * receptivity,
+        });
       }
       return {
         mutations,
         action_result: {
           executed: true,
-          message: "Successfully shared " + added + " fragments with " + profession.name + ". (Included " + unexplainedCount + " pieces of unexplained knowledge)",
+          message: "Shared " + fragmentIds.length + " fact(s) with " + profession.name + " (transmit " + transmit.toFixed(2) + ", receptivity " + receptivity.toFixed(2) + ").",
         },
       };
     },

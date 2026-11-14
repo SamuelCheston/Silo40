@@ -54,6 +54,8 @@ type MechanicMutation struct {
 	Reliability  float64 `json:"reliability,omitempty"`
 	RelatedF     float64 `json:"related_f,omitempty"`
 	Independence float64 `json:"independence,omitempty"`
+	// profession_belief_absorb 载荷：分享来源标签 (同源转述折减用)。
+	Source string `json:"source,omitempty"`
 }
 
 type MechanicResult struct {
@@ -225,6 +227,7 @@ func (m *MechanicEngine) Run(def MechanicDefinition, ctx MechanicContext) (Mecha
 		result.Mutations[i].FactionName = strings.TrimSpace(result.Mutations[i].FactionName)
 		result.Mutations[i].ConnectionDept = strings.TrimSpace(result.Mutations[i].ConnectionDept)
 		result.Mutations[i].Observation = strings.TrimSpace(result.Mutations[i].Observation)
+		result.Mutations[i].Source = strings.TrimSpace(result.Mutations[i].Source)
 	}
 
 	return result, nil
@@ -863,6 +866,11 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 	case "profession_alertness_delta":
 		if prof := findDept(silo, mutation.Profession); prof != nil {
 			prof.Alertness = clampUnit(prof.Alertness + mutation.Value)
+		}
+	case "profession_belief_absorb":
+		// §3.6 分享接收：强度进入接收部门信念层；玩家私下确信不直接进 E/Q。
+		if prof := findDept(silo, mutation.Profession); prof != nil {
+			AbsorbSharedFact(DefaultInformationConfig(), &prof.Beliefs, mutation.Fragment, mutation.Source, mutation.Value)
 		}
 	case "profession_metric_delta":
 		if prof := findDept(silo, mutation.Profession); prof != nil {
