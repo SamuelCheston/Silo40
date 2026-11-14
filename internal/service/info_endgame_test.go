@@ -99,6 +99,82 @@ func TestInformationVigilEveFires(t *testing.T) {
 	}
 }
 
+// TestInformationProgressExposedInState locks 修复3: the 《共证》 chain state
+// (node lights, replication count, department coverage, gate constants) is a
+// first-class part of every state snapshot, so the player can see 复制进展 /
+// 活链成立 instead of guessing from event history.
+func TestInformationProgressExposedInState(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "information-progress.db"))
+	req := threeSiloRequest(2402)
+	req.Profession = "IT"
+	state, err := svc.CreateGame(req)
+	if err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	progress := state.InformationProgress
+	if progress == nil {
+		t.Fatal("game state lacks information_progress")
+	}
+	if len(progress.Nodes) != 6 {
+		t.Fatalf("expected the 6 《共证》 chain nodes, got %d", len(progress.Nodes))
+	}
+	if progress.Nodes[0].Title != "陪同回查" || progress.Nodes[1].Title != "复制推进" {
+		t.Fatalf("chain node titles out of order: %+v", progress.Nodes)
+	}
+	for _, node := range progress.Nodes {
+		if node.Lit {
+			t.Fatalf("node %s lit on a fresh game", node.Key)
+		}
+	}
+	if progress.GateFactCount != informationGateFactCount {
+		t.Fatalf("gate fact count mismatch: %d vs %d", progress.GateFactCount, informationGateFactCount)
+	}
+	if progress.BeliefFloor != engine.DefaultInformationConfig().QualRumor {
+		t.Fatalf("belief floor mismatch: %v", progress.BeliefFloor)
+	}
+
+	// Open the line: one gather + one share lights the replication heartbeat.
+	execute := func(action model.AgentAction) {
+		t.Helper()
+		outcome, err := svc.ExecuteAction(action)
+		if err != nil || !outcome.Result.Executed {
+			t.Fatalf("execute %+v: %+v (%v)", action, outcome.Result, err)
+		}
+	}
+	execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Judicial"})
+	execute(model.AgentAction{
+		Type: model.ActionShareInfo, TargetDept: "Judicial",
+		FragmentIds: []string{svc.agent.KnownFragments[0]},
+	})
+
+	after, err := svc.GetState()
+	if err != nil {
+		t.Fatalf("get state: %v", err)
+	}
+	progress = after.InformationProgress
+	if progress == nil {
+		t.Fatal("state after actions lacks information_progress")
+	}
+	var replication *model.InformationChainNode
+	for i := range progress.Nodes {
+		if progress.Nodes[i].Key == "special:replication_progress" {
+			replication = &progress.Nodes[i]
+		}
+	}
+	if replication == nil || !replication.Lit || replication.Count < 1 {
+		t.Fatalf("replication heartbeat not visible after the first share: %+v", replication)
+	}
+	judicialCovered := false
+	for _, dept := range progress.Departments {
+		if dept.Name == "Judicial" && dept.AboveFloor >= 1 {
+			judicialCovered = true
+		}
+	}
+	if !judicialCovered {
+		t.Fatalf("department coverage does not reflect the shared belief: %+v", progress.Departments)
+	}
+}
+
 func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "information-playable.db"))
 	req := threeSiloRequest(2401)

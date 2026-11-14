@@ -10,6 +10,7 @@ import { BunkerMap } from './components/BunkerMap';
 import { FactionView } from './components/FactionView';
 import { HeaderStats } from './components/HeaderStats';
 import { WorldPanel } from './components/WorldPanel';
+import { InformationProgressPanel } from './components/InformationProgressPanel';
 import { Silo, Agent, AgentAction, AgentActionType, GameState, AgentStats, PlayerActionMeta, StoryEventLog } from './logic/models';
 import { LayoutGrid, Users } from 'lucide-react';
 
@@ -37,6 +38,7 @@ function App() {
     const [eventHistory, setEventHistory] = useState<StoryEventLog[]>([]);
     const [world, setWorld] = useState<any>(null);
     const [busy, setBusy] = useState(false);
+    const [infoProgress, setInfoProgress] = useState<any>(null);
 
     // Action Form State
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
@@ -80,12 +82,13 @@ function App() {
     const showResourceSelector = selectedActionMeta?.target_type === 'RESOURCE';
 
     // 应用后端返回的游戏状态快照
-    const applyGameState = useCallback((state: GameState) => {
+    const applyGameState = useCallback((state: any) => {
         setSilo(state.silo);
         setAgent(state.agent);
         setAgentStats(state.agent_stats);
         setAvailableActions(state.available_actions || []);
         setWorld(state.world || null);
+        setInfoProgress(state.information_progress || null);
         setPendingEvents(0);
         setPendingOperation('');
         setGameStarted(true);
@@ -98,6 +101,7 @@ function App() {
         setAgentStats(state.agent_stats);
         setAvailableActions(state.available_actions || []);
         setWorld(state.world || null);
+        setInfoProgress(state.information_progress || null);
         setPendingEvents(state.pending_events || 0);
         setPendingOperation(state.pending_operation || '');
         setGameStarted(true);
@@ -439,6 +443,7 @@ function App() {
                                     ) : (
                                         silo && <FactionView silo={silo} />
                                     )}
+                                    <InformationProgressPanel progress={infoProgress} silo={silo} />
                                 </VStack>
 
                                 {/* Right Side: Operations */}

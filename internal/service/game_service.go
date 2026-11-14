@@ -2913,15 +2913,16 @@ func (s *GameService) endingNarrative() string {
 func (s *GameService) buildState() *model.GameState {
 	gameOver := s.gameOver()
 	return &model.GameState{
-		Silo:              s.publicSiloSnapshot(),
-		Agent:             *s.agent,
-		AgentStats:        s.engine.BuildAgentStats(s.agent, s.playerActionSilo()),
-		GameOver:          gameOver,
-		EndingNarrative:   s.endingNarrative(),
-		VictoryStatus:     s.silo.VictoryStatus,
-		ProfessionActions: engine.GetProfessionActionMeta(s.agent.Profession),
-		AvailableActions:  s.availablePlayerActions(),
-		World:             s.publicWorldView(),
+		Silo:                s.publicSiloSnapshot(),
+		Agent:               *s.agent,
+		AgentStats:          s.engine.BuildAgentStats(s.agent, s.playerActionSilo()),
+		GameOver:            gameOver,
+		EndingNarrative:     s.endingNarrative(),
+		VictoryStatus:       s.silo.VictoryStatus,
+		ProfessionActions:   engine.GetProfessionActionMeta(s.agent.Profession),
+		AvailableActions:    s.availablePlayerActions(),
+		World:               s.publicWorldView(),
+		InformationProgress: s.informationProgress(),
 	}
 }
 
@@ -2980,17 +2981,71 @@ func (s *GameService) pendingOperationName() string {
 	return s.pendingOperation.Kind
 }
 
+// informationChainKeys 是《共证》链节点的展示顺序：感染(陪同回查) → 复制 →
+// 独立接收者 → 活链 → 公共事实 → 守夜。链状态只存在于内容事件状态里，事件
+// 历史会被后续事件挤出，这里把它提升为玩家可见的一等进度 (修复3)。
+var informationChainKeys = []string{
+	"player_actions:receiver_verify_accompany",
+	"special:replication_progress",
+	"special:independent_receivers_met",
+	"special:living_chain_confirmed",
+	"special:public_fact_cross_dept",
+	"special:info_vigil_eve",
+}
+
+// informationProgress 汇总玩家堡的《共证》线进度。只读内存状态、不消耗 RNG。
+func (s *GameService) informationProgress() *model.InformationProgress {
+	if s.silo == nil {
+		return nil
+	}
+	progress := &model.InformationProgress{
+		GateFactCount: informationGateFactCount,
+		BeliefFloor:   engine.DefaultInformationConfig().QualRumor,
+	}
+	states := s.contentStates[s.silo.ID]
+	for _, key := range informationChainKeys {
+		title := key
+		for _, def := range s.contentDefinitions {
+			if def.Key == key {
+				title = def.Title
+				break
+			}
+		}
+		state := states[key]
+		progress.Nodes = append(progress.Nodes, model.InformationChainNode{
+			Key:   key,
+			Title: title,
+			Lit:   state.Triggered,
+			Count: state.TriggerCount,
+		})
+	}
+	for _, profession := range s.silo.Professions {
+		above := 0
+		for _, belief := range profession.Beliefs {
+			if belief.B >= progress.BeliefFloor {
+				above++
+			}
+		}
+		progress.Departments = append(progress.Departments, model.DepartmentFactCoverage{
+			Name:       profession.Name,
+			AboveFloor: above,
+		})
+	}
+	return progress
+}
+
 func (s *GameService) buildQueueState() *model.EventQueueState {
 	return &model.EventQueueState{
-		Silo:             s.publicSiloSnapshot(),
-		Agent:            *s.agent,
-		AgentStats:       s.engine.BuildAgentStats(s.agent, s.playerActionSilo()),
-		AvailableActions: s.availablePlayerActions(),
-		World:            s.publicWorldView(),
-		GameOver:         s.gameOver(),
-		EndingNarrative:  s.endingNarrative(),
-		PendingEvents:    s.engine.Bus.Pending(),
-		PendingOperation: s.pendingOperationName(),
+		Silo:                s.publicSiloSnapshot(),
+		Agent:               *s.agent,
+		AgentStats:          s.engine.BuildAgentStats(s.agent, s.playerActionSilo()),
+		AvailableActions:    s.availablePlayerActions(),
+		World:               s.publicWorldView(),
+		GameOver:            s.gameOver(),
+		EndingNarrative:     s.endingNarrative(),
+		PendingEvents:       s.engine.Bus.Pending(),
+		PendingOperation:    s.pendingOperationName(),
+		InformationProgress: s.informationProgress(),
 	}
 }
 
@@ -3008,6 +3063,8 @@ func (s *GameService) buildStepResult(processed *engine.GameEvent, logs []string
 		OperationComplete: complete,
 		Logs:              logs,
 		Stories:           stories,
+
+		InformationProgress: s.informationProgress(),
 	}
 	if processed != nil {
 		result.ProcessedEventID = processed.ID
