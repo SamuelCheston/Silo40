@@ -37,8 +37,8 @@ const (
 	auditActionKeeper = 12
 )
 
-// ItAction IT 候选动作 (§5.1 维护 + §5.3 七类隐蔽动作)。结构性边界 (§5.4)：
-// 公开亮相与反上层控制方不在候选集——目录里不存在这类条目，不是成本高。
+// ItAction IT 候选动作 (§5.1 维护 + §5.3 七类隐蔽动作 + 反击)。结构性边界
+// (§5.4)：公开亮相与反上层控制方不在候选集——目录里不存在这类条目，不是成本高。
 type ItAction struct {
 	ID                string
 	BaseCost          float64
@@ -49,6 +49,7 @@ type ItAction struct {
 	Group             string  // 维护动作目标组：bailiff / it_internal
 	Method            string  // 维护方式：goods/fear/career/truth
 	RegimeAverting    bool    // Judicial 游离时是否属于"挽留"动作
+	Counter           bool    // 反击动作：只在玩家威胁出现时可选 (§7.4)
 }
 
 // ItActionCatalog 返回按 ID 升序的候选动作集 (确定性)。
@@ -56,6 +57,8 @@ type ItAction struct {
 func ItActionCatalog() []ItAction {
 	return []ItAction{
 		{ID: "control_information", BaseCost: 6, WShock: 2, LossOfControlProb: 0.03},
+		{ID: "counter_investigate_player", BaseCost: 8, Counter: true},
+		{ID: "counter_seize_materials", BaseCost: 9, WShock: 2, Counter: true},
 		{ID: "delay_enforcement", BaseCost: 7, WShock: 3, LossOfControlProb: 0.06},
 		{ID: "dispatch_bailiff", BaseCost: 10, WShock: 4, DirectExposure: 0.18},
 		{ID: "forge_records", BaseCost: 7, WShock: 2, LossOfControlProb: 0.04},
@@ -136,10 +139,19 @@ func applyItMaintenance(state *model.ItAuthorityState, group, method string) {
 	}
 }
 
+// playerThreatVisible IT 可观察到的玩家进展 (§5.5 反击触发)：公开证据、
+// 核验名单或已成形的曝光。IT 读不到玩家私人信念。
+func playerThreatVisible(silo *model.Silo) bool {
+	return len(silo.PublicEvidence) > 0 || len(silo.VerifiedEvidence) > 0 || silo.Authority.E >= 0.2
+}
+
 // itUtility §5.5 双动机 utility。IT 读自己的预测 (believed 一侧)，不读真实
 // 全知结果；本轮预测值取动作声明效果 (TODO(balance): 预测误差之后接 believed
-// 条款与碎片)。
+// 条款与碎片)。反击动作只在玩家威胁可见时进入候选。
 func itUtility(action ItAction, silo *model.Silo, cost float64) float64 {
+	if action.Counter && !playerThreatVisible(silo) {
+		return -1000
+	}
 	deltaK := 0.0
 	if action.Group != "" {
 		state := &silo.ItAuthority
@@ -162,12 +174,17 @@ func itUtility(action ItAction, silo *model.Silo, cost float64) float64 {
 	}
 	self := action.WShock/6 + 1.5*regimeAverted + 0.5*deltaK
 	public := -action.RSDelta / 0.05
-	return 0.5*self + 0.5*public - 0.01*cost
+	utility := 0.5*self + 0.5*public - 0.01*cost
+	if action.Counter {
+		// TODO(balance): 反击加成 1.5 为 sim 起点 (§7.4：承受至少一次反击)。
+		utility += 1.5
+	}
+	return utility
 }
 
 // RunITAuthorityMonthly §5 月度 IT 权威回合：忠诚回归、动作选择与执行、
 // 资源结算。确定性选择 + 单一 RNG 流 (失控/暴露骰)。在 Protocol 结算之后。
-func (e *GameEngine) RunITAuthorityMonthly(silo *model.Silo) {
+func (e *GameEngine) RunITAuthorityMonthly(silo *model.Silo, agent *model.Agent) {
 	if silo == nil || silo.VictoryStatus != nil {
 		return
 	}
@@ -235,7 +252,7 @@ func (e *GameEngine) RunITAuthorityMonthly(silo *model.Silo) {
 		}
 		spent += candidate.cost
 		executed++
-		e.executeItAction(silo, candidate.action)
+		e.executeItAction(silo, agent, candidate.action)
 		state.LastActions = append(state.LastActions, candidate.action.ID)
 		if len(state.LastActions) > auditActionKeeper {
 			state.LastActions = state.LastActions[len(state.LastActions)-auditActionKeeper:]
@@ -247,13 +264,29 @@ func (e *GameEngine) RunITAuthorityMonthly(silo *model.Silo) {
 }
 
 // executeItAction 执行一个隐蔽动作的真实后果。
-func (e *GameEngine) executeItAction(silo *model.Silo, action ItAction) {
+func (e *GameEngine) executeItAction(silo *model.Silo, agent *model.Agent, action ItAction) {
 	state := &silo.ItAuthority
 
 	// 维护动作：忠诚响应。
 	if action.Group != "" {
 		applyItMaintenance(state, action.Group, action.Method)
 		return
+	}
+
+	// 反击动作 (§7.4：玩家须承受至少一次反击；强度随资源枯竭衰减)。
+	// TODO(balance): 怀疑度 0.08 与戒备 0.15 为 sim 起点。
+	switch action.ID {
+	case "counter_investigate_player":
+		if agent != nil {
+			agent.SuspicionLevel = math.Max(0, agent.SuspicionLevel+0.08)
+		}
+	case "counter_seize_materials":
+		for i := range silo.Professions {
+			prof := &silo.Professions[i]
+			if prof.Name == "Judicial" || prof.Name == "IT" {
+				prof.Alertness = clampUnit(prof.Alertness + 0.15)
+			}
+		}
 	}
 
 	// W 效果经冲击队列在下一次权威更新消费。

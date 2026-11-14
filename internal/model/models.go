@@ -430,6 +430,9 @@ type Silo struct {
 	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
 	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
 	PublicEvidence []PublicEvidenceRecord `gorm:"type:text;serializer:json" json:"public_evidence,omitempty"`
+	// VerifiedEvidence 已完成核验、具备已核验档案级 provenance 的事实 ID
+	// (子项 6：核验是发布的前置)。按 ID 升序去重。
+	VerifiedEvidence []string `gorm:"type:text;serializer:json" json:"verified_evidence,omitempty"`
 	// Protocol Order 条款运行时状态 (子项 4)：believed 副本、偏离记录、介入链
 	// 与主任认知 G。真实条款由加载器持有，不持久化、不可伪造。
 	Protocol ProtocolState `gorm:"type:text;serializer:json" json:"protocol"`

@@ -69,7 +69,10 @@ defineMechanics([
         mutations.push({ type: "actor_metric_delta", field: "political_points", value: prestige * 0.1 * deltaYears });
       }
 
-      const apGainRate = 10 + prestige * 0.05;
+      // AP 经济按 §7.4 的拆台节奏校准 (TODO(balance))：首档 60–75AP/4–6 月、
+      // covenant 累计 125–150AP/12–16 月需要约 6–8 AP/月 的恢复，旧的
+      // 10/年 是另一套动作经济下的遗留值。
+      const apGainRate = 84 + prestige * 0.3;
       const nextAP = clamp(ctx.actor.action_points + apGainRate * deltaYears, 0, 100);
       mutations.push({ type: "actor_metric_set", field: "action_points", value: nextAP });
 

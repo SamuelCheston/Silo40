@@ -78,10 +78,9 @@ func TestPublicEvidenceRegisterEffect(t *testing.T) {
 }
 
 // TestBailiffEvidenceChainsLoadAndFlow locks the two independent dispatch
-// evidence chains end to end: the evidence node fires on local unrest after the
-// first local observation, and the publication node fires once the player's
-// belief crosses the §3.6 publish floor — registering public evidence and
-// informing the Judicial layer.
+// evidence chains end to end: the evidence node fires on local unrest after
+// the first local observation, and the player-driven verify/publish actions
+// (子项 6) carry the material from private belief to public evidence.
 func TestBailiffEvidenceChainsLoadAndFlow(t *testing.T) {
 	svc := bootstrapRealContent(t)
 	svc.engine = engine.NewGameEngine()
@@ -96,8 +95,10 @@ func TestBailiffEvidenceChainsLoadAndFlow(t *testing.T) {
 	for _, key := range []string{
 		"special:bailiff_dispatch_evidence_a",
 		"special:bailiff_dispatch_evidence_b",
-		"special:bailiff_evidence_public_a",
-		"special:bailiff_evidence_public_b",
+		"player_actions:investigate_dispatch",
+		"player_actions:expose_execution_failure",
+		"player_actions:verify_evidence",
+		"player_actions:publish_evidence",
 	} {
 		findContentDefinitionByKey(t, svc, key)
 	}
@@ -132,14 +133,37 @@ func TestBailiffEvidenceChainsLoadAndFlow(t *testing.T) {
 		t.Fatalf("verification fixture did not reach the publish floor: %v", belief.B)
 	}
 
-	svc.queueSystemContentEvents("TEST")
+	// Verify action: B >= 0.85 floor (§3.6) -> verified list.
+	verifyAction := model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "verify_evidence", Cost: 15}
+	handled, result, err := svc.queuePlayerActionEvents(verifyAction)
+	if err != nil || !handled || !result.Executed {
+		t.Fatalf("verify action failed: handled=%v result=%+v err=%v", handled, result, err)
+	}
+	svc.drainQueuedEvents()
+	svc.completePlayerAction(verifyAction)
+	svc.drainQueuedEvents()
+	if len(svc.silo.VerifiedEvidence) != 1 || svc.silo.VerifiedEvidence[0] != "Judicial_1" {
+		t.Fatalf("verify action did not register the verified fact: %+v", svc.silo.VerifiedEvidence)
+	}
+
+	// Publish action: verified + B >= 0.90 -> public evidence (provenance 1.0).
+	publishAction := model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "publish_evidence", Cost: 20}
+	handled, result, err = svc.queuePlayerActionEvents(publishAction)
+	if err != nil || !handled || !result.Executed {
+		t.Fatalf("publish action failed: handled=%v result=%+v err=%v", handled, result, err)
+	}
+	svc.drainQueuedEvents()
+	svc.completePlayerAction(publishAction)
 	svc.drainQueuedEvents()
 
-	if !contentTriggered(svc, "special:bailiff_evidence_public_a") {
-		t.Fatal("publication chain A did not fire at the publish floor")
+	if !contentTriggered(svc, "player_action:publish_evidence") {
+		t.Fatal("publication completion key missing")
 	}
 	if len(svc.silo.PublicEvidence) != 1 || svc.silo.PublicEvidence[0].FactID != "Judicial_1" {
 		t.Fatalf("publication did not register public evidence: %+v", svc.silo.PublicEvidence)
+	}
+	if record := svc.silo.PublicEvidence[0]; record.Provenance != 1.0 || record.Coverage != 0.9 {
+		t.Fatalf("publication provenance/coverage unexpected: %+v", record)
 	}
 	var judicial *model.Profession
 	for i := range svc.silo.Professions {

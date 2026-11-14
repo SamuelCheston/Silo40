@@ -344,7 +344,7 @@ func (e *GameEngine) RunLocalPhase(silo *model.Silo, agent *model.Agent, deltaYe
 	e.AdvanceProtocolMonthly(silo)
 
 	// 4.6 IT 权威回合：二元联盟维护与隐蔽动作 (§5)。
-	e.RunITAuthorityMonthly(silo)
+	e.RunITAuthorityMonthly(silo, agent)
 
 	// 5. NPC 自主行为
 	e.RunNpcTurn(silo, agent, deltaYears, e.logf)
