@@ -126,6 +126,30 @@ function topStanceReeval(actor) {
 function topStanceGuarantee(delta) {
   return { type: "top_stance_guarantee", value: delta || 0 };
 }
+function preparationDelta(field, value) {
+  return { type: "preparation_delta", metric: field, value: value || 0 };
+}
+function preparationSetBool(field, boolValue) {
+  return { type: "preparation_delta", metric: field, bool_value: !!boolValue };
+}
+function preparationStage(stage) {
+  return { type: "preparation_delta", metric: "reception_stage", flag: stage };
+}
+function preparationPlanRole(role, value) {
+  return { type: "preparation_delta", metric: "plan_role", profession: role, value: (value === undefined || value === null) ? 1 : value };
+}
+function preparationTransfer(resource, amount) {
+  return { type: "preparation_transfer", metric: resource, value: amount };
+}
+function spilloverChannelAdd(kind, targetSilo, reliability) {
+  return { type: "spillover_channel_add", flag: kind, count: targetSilo, value: reliability || 0 };
+}
+function preparationGte(field, value) {
+  return { type: "preparation_gte", metric: field, value: value };
+}
+function escapeDepartureSettle() {
+  return { type: "escape_departure_settle" };
+}
 function completePlayerAction(actionId) {
   return { type: "player_action_complete", action: actionId };
 }
@@ -397,6 +421,36 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			"mayor":       ctx.Silo.TopStance.MayorStance(),
 			"it":          ctx.Silo.TopStance.ITStance(),
 			"guarantee":   ctx.Silo.TopStance.Guarantee,
+		}
+		// 16 Layer 1：准备账本只读视图。账本塑形出发结算与动作可得性；
+		// 仲裁永不读它 (囤积准备不是胜利进度条)。
+		result["escape_prep"] = map[string]interface{}{
+			"initialized":       ctx.Silo.EscapePrep.Initialized,
+			"suits_functional":  ctx.Silo.EscapePrep.SuitsFunctional,
+			"supplies_packed":   ctx.Silo.EscapePrep.SuppliesPacked,
+			"materials_packed":  ctx.Silo.EscapePrep.MaterialsPacked,
+			"plan_completeness": ctx.Silo.EscapePrep.PlanCompleteness,
+			"plan_roles":        append([]string(nil), ctx.Silo.EscapePrep.PlanRoles...),
+			"drill_level":       ctx.Silo.EscapePrep.DrillLevel,
+			"care_ready":        ctx.Silo.EscapePrep.CareReady,
+			"production_start":  ctx.Silo.EscapePrep.ProductionStart,
+			"reception_stage":   ctx.Silo.EscapePrep.ReceptionStage,
+			"prep_exposure":     ctx.Silo.EscapePrep.PrepExposure,
+		}
+		spilloverChannels := make([]map[string]interface{}, 0, len(ctx.Silo.SpilloverPrep.Channels))
+		for _, channel := range ctx.Silo.SpilloverPrep.Channels {
+			spilloverChannels = append(spilloverChannels, map[string]interface{}{
+				"kind":          channel.Kind,
+				"target_silo":   channel.TargetSilo,
+				"reliability":   channel.Reliability,
+				"exposure_cost": channel.ExposureCost,
+				"year":          channel.Year,
+				"month":         channel.Month,
+			})
+		}
+		result["spillover_prep"] = map[string]interface{}{
+			"channels":       spilloverChannels,
+			"package_quality": ctx.Silo.SpilloverPrep.PackageQuality,
 		}
 
 		resources := map[string]float64{}

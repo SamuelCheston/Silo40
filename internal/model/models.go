@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sort"
 	"time"
 
 	"gorm.io/gorm"
@@ -38,7 +39,12 @@ const (
 //     (PreFallSnapshot)、公开约章事实键 (PublicFactKeys)、跨堡出站投递日志
 //     (World.OutboundSignals) 与结局仲裁审计字段。新增字段零值即旧档语义，
 //     v8 存档经备份+单事务+回读校验升级，不回填任何推测状态。
-const CurrentSaveVersion = 9
+//   - v10: 准备度账本与顶层立场 (16 分册 Layer 0/1)。Silo 携带逃跑准备账本
+//     (EscapePrep)、外溢准备账本 (SpilloverPrep)、顶层立场 (TopStance) 与
+//     逃出群体审计字段 (Departed/Fragile)。新字段零值即旧档语义 (无准备、
+//     立场零值=阻挠)，账本在出发结算落地前不被任何结局读取；v9 存档经
+//     备份+单事务+回读校验升级，不回填任何推测状态。
+const CurrentSaveVersion = 10
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -440,6 +446,8 @@ type Silo struct {
 	Authority       ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`         // IT 幕后威势与 Judicial 附着
 	EscapedGroup    EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`     // 已离开且可能存续的堡外群体 (G5)
 	TopStance       TopStanceState          `gorm:"type:text;serializer:json" json:"top_stance"`        // 顶层立场 (16 §3.2)：内部状态，仲裁不读
+	EscapePrep      EscapePreparation       `gorm:"type:text;serializer:json" json:"escape_prep"`       // 逃跑准备账本 (16 §2)：事实账本，仲裁不读
+	SpilloverPrep   SpilloverPreparation    `gorm:"type:text;serializer:json" json:"spillover_prep"`    // 外溢准备账本 (16 §2.3)：信道建立侧
 	PreFallSnapshot PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
 	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
 	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
@@ -540,15 +548,106 @@ func normalizeTopStance(v string) string {
 	}
 }
 
+// 接应档位 (16 §2.1)：none = 无接应事实；surveyed = 路线已勘察；
+// confirmed = 先遣往返确认；stocked = 接应点已囤物资。
+const (
+	ReceptionNone      = "none"
+	ReceptionSurveyed  = "surveyed"
+	ReceptionConfirmed = "confirmed"
+	ReceptionStocked   = "stocked"
+)
+
+// 预案功能位 (16 §2.2，剧情台阶 R-2 清单)：预案完备度 = 功能位覆盖率。
+// 每个功能位由对应的准备动作/事件写入，权重 TODO(balance) (当前等权)。
+const (
+	PlanRoleMechanical   = "mechanical"    // 出口与设备可重复使用
+	PlanRoleMines        = "mines"         // 通行限制与结构影响
+	PlanRoleSupply       = "supply"        // 多批次物资换算
+	PlanRoleMedical      = "medical"       // 暴露风险与照护
+	PlanRoleAgricultural = "agricultural"  // 可携带食物与生产起点
+	PlanRoleOrder        = "order"         // Mayor/Police 公开秩序 (可争取非必须)
+)
+
+// PlanRoleCount 功能位总数 (派生完备度的分母)。
+const PlanRoleCount = 6
+
+// EscapePreparation 逃跑准备账本 (16 §2/§6.1)。事实账本，不是成功率系数：
+// 每条记录必须有明确生产者 (玩家动作/内容事件)，禁止月度被动积累与
+// AP 直接兑换。可数实物获取即付成本 (划拨即扣减、暴露即累积)。
+// 空账本 = 无准备 = 旧行为逐位不变。
+type EscapePreparation struct {
+	Initialized bool `json:"initialized"`
+	// 可数实物
+	SuitsFunctional int     `json:"suits_functional"` // 可用防护服套数 (预置缓存可用部分 + 本地修复成功部分)
+	SuppliesPacked  float64 `json:"supplies_packed"`  // 已划拨封存的便携补给 (人·月单位)
+	MaterialsPacked float64 `json:"materials_packed"` // 已划拨的装备材料 (含生产起点载体)
+	// 程度事实
+	PlanCompleteness float64  `json:"plan_completeness"`      // 预案完备度 = 功能位覆盖率 (0-1)，由 PlanRoles 派生
+	PlanRoles        []string `json:"plan_roles,omitempty"`   // 已完成实质对接的功能位 (升序去重)
+	DrillLevel       float64  `json:"drill_level"`            // 演练水平 (0-1，按次累积)
+	CareReady        float64  `json:"care_ready"`             // 照护能力 (0-1)
+	ProductionStart  bool     `json:"production_start"`       // 生产起点 ("明天") 已备
+	ReceptionStage   string   `json:"reception_stage,omitempty"` // 接应档位：none/surveyed/confirmed/stocked
+	// 暴露记账
+	PrepExposure float64 `json:"prep_exposure"` // 筹备活动暴露累计 (修服/划拨/演练可见性)
+}
+
+// RecomputePlanCompleteness 由已对接功能位重算预案完备度 (等权基线，
+// 权重 TODO(balance))。PlanRoles 升序去重。
+func (p *EscapePreparation) RecomputePlanCompleteness() {
+	if p == nil {
+		return
+	}
+	seen := map[string]bool{}
+	roles := make([]string, 0, len(p.PlanRoles))
+	for _, role := range p.PlanRoles {
+		if role == "" || seen[role] {
+			continue
+		}
+		seen[role] = true
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	p.PlanRoles = roles
+	p.PlanCompleteness = float64(len(roles)) / PlanRoleCount // TODO(balance): 功能位权重
+}
+
+// 外溢受限信道三种 (16 §2.3，与《共证》I-6 台阶一致)。
+const (
+	SpilloverChannelITLine         = "it_line"          // IT 专线类：可靠度最高、暴露成本最高
+	SpilloverChannelCrossSignal    = "cross_signal"     // 跨堡信号类：受邻接约束
+	SpilloverChannelPhysicalHandoff = "physical_handoff" // 实体交接类：与逃跑耦合
+)
+
+// SpilloverChannel 一条已建立的受限信道 (建立侧)。投递与独立接收结算
+// 属 Layer 3 (外溢模型主体)，本期不实现。
+type SpilloverChannel struct {
+	Kind         string  `json:"kind"`
+	TargetSilo   uint    `json:"target_silo"`
+	Reliability  float64 `json:"reliability"`  // TODO(balance)
+	ExposureCost float64 `json:"exposure_cost"` // TODO(balance)
+	Year         int     `json:"year"`
+	Month        int     `json:"month"`
+}
+
+// SpilloverPreparation 外溢准备账本 (16 §2.3/§6.1)。外溢是逃跑失败后的
+// 退路，不是并行的第二套准备 (用户裁决，16 §3.5)。
+type SpilloverPreparation struct {
+	Channels       []SpilloverChannel `json:"channels,omitempty"`
+	PackageQuality float64            `json:"package_quality"` // 五种能力完备度 (0-1)
+}
+
 // EscapeGroup 逃出群体模型 (G5)：已经离开驻地、在堡外可能存续的人口。
 // 存续的逃出群体是《越岭》的资格事实，也是《寂堡》《遗忘》《断层》的例外：
 // 原驻地毁灭/重置/崩坏时不再追溯判死该群体。
 type EscapeGroup struct {
 	Initialized   bool `json:"initialized"`
 	Population    int  `json:"population"`
+	Departed      int  `json:"departed,omitempty"` // 出发人数 (审计：路上损耗 = Departed - Population)
 	DepartedYear  int  `json:"departed_year,omitempty"`
 	DepartedMonth int  `json:"departed_month,omitempty"`
 	Surviving     bool `json:"surviving"`
+	Fragile       bool `json:"fragile,omitempty"` // 脆弱存续标记 (维存缺口或追踪压力，供堡外月度检查)
 }
 
 // SurvivingEscapeGroup 报告是否存在真实可读的存续逃出群体 (结局体系 12 §6：

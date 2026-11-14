@@ -94,7 +94,9 @@ type ContentEffect struct {
 	Value       float64 `json:"value,omitempty"`
 	BoolValue   bool    `json:"bool_value,omitempty"`
 	DelayMonths int     `json:"delay_months,omitempty"`
-	EventID     string  `json:"event_id,omitempty"`
+	// Count 整数载荷：spillover_channel_add 的目标堡 ID。
+	Count   int    `json:"count,omitempty"`
+	EventID string `json:"event_id,omitempty"`
 	// Action 仅用于 player_action_complete：写入的玩家完成键动作 ID
 	// (服务层加 "player_action:" 前缀，如 reset_countermeasure_done)。
 	Action string `json:"action,omitempty"`
@@ -426,6 +428,15 @@ func validateTrigger(trigger ContentTrigger) error {
 			return fmt.Errorf("%s requires metric", trigger.Type)
 		}
 		return nil
+	case "preparation_gte":
+		// 16 §6.2 (Layer 1): ledger field >= threshold, for downstream gating.
+		if trigger.Metric == "" {
+			return fmt.Errorf("preparation_gte requires metric")
+		}
+		if _, ok := readPreparationMetric(&model.Silo{}, trigger.Metric); !ok {
+			return fmt.Errorf("preparation_gte metric %q is not a readable ledger field", trigger.Metric)
+		}
+		return nil
 	case "silo_population_gte", "silo_population_lte":
 		return nil
 	case "silo_flag_true", "silo_flag_false":
@@ -558,6 +569,36 @@ func validateEffect(effect ContentEffect) error {
 	case "top_stance_guarantee":
 		// 16 §3.2: raise (or lower) the credibility of the rebels' guarantees;
 		// weight input of the stance decision, clamped to [0,1] at apply time.
+	case "preparation_delta":
+		// 16 §6.2 (Layer 1): whitelisted ledger writes; unknown field = failure.
+		if err := validatePreparationDelta(effect); err != nil {
+			return err
+		}
+	case "preparation_transfer":
+		// 16 §6.2: resource transfer into the sealed ledger; the deduction is
+		// immediate and insufficient balance fails explicitly at apply time.
+		// Metric 比较大小写不敏感：脚本效果归一化会把 metric 小写化。
+		switch strings.ToLower(effect.Metric) {
+		case "supplies", "materials":
+		default:
+			return fmt.Errorf("preparation_transfer metric must be Supplies or Materials")
+		}
+		if effect.Value <= 0 {
+			return fmt.Errorf("preparation_transfer requires positive value")
+		}
+	case "spillover_channel_add":
+		// 16 §6.2: register one restricted channel (establishment side only;
+		// delivery/reception settlement is Layer 3).
+		if _, ok := spilloverChannelKinds[effect.Flag]; !ok {
+			return fmt.Errorf("spillover_channel_add flag must be it_line|cross_signal|physical_handoff")
+		}
+		if effect.Count <= 0 {
+			return fmt.Errorf("spillover_channel_add requires positive count (target silo id)")
+		}
+	case "escape_departure_settle":
+		// 16 §3.4 (departure settlement point, minimal form): the service layer
+		// settles after all effects apply. No fields; the settlement reads the
+		// stance + ledger + route facts and writes the escape group.
 	case "player_action_complete":
 		// 玩家完成键写入路径 (18 分册 copies_distributed 一类节点)：内容事件
 		// 由此写入 player_action:<action> 完成键，服务层负责落状态并发总线事件。
@@ -711,6 +752,9 @@ func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext
 		return contentGameTimestamp(ctx.Silo.CurrentYear, ctx.Silo.CurrentMonth) >= target
 	case "silo_metric_gte":
 		value, ok := readSiloMetric(ctx.Silo, trigger.Metric)
+		return ok && value >= trigger.Value
+	case "preparation_gte":
+		value, ok := readPreparationMetric(ctx.Silo, trigger.Metric)
 		return ok && value >= trigger.Value
 	case "silo_metric_lte":
 		value, ok := readSiloMetric(ctx.Silo, trigger.Metric)
@@ -946,6 +990,10 @@ type ScopeContext struct {
 	// AllianceDeltas 收集 alliance_loyalty_delta 效果 (组名 -> 增量列表)；
 	// nil = 无处投递。
 	AllianceDeltas *[]AllianceLoyaltyDelta
+	// EscapeDepartureSettle 收集 escape_departure_settle 效果：出发结算点
+	// 请求 (16 §3.4 第一段结算的最小形态)。服务层在全部效果施加后执行结算
+	// (结算读立场与账本，产出逃出群体；仲裁只读群体事实)。nil = 无处投递。
+	EscapeDepartureSettle *bool
 	// Errors 收集目标解析失败等显式错误 (对齐 07 §12：不静默丢弃)。
 	Errors *[]string
 }
@@ -1052,6 +1100,13 @@ func ApplyContentEffectsScoped(effects []ContentEffect, sc *ScopeContext) []Cont
 				})
 			}
 			continue
+		case "escape_departure_settle":
+			// 16 §3.4：出发结算点请求。结算在所有效果 (含立场终局重估)
+			// 施加完毕后由服务层执行一次。
+			if sc != nil && sc.EscapeDepartureSettle != nil {
+				*sc.EscapeDepartureSettle = true
+			}
+			continue
 		}
 		applyContentEffectScoped(effect, sc)
 	}
@@ -1106,6 +1161,23 @@ func applyContentEffectScoped(effect ContentEffect, sc *ScopeContext) {
 	case "top_stance_guarantee":
 		if sc.Self != nil {
 			addTopStanceGuarantee(sc.Self, effect.Value)
+		}
+		return
+	case "preparation_delta":
+		// 16 §6.2 (Layer 1)：账本写入只作用于驻地；非法写入显式失败。
+		if err := applyPreparationDelta(sc.Self, effect); err != nil {
+			sc.reportError(err.Error())
+		}
+		return
+	case "preparation_transfer":
+		// 划拨即扣减；余额不足显式失败 (不部分划拨、不静默跳过)。
+		if err := applyPreparationTransfer(sc.Self, effect.Metric, effect.Value); err != nil {
+			sc.reportError(err.Error())
+		}
+		return
+	case "spillover_channel_add":
+		if err := applySpilloverChannelAdd(sc.Self, effect.Flag, effect.Count, effect.Value); err != nil {
+			sc.reportError(err.Error())
 		}
 		return
 	}

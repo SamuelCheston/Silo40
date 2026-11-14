@@ -616,3 +616,55 @@ func TestResumeStillRejectsHigherVersion(t *testing.T) {
 		t.Fatalf("expected ErrIncompatibleSave for higher version, got: %v", err)
 	}
 }
+
+// v9 → v10：准备账本与顶层立场空起步。新字段在 v9 时代没有任何写入方，
+// 升级不回填推测状态；回读校验账本为空、立场零值=阻挠，升级后行为逐位不变。
+func TestUpgradeV9ToPreparationSave(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "v10preparation.db")
+	svc := newVersionTestService(t, dbPath)
+	createVersionTestGame(t, svc)
+	// 模拟 v9 存档：只回退版本标记 (新字段零值即 v9 语义)。
+	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: endingsSaveVersion}).Error; err != nil {
+		t.Fatalf("downgrade meta: %v", err)
+	}
+
+	upgraded, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
+	if err != nil || !upgraded {
+		t.Fatalf("v10 preparation upgrade failed: upgraded=%v err=%v", upgraded, err)
+	}
+	backups, _ := filepath.Glob(dbPath + ".bak-*-v10preparation")
+	if len(backups) != 1 {
+		t.Fatalf("expected one preparation backup, got %v", backups)
+	}
+
+	var silos []model.Silo
+	if err := svc.db.Order("id ASC").Find(&silos).Error; err != nil {
+		t.Fatalf("reload silos: %v", err)
+	}
+	for i := range silos {
+		silo := &silos[i]
+		if silo.EscapePrep.Initialized || len(silo.EscapePrep.PlanRoles) != 0 ||
+			silo.EscapePrep.SuitsFunctional != 0 || silo.EscapePrep.PrepExposure != 0 {
+			t.Fatalf("silo %d gained escape preparation during migration: %+v", silo.ID, silo.EscapePrep)
+		}
+		if len(silo.SpilloverPrep.Channels) != 0 || silo.SpilloverPrep.PackageQuality != 0 {
+			t.Fatalf("silo %d gained spillover preparation during migration: %+v", silo.ID, silo.SpilloverPrep)
+		}
+		if silo.TopStance.Initialized || silo.TopStance.Guarantee != 0 {
+			t.Fatalf("silo %d gained stance state during migration: %+v", silo.ID, silo.TopStance)
+		}
+		if got := silo.TopStance.MayorStance(); got != model.TopStanceBlock {
+			t.Fatalf("silo %d stance zero value = %q, want block", silo.ID, got)
+		}
+	}
+
+	fresh := newVersionTestService(t, dbPath)
+	if err := fresh.Resume(); err != nil {
+		t.Fatalf("resume migrated v10 save: %v", err)
+	}
+
+	again, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
+	if err != nil || again {
+		t.Fatalf("v10 save must skip migration: upgraded=%v err=%v", again, err)
+	}
+}

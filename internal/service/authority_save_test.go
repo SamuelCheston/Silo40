@@ -34,10 +34,18 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 		t.Fatalf("meta version = %d, want %d", meta.SaveVersion, authoritySaveVersion)
 	}
 
-	// The startup chain continues v8 → v9 before Resume accepts the save.
+	// The startup chain continues v8 → v9 → v10 before Resume accepts the save.
 	upgradedV9, err := UpgradeV8ToEndingsSave(svc.db, dbPath)
 	if err != nil || !upgradedV9 {
 		t.Fatalf("v8 endings upgrade failed: upgraded=%v err=%v", upgradedV9, err)
+	}
+	upgradedV10, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
+	if err != nil || !upgradedV10 {
+		t.Fatalf("v9 preparation upgrade failed: upgraded=%v err=%v", upgradedV10, err)
+	}
+	backupsV10, _ := filepath.Glob(dbPath + ".bak-*-v10preparation")
+	if len(backupsV10) != 1 {
+		t.Fatalf("expected one preparation backup, got %v", backupsV10)
 	}
 
 	fresh := newVersionTestService(t, dbPath)
