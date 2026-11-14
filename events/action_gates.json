@@ -81,6 +81,35 @@
       "unlock": { "event_completed": "player_action:action_share_info" },
       "available": { "relation": "Judicial", "min": 0.1 },
       "reason": "需要先完成一次分享，并与司法侧建立最低信任（初始校准值）"
+    },
+    {
+      "id": "CHARTER_CONTACT_OFFER",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:order_chain_breach" },
+          { "relation": "Judicial", "min": 0.2 }
+        ]
+      },
+      "available": {},
+      "reason": "需要先点亮规则断点，并与司法侧建立最低信任（初始校准值）"
+    },
+    {
+      "id": "CHARTER_CONTACT_ACCEPT",
+      "unlock": { "event_completed": "player_actions:charter_contact_offer" },
+      "available": {},
+      "reason": "需要先完成程序派联系人接触"
+    },
+    {
+      "id": "CHARTER_CONTACT_DECLINE",
+      "unlock": { "event_completed": "player_actions:charter_contact_offer" },
+      "available": {},
+      "reason": "需要先完成程序派联系人接触"
+    },
+    {
+      "id": "CHARTER_CONTACT_DEFER",
+      "unlock": { "event_completed": "player_actions:charter_contact_offer" },
+      "available": {},
+      "reason": "需要先完成程序派联系人接触"
     }
   ]
 }

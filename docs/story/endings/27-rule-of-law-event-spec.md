@@ -50,7 +50,7 @@
 | 接受效果 | `scheduleEvent("charter_window_expiry", 6)`（`TODO(balance)`） |
 | 拒绝/暂缓效果 | 无机制效果（`apply` 返回空）；注释指依赖：材料转喂 Mayor 圈层属《人治》节点群（未编写） |
 | 完成键 | `player_action:charter_contact_accept`／`..._decline`／`..._defer` |
-| 门控 | 三键同解：`unlock: event_completed "player_action:charter_contact_offer"` |
+| 门控 | 三键同解：`unlock: event_completed "player_actions:charter_contact_offer"`（内容完成键按 `组:事件 ID` 命名，注意与内置动作键 `player_action:*` 的区别） |
 | DSL 能力 | 全部现有 |
 | 依赖 | **缺口**：门控无否定谓词，选定其一后兄弟选择不能隐藏；下游只读接受键，多选不构成机制矛盾。隐藏能力等门控批次，届时在 `available` 加"未选其他键"条件 |
 
