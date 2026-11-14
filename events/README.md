@@ -150,3 +150,9 @@ trigger: { type: "silo_population_lte", value: 6000 },
   provenance=1.0 发布的前置。JS helper：`evidenceVerify(fragment)`）
 - `authority_w_shock`（`value` = 冲击值。进入威势冲击队列 Σδe，下一次月度
   权威更新消费一次，单月合计 cap ±12。JS helper：`authorityWShock(value)`）
+- `decisive_shock`（裁决的冲击通道：结构性事件的离散负冲击，不受 ±12 上限、
+  可击穿日常平衡点下限。`flag` = 冲击源键（缺省取事件键），`value` = 冲击值
+  （缺省 = 引擎 `DecisiveShockMagnitude`，必须为负）。同源只发一次，记录永久
+  保留作审计。触发源只给三类：1 号地堡覆灭、终止链失效、大规模公开证据；
+  量级推导见 `docs/research/10-it-control-credibility/14-parameters-and-audit.md`
+  §9.1。JS helper：`decisiveShock(source, value)`）

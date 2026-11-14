@@ -135,6 +135,9 @@ function evidenceVerify(fragment) {
 function authorityWShock(value) {
   return { type: "authority_w_shock", value: value };
 }
+function decisiveShock(source, value) {
+  return { type: "decisive_shock", flag: source || "", value: value || 0 };
+}
 function allianceLoyaltyDelta(group, value) {
   return { type: "alliance_loyalty_delta", observer: group, value: value };
 }

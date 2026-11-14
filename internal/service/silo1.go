@@ -94,8 +94,13 @@ func (s *GameService) syncSilo1Peer() {
 	}
 	destroyed := silo.VictoryStatus != nil && strings.EqualFold(silo.VictoryStatus.Type, "death")
 	s.world.Silo1.Alive = !destroyed
-	if destroyed {
+	if destroyed && !s.world.Flags[model.WorldFlagSilo1Destroyed] {
 		s.world.Flags[model.WorldFlagSilo1Destroyed] = true
+		// 裁决的冲击通道 (三类触发源之一)：1 号地堡覆灭首次成为世界事实时，
+		// 为玩家堡排队一次决定性冲击 (同源去重保证只发一次)。
+		if s.silo != nil {
+			engine.QueueDecisiveShock(s.silo, engine.DecisiveSourceSilo1Destroyed, engine.DecisiveShockMagnitude)
+		}
 	}
 }
 

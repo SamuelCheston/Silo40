@@ -1656,10 +1656,17 @@ func (s *GameService) applyPublicEvidenceWrites(siloID uint, records []model.Pub
 	if silo == nil {
 		return
 	}
+	qualifyingBefore := engine.ComputeInformationEnvironment(silo).QualifyingFacts
 	for _, record := range records {
 		record.Year = silo.CurrentYear
 		record.Month = silo.CurrentMonth
 		engine.RegisterPublicEvidence(silo, record)
+	}
+	// 裁决的冲击通道 (三类触发源之一)：合格公开事实数因本次登记首次达到
+	// 约章门槛 = "大规模公开证据"。同源去重保证只发一次。
+	if qualifyingBefore < engine.DefaultAuthorityConfig().PactMinFacts &&
+		engine.ComputeInformationEnvironment(silo).QualifyingFacts >= engine.DefaultAuthorityConfig().PactMinFacts {
+		engine.QueueDecisiveShock(silo, engine.DecisiveSourceMassEvidence, engine.DecisiveShockMagnitude)
 	}
 }
 
@@ -1705,6 +1712,33 @@ func (s *GameService) applyWShocks(siloID uint, shocks []float64) {
 	}
 	for _, value := range shocks {
 		engine.QueueAuthorityShock(silo, value)
+	}
+}
+
+// applyDecisiveShocks 落地 decisive_shock 效果 (裁决的冲击通道)：结构性事件
+// 的离散负冲击，不受 ±12 上限约束，同源只发一次。Source 缺省取事件键；
+// Value 缺省取 engine.DecisiveShockMagnitude。
+func (s *GameService) applyDecisiveShocks(siloID uint, eventKey string, requests []engine.DecisiveShockRequest) {
+	if len(requests) == 0 {
+		return
+	}
+	silo := s.siloByID(siloID)
+	if silo == nil && s.silo != nil && s.silo.ID == siloID {
+		silo = s.silo
+	}
+	if silo == nil {
+		return
+	}
+	for _, request := range requests {
+		source := request.Source
+		if source == "" {
+			source = eventKey
+		}
+		value := request.Value
+		if value == 0 {
+			value = engine.DecisiveShockMagnitude
+		}
+		engine.QueueDecisiveShock(silo, source, value)
 	}
 }
 
@@ -2869,6 +2903,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	evidenceWrites := []model.PublicEvidenceRecord{}
 	verifiedFacts := []string{}
 	wShocks := []float64{}
+	decisiveShocks := []engine.DecisiveShockRequest{}
 	allianceDeltas := []engine.AllianceLoyaltyDelta{}
 	scopeCtx := s.scopeContextFor(simSilo)
 	scopeCtx.CompletionKeys = &completionKeys
@@ -2876,6 +2911,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scopeCtx.PublicEvidenceWrites = &evidenceWrites
 	scopeCtx.VerifiedFacts = &verifiedFacts
 	scopeCtx.WShocks = &wShocks
+	scopeCtx.DecisiveShocks = &decisiveShocks
 	scopeCtx.AllianceDeltas = &allianceDeltas
 	story, scheduled := engine.ApplyContentEventScoped(def, scopeCtx)
 	s.flushScopeResults(scopeCtx, event)
@@ -2888,6 +2924,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	// 子项 6：核验登记、威势冲击与联盟忠诚冲击。
 	s.applyVerifiedFacts(siloID, verifiedFacts)
 	s.applyWShocks(siloID, wShocks)
+	s.applyDecisiveShocks(siloID, def.Key, decisiveShocks)
 	s.applyAllianceDeltas(siloID, allianceDeltas)
 
 	state, legacyKey := s.contentStateForDefinition(def)
@@ -2951,6 +2988,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptEvidenceWrites := []model.PublicEvidenceRecord{}
 	scriptVerifiedFacts := []string{}
 	scriptWShocks := []float64{}
+	scriptDecisiveShocks := []engine.DecisiveShockRequest{}
 	scriptAllianceDeltas := []engine.AllianceLoyaltyDelta{}
 	scriptScopeCtx := s.scopeContextFor(simSilo)
 	scriptScopeCtx.CompletionKeys = &scriptCompletionKeys
@@ -2958,6 +2996,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptScopeCtx.PublicEvidenceWrites = &scriptEvidenceWrites
 	scriptScopeCtx.VerifiedFacts = &scriptVerifiedFacts
 	scriptScopeCtx.WShocks = &scriptWShocks
+	scriptScopeCtx.DecisiveShocks = &scriptDecisiveShocks
 	scriptScopeCtx.AllianceDeltas = &scriptAllianceDeltas
 	scheduledFromScript := engine.ApplyContentEffectsScoped(scriptResult.Effects, scriptScopeCtx)
 	s.flushScopeResults(scriptScopeCtx, event)
@@ -2966,6 +3005,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	s.applyPublicEvidenceWrites(siloID, scriptEvidenceWrites)
 	s.applyVerifiedFacts(siloID, scriptVerifiedFacts)
 	s.applyWShocks(siloID, scriptWShocks)
+	s.applyDecisiveShocks(siloID, def.Key, scriptDecisiveShocks)
 	s.applyAllianceDeltas(siloID, scriptAllianceDeltas)
 	s.scheduleContentEvents(scheduledFromScript, event, ctx)
 	s.scheduleContentEvents(scriptResult.Schedule, event, ctx)

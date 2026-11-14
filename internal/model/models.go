@@ -395,6 +395,15 @@ type JudicialAttachment struct {
 	PactLocked     bool     `json:"pact_locked"`
 }
 
+// DecisiveShock 结构性事件的一次性离散负冲击 (裁决：冲击通道)。不复用 E、
+// 不走日常累积；可击穿日常平衡点下限。记录永久保留作审计，消费游标单独推进。
+type DecisiveShock struct {
+	Value  float64 `json:"value"`
+	Source string  `json:"source"`
+	Year   int     `json:"year"`
+	Month  int     `json:"month"`
+}
+
 // ShadowAuthority is the independent IT authority state. OrderDeviation is a
 // reserved input interface and is deliberately absent from the v8 W formula.
 type ShadowAuthority struct {
@@ -409,7 +418,11 @@ type ShadowAuthority struct {
 	OrderDeviation       float64 `json:"order_deviation"`
 	// Shocks 待消费的 W 冲击队列 (§3.2 的 Σδe)：Protocol 偏离等写入，下一次
 	// 月度权威更新消费一次 (单月合计 cap ±12)。
-	Shocks          []float64          `json:"shocks,omitempty"`
+	Shocks []float64 `json:"shocks,omitempty"`
+	// DecisiveShocks 结构性事件的离散冲击 (裁决的冲击通道)：不受 ±12 上限约束，
+	// 可击穿日常平衡点下限；DecisiveApplied 是消费游标。
+	DecisiveShocks  []DecisiveShock    `json:"decisive_shocks,omitempty"`
+	DecisiveApplied int                `json:"decisive_applied,omitempty"`
 	PoliceObedience float64            `json:"police_obedience"`
 	Judicial        JudicialAttachment `json:"judicial"`
 }
@@ -1108,9 +1121,9 @@ var ALL_FRAGMENTS = []string{
 // 跑赢恒定淡忘。戏剧性动作 (煽动/宣传/公开化) 保持高成本不变。
 // TODO(balance): 全部为 sim 起点。
 var ACTION_COSTS = map[AgentActionType]float64{
-	ActionGatherInfo:        2,  // TODO(balance): 10 → 2
-	ActionShareInfo:         3,  // TODO(balance): 20 → 3
-	ActionBuildConnection:   4,  // TODO(balance): 15 → 4
+	ActionGatherInfo:        2, // TODO(balance): 10 → 2
+	ActionShareInfo:         3, // TODO(balance): 20 → 3
+	ActionBuildConnection:   4, // TODO(balance): 15 → 4
 	ActionInciteRebellion:   30,
 	ActionConductPropaganda: 20,
 	ActionPublicizeFaction:  25,

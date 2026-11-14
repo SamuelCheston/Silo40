@@ -218,6 +218,10 @@ func AdvanceAuthorityWithConfig(silo *model.Silo, inputs AuthorityInputs, cfg Au
 		a.W = clamp(a.W+shock, 0, 100)
 	}
 
+	// 裁决的冲击通道：结构性事件的离散负冲击，不受 ±12 上限约束，可击穿
+	// 日常平衡点下限 (日常累积走上面的普通冲击队列，两者分账)。
+	consumeDecisiveShocks(a)
+
 	l := silo.MayorLegitimacy()
 	a.PoliceObedience = clamp01(a.PoliceObedience + cfg.PoliceObedienceResponseRate*(l-a.PoliceObedience))
 	advanceJudicialAttachment(silo, cfg)

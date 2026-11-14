@@ -62,14 +62,15 @@ func playerCoreBelief(svc *GameService, factID string) float64 {
 // operation budget and drives Q over the 0.85 gate; W collapses
 // substantially under pressure instead of drifting.
 //
-// TODO(balance, ADJUDICATION NEEDED): §7.4's numeric targets are not met by
-// the fixed §3.2 W formula (half-life 8 months, weights 25/12/10/12/40,
-// base 50). Measured on seed 421: W_eq bottoms near 25-32 under maximal
-// pressure, so W<=30-by-month-6 and sustained W<=18 (the covenant gate)
-// stay out of reach within 16 months. Closing the gap requires a ruling on
-// one of: shorter W half-life, larger E weight, stronger shock channels,
-// or a relaxed covenant W gate. Until then the §7.4 numbers stay design
-// targets, not sim results (as the doc itself anticipates).
+// Ruling resolved (shock channel): the fixed §3.2 W formula keeps the daily
+// equilibrium floor at W_eq ≈ 25–32 under maximal pressure — intended, per
+// the ruling ("平常的压力磨不垮威势"). The covenant gate W≤18 is reachable
+// only through the discrete decisive-shock channel (Silo 1 destruction /
+// termination-channel failure / large-scale public evidence); publishing the
+// second qualifying fact below IS that decisive event. Convergence is locked
+// by TestCovenantConvergenceDailyPressureAloneFails (daily pressure alone
+// never reaches 18) and TestCovenantConvergenceDecisiveEventSucceeds.
+// Magnitude derivation: 14-parameters-and-audit.md §9.1.
 func TestSkilledStrategyReachesFirstTierAndCovenant(t *testing.T) {
 	svc := calibrationService(t, 421)
 	station := svc.silo
@@ -218,9 +219,9 @@ func TestSkilledStrategyReachesFirstTierAndCovenant(t *testing.T) {
 		t.Fatalf("covenant route used %d effective operations, target 8-10 (TODO(balance))", effectiveOps)
 	}
 	// First-tier loosening must be real, not a numeric trickle: W drops by at
-	// least 25 points from the 70 start under the skilled strategy.
-	// (TODO(balance, adjudication): §7.4 target W<=30 by month 4-6 — see the
-	// test header for the structural gap against the fixed §3.2 W formula.)
+	// least 25 points from the 70 start under the skilled strategy. (The
+	// §7.4 W<=30-by-month-4-6 target stays TODO(balance); the ruling keeps
+	// the daily floor above the covenant gate — see the test header.)
 	if station.Authority.W > 45 {
 		t.Fatalf("skilled strategy must visibly loosen W: got %.2f (start 70)", station.Authority.W)
 	}
