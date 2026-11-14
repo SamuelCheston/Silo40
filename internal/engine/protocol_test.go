@@ -8,9 +8,13 @@ import (
 	"silo40/internal/model"
 )
 
+func filepathAbsProtocolDir() (string, error) {
+	return filepath.Abs("../../events/protocol")
+}
+
 func protocolFixture(t *testing.T) (*GameEngine, *model.Silo, []model.ProtocolClause) {
 	t.Helper()
-	dir, err := filepath.Abs("../../events/protocol")
+	dir, err := filepathAbsProtocolDir()
 	if err != nil {
 		t.Fatalf("resolve protocol dir: %v", err)
 	}
