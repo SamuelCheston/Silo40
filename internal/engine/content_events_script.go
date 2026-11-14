@@ -384,12 +384,26 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			for ideology, value := range profession.Ideologies {
 				ideologies[ideology] = value
 			}
+			// 部门信念层可读 (24-spec §3 的 department-belief readability)：
+			// 只读快照，形状与 mechanic ctx 一致 (fact_id + b)。终局铺垫一类
+			// canTrigger 需要读"覆盖离门槛还差多少"。
+			beliefs := make([]map[string]interface{}, 0, len(profession.Beliefs))
+			for _, belief := range profession.Beliefs {
+				if belief.B <= 0 {
+					continue
+				}
+				beliefs = append(beliefs, map[string]interface{}{
+					"fact_id": belief.FactID,
+					"b":       belief.B,
+				})
+			}
 			professions = append(professions, map[string]interface{}{
 				"name":         profession.Name,
 				"class_type":   profession.ClassType,
 				"panic_value":  profession.PanicValue,
 				"productivity": profession.Productivity,
 				"ideologies":   ideologies,
+				"beliefs":      beliefs,
 			})
 		}
 		result["professions"] = professions

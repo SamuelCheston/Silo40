@@ -99,6 +99,145 @@ func TestInformationVigilEveFires(t *testing.T) {
 	}
 }
 
+// vigilFixtureService builds the vigil scenario: P-1 lit, rebellion calm,
+// clock set before the final year so only the foreshadow window can fire.
+func vigilFixtureService(t *testing.T) *GameService {
+	t.Helper()
+	boot := bootstrapRealContent(t)
+	var vigilDef engine.ContentEventDefinition
+	for _, def := range boot.contentDefinitions {
+		if def.Key == "special:info_vigil_eve" {
+			vigilDef = def
+		}
+	}
+	if vigilDef.Key == "" {
+		t.Fatal("special:info_vigil_eve did not load from events/special/")
+	}
+	svc := chainTestService(vigilDef)
+	svc.silo.CurrentYear, svc.silo.CurrentMonth = 127, 1
+	svc.silo.Rebellion = 0.2
+	svc.statesMapFor(svc.silo.ID)["special:public_fact_cross_dept"] = model.ContentEventState{
+		SiloID: svc.silo.ID, EventKey: "special:public_fact_cross_dept", Triggered: true,
+	}
+	return svc
+}
+
+// TestInformationVigilForeshadowsNearGate locks 修复4: the ending settles the
+// month the belief gate is met, so the old final-year-only vigil was pure
+// foreshadow that fast playthroughs never saw. With coverage within one
+// department of the gate the vigil lights early; far from the gate it stays
+// dark until the final year.
+func TestInformationVigilForeshadowsNearGate(t *testing.T) {
+	svc := vigilFixtureService(t)
+	// One department complete, one missing two facts: within the 3-fact gap.
+	svc.silo.Professions = []model.Profession{
+		{Name: "IT", Beliefs: []model.FactBelief{
+			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		}},
+		{Name: "Judicial", Beliefs: []model.FactBelief{{FactID: "d", B: 0.5}}},
+	}
+	if svc.queueSystemContentEvents("TEST") == 0 {
+		t.Fatal("vigil did not foreshadow while coverage was within one department of the gate")
+	}
+	svc.drainQueuedEvents()
+	if !contentTriggered(svc, "special:info_vigil_eve") {
+		t.Fatal("info_vigil_eve never fired in the foreshadow window")
+	}
+}
+
+func TestInformationVigilStaysDarkFarFromGate(t *testing.T) {
+	svc := vigilFixtureService(t)
+	// Three departments with nothing above the floor: 9 facts missing > gap 3.
+	svc.silo.Professions = []model.Profession{
+		{Name: "IT", Beliefs: []model.FactBelief{{FactID: "a", B: 0.1}}},
+		{Name: "Judicial"},
+		{Name: "Medical"},
+	}
+	if svc.queueSystemContentEvents("TEST") != 0 {
+		t.Fatal("vigil fired long before the gate was in sight")
+	}
+	svc.drainQueuedEvents()
+	if contentTriggered(svc, "special:info_vigil_eve") {
+		t.Fatal("info_vigil_eve fired far from the gate")
+	}
+}
+
+// TestInformationProgressExposedInState locks 修复3: the 《共证》 chain state
+// (node lights, replication count, department coverage, gate constants) is a
+// first-class part of every state snapshot, so the player can see 复制进展 /
+// 活链成立 instead of guessing from event history.
+func TestInformationProgressExposedInState(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "information-progress.db"))
+	req := threeSiloRequest(2402)
+	req.Profession = "IT"
+	state, err := svc.CreateGame(req)
+	if err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	progress := state.InformationProgress
+	if progress == nil {
+		t.Fatal("game state lacks information_progress")
+	}
+	if len(progress.Nodes) != 6 {
+		t.Fatalf("expected the 6 《共证》 chain nodes, got %d", len(progress.Nodes))
+	}
+	if progress.Nodes[0].Title != "陪同回查" || progress.Nodes[1].Title != "复制推进" {
+		t.Fatalf("chain node titles out of order: %+v", progress.Nodes)
+	}
+	for _, node := range progress.Nodes {
+		if node.Lit {
+			t.Fatalf("node %s lit on a fresh game", node.Key)
+		}
+	}
+	if progress.GateFactCount != informationGateFactCount {
+		t.Fatalf("gate fact count mismatch: %d vs %d", progress.GateFactCount, informationGateFactCount)
+	}
+	if progress.BeliefFloor != engine.DefaultInformationConfig().QualRumor {
+		t.Fatalf("belief floor mismatch: %v", progress.BeliefFloor)
+	}
+
+	// Open the line: one gather + one share lights the replication heartbeat.
+	execute := func(action model.AgentAction) {
+		t.Helper()
+		outcome, err := svc.ExecuteAction(action)
+		if err != nil || !outcome.Result.Executed {
+			t.Fatalf("execute %+v: %+v (%v)", action, outcome.Result, err)
+		}
+	}
+	execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Judicial"})
+	execute(model.AgentAction{
+		Type: model.ActionShareInfo, TargetDept: "Judicial",
+		FragmentIds: []string{svc.agent.KnownFragments[0]},
+	})
+
+	after, err := svc.GetState()
+	if err != nil {
+		t.Fatalf("get state: %v", err)
+	}
+	progress = after.InformationProgress
+	if progress == nil {
+		t.Fatal("state after actions lacks information_progress")
+	}
+	var replication *model.InformationChainNode
+	for i := range progress.Nodes {
+		if progress.Nodes[i].Key == "special:replication_progress" {
+			replication = &progress.Nodes[i]
+		}
+	}
+	if replication == nil || !replication.Lit || replication.Count < 1 {
+		t.Fatalf("replication heartbeat not visible after the first share: %+v", replication)
+	}
+	judicialCovered := false
+	for _, dept := range progress.Departments {
+		if dept.Name == "Judicial" && dept.AboveFloor >= 1 {
+			judicialCovered = true
+		}
+	}
+	if !judicialCovered {
+		t.Fatalf("department coverage does not reflect the shared belief: %+v", progress.Departments)
+	}
+}
+
 func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "information-playable.db"))
 	req := threeSiloRequest(2401)
@@ -165,7 +304,14 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	if receiver == nil || !receiver.Enabled {
 		t.Fatalf("receiver verification never became available through real gates: %+v", receiver)
 	}
-	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY"})
+	// 修复1 回归：真实内容下执行回执必须复述事件故事，不能退回系统黑话。
+	outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY"})
+	if err != nil || !outcome.Result.Executed {
+		t.Fatalf("receiver verification failed: %+v (%v)", outcome.Result, err)
+	}
+	if !strings.Contains(outcome.Result.Message, "陪同回查") {
+		t.Fatalf("receiver verification receipt lost its story: %q", outcome.Result.Message)
+	}
 
 	circulationActions := 0
 	attemptCirculation := func(action model.AgentAction) {

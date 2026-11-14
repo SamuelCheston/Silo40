@@ -2340,7 +2340,7 @@ func (s *GameService) contentStateSlice() []model.ContentEventState {
 
 func (s *GameService) queueSystemContentEvents(source string) int {
 	isPlayerSilo := s.world == nil || s.simSiloID() == s.world.PlayerSiloID
-	count, _, _ := s.queueContentEvents(source, nil, func(def engine.ContentEventDefinition) bool {
+	count, _, _, _ := s.queueContentEvents(source, nil, func(def engine.ContentEventDefinition) bool {
 		if def.SourceGroup == "player_actions" || def.SourceGroup == "player_action" {
 			return false
 		}
@@ -2454,7 +2454,7 @@ func (s *GameService) queuePlayerActionEvents(action model.AgentAction) (bool, m
 		return false, model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}, nil
 	}
 
-	count, logs, stories := s.queueContentEvents("ACTION:"+string(action.Type)+":PLAYER_EVENT", &action, func(def engine.ContentEventDefinition) bool {
+	count, logs, stories, fired := s.queueContentEvents("ACTION:"+string(action.Type)+":PLAYER_EVENT", &action, func(def engine.ContentEventDefinition) bool {
 		return def.SourceGroup == "player_actions" || def.SourceGroup == "player_action"
 	})
 	_ = logs
@@ -2470,9 +2470,12 @@ func (s *GameService) queuePlayerActionEvents(action model.AgentAction) (bool, m
 	if s.agent.ActionPoints < 0 {
 		s.agent.ActionPoints = 0
 	}
-	message := "Triggered player action event."
-	if count > 1 {
-		message = fmt.Sprintf("Triggered %d player action events.", count)
+	// 玩家事件动作的反馈直接复述命中事件的标题与叙事，而不是"触发了一个
+	// 事件"这类系统黑话——故事本体在 drain 后才入史，这里用定义侧文本保证
+	// 执行回执当下可读。
+	message := strings.Join(fired, "；")
+	if message == "" {
+		message = "Triggered player action event."
 	}
 	return true, model.ActionResult{Executed: true, Message: message}, nil
 }
@@ -2489,13 +2492,16 @@ func (s *GameService) executePlayerActionEvents(action model.AgentAction) (bool,
 	return true, result, logs, stories
 }
 
-func (s *GameService) queueContentEvents(source string, action *model.AgentAction, allow func(engine.ContentEventDefinition) bool) (int, []string, []model.StoryEvent) {
+// queueContentEvents 把本可触发的内容事件入队。第四个返回值是命中事件的
+// "标题：描述" 文本 (按定义顺序)，供执行回执在 drain 之前就能复述故事。
+func (s *GameService) queueContentEvents(source string, action *model.AgentAction, allow func(engine.ContentEventDefinition) bool) (int, []string, []model.StoryEvent, []string) {
 	if !s.hasSession() || len(s.contentDefinitions) == 0 {
-		return 0, nil, nil
+		return 0, nil, nil, nil
 	}
 
 	var logs []string
 	var stories []model.StoryEvent
+	var fired []string
 	simSilo := s.simSilo()
 	count := 0
 	for _, def := range s.contentDefinitions {
@@ -2535,13 +2541,18 @@ func (s *GameService) queueContentEvents(source string, action *model.AgentActio
 		}
 		if s.emitContentEvent(def, source, engine.NewEventContext(), action, &stories, &logs) {
 			count++
+			text := def.Title
+			if def.Description != "" && def.Description != def.Title {
+				text = def.Title + "：" + def.Description
+			}
+			fired = append(fired, text)
 		}
 	}
-	return count, logs, stories
+	return count, logs, stories, fired
 }
 
 func (s *GameService) triggerContentEvents(source string, action *model.AgentAction, allow func(engine.ContentEventDefinition) bool) ([]string, []model.StoryEvent) {
-	_, logs, stories := s.queueContentEvents(source, action, allow)
+	_, logs, stories, _ := s.queueContentEvents(source, action, allow)
 	moreLogs, moreStories := s.drainQueuedEvents()
 	logs = append(logs, moreLogs...)
 	stories = append(stories, moreStories...)
@@ -2902,15 +2913,16 @@ func (s *GameService) endingNarrative() string {
 func (s *GameService) buildState() *model.GameState {
 	gameOver := s.gameOver()
 	return &model.GameState{
-		Silo:              s.publicSiloSnapshot(),
-		Agent:             *s.agent,
-		AgentStats:        s.engine.BuildAgentStats(s.agent, s.playerActionSilo()),
-		GameOver:          gameOver,
-		EndingNarrative:   s.endingNarrative(),
-		VictoryStatus:     s.silo.VictoryStatus,
-		ProfessionActions: engine.GetProfessionActionMeta(s.agent.Profession),
-		AvailableActions:  s.availablePlayerActions(),
-		World:             s.publicWorldView(),
+		Silo:                s.publicSiloSnapshot(),
+		Agent:               *s.agent,
+		AgentStats:          s.engine.BuildAgentStats(s.agent, s.playerActionSilo()),
+		GameOver:            gameOver,
+		EndingNarrative:     s.endingNarrative(),
+		VictoryStatus:       s.silo.VictoryStatus,
+		ProfessionActions:   engine.GetProfessionActionMeta(s.agent.Profession),
+		AvailableActions:    s.availablePlayerActions(),
+		World:               s.publicWorldView(),
+		InformationProgress: s.informationProgress(),
 	}
 }
 
@@ -2969,17 +2981,71 @@ func (s *GameService) pendingOperationName() string {
 	return s.pendingOperation.Kind
 }
 
+// informationChainKeys 是《共证》链节点的展示顺序：感染(陪同回查) → 复制 →
+// 独立接收者 → 活链 → 公共事实 → 守夜。链状态只存在于内容事件状态里，事件
+// 历史会被后续事件挤出，这里把它提升为玩家可见的一等进度 (修复3)。
+var informationChainKeys = []string{
+	"player_actions:receiver_verify_accompany",
+	"special:replication_progress",
+	"special:independent_receivers_met",
+	"special:living_chain_confirmed",
+	"special:public_fact_cross_dept",
+	"special:info_vigil_eve",
+}
+
+// informationProgress 汇总玩家堡的《共证》线进度。只读内存状态、不消耗 RNG。
+func (s *GameService) informationProgress() *model.InformationProgress {
+	if s.silo == nil {
+		return nil
+	}
+	progress := &model.InformationProgress{
+		GateFactCount: informationGateFactCount,
+		BeliefFloor:   engine.DefaultInformationConfig().QualRumor,
+	}
+	states := s.contentStates[s.silo.ID]
+	for _, key := range informationChainKeys {
+		title := key
+		for _, def := range s.contentDefinitions {
+			if def.Key == key {
+				title = def.Title
+				break
+			}
+		}
+		state := states[key]
+		progress.Nodes = append(progress.Nodes, model.InformationChainNode{
+			Key:   key,
+			Title: title,
+			Lit:   state.Triggered,
+			Count: state.TriggerCount,
+		})
+	}
+	for _, profession := range s.silo.Professions {
+		above := 0
+		for _, belief := range profession.Beliefs {
+			if belief.B >= progress.BeliefFloor {
+				above++
+			}
+		}
+		progress.Departments = append(progress.Departments, model.DepartmentFactCoverage{
+			Name:       profession.Name,
+			AboveFloor: above,
+		})
+	}
+	return progress
+}
+
 func (s *GameService) buildQueueState() *model.EventQueueState {
 	return &model.EventQueueState{
-		Silo:             s.publicSiloSnapshot(),
-		Agent:            *s.agent,
-		AgentStats:       s.engine.BuildAgentStats(s.agent, s.playerActionSilo()),
-		AvailableActions: s.availablePlayerActions(),
-		World:            s.publicWorldView(),
-		GameOver:         s.gameOver(),
-		EndingNarrative:  s.endingNarrative(),
-		PendingEvents:    s.engine.Bus.Pending(),
-		PendingOperation: s.pendingOperationName(),
+		Silo:                s.publicSiloSnapshot(),
+		Agent:               *s.agent,
+		AgentStats:          s.engine.BuildAgentStats(s.agent, s.playerActionSilo()),
+		AvailableActions:    s.availablePlayerActions(),
+		World:               s.publicWorldView(),
+		GameOver:            s.gameOver(),
+		EndingNarrative:     s.endingNarrative(),
+		PendingEvents:       s.engine.Bus.Pending(),
+		PendingOperation:    s.pendingOperationName(),
+		InformationProgress: s.informationProgress(),
 	}
 }
 
@@ -2997,6 +3063,8 @@ func (s *GameService) buildStepResult(processed *engine.GameEvent, logs []string
 		OperationComplete: complete,
 		Logs:              logs,
 		Stories:           stories,
+
+		InformationProgress: s.informationProgress(),
 	}
 	if processed != nil {
 		result.ProcessedEventID = processed.ID
