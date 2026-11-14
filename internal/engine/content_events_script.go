@@ -123,6 +123,12 @@ function escapeGroupStatus(boolValue, scope) {
 function completePlayerAction(actionId) {
   return { type: "player_action_complete", action: actionId };
 }
+function beliefObserve(observer, fragment, reliability) {
+  return { type: "belief_observe", observer: observer, fragment: fragment, reliability: reliability || 0.7 };
+}
+function publicEvidenceRegister(fragment, provenance, coverage) {
+  return { type: "public_evidence_register", fragment: fragment, provenance: provenance, coverage: coverage };
+}
 function __contentStrip(value) {
   if (Array.isArray(value)) {
     return value.map(__contentStrip);
@@ -427,6 +433,24 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			"action_points":      ctx.Agent.ActionPoints,
 			"known_fragments":    len(ctx.Agent.KnownFragments),
 		}
+		// 子项 3：玩家信念层可读 (发布门槛一类 canTrigger 用)，只读快照。
+		beliefs := make([]map[string]interface{}, 0, len(ctx.Agent.Beliefs))
+		for i := range ctx.Agent.Beliefs {
+			beliefs = append(beliefs, map[string]interface{}{
+				"fact_id":   ctx.Agent.Beliefs[i].FactID,
+				"b":         ctx.Agent.Beliefs[i].B,
+				"obs_count": ctx.Agent.Beliefs[i].ObsCount,
+			})
+		}
+		result["actor"].(map[string]interface{})["beliefs"] = beliefs
+	}
+	if ctx.Silo != nil {
+		// 已公开证据登记可读 (canTrigger 判断"是否已发布")。
+		evidenceIDs := make([]string, 0, len(ctx.Silo.PublicEvidence))
+		for _, record := range ctx.Silo.PublicEvidence {
+			evidenceIDs = append(evidenceIDs, record.FactID)
+		}
+		result["public_evidence"] = evidenceIDs
 	}
 	states := map[string]map[string]interface{}{}
 	for key, runtime := range ctx.States {
@@ -459,6 +483,7 @@ func normalizeContentScriptApplyResult(exported any) (ContentScriptApplyResult, 
 		payload.Effects[i].Zone = strings.TrimSpace(payload.Effects[i].Zone)
 		payload.Effects[i].EventID = strings.TrimSpace(payload.Effects[i].EventID)
 		payload.Effects[i].Action = strings.TrimSpace(payload.Effects[i].Action)
+		payload.Effects[i].Observer = strings.TrimSpace(payload.Effects[i].Observer)
 		if err := validateEffect(payload.Effects[i]); err != nil {
 			return ContentScriptApplyResult{}, err
 		}

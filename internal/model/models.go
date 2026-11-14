@@ -62,24 +62,50 @@ type User struct {
 
 // Agent 特工模型 (玩家角色)
 type Agent struct {
-	ID                uint           `gorm:"primarykey" json:"id"`
-	UserID            uint           `gorm:"index" json:"user_id"`
-	SiloID            uint           `gorm:"index" json:"silo_id"`                   // Current simulated silo; the player belongs to the assigned station.
-	StationSiloID     uint           `gorm:"index" json:"station_silo_id,omitempty"` // Player's assigned station; zero marks an incompatible pre-v6 save.
-	Name              string         `gorm:"size:64" json:"name"`
-	Profession        string         `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
-	Traits            []string       `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
-	PoliticalPrestige float64        `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
-	PoliticalPoints   float64        `gorm:"default:0.0" json:"political_points"`     // 政治点数
-	ActionPoints      float64        `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
-	PropagandaLevel   float64        `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
-	SuspicionLevel    float64        `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
-	Connections       []Connection   `gorm:"foreignKey:AgentID" json:"connections"`
-	KnownFragments    []string       `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
-	Relics            []Relic        `gorm:"foreignKey:AgentID" json:"relics,omitempty"`       // 特工私吞的遗物
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
-	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                uint         `gorm:"primarykey" json:"id"`
+	UserID            uint         `gorm:"index" json:"user_id"`
+	SiloID            uint         `gorm:"index" json:"silo_id"`                   // Current simulated silo; the player belongs to the assigned station.
+	StationSiloID     uint         `gorm:"index" json:"station_silo_id,omitempty"` // Player's assigned station; zero marks an incompatible pre-v6 save.
+	Name              string       `gorm:"size:64" json:"name"`
+	Profession        string       `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
+	Traits            []string     `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
+	PoliticalPrestige float64      `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
+	PoliticalPoints   float64      `gorm:"default:0.0" json:"political_points"`     // 政治点数
+	ActionPoints      float64      `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
+	PropagandaLevel   float64      `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
+	SuspicionLevel    float64      `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
+	Connections       []Connection `gorm:"foreignKey:AgentID" json:"connections"`
+	KnownFragments    []string     `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
+	// Beliefs 分层信念层 (10-it-control-credibility §3.3/§3.5)：每个事实的连续
+	// 确信 B、解释版本分布 π 与去重观察记录。旧档没有该字段时为空，读取时按
+	// KnownFragments 保守补种 (engine.SeedLegacyBeliefs)，不升存档版本。
+	Beliefs   []FactBelief   `gorm:"type:text;serializer:json" json:"beliefs,omitempty"`
+	Relics    []Relic        `gorm:"foreignKey:AgentID" json:"relics,omitempty"` // 特工私吞的遗物
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// FactBelief 单个观察者对单个事实的分层信念 (10-it-control-credibility §3.3)。
+// B 是事实成立的确信度；Versions 是事实成立时各解释版本的条件概率 π (和为 1)；
+// Observations 按 observation_id 去重，同一观察不重放收益；ObsCount 是有效观察数 n。
+type FactBelief struct {
+	FactID       string             `json:"fact_id"`
+	B            float64            `json:"b"`
+	Versions     map[string]float64 `json:"versions,omitempty"`
+	Observations []string           `json:"observations,omitempty"`
+	ObsCount     int                `json:"obs_count"`
+}
+
+// PublicEvidenceRecord 一份已公开证据的登记 (§3.7)：provenance 为来源等级
+// (私人猜疑 0 / 匿名传闻 0.3 / 公开证词或未经核验记录 0.6 / 已核验档案或
+// 市面可查原始记录 1)，coverage 为实际公开覆盖率 [0,1]。
+type PublicEvidenceRecord struct {
+	FactID     string  `json:"fact_id"`
+	Provenance float64 `json:"provenance"`
+	Coverage   float64 `json:"coverage"`
+	Year       int     `json:"year"`
+	Month      int     `json:"month"`
 }
 
 // Connection 各部门人脉值
@@ -309,39 +335,42 @@ type ShadowAuthority struct {
 
 // Silo 地堡核心模型
 type Silo struct {
-	ID                 uint                    `gorm:"primarykey" json:"id"`
-	WorldID            uint                    `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
-	Name               string                  `gorm:"size:100" json:"name"`
-	Traits             []string                `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
-	SafeguardRisk      float64                 `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
-	TotalPopulation    int                     `gorm:"default:10000" json:"total_population"`
-	Legitimacy         float64                 `gorm:"default:1.0" json:"legitimacy"`                             // Compatibility mirror of Mayor.Legitimacy.
-	Mayor              MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`                    // 现任 Mayor 个人正统性
-	Authority          ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`                // IT 幕后威势与 Judicial 附着
-	EscapedGroup       EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`            // 已离开且可能存续的堡外群体 (G5)
-	PreFallSnapshot    PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"`        // 覆灭前夕人口加权思潮快照 (G4)
-	Cohesion           float64                 `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
-	Rebellion          float64                 `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
-	DeptTension        float64                 `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
-	ClassFragmentation float64                 `gorm:"default:0.0" json:"class_fragmentation"`                    // 精英与平民割裂程度 (0-1)
-	HistoryBurden      float64                 `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
-	EventTrigger       float64                 `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
-	CurrentYear        int                     `gorm:"default:122" json:"current_year"`                           // 当前年份
-	CurrentMonth       int                     `gorm:"default:1" json:"current_month"`                            // 当前月份 (1-12)
-	Countdown          float64                 `gorm:"default:500.0" json:"countdown"`                            // 500年倒计时 (时间胜利)
-	Silo1Destroyed     bool                    `gorm:"default:false" json:"silo1_destroyed"`                      // 1号地堡是否已覆灭
-	RNGSeed            int64                   `gorm:"default:0" json:"-"`                                        // 本局 RNG 种子 (读档时重建随机源，保证同种子复现)
-	VictoryStatus      *VictoryStatus          `gorm:"type:text;serializer:json" json:"victory_status,omitempty"` // 胜利判定结果
-	Resources          []Resource              `gorm:"foreignKey:SiloID" json:"resources"`
-	Professions        []Profession            `gorm:"foreignKey:SiloID" json:"professions"`
-	Floors             []Floor                 `gorm:"foreignKey:SiloID" json:"floors"`
-	Cohorts            []PopulationCohort      `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
-	Residents          []Resident              `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
-	Factions           []Faction               `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
-	Relics             []Relic                 `gorm:"foreignKey:SiloID" json:"relics,omitempty"` // 地堡中存在的所有遗物
-	CreatedAt          time.Time               `json:"created_at"`
-	UpdatedAt          time.Time               `json:"updated_at"`
-	DeletedAt          gorm.DeletedAt          `gorm:"index" json:"-"`
+	ID              uint                    `gorm:"primarykey" json:"id"`
+	WorldID         uint                    `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
+	Name            string                  `gorm:"size:100" json:"name"`
+	Traits          []string                `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
+	SafeguardRisk   float64                 `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
+	TotalPopulation int                     `gorm:"default:10000" json:"total_population"`
+	Legitimacy      float64                 `gorm:"default:1.0" json:"legitimacy"`                      // Compatibility mirror of Mayor.Legitimacy.
+	Mayor           MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`             // 现任 Mayor 个人正统性
+	Authority       ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`         // IT 幕后威势与 Judicial 附着
+	EscapedGroup    EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`     // 已离开且可能存续的堡外群体 (G5)
+	PreFallSnapshot PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
+	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
+	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
+	PublicEvidence     []PublicEvidenceRecord `gorm:"type:text;serializer:json" json:"public_evidence,omitempty"`
+	Cohesion           float64                `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
+	Rebellion          float64                `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
+	DeptTension        float64                `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
+	ClassFragmentation float64                `gorm:"default:0.0" json:"class_fragmentation"`                    // 精英与平民割裂程度 (0-1)
+	HistoryBurden      float64                `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
+	EventTrigger       float64                `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
+	CurrentYear        int                    `gorm:"default:122" json:"current_year"`                           // 当前年份
+	CurrentMonth       int                    `gorm:"default:1" json:"current_month"`                            // 当前月份 (1-12)
+	Countdown          float64                `gorm:"default:500.0" json:"countdown"`                            // 500年倒计时 (时间胜利)
+	Silo1Destroyed     bool                   `gorm:"default:false" json:"silo1_destroyed"`                      // 1号地堡是否已覆灭
+	RNGSeed            int64                  `gorm:"default:0" json:"-"`                                        // 本局 RNG 种子 (读档时重建随机源，保证同种子复现)
+	VictoryStatus      *VictoryStatus         `gorm:"type:text;serializer:json" json:"victory_status,omitempty"` // 胜利判定结果
+	Resources          []Resource             `gorm:"foreignKey:SiloID" json:"resources"`
+	Professions        []Profession           `gorm:"foreignKey:SiloID" json:"professions"`
+	Floors             []Floor                `gorm:"foreignKey:SiloID" json:"floors"`
+	Cohorts            []PopulationCohort     `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
+	Residents          []Resident             `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
+	Factions           []Faction              `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
+	Relics             []Relic                `gorm:"foreignKey:SiloID" json:"relics,omitempty"` // 地堡中存在的所有遗物
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt         `gorm:"index" json:"-"`
 }
 
 // MayorLegitimacy is the sole legitimacy read used by simulation settlement.
@@ -496,18 +525,23 @@ type Resource struct {
 
 // Profession 职业/部门模型
 type Profession struct {
-	ID             uint               `gorm:"primarykey" json:"id"`
-	SiloID         uint               `gorm:"index" json:"silo_id"`
-	Name           string             `gorm:"size:50" json:"name"`
-	ClassType      string             `gorm:"size:20" json:"class_type"` // ELITE / COMMONER
-	Population     int                `gorm:"default:0" json:"population"`
-	Ideologies     map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"` // 各项思潮值 (0-1)
-	PanicValue     float64            `gorm:"default:0.0" json:"panic_value"`              // 恐慌值
-	Productivity   float64            `gorm:"default:1.0" json:"productivity"`             // 生产力值
+	ID           uint               `gorm:"primarykey" json:"id"`
+	SiloID       uint               `gorm:"index" json:"silo_id"`
+	Name         string             `gorm:"size:50" json:"name"`
+	ClassType    string             `gorm:"size:20" json:"class_type"` // ELITE / COMMONER
+	Population   int                `gorm:"default:0" json:"population"`
+	Ideologies   map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"` // 各项思潮值 (0-1)
+	PanicValue   float64            `gorm:"default:0.0" json:"panic_value"`              // 恐慌值
+	Productivity float64            `gorm:"default:1.0" json:"productivity"`             // 生产力值
+	// Alertness 部门戒备 (10-it-control-credibility §3.4 的 alert_d)：失败探查与
+	// 信息管控抬高，压低对该部门的碎片获取概率。旧档缺省 0。
+	Alertness      float64            `gorm:"default:0.0" json:"alertness"`
 	PowerLevel     int                `gorm:"default:1" json:"power_level"`
 	Zone           string             `gorm:"size:20" json:"zone"`
 	KnownFragments []string           `gorm:"type:text;serializer:json" json:"known_fragments"`     // 掌握的其他部门信息碎片来源
 	Relations      map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"` // NPC部门之间的人脉/关系网
+	// Beliefs 部门层信念 (§3.3 的部门×阶层层，本轮以部门为聚合单元)。
+	Beliefs []FactBelief `gorm:"type:text;serializer:json" json:"beliefs,omitempty"`
 	// ---- 统一 Actor 经济体系 (与 Agent 同构) ----
 	ActionPoints      float64   `gorm:"default:0" json:"action_points"`                    // 行动点数 (AP)
 	SuspicionLevel    float64   `gorm:"default:0" json:"suspicion_level"`                  // 怀疑度
@@ -572,7 +606,9 @@ type Resident struct {
 	PropagandaLevel   float64            `gorm:"default:0.0" json:"propaganda_level"`
 	KnownFragments    []string           `gorm:"type:text;serializer:json" json:"known_fragments"`
 	Relations         map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"`
-	IsRepresentative  bool               `gorm:"default:false" json:"is_representative"`
+	// Beliefs 具名人物层信念 (§3.3)：公开传播与关键人物确信进入 E 聚合。
+	Beliefs          []FactBelief `gorm:"type:text;serializer:json" json:"beliefs,omitempty"`
+	IsRepresentative bool         `gorm:"default:false" json:"is_representative"`
 	// Alive 不带 gorm default：default:true 会让零值 (false=死亡) 在 INSERT 时
 	// 被跳过而被数据库默认值复活。代码侧创建居民时一律显式置 Alive。
 	Alive     bool      `json:"alive"`
@@ -768,21 +804,21 @@ type RumorView struct {
 
 // WorldView 下发前端的世界级快照 (增量字段，不破坏单堡消费方)。
 type WorldView struct {
-	ID                       uint             `json:"id"`
-	Seed                     int64            `json:"seed"`
-	CurrentYear              int              `json:"current_year"`
-	CurrentMonth             int              `json:"current_month"`
-	PlayerSiloID             uint             `json:"player_silo_id"`
-	ProgressStage            string           `json:"progress_stage"`
-	Pacing                   WorldPacing      `json:"pacing"`
-	Silo1Alive               bool             `json:"silo1_alive"`
-	Silo1Simulated           bool             `json:"silo1_simulated"`
-	Silo1Departments         []string         `json:"silo1_departments,omitempty"`
-	Silo1LastReport          string           `json:"silo1_last_report,omitempty"`
-	Silo1Exposure            float64          `json:"silo1_exposure"`
-	Silo1CounterintelStage   int              `json:"silo1_counterintel_stage"`
-	Silo1Operations          []Silo1Operation `json:"silo1_operations,omitempty"`
-	StationSiloID            uint             `json:"station_silo_id,omitempty"`
+	ID                     uint             `json:"id"`
+	Seed                   int64            `json:"seed"`
+	CurrentYear            int              `json:"current_year"`
+	CurrentMonth           int              `json:"current_month"`
+	PlayerSiloID           uint             `json:"player_silo_id"`
+	ProgressStage          string           `json:"progress_stage"`
+	Pacing                 WorldPacing      `json:"pacing"`
+	Silo1Alive             bool             `json:"silo1_alive"`
+	Silo1Simulated         bool             `json:"silo1_simulated"`
+	Silo1Departments       []string         `json:"silo1_departments,omitempty"`
+	Silo1LastReport        string           `json:"silo1_last_report,omitempty"`
+	Silo1Exposure          float64          `json:"silo1_exposure"`
+	Silo1CounterintelStage int              `json:"silo1_counterintel_stage"`
+	Silo1Operations        []Silo1Operation `json:"silo1_operations,omitempty"`
+	StationSiloID          uint             `json:"station_silo_id,omitempty"`
 	// 驻地不再整堡重复序列化：StationSiloID 即引用，驻地完整快照随 GameState.Silo
 	// 单份下发 (二者为同一堡)，避免每个回合快照重复携带 floors/residents 等死重量。
 	StationLastReport        string           `json:"station_last_report,omitempty"`
