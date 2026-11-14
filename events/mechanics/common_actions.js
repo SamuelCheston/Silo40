@@ -3,7 +3,8 @@ defineMechanics([
     id: "action_gather_info",
     action_type: "GATHER_INFO",
     label: "Gather Info",
-    description: "Probe a department for information. Success depends on fit, alertness and channels; failure raises the target's alertness.",
+    description:
+      "收集可被本地核验的材料——这是整条线的起点：事实必须先在你手里成立，才谈得上脱离你的自述。探查所得会抬升你的确信（B），B ≥ 0.30 的材料才能作为事实分享；目标部门新材料枯竭后，复核已知材料仍能加深确信。成功取决于匹配度、戒备与渠道；失败会抬升目标戒备。",
     target_type: "DEPT",
     // AP 经济修复 (17-information-economy §3, TODO(balance)): 10 → 2。
     // 流通动词必须便宜到月收入 (~3/月) 可以支撑每月级的节奏。
@@ -104,7 +105,8 @@ defineMechanics([
     id: "action_share_info",
     action_type: "SHARE_INFO",
     label: "Share Info",
-    description: "Share real or fake fragments with a department.",
+    description:
+      "把事实交给能独立查账的人——从「你知道」走向「他们知道」的第一步。接收方吸收后，事实进入其信念层，开始不依赖你而存在，也开始随时间淡忘：流通跑赢淡忘才守得住。B < 0.30 的材料仍是私人猜测，不能作为事实分享；传输强度随你与目标部门的关系上升。",
     target_type: "DEPT",
     // AP 经济修复 (17-information-economy §3, TODO(balance)): 20 → 3。
     // 分享是流通的主动词：成本 ~ 月收入，才能维持跑赢淡忘的节奏。
@@ -146,7 +148,8 @@ defineMechanics([
         mutations,
         action_result: {
           executed: true,
-          message: "Shared " + fragmentIds.length + " fact(s) with " + profession.name + " (transmit " + transmit.toFixed(2) + ", receptivity " + receptivity.toFixed(2) + ").",
+          message:
+            profession.name + " absorbed " + fragmentIds.length + " fact(s) into their belief layer (transmit " + transmit.toFixed(2) + ", receptivity " + receptivity.toFixed(2) + "). Belief fades with time — keep circulating to hold it.",
         },
       };
     },
@@ -155,7 +158,8 @@ defineMechanics([
     id: "action_build_connection",
     action_type: "BUILD_CONNECTION",
     label: "Build Network",
-    description: "Build influence with a department over time.",
+    description:
+      "与一个部门建立信任。信任是流通的管道：关系越深，分享时的传输强度越高，好材料才接得住。没有信任的部门即使拿到事实，吸收也会大打折扣。",
     target_type: "DEPT",
     // AP 经济修复 (17-information-economy §3, TODO(balance)): 15 → 4。
     ap_cost: 4,
@@ -187,7 +191,8 @@ defineMechanics([
     id: "action_incite_rebellion",
     action_type: "INCITE_REBELLION",
     label: "Incite Rebellion",
-    description: "Agitate commoner departments.",
+    description:
+      "鼓动平民部门，向现有秩序施压。叛乱能打开窗口，也能把宿主掀翻、喂大侦察与整肃链——它不是《共证》的主路，只在需要倾斜走向时使用。",
     target_type: "NONE",
     ap_cost: 30,
     duration_months: 2,
@@ -215,7 +220,8 @@ defineMechanics([
     id: "action_conduct_propaganda",
     action_type: "CONDUCT_PROPAGANDA",
     label: "Propaganda",
-    description: "Increase your propaganda level.",
+    description:
+      "提高宣传力度，扩大你声音的触达。注意：声量不等于可核验性——宣传为事实开路，事实本身仍要交给能查账的人才算数。",
     target_type: "NONE",
     ap_cost: 20,
     duration_months: 1,
@@ -234,7 +240,8 @@ defineMechanics([
     id: "action_publicize_faction",
     action_type: "PUBLICIZE_FACTION",
     label: "Publicize Faction",
-    description: "Reveal your faction to the silo and gain prestige.",
+    description:
+      "公开你的派系，用隐匿换取威望与公开位置。这是一条单行道：公开后暴露与终止链风险随之上升，只有在公开位置能换来别处换不到的东西时才值得。",
     target_type: "NONE",
     ap_cost: 25,
     duration_months: 0,
