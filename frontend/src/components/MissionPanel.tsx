@@ -16,11 +16,11 @@ interface Props {
 const stageBriefing: Record<string, { label: string; brief: string }> = {
     arrival: {
         label: "初到驻地",
-        brief: "没有人认识你，你手里也还没有能独立成立的事实。第一步：用「Gather Info」取得第一份可核验的材料。",
+        brief: "没有人认识你。第一步：取得可核验的材料——「Gather Info」是通用起点；确信提到 B ≥ 0.30，材料才够格作为事实离手。",
     },
     first_signal: {
-        label: "第一次本地核验",
-        brief: "你拿到了能独立成立的材料。「Share Info」已解锁——把事实交给能独立查账的人，让它在你的叙述之外成立。",
+        label: "第一次本地观察",
+        brief: "「Share Info」与职务动作已解锁。把手里确信 B ≥ 0.30 的材料交给能独立查账的人——手里还没有够格的材料，就先「Gather Info」。",
     },
     archive_awakened: {
         label: "档案苏醒",

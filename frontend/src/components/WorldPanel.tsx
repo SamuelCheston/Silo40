@@ -23,7 +23,7 @@ const operationStatusText: Record<string, string> = {
 // 阶段是后端权威进度 (action_gates.json)；界面不显示裸 key。
 const stageLabel: Record<string, string> = {
     arrival: '初到驻地',
-    first_signal: '第一次本地核验',
+    first_signal: '第一次本地观察',
     archive_awakened: '档案苏醒',
     chain_living: '活链成立',
     chain_public_fact: '公共事实',

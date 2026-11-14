@@ -27,8 +27,8 @@ function formatStory(story: any): string {
 // 界面要给够分量——不是弹窗，是常驻一屏的醒目横幅，下一次行动时收起。
 const stageMoments: Record<string, { title: string; body: string }> = {
     first_signal: {
-        title: '第一次本地核验完成',
-        body: '你拿到了能独立成立的材料——它不依赖你的身份、你的记忆，也不依赖某份只有你能解读的文本。「Share Info」已解锁：找到能独立查账的人，让事实到你的叙述之外去成立。',
+        title: '第一次本地观察完成',
+        body: '驻地的门开了一条缝——「Share Info」与职务动作已解锁。当你手握确信 B ≥ 0.30 的材料时，把它交给能独立查账的人：事实要到你的叙述之外去成立。',
     },
     archive_awakened: {
         title: '档案苏醒：第一次有本地人用自己的职务语言重新提出问题',
