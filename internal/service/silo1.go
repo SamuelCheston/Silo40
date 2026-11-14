@@ -27,6 +27,12 @@ func createSilo1(startYear int) *model.Silo {
 	silo.Rebellion = 0.04
 	silo.DeptTension = 0.18
 
+	// 中央堡储备充足 (确定性常量，不消耗 RNG)：资源曲线与其他堡错开，
+	// 资源阈值类危机不会三堡同月齐发 (开局自解释 §每堡自己的节奏)。
+	setResourceAmount(silo, "Energy", 5300)
+	setResourceAmount(silo, "Materials", 2800)
+	setResourceAmount(silo, "Supplies", 5800)
+
 	for i := range silo.Professions {
 		if silo.Professions[i].Name == "Supply" {
 			silo.Professions[i].Population -= 300
@@ -160,4 +166,18 @@ func (s *GameService) silo1DepartmentNames() []string {
 		names = append(names, profession.Name)
 	}
 	return names
+}
+
+// setResourceAmount 覆写指定资源类型的初始库存 (不存在则忽略)。用于给邻堡
+// 各自不同的资源曲线起点——确定性的节奏分化来源，不消耗 RNG。
+func setResourceAmount(silo *model.Silo, resourceType string, amount float64) {
+	if silo == nil {
+		return
+	}
+	for i := range silo.Resources {
+		if silo.Resources[i].Type == resourceType {
+			silo.Resources[i].Amount = amount
+			return
+		}
+	}
 }

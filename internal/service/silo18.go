@@ -75,6 +75,13 @@ func createSilo18(startYear int) *model.Silo {
 	silo.ClassFragmentation = 0.22
 	silo.EventTrigger = 0.05
 
+	// 老化堡的旧库存与锈蚀基建 (确定性常量，不消耗 RNG)：资源曲线与
+	// 其他堡错开，资源阈值类危机不会三堡同月齐发，也更贴合 18 号的
+	// 原著底色 (开局自解释 §每堡自己的节奏)。
+	setResourceAmount(silo, "Energy", 4400)
+	setResourceAmount(silo, "Materials", 1300)
+	setResourceAmount(silo, "Supplies", 4700)
+
 	appendSilo18NamedCast(silo)
 	engine.AssignMayorHolder(silo, "Jahns")
 	return silo
