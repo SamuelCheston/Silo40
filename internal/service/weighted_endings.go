@@ -134,7 +134,7 @@ func outcomeWeight(weights endingOutcomeWeights, outcome string) float64 {
 // epilogues (charter locked, station destroyed, escape group surviving) are
 // appended by the arbitrator, not encoded as separate endings (结局体系 12 §6.1).
 var endingDescriptions = map[string]string{
-	endingInformation:  "核心真相已成为跨部门、可独立复核的公共事实。玩家的沉默或离开不再能收回它——《共证》成立。",
+	endingInformation:  "核心真相已经成为跨部门、可独立复核的公共事实：它有了自己的来源说明、自己的核验路径、自己的保管人。你的沉默、离开或失忆，都不再能把它收回——链不再需要你，这正是任务要的结果。驻地之外是否有人接过这份事实，只写进结算，不改变这个结局。《共证》成立。",
 	endingRebellion:    "有组织的不满转化为了实际离开：一个成规模的群体在堡外继续存续——《越岭》成立。",
 	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。公开约章已经锁定——《公议》成立。",
 	endingTime:         "一号地堡权威覆灭，驻地仍有形成历史的能力，覆灭前夕的思潮具备面向外部的一极——《无人裁决》成立。",
@@ -206,6 +206,24 @@ func (s *GameService) spilloverSiloCount(stationID uint) int {
 		reached[signal.TargetSilo] = true
 	}
 	return len(reached)
+}
+
+// spilloverSignalCount counts every station-originated outbound signal
+// (deterministic log order). Together with spilloverSiloCount it renders the
+// spillover settlement line: how much was sent out, how many silos it
+// reached. Spillover never gates victory; this is settlement information
+// only (25-information-endgame §3).
+func (s *GameService) spilloverSignalCount(stationID uint) int {
+	if s.world == nil {
+		return 0
+	}
+	count := 0
+	for _, signal := range s.world.OutboundSignals {
+		if signal.SourceSilo == stationID && signal.TargetSilo != stationID && signal.TargetSilo != 0 {
+			count++
+		}
+	}
+	return count
 }
 
 // exclusionistEligible reports whether the closed order still dominates the
@@ -486,7 +504,22 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		return s.finishArbitration(decision)
 	}
 	decision.Selected = best
-	decision.Reason = fmt.Sprintf("P2 加权：%s 得分 %.4f 达到最低分 %.4f；同分顺序按固定裁决序。", best, bestScore, config.MinimumScore)
+	// Settlement narrative replaces the score formula on the ending screen:
+	// the structured audit (scores, contributions, pool, exclusions) stays in
+	// the decision fields, Reason carries the story (25-information-endgame
+	// §2.2). INFORMATION appends the spillover settlement line — spillover
+	// never gates victory, it is settlement information only.
+	narrative := endingDescriptions[best]
+	if best == endingInformation {
+		sent := s.spilloverSignalCount(station.ID)
+		reached := s.spilloverSiloCount(station.ID)
+		if sent == 0 {
+			narrative += "本局没有信号送出驻地——外溢为零，不影响本次裁决。"
+		} else {
+			narrative += fmt.Sprintf("本局共有 %d 条信号送出驻地，到达 %d 座他堡。", sent, reached)
+		}
+	}
+	decision.Reason = narrative
 	return s.finishArbitration(decision)
 }
 
