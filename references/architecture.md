@@ -93,9 +93,21 @@
    - **存档**：v7 持久化阶段、解锁和仲裁记录；v6 显式拒绝，v5 继续旧身份拒绝。覆盖 `action_gates_test.go`、`weighted_endings_test.go`、engine hook 和 v6 拒绝测试；本轮不做批量对局或 parity 重建。
 
 32. **权威状态骨架 (v8)**：`MayorOffice` 绑定现任具名 Resident 与个人正统性，旧 `Silo.Legitimacy` 仅为兼容镜像，结算统一经 `MayorLegitimacy()` / `SetMayorLegitimacy()`。`ShadowAuthority` 独立保存 W、K/D/P/X/E、Police 服从和 Judicial `A/T/O`；`AuthorityConfig` 集中文档参数。Police 单向因果响应 `O←O+0.35(L−O)`（0.35 为 TODO(balance)）；W 按 `50+25K+12D+10P+12X−40E` 与 8 月半衰期更新，OrderDeviation 仅保留输入位。
-   - **可观测输入与边界**：K 来自 Judicial/IT cohort 忠诚，D 暂由 Judicial 恐慌映射，E 暂由 SafeguardRisk 映射；P/X 为 0。每月思潮后、NPC 前更新，零月不漂移，不消耗 RNG。pact 仅有资格/锁定结构，当前无内容能授予资格，也不进入结局。
+   - **可观测输入与边界**：K 来自 Judicial/IT cohort 忠诚，D 暂由 Judicial 恐慌映射，E 暂由 SafeguardRisk 映射；P/X 为 0。每月思潮后、NPC 前更新，零月不漂移，不消耗 RNG。pact 资格/锁定结构自 v9 起有内容写入入口（见第 33 条 G2），但尚无内容事件实际供给。
    - **Judicial 滞回**：`S(W)=1/(1+exp(−(W−38)/3.5))`，`A_next=0.4A+0.6T`；Mayor 需 `W≤30/L≥0.35` 连续 2 月且 `A_Mayor≥0.60`，31–44 保持，`W≥45` 连续 3 月才回 IT。权重始终非负且总和 1，现任者更替进入 SWING 并释放 Mayor 权重。
    - **迁移与 parity**：`UpgradeV7ToAuthoritySave` 按 SiloID 顺序迁移全部堡，备份+单事务+回读校验+失败回滚；Mayor 继承旧 Legitimacy，W 固定为来源 `v7_conservative_w50` 的保守 50。个人正统性、Police/Judicial 关系和 W 已进入月度轨迹，因此 v6 parity 基线自 v8 起失效，本轮未重建。
+
+33. **结局事件链机制底座 (v9)**：按 `docs/research/12-ending-system-design.md` 与 `docs/story/endings/` 落地 G1–G11 引擎能力，十条结局链的内容节点群尚未编写，底座只保证其完成键/事实键可被生产与消费。
+   - **候选与仲裁 (G1/G9)**：`weighted_endings.go` 重写为 P0→P1→P2→P3 管线。P0 硬失败护栏按寂堡→遗忘→断层→除名固定顺序，先读逃出群体；存续逃出群体把本地毁灭/重置/崩坏改判为《越岭》惨胜（除名仍优先，结局体系 §8）。P1 资格池：INFORMATION=全部门≥5 碎片、REBELLION=存续逃出群体、TIME=覆灭事实+快照思潮闸、RULE_OF_LAW=`PactLocked`、PERSONAL_RULE=`Regime==MAYOR`、EXCLUSIONIST=封闭主导或一号覆灭。P2 四类主体只对合格候选加权；P3 同分顺序 `INFORMATION→REBELLION→RULE_OF_LAW→TIME→PERSONAL_RULE→EXCLUSIONIST`（修正旧 TIME 先于 REBELLION）。空池/低于最低分=清除请求继续模拟。
+   - **victory_check 双路径 (G9)**：JS 主路径与 Go 降级副本同语义——硬失败（safeguard≥1/人口≤0 → DEATH，怀疑≥1 → AGENT_COMPROMISED）即时成立；信息/覆灭/叛乱只"请求终局评估"，由服务侧仲裁接受、改道或驳回。
+   - **覆灭前夕快照 (G4)**：`silo1_destroyed` 置位瞬间对驻地 cohort 做人口加权快照（cohort 按 ID 升序、轴按名升序累加）；`pro_foreign>0 且 ≥loyalty` 记为开放合格，纯种地堡思潮不合格。快照供 TIME 思潮闸与审计。
+   - **逃出群体 (G5)**：`Silo.EscapedGroup`（人口/离开时间/存续）。内容效果 `escape_group_depart`（堡内人口移入群体）与 `escape_group_status`（存续置位）。存续群体是《越岭》资格与寂堡/遗忘/断层例外。
+   - **内容写入通路 (G2/G4/G6)**：新增效果 `authority_evidence_delta`/`authority_public_fact`（按键去重）/`authority_pact_qualify`/`cohort_ideology_delta`（人口真源直写，不被每 tick 覆写）；`safeguard_risk` 进 `silo_metric_delta`/触发器读取。
+   - **ctx 扩展 (G3)**：内容与机制脚本 ctx 暴露 authority（W/附着/约章资格）、actor（怀疑/威望/宣传）、`safeguard_risk` 与逃出群体。
+   - **跨堡出站 (G7)**：`fireCrossEvent` 派发时按 (到期月,Seq) 序追加 `World.OutboundSignals`；仲裁读驻地起源信号的可达堡数计入《共证》外溢。
+   - **network_jammed (G11)**：世界 flag 已可写；消费方为一号状态机在干扰期间停发通牒（物理渠道不受影响）。
+   - **first_signal 迁移 (G10)**：`observation:first_local` 完成键由首个产出本地材料的动作（现 Gather Info/职务行动）写入，门控消费该键；待 Observation 钩子与专用情报入口移除后收紧来源。
+   - **迁移**：`UpgradeV8ToEndingsSave` 备份+单事务+回读校验；新字段零值即旧档语义，不回填推测状态。加权系数全部 TODO(balance) 占位（结局体系 §9 留待 sim）。
 
 ### 运行时数据流
 

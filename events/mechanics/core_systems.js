@@ -360,6 +360,10 @@ defineMechanics([
     id: "victory_check",
     event_type: "VICTORY_CHECK",
     apply(ctx) {
+      // G9 semantics (ending system 12 §6.2): hard failures settle immediately
+      // in P0 order (DEATH facts first, then AGENT_COMPROMISED); historical
+      // triggers only REQUEST the terminal evaluation, which the service-side
+      // arbitration may accept, redirect, or reject (continue simulating).
       const silo = ctx.silo || {};
       const metrics = silo.metrics || {};
       const actor = ctx.actor || {};
@@ -371,6 +375,28 @@ defineMechanics([
             field: "DEATH",
             bool_value: false,
             text: "Safeguard 协议被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
+          }],
+        };
+      }
+
+      if ((silo.total_population || 0) <= 0) {
+        return {
+          mutations: [{
+            type: "victory_status_set",
+            field: "DEATH",
+            bool_value: false,
+            text: "地堡内已无生命迹象。人类最后的堡垒沦为了一座寂静的坟墓。",
+          }],
+        };
+      }
+
+      if ((actor.suspicion_level || 0) >= 1.0) {
+        return {
+          mutations: [{
+            type: "victory_status_set",
+            field: "AGENT_COMPROMISED",
+            bool_value: false,
+            text: "由于传播过多掺杂了个人意图的虚假信息，你的特工身份彻底暴露。司法部已经下达了逮捕令。",
           }],
         };
       }
@@ -393,7 +419,7 @@ defineMechanics([
               type: "victory_status_set",
               field: "INFORMATION",
               bool_value: true,
-              text: "你成功让真相在所有部门间流传。全知视角的拼图终于拼凑完整，地堡的居民迎来了觉醒的黎明。",
+              text: "终局评估请求：跨部门信息覆盖达成。是否成立《共证》由资格与加权仲裁决定。",
             }],
           };
         }
@@ -405,18 +431,7 @@ defineMechanics([
             type: "victory_status_set",
             field: "TIME",
             bool_value: true,
-            text: "一号地堡已经覆灭，控制网络断开。40 号派出的特工迎来了属于自己的时间。",
-          }],
-        };
-      }
-
-      if ((actor.suspicion_level || 0) >= 1.0) {
-        return {
-          mutations: [{
-            type: "victory_status_set",
-            field: "AGENT_COMPROMISED",
-            bool_value: false,
-            text: "由于传播过多掺杂了个人意图的虚假信息，你的特工身份彻底暴露。司法部已经下达了逮捕令。",
+            text: "终局评估请求：一号地堡覆灭事实成立。是否成立《无人裁决》须经覆灭前夕思潮闸与加权仲裁。",
           }],
         };
       }
@@ -427,18 +442,7 @@ defineMechanics([
             type: "victory_status_set",
             field: "REBELLION",
             bool_value: true,
-            text: "你成功组织了反抗力量并发动了叛乱。旧的统治被推翻，幸存者们冲破了封闭的牢笼。",
-          }],
-        };
-      }
-
-      if ((silo.total_population || 0) <= 0) {
-        return {
-          mutations: [{
-            type: "victory_status_set",
-            field: "DEATH",
-            bool_value: false,
-            text: "地堡内已无生命迹象。人类最后的堡垒沦为了一座寂静的坟墓。",
+            text: "终局评估请求：叛乱达到顶点。高叛乱不等于《越岭》，须有实际逃离并存续的群体。",
           }],
         };
       }

@@ -4,7 +4,7 @@
   "default_visibility": "locked",
   "stages": [
     { "id": "arrival", "when": {} },
-    { "id": "first_signal", "when": { "event_completed": "player_action:action_gather_info" } },
+    { "id": "first_signal", "when": { "event_completed": "observation:first_local" } },
     { "id": "archive_awakened", "when": { "event_completed": "player_action:action_share_info" } }
   ],
   "actions": [

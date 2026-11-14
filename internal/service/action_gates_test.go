@@ -70,7 +70,7 @@ func TestActionGatesStartNarrowAndUnlockFromStoryStage(t *testing.T) {
 	}
 
 	svc.agent.KnownFragments = nil
-	completeGateEvent(svc, "player_action:action_gather_info")
+	completeGateEvent(svc, observationFirstLocalKey)
 	if svc.world.ProgressStage != "first_signal" {
 		t.Fatalf("story node did not advance stage: %s", svc.world.ProgressStage)
 	}
@@ -117,7 +117,7 @@ func TestActionGatesUseAttributesRelationsAndAPReasons(t *testing.T) {
 		t.Fatal("relation-gated propaganda should remain hidden below its unlock threshold")
 	}
 
-	completeGateEvent(svc, "player_action:action_gather_info")
+	completeGateEvent(svc, observationFirstLocalKey)
 	setGateConnection(svc, "Mayor", 0.2)
 	svc.refreshActionProgress()
 	if action := actionByID(svc.availablePlayerActions(), "action_conduct_propaganda"); action == nil || !action.Enabled {

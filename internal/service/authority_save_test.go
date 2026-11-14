@@ -34,9 +34,15 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 		t.Fatalf("meta version = %d, want %d", meta.SaveVersion, authoritySaveVersion)
 	}
 
+	// The startup chain continues v8 → v9 before Resume accepts the save.
+	upgradedV9, err := UpgradeV8ToEndingsSave(svc.db, dbPath)
+	if err != nil || !upgradedV9 {
+		t.Fatalf("v8 endings upgrade failed: upgraded=%v err=%v", upgradedV9, err)
+	}
+
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v8 save: %v", err)
+		t.Fatalf("resume migrated v9 save: %v", err)
 	}
 	if len(fresh.silos) != 3 || fresh.silo.MayorLegitimacy() != legacy[fresh.silo.ID] {
 		t.Fatalf("resumed authority state mismatch: silos=%d Mayor=%+v", len(fresh.silos), fresh.silo.Mayor)

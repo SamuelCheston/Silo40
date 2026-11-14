@@ -87,6 +87,11 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV7ToAuthoritySave(a.db, dbFileName); err != nil {
 		log.Fatalf("v7 authority upgrade failed: %v", err)
 	}
+	// v8 authority saves gain the ending-chain mechanism base (escape groups,
+	// pre-fall snapshots, pact fact keys, outbound signal logs).
+	if _, err := service.UpgradeV8ToEndingsSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v8 endings upgrade failed: %v", err)
+	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)

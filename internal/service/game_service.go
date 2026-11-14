@@ -1327,6 +1327,11 @@ func (s *GameService) advancePendingOperationAfterDrain() {
 	}
 }
 
+// observationFirstLocalKey is the first-local-observation completion key
+// (行动设计 15 §5.3). first_signal consumes it instead of the old
+// player_action:action_gather_info source (G10).
+const observationFirstLocalKey = "observation:first_local"
+
 // completePlayerAction records a generic, content-addressable completion node.
 // It is called only after the action and any duration have fully resolved.
 func (s *GameService) completePlayerAction(action model.AgentAction) {
@@ -1341,7 +1346,32 @@ func (s *GameService) completePlayerAction(action model.AgentAction) {
 	state.TriggerCount++
 	state.LastTriggeredTimestamp = gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth)
 	s.statesMapFor(s.silo.ID)[key] = state
+	s.recordFirstLocalObservation(action)
 	s.refreshActionProgress()
+}
+
+// recordFirstLocalObservation G10: writes observation:first_local exactly once,
+// the first time the agent completes an action that yields local observation
+// material. Today that is Gather Info (the current opening material source) and
+// any profession (duty) action; once the dedicated Observation hook system and
+// the removal of dedicated intel entries land (行动设计 15 §4/§6), this source
+// tightens to "first valid local Observation produced by the hook" and the gate
+// itself stays on observation:first_local unchanged.
+func (s *GameService) recordFirstLocalObservation(action model.AgentAction) {
+	if action.Type != model.ActionProfession && action.Type != model.ActionGatherInfo {
+		return
+	}
+	states := s.statesMapFor(s.silo.ID)
+	if existing, ok := states[observationFirstLocalKey]; ok && existing.Triggered {
+		return
+	}
+	state := states[observationFirstLocalKey]
+	state.SiloID = s.silo.ID
+	state.EventKey = observationFirstLocalKey
+	state.Triggered = true
+	state.TriggerCount++
+	state.LastTriggeredTimestamp = gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth)
+	states[observationFirstLocalKey] = state
 }
 
 func (s *GameService) nextDelayTaskID() string {
@@ -2206,6 +2236,7 @@ func (s *GameService) queueContentEvents(source string, action *model.AgentActio
 			Silo:   simSilo,
 			States: s.contentRuntimeMap(),
 			Action: action,
+			Agent:  s.simAgent(),
 		}
 		// 多堡编排时注入世界事实与本月收到的跨堡信号；单堡保持 nil/空，
 		// 世界化触发器按不可触发处理，行为不变。
@@ -2433,6 +2464,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		Silo:   simSilo,
 		States: s.contentRuntimeMap(),
 		Action: contentActionFromEvent(event),
+		Agent:  s.simAgent(),
 		Runtime: engine.ContentEventRuntime{
 			Triggered:              state.Triggered,
 			TriggerCount:           state.TriggerCount,
@@ -2528,6 +2560,7 @@ func (s *GameService) tryEmitFollowupContentEvent(def engine.ContentEventDefinit
 		Silo:   simSilo,
 		States: s.contentRuntimeMap(),
 		Action: contentActionFromEvent(sourceEvent),
+		Agent:  s.simAgent(),
 		Runtime: engine.ContentEventRuntime{
 			Triggered:              state.Triggered,
 			TriggerCount:           state.TriggerCount,
@@ -2823,6 +2856,7 @@ func (s *GameService) contentPlayerActions(stats model.AgentStats) []model.Playe
 		ctx := engine.ContentEvaluationContext{
 			Silo:   s.silo,
 			States: s.contentRuntimeMap(),
+			Agent:  s.simAgent(),
 			Runtime: engine.ContentEventRuntime{
 				Triggered:              state.Triggered,
 				TriggerCount:           state.TriggerCount,

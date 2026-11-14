@@ -262,6 +262,17 @@ func (s *GameService) fireCrossEvent(entry model.CrossEvent, logs *[]string, sto
 			}
 		}
 		s.receivedSignals[target.ID] = append(s.receivedSignals[target.ID], entry.EventID)
+		// G7: outbound delivery log for spillover settlement. dispatchCrossQueue
+		// pops in (due month, Seq) order and targets iterate in ascending ID
+		// order, so this append sequence is fully deterministic.
+		s.world.OutboundSignals = append(s.world.OutboundSignals, model.OutboundSignal{
+			Seq:        entry.Seq,
+			SourceSilo: entry.SourceSilo,
+			TargetSilo: target.ID,
+			EventID:    entry.EventID,
+			Year:       s.world.CurrentYear,
+			Month:      s.world.CurrentMonth,
+		})
 		s.currentSilo = target
 		s.currentAgent = s.agents[target.ID]
 		localStories := []model.StoryEvent{}
@@ -349,6 +360,13 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 	}
 	// 一次性通牒：首个叛乱越线 (>=0.8) 的堡 (按 SiloID 升序)。仅在观察相位触发。
 	if w.Silo1.OrderPhase != "WATCHING" {
+		return
+	}
+	// G11: network_jammed 是终止信号信道被干扰的世界事实 (21 分册
+	// termination_channel_disrupted 的消费方)。信道被干扰期间 Silo 1 无法签发
+	// 通牒；物理渠道 (bombing_terminal 等) 不受影响，仍由内容调度。
+	// TODO(adjudication): 是否同时暂停 StationOps 反间谍轨道递增，待设计裁决。
+	if w.Flags[model.WorldFlagNetworkJammed] {
 		return
 	}
 	for _, silo := range s.silos {

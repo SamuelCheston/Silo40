@@ -367,7 +367,7 @@ function App() {
                                     <Box mt={3} p={3} bg="white" borderRadius="md">
                                         <Text fontSize="sm" fontWeight="bold">多主体权重分流 · 配置 v{silo.victory_status.decision.config_version}</Text>
                                         <Text fontSize="xs" color="gray.600" mt={1}>
-                                            {['INFORMATION', 'TIME', 'REBELLION', 'EXCLUSIONIST'].map(outcome => `${outcome} ${(silo.victory_status.decision.scores[outcome] || 0).toFixed(2)}`).join(' · ')}
+                                            {['INFORMATION', 'REBELLION', 'RULE_OF_LAW', 'TIME', 'PERSONAL_RULE', 'EXCLUSIONIST'].map(outcome => `${outcome} ${(silo.victory_status.decision.scores[outcome] || 0).toFixed(2)}`).join(' · ')}
                                         </Text>
                                     </Box>
                                 )}

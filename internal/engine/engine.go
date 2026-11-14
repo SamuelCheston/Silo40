@@ -681,9 +681,13 @@ func (e *GameEngine) CalculateScore(silo *model.Silo) *model.GameScore {
 			multiplier = 1.2
 		case "EXCLUSIONIST":
 			multiplier = 0.5
+		case "RULE_OF_LAW", "PERSONAL_RULE":
+			multiplier = 1.0
 		case "DEATH":
 			multiplier = 0
 		case "AGENT_COMPROMISED":
+			multiplier = 0
+		case "RESET", "FRACTURE":
 			multiplier = 0
 		}
 	}
@@ -748,6 +752,11 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		return
 	}
 
+	// G9 语义 (结局体系 12 §6.2)：硬失败按 P0 顺序即时成立 (先 DEATH 两类事实，
+	// 再 AGENT_COMPROMISED)；历史触发只"请求终局评估"，由服务侧仲裁接受、改道
+	// 或驳回 (继续模拟)。本函数是 JS 主路径 (core_systems.js VICTORY_CHECK) 的
+	// 降级副本，两侧规则必须同步修改。
+
 	// 0. Safeguard 危机 (IT专属)
 	if silo.SafeguardRisk >= 1.0 {
 		silo.VictoryStatus = &model.VictoryStatus{
@@ -758,7 +767,30 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		return
 	}
 
-	// 1. 信息胜利：每个部门至少获得5个其他部门的信息碎片
+	// 1. 人口灭绝 (与 Safeguard 同属 P0.1 寂堡事实，先于除名判定)。
+	if silo.TotalPopulation <= 0 {
+		silo.VictoryStatus = &model.VictoryStatus{
+			IsWon:       false,
+			Type:        "DEATH",
+			Description: "地堡内已无生命迹象。人类最后的堡垒沦为了一座寂静的坟墓。",
+		}
+		return
+	}
+
+	// 2. 除名：怀疑度封顶。
+	if agent != nil {
+		const suspicionThreshold = 1.0
+		if agent.SuspicionLevel >= suspicionThreshold {
+			silo.VictoryStatus = &model.VictoryStatus{
+				IsWon:       false,
+				Type:        "AGENT_COMPROMISED",
+				Description: "由于传播过多掺杂了个人意图的虚假信息，你的特工身份彻底暴露。司法部已经下达了逮捕令。",
+			}
+			return
+		}
+	}
+
+	// 3. 信息终局请求：每个部门至少获得5个其他部门的信息碎片。
 	allDeptsHaveFragments := false
 	if len(silo.Professions) > 0 {
 		allDeptsHaveFragments = true
@@ -773,56 +805,31 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 			}
 		}
 	}
-
 	if allDeptsHaveFragments {
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       true,
 			Type:        "INFORMATION",
-			Description: "你成功让真相在所有部门间流传。全知视角的拼图终于拼凑完整，地堡的居民迎来了觉醒的黎明。",
+			Description: "终局评估请求：跨部门信息覆盖达成。是否成立《共证》由资格与加权仲裁决定。",
 		}
 		return
 	}
 
-	// 2. 时间胜利判定：由"1号地堡覆灭"事件触发后结算
+	// 4. 时间终局请求：一号地堡覆灭事实；思潮闸与加权在仲裁侧。
 	if silo.Silo1Destroyed {
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       true,
 			Type:        "TIME",
-			Description: "一号地堡已经覆灭，控制网络断开。40 号派出的特工迎来了属于自己的时间。",
+			Description: "终局评估请求：一号地堡覆灭事实成立。是否成立《无人裁决》须经覆灭前夕思潮闸与加权仲裁。",
 		}
 		return
 	}
 
-	// 3. 叛乱胜利
-	if agent != nil && silo.TotalPopulation > 0 {
-		const suspicionThreshold = 1.0
-		if agent.SuspicionLevel >= suspicionThreshold {
-			silo.VictoryStatus = &model.VictoryStatus{
-				IsWon:       false,
-				Type:        "AGENT_COMPROMISED",
-				Description: "由于传播过多掺杂了个人意图的虚假信息，你的特工身份彻底暴露。司法部已经下达了逮捕令。",
-			}
-			return
-		}
-
-		// 叛乱胜利当前以地堡叛乱值 >= 1.0 判定。注意：这是 JS 主路径
-		// (core_systems.js VICTORY_CHECK) 的降级副本，两侧规则必须同步修改。
-		if silo.Rebellion >= 1.0 {
-			silo.VictoryStatus = &model.VictoryStatus{
-				IsWon:       true,
-				Type:        "REBELLION",
-				Description: "你成功组织了反抗力量并发动了叛乱。旧的统治被推翻，幸存者们冲破了封闭的牢笼。",
-			}
-			return
-		}
-	}
-
-	// 4. 失败判定 (人口灭绝)
-	if silo.TotalPopulation <= 0 {
+	// 5. 叛乱终局请求：高叛乱不等于《越岭》，须有实际逃离并存续的群体。
+	if silo.Rebellion >= 1.0 {
 		silo.VictoryStatus = &model.VictoryStatus{
-			IsWon:       false,
-			Type:        "DEATH",
-			Description: "地堡内已无生命迹象。人类最后的堡垒沦为了一座寂静的坟墓。",
+			IsWon:       true,
+			Type:        "REBELLION",
+			Description: "终局评估请求：叛乱达到顶点。高叛乱不等于《越岭》，须有实际逃离并存续的群体。",
 		}
 	}
 }

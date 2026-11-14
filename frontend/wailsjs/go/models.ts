@@ -910,6 +910,9 @@ export namespace model {
 	    minimum_score: number;
 	    scores: Record<string, number>;
 	    contributions: EndingEntityContribution[];
+	    reason?: string;
+	    pool?: string[];
+	    excluded?: Record<string, string>;
 
 	    static createFrom(source: any = {}) {
 	        return new EndingDecision(source);
@@ -922,6 +925,9 @@ export namespace model {
 	        this.minimum_score = source["minimum_score"];
 	        this.scores = source["scores"];
 	        this.contributions = this.convertValues(source["contributions"], EndingEntityContribution);
+	        this.reason = source["reason"];
+	        this.pool = source["pool"];
+	        this.excluded = source["excluded"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1138,6 +1144,50 @@ export namespace model {
 		    return a;
 		}
 	}
+	export class PreFallIdeologySnapshot {
+	    taken: boolean;
+	    year?: number;
+	    month?: number;
+	    population: number;
+	    ideologies?: Record<string, number>;
+	    dominant_axis?: string;
+	    open_qualified: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new PreFallIdeologySnapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.taken = source["taken"];
+	        this.year = source["year"];
+	        this.month = source["month"];
+	        this.population = source["population"];
+	        this.ideologies = source["ideologies"];
+	        this.dominant_axis = source["dominant_axis"];
+	        this.open_qualified = source["open_qualified"];
+	    }
+	}
+	export class EscapeGroup {
+	    initialized: boolean;
+	    population: number;
+	    departed_year?: number;
+	    departed_month?: number;
+	    surviving: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new EscapeGroup(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.initialized = source["initialized"];
+	        this.population = source["population"];
+	        this.departed_year = source["departed_year"];
+	        this.departed_month = source["departed_month"];
+	        this.surviving = source["surviving"];
+	    }
+	}
 	export class JudicialAttachment {
 	    a_it: number;
 	    a_mayor: number;
@@ -1155,6 +1205,7 @@ export namespace model {
 	    pact_qualified: boolean;
 	    public_evidence_q: number;
 	    independent_public_facts: number;
+	    public_fact_keys?: string[];
 	    pact_locked: boolean;
 
 	    static createFrom(source: any = {}) {
@@ -1179,6 +1230,7 @@ export namespace model {
 	        this.pact_qualified = source["pact_qualified"];
 	        this.public_evidence_q = source["public_evidence_q"];
 	        this.independent_public_facts = source["independent_public_facts"];
+	        this.public_fact_keys = source["public_fact_keys"];
 	        this.pact_locked = source["pact_locked"];
 	    }
 	}
@@ -1260,6 +1312,8 @@ export namespace model {
 	    legitimacy: number;
 	    mayor: MayorOffice;
 	    authority: ShadowAuthority;
+	    escaped_group: EscapeGroup;
+	    pre_fall_snapshot: PreFallIdeologySnapshot;
 	    cohesion: number;
 	    rebellion: number;
 	    dept_tension: number;
@@ -1298,6 +1352,8 @@ export namespace model {
 	        this.legitimacy = source["legitimacy"];
 	        this.mayor = this.convertValues(source["mayor"], MayorOffice);
 	        this.authority = this.convertValues(source["authority"], ShadowAuthority);
+	        this.escaped_group = this.convertValues(source["escaped_group"], EscapeGroup);
+	        this.pre_fall_snapshot = this.convertValues(source["pre_fall_snapshot"], PreFallIdeologySnapshot);
 	        this.cohesion = source["cohesion"];
 	        this.rebellion = source["rebellion"];
 	        this.dept_tension = source["dept_tension"];
@@ -1387,7 +1443,7 @@ export namespace model {
 		}
 	}
 
-	
+
 	export class AgentAction {
 	    type: string;
 	    action_id?: string;
@@ -1413,7 +1469,7 @@ export namespace model {
 	    }
 	}
 
-	
+
 	export class NeighborSiloConfig {
 	    name: string;
 	    agent_name: string;
@@ -1477,7 +1533,8 @@ export namespace model {
 		}
 	}
 
-	
+
+
 	export class StoryEventLog {
 	    id: number;
 	    silo_id: number;
@@ -1669,7 +1726,7 @@ export namespace model {
 		}
 	}
 
-	
+
 
 	export class ProfessionActionMeta {
 	    id: string;
@@ -1742,23 +1799,24 @@ export namespace model {
 		}
 	}
 
-	
 
-	
 
-	
 
-	
 
-	
 
-	
 
-	
 
-	
 
-	
+
+
+
+
+
+
+
+
+
+
 
 	export class TickResult {
 	    silo: Silo;
@@ -1807,7 +1865,7 @@ export namespace model {
 		}
 	}
 
-	
+
 
 
 }

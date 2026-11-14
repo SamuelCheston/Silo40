@@ -123,6 +123,8 @@ type ContentEvaluationContext struct {
 	Runtime         ContentEventRuntime
 	States          map[string]ContentEventRuntime
 	Action          *model.AgentAction
+	// Agent 当前模拟堡的操作者 (G3：内容脚本可读怀疑度/威望等 actor 状态)。
+	Agent *model.Agent
 }
 
 // LoadContentEventDefinitions 从多个目录加载 JSON 事件定义。
@@ -493,6 +495,24 @@ func validateEffect(effect ContentEffect) error {
 		if !model.ValidWorldFlag(effect.Flag) {
 			return fmt.Errorf("world_flag_set flag %q is not in the world flag whitelist", effect.Flag)
 		}
+	case "cohort_ideology_delta":
+		// G4: persistent cohort-level ideology write. profession 空 = 全部 cohort。
+		if effect.Ideology == "" {
+			return fmt.Errorf("cohort_ideology_delta requires ideology")
+		}
+	case "authority_evidence_delta":
+		// G2: PublicEvidenceQ supply for the public-charter qualification.
+	case "authority_public_fact":
+		// G2: independent public fact registration; flag is the dedup key.
+		if effect.Flag == "" {
+			return fmt.Errorf("authority_public_fact requires flag as the fact key")
+		}
+	case "authority_pact_qualify":
+		// G2: charter qualification flag (bool_value).
+	case "escape_group_depart":
+		// G5: move population out of the silo into a surviving escape group.
+	case "escape_group_status":
+		// G5: mark the escape group surviving or destroyed (bool_value).
 	default:
 		return fmt.Errorf("unsupported effect type %q", effect.Type)
 	}
@@ -1004,8 +1024,107 @@ func applyContentEffect(effect ContentEffect, silo *model.Silo) {
 		applyContentFragmentRemove(silo, effect.Profession, effect.Fragment)
 	case "floor_stability_delta":
 		applyContentFloorStabilityDelta(silo, effect.Zone, effect.Value)
+	case "cohort_ideology_delta":
+		applyContentCohortIdeologyDelta(silo, effect.Profession, effect.Ideology, effect.Value)
+	case "authority_evidence_delta":
+		applyContentAuthorityEvidenceDelta(silo, effect.Value)
+	case "authority_public_fact":
+		applyContentAuthorityPublicFact(silo, effect.Flag)
+	case "authority_pact_qualify":
+		if silo != nil {
+			silo.Authority.Judicial.PactQualified = effect.BoolValue
+		}
+	case "escape_group_depart":
+		applyContentEscapeGroupDepart(silo, effect.Value)
+	case "escape_group_status":
+		if silo != nil && silo.EscapedGroup.Initialized {
+			silo.EscapedGroup.Surviving = effect.BoolValue
+		}
 	case "schedule_event":
 		// Handled at the service level where the runtime can rewrite the main event queue.
+	}
+}
+
+// applyContentCohortIdeologyDelta G4：cohort 思潮直写。与 profession_ideology_delta_all
+// 不同，它写入人口真源 (Cohort.Ideologies)，不会被每 tick 的派生视图覆写。
+// profession 非空时只作用于该部门的 cohort；cohort 按切片既有 (持久化) 顺序处理。
+func applyContentCohortIdeologyDelta(silo *model.Silo, profession, ideology string, delta float64) {
+	if silo == nil || ideology == "" {
+		return
+	}
+	professionID := uint(0)
+	filter := strings.TrimSpace(profession) != ""
+	if filter {
+		found := false
+		for i := range silo.Professions {
+			if silo.Professions[i].Name == profession {
+				professionID = silo.Professions[i].ID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return
+		}
+	}
+	for i := range silo.Cohorts {
+		cohort := &silo.Cohorts[i]
+		if filter && cohort.ProfessionID != professionID {
+			continue
+		}
+		if cohort.Ideologies == nil {
+			cohort.Ideologies = map[string]float64{}
+		}
+		cohort.Ideologies[ideology] = clampUnit(cohort.Ideologies[ideology] + delta)
+	}
+}
+
+// applyContentAuthorityEvidenceDelta G2：公开证据强度 Q 的内容供给 (0–1 截断)。
+func applyContentAuthorityEvidenceDelta(silo *model.Silo, delta float64) {
+	if silo == nil {
+		return
+	}
+	j := &silo.Authority.Judicial
+	j.PublicEvidenceQ = clampUnit(j.PublicEvidenceQ + delta)
+}
+
+// applyContentAuthorityPublicFact G2：登记一条独立公共事实。按键去重、按登记
+// 顺序追加 (确定性)；计数与键表长度保持一致，供 pact 锁定动力学读取。
+func applyContentAuthorityPublicFact(silo *model.Silo, key string) {
+	if silo == nil || strings.TrimSpace(key) == "" {
+		return
+	}
+	j := &silo.Authority.Judicial
+	for _, existing := range j.PublicFactKeys {
+		if existing == key {
+			return
+		}
+	}
+	j.PublicFactKeys = append(j.PublicFactKeys, key)
+	j.IndependentPublicFacts = len(j.PublicFactKeys)
+}
+
+// applyContentEscapeGroupDepart G5：把 n 人从堡内移入逃出群体。移出即堡外
+// 存续事实：群体记为存续，首次离开记录时间戳。人数不得超过当前堡内人口。
+func applyContentEscapeGroupDepart(silo *model.Silo, count float64) {
+	if silo == nil {
+		return
+	}
+	n := int(count)
+	if n <= 0 || silo.TotalPopulation <= 0 {
+		return
+	}
+	if n > silo.TotalPopulation {
+		n = silo.TotalPopulation
+	}
+	silo.TotalPopulation -= n
+	group := &silo.EscapedGroup
+	group.Population += n
+	group.Surviving = true
+	if !group.Initialized {
+		group.Initialized = true
+		group.DepartedYear = silo.CurrentYear
+		group.DepartedMonth = silo.CurrentMonth
 	}
 }
 
@@ -1116,6 +1235,11 @@ func applySiloMetricDelta(silo *model.Silo, metric string, delta float64) {
 		silo.EventTrigger = math.Max(0, silo.EventTrigger+delta)
 	case "countdown":
 		silo.Countdown = math.Max(0, silo.Countdown+delta)
+	case "safeguard_risk":
+		// G6: content may now raise or lower intervention risk. The lower bound
+		// matches the mechanic layer; the death threshold stays a victory_check
+		// readout, not an effect-side cap.
+		silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+delta)
 	}
 }
 
@@ -1155,6 +1279,8 @@ func readSiloMetric(silo *model.Silo, metric string) (float64, bool) {
 		return silo.EventTrigger, true
 	case "countdown":
 		return silo.Countdown, true
+	case "safeguard_risk":
+		return silo.SafeguardRisk, true
 	default:
 		return 0, false
 	}
@@ -1200,6 +1326,13 @@ func writeWorldFlag(sc *ScopeContext, flag string, value bool) {
 		world.Flags = map[string]bool{}
 	}
 	if flag == model.WorldFlagSilo1Destroyed {
+		if value {
+			// G4: snapshot the station's cohort ideologies at the exact moment
+			// the destruction fact lands, before aftermath panic propagates.
+			if player := siloByID(sc, world.PlayerSiloID); player != nil && !player.Silo1Destroyed {
+				takePreFallIdeologySnapshot(player)
+			}
+		}
 		world.Silo1.Alive = !value
 		if player := siloByID(sc, world.PlayerSiloID); player != nil {
 			player.Silo1Destroyed = value
@@ -1207,6 +1340,80 @@ func writeWorldFlag(sc *ScopeContext, flag string, value bool) {
 		return
 	}
 	world.Flags[flag] = value
+}
+
+// takePreFallIdeologySnapshot G4：覆灭前夕思潮快照。读取 Cohort 的人口加权
+// 思潮 (真源，不是部门派生视图)；cohort 按 ID 升序、思潮轴按名称升序累加，
+// 保证跨进程逐位一致。只在首次置真时截取一次。
+//
+// 资格口径 (结局体系 12 §3.3)：亲外思潮为主导或复合主导一极即合格；纯种
+// 地堡思潮 (忠诚主导) 一律不合格。亲外权重必须为正——资格只能来自覆灭前
+// 建成的可核验交往经历，不能由覆灭后的恐慌产生。
+func takePreFallIdeologySnapshot(silo *model.Silo) {
+	if silo == nil || silo.PreFallSnapshot.Taken {
+		return
+	}
+	cohorts := append([]model.PopulationCohort(nil), silo.Cohorts...)
+	sort.SliceStable(cohorts, func(i, j int) bool { return cohorts[i].ID < cohorts[j].ID })
+
+	axisSet := map[string]bool{}
+	for i := range cohorts {
+		for axis := range cohorts[i].Ideologies {
+			axisSet[axis] = true
+		}
+	}
+	axes := make([]string, 0, len(axisSet))
+	for axis := range axisSet {
+		axes = append(axes, axis)
+	}
+	sort.Strings(axes)
+
+	weighted := map[string]float64{}
+	totalWeight := 0.0
+	for i := range cohorts {
+		cohort := &cohorts[i]
+		if cohort.Count <= 0 {
+			continue
+		}
+		w := float64(cohort.Count)
+		totalWeight += w
+		for _, axis := range axes {
+			weighted[axis] += clampUnit(cohort.Ideologies[axis]) * w
+		}
+	}
+	snapshot := model.PreFallIdeologySnapshot{
+		Taken:      true,
+		Year:       silo.CurrentYear,
+		Month:      silo.CurrentMonth,
+		Population: totalPopulationOf(cohorts),
+		Ideologies: map[string]float64{},
+	}
+	if totalWeight > 0 {
+		dominant := ""
+		best := -1.0
+		for _, axis := range axes {
+			value := weighted[axis] / totalWeight
+			snapshot.Ideologies[axis] = value
+			if value > best {
+				best = value
+				dominant = axis
+			}
+		}
+		snapshot.DominantAxis = dominant
+		snapshot.OpenQualified = snapshot.Ideologies[model.IdeologyProForeign] > 0 &&
+			snapshot.Ideologies[model.IdeologyProForeign] >= snapshot.Ideologies[model.IdeologyLoyalty]
+	}
+	silo.PreFallSnapshot = snapshot
+}
+
+func totalPopulationOf(cohorts []model.PopulationCohort) int {
+	total := 0
+	for i := range cohorts {
+		if cohorts[i].Count > 0 {
+			total += cohorts[i].Count
+		}
+	}
+	return total
 }
 
 func readSiloFlag(silo *model.Silo, flag string) (bool, bool) {
@@ -1221,6 +1428,9 @@ func readSiloFlag(silo *model.Silo, flag string) (bool, bool) {
 func writeSiloFlag(silo *model.Silo, flag string, value bool) {
 	switch flag {
 	case "silo1_destroyed":
+		if value && silo != nil && !silo.Silo1Destroyed {
+			takePreFallIdeologySnapshot(silo)
+		}
 		silo.Silo1Destroyed = value
 	}
 }

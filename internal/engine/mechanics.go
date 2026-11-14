@@ -480,6 +480,9 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			"safeguard_risk":   ctx.Silo.SafeguardRisk,
 			"silo1_destroyed":  ctx.Silo.Silo1Destroyed,
 			"traits":           append([]string(nil), ctx.Silo.Traits...),
+			// G5: victory_check reads the escape group to apply the DEATH exception.
+			"escaped_population": ctx.Silo.EscapedGroup.Population,
+			"escaped_surviving":  ctx.Silo.EscapedGroup.Initialized && ctx.Silo.EscapedGroup.Surviving,
 			"metrics": map[string]float64{
 				"legitimacy":          ctx.Silo.MayorLegitimacy(),
 				"cohesion":            ctx.Silo.Cohesion,
@@ -1119,8 +1122,10 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 	e.applyWeightedEnding(eventType, silo, agent)
 }
 
-// applyWeightedEnding lets the service arbitrate non-catastrophic outcomes
-// without giving the standalone engine access to world-level entities.
+// applyWeightedEnding lets the service arbitrate the terminal evaluation
+// requested by victory_check without giving the standalone engine access to
+// world-level entities. A decision with an empty Selected means "no qualified
+// candidate — continue simulating": the request is cleared and the game goes on.
 func (e *GameEngine) applyWeightedEnding(eventType string, silo *model.Silo, agent *model.Agent) {
 	if eventType != EVENT_VICTORY_CHECK || e.WeightedEndingResolver == nil || silo == nil || silo.VictoryStatus == nil {
 		return
@@ -1129,10 +1134,24 @@ func (e *GameEngine) applyWeightedEnding(eventType string, silo *model.Silo, age
 	if decision == nil {
 		return
 	}
+	if decision.Selected == "" {
+		silo.VictoryStatus = nil
+		return
+	}
 	silo.VictoryStatus.Type = decision.Selected
-	silo.VictoryStatus.IsWon = true
-	silo.VictoryStatus.Description = "多主体加权结局：" + decision.Selected + "。玩家、驻地派系、关键人物与 1 号共同影响了历史方向。"
+	silo.VictoryStatus.IsWon = !isHardFailureEnding(decision.Selected)
+	silo.VictoryStatus.Description = "多主体终局仲裁：" + decision.Selected + "。" + decision.Reason
 	silo.VictoryStatus.Decision = decision
+}
+
+// isHardFailureEnding marks P0 guardrail endings that end the game as failures
+// and can never be overridden by weighted scoring.
+func isHardFailureEnding(outcome string) bool {
+	switch outcome {
+	case "DEATH", "RESET", "FRACTURE", "AGENT_COMPROMISED":
+		return true
+	}
+	return false
 }
 
 func (e *GameEngine) applyMechanicMetadata() {

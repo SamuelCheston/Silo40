@@ -102,6 +102,24 @@ function professionFragmentRemove(profession, fragment, scope) {
 function floorStabilityDelta(zone, value, scope) {
   return __withScope({ type: "floor_stability_delta", zone: zone, value: value }, scope);
 }
+function cohortIdeologyDelta(ideology, value, profession, scope) {
+  return __withScope({ type: "cohort_ideology_delta", ideology: ideology, value: value, profession: profession || "" }, scope);
+}
+function authorityEvidenceDelta(value, scope) {
+  return __withScope({ type: "authority_evidence_delta", value: value }, scope);
+}
+function authorityPublicFact(key, scope) {
+  return __withScope({ type: "authority_public_fact", flag: key }, scope);
+}
+function authorityPactQualify(boolValue, scope) {
+  return __withScope({ type: "authority_pact_qualify", bool_value: !!boolValue }, scope);
+}
+function escapeGroupDepart(count, scope) {
+  return __withScope({ type: "escape_group_depart", value: count }, scope);
+}
+function escapeGroupStatus(boolValue, scope) {
+  return __withScope({ type: "escape_group_status", bool_value: !!boolValue }, scope);
+}
 function __contentStrip(value) {
   if (Array.isArray(value)) {
     return value.map(__contentStrip);
@@ -317,9 +335,32 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			"history_burden":      ctx.Silo.HistoryBurden,
 			"event_trigger":       ctx.Silo.EventTrigger,
 			"countdown":           ctx.Silo.Countdown,
+			"safeguard_risk":      ctx.Silo.SafeguardRisk,
 		}
 		result["silo_flags"] = map[string]bool{
 			"silo1_destroyed": ctx.Silo.Silo1Destroyed,
+		}
+
+		// G3: authority state is readable by content (W, judicial attachment,
+		// pact qualification, police obedience). Mutation stays on the Go side.
+		judicial := ctx.Silo.Authority.Judicial
+		result["authority"] = map[string]interface{}{
+			"initialized":       ctx.Silo.Authority.Initialized,
+			"w":                 ctx.Silo.Authority.W,
+			"police_obedience":  ctx.Silo.Authority.PoliceObedience,
+			"a_it":              judicial.IT,
+			"a_mayor":           judicial.Mayor,
+			"a_pact":            judicial.Pact,
+			"regime":            judicial.Regime,
+			"pact_qualified":    judicial.PactQualified,
+			"pact_locked":       judicial.PactLocked,
+			"public_evidence_q": judicial.PublicEvidenceQ,
+			"independent_public_facts": judicial.IndependentPublicFacts,
+		}
+		result["escaped_group"] = map[string]interface{}{
+			"initialized": ctx.Silo.EscapedGroup.Initialized,
+			"population":  ctx.Silo.EscapedGroup.Population,
+			"surviving":   ctx.Silo.EscapedGroup.Surviving,
 		}
 
 		resources := map[string]float64{}
@@ -372,6 +413,16 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			"profession_action": ctx.Action.ProfessionAction,
 			"resource_target":   ctx.Action.ResourceTarget,
 			"cost":              ctx.Action.Cost,
+		}
+	}
+	// G3: actor state (suspicion, prestige, propaganda) is readable by content.
+	if ctx.Agent != nil {
+		result["actor"] = map[string]interface{}{
+			"suspicion_level":    ctx.Agent.SuspicionLevel,
+			"political_prestige": ctx.Agent.PoliticalPrestige,
+			"propaganda_level":   ctx.Agent.PropagandaLevel,
+			"action_points":      ctx.Agent.ActionPoints,
+			"known_fragments":    len(ctx.Agent.KnownFragments),
 		}
 	}
 	states := map[string]map[string]interface{}{}

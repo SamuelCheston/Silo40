@@ -5,7 +5,11 @@ export type VictoryType =
   | "INFORMATION"
   | "TIME"
   | "REBELLION"
+  | "RULE_OF_LAW"
+  | "PERSONAL_RULE"
   | "EXCLUSIONIST"
+  | "RESET"
+  | "FRACTURE"
   | "DEATH"
   | "AGENT_COMPROMISED";
 

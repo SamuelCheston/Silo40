@@ -482,6 +482,97 @@ func upgradeV7ToAuthority(tx *gorm.DB) error {
 
 const authoritySaveVersion = 8
 
+// UpgradeV8ToEndingsSave adds the ending-chain mechanism base (G1–G11 models):
+// escape groups, pre-fall ideology snapshots, pact fact keys, outbound signal
+// logs, and ending arbitration audit fields. All new fields are zero-valued in
+// v8 saves (nothing could write them before v9), so the migration backfills no
+// guessed state; it still follows the backup + one transaction + readback
+// contract so a corrupted or partial database can never load half-migrated.
+func UpgradeV8ToEndingsSave(db *gorm.DB, dbPath string) (bool, error) {
+	var meta model.SaveMeta
+	err := db.First(&meta, "`key` = ?", saveMetaKey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("v9 endings upgrade: read save meta: %w", err)
+	}
+	if meta.SaveVersion != 8 {
+		return false, nil
+	}
+	backupPath := fmt.Sprintf("%s.bak-%s-v9endings", dbPath, time.Now().Format("20060102-150405"))
+	if err := backupSaveFile(db, backupPath); err != nil {
+		return false, fmt.Errorf("v9 endings upgrade: backup to %s failed: %w（数据库未改动）", backupPath, err)
+	}
+	if err := db.Transaction(upgradeV8ToEndings); err != nil {
+		return false, fmt.Errorf("v9 endings upgrade: %w（数据库未改动，备份保留在 %s，可用它还原）", err, backupPath)
+	}
+	log.Printf("v8 save upgraded to v9 ending-chain model (backup: %s)——逃出群体/覆灭快照/出站日志均为空起步，不回填推测状态", backupPath)
+	return true, nil
+}
+
+func upgradeV8ToEndings(tx *gorm.DB) error {
+	var silos []model.Silo
+	if err := tx.Order("id ASC").Find(&silos).Error; err != nil {
+		return fmt.Errorf("load silos: %w", err)
+	}
+	for i := range silos {
+		silo := &silos[i]
+		// Re-save so the new serialized columns exist explicitly; zero values
+		// are the documented v8 semantics (no escape group, no snapshot).
+		if err := tx.Save(silo).Error; err != nil {
+			return fmt.Errorf("resave silo %d: %w", silo.ID, err)
+		}
+	}
+	var world model.World
+	if err := tx.First(&world, ActiveWorldID).Error; err != nil {
+		return fmt.Errorf("load world: %w", err)
+	}
+	if err := tx.Save(&world).Error; err != nil {
+		return fmt.Errorf("resave world: %w", err)
+	}
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: endingsSaveVersion}).Error; err != nil {
+		return fmt.Errorf("bump save meta: %w", err)
+	}
+
+	var checkSilos []model.Silo
+	if err := tx.Order("id ASC").Find(&checkSilos).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload silos: %w", err)
+	}
+	if len(checkSilos) != len(silos) {
+		return fmt.Errorf("post-write verification failed: silo count changed")
+	}
+	for i := range checkSilos {
+		silo := &checkSilos[i]
+		if silo.EscapedGroup.Initialized || silo.EscapedGroup.Population != 0 {
+			return fmt.Errorf("post-write verification failed: silo %d gained an escape group during migration", silo.ID)
+		}
+		if silo.PreFallSnapshot.Taken {
+			return fmt.Errorf("post-write verification failed: silo %d gained a pre-fall snapshot during migration", silo.ID)
+		}
+		if len(silo.Authority.Judicial.PublicFactKeys) != silo.Authority.Judicial.IndependentPublicFacts {
+			return fmt.Errorf("post-write verification failed: silo %d pact fact keys diverged from count", silo.ID)
+		}
+	}
+	var checkWorld model.World
+	if err := tx.First(&checkWorld, ActiveWorldID).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload world: %w", err)
+	}
+	if len(checkWorld.OutboundSignals) != 0 || checkWorld.LastEndingAudit != nil {
+		return fmt.Errorf("post-write verification failed: world gained outbound/audit state during migration")
+	}
+	var checkMeta model.SaveMeta
+	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
+	}
+	if checkMeta.SaveVersion != endingsSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, endingsSaveVersion)
+	}
+	return nil
+}
+
+const endingsSaveVersion = 9
+
 // legacyUnaffiliatedSignature 与 engine.unaffiliatedSignature 一致 (跨包不导出，
 // 升级器按字面值对齐)。
 const legacyUnaffiliatedSignature = "special:unaffiliated"

@@ -34,7 +34,11 @@ const (
 //     VictoryStatus 持久化权重仲裁记录；v6 不提供伪迁移，必须显式拒绝。
 //   - v8: Mayor 个人正统性、Police 服从、幕后威势 W 与 Judicial 三方附着。
 //     v7 经备份+单事务升级；Mayor 从旧 Legitimacy 初始化，W 使用标注的保守初值。
-const CurrentSaveVersion = 8
+//   - v9: 结局事件链机制底座。逃出群体 (EscapedGroup)、覆灭前夕思潮快照
+//     (PreFallSnapshot)、公开约章事实键 (PublicFactKeys)、跨堡出站投递日志
+//     (World.OutboundSignals) 与结局仲裁审计字段。新增字段零值即旧档语义，
+//     v8 存档经备份+单事务+回读校验升级，不回填任何推测状态。
+const CurrentSaveVersion = 9
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -198,8 +202,25 @@ type World struct {
 	ProgressStage   string          `json:"progress_stage"`
 	UnlockedActions []string        `gorm:"type:text;serializer:json" json:"unlocked_actions"`
 	HistoryImpacts  []HistoryImpact `gorm:"type:text;serializer:json" json:"history_impacts"`
+	// OutboundSignals 跨堡出站投递日志 (G7)：派发阶段按 (到期月, Seq) 顺序
+	// 追加，因此整个日志本身即确定性有序。外溢结算只读它，不改写投递。
+	OutboundSignals []OutboundSignal `gorm:"type:text;serializer:json" json:"outbound_signals,omitempty"`
+	// LastEndingAudit 最近一次终局仲裁记录 (含"继续模拟"的空池裁决)，
+	// 供结局体系 12 §9 的解释性审计；不影响任何模拟状态。
+	LastEndingAudit *EndingDecision `gorm:"type:text;serializer:json" json:"last_ending_audit,omitempty"`
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+// OutboundSignal records one delivered cross-silo signal for spillover
+// settlement (G7). SourceSilo = 0 marks Silo 1 / world origin.
+type OutboundSignal struct {
+	Seq        int    `json:"seq"`
+	SourceSilo uint   `json:"source_silo"`
+	TargetSilo uint   `json:"target_silo"`
+	EventID    string `json:"event_id"`
+	Year       int    `json:"year"`
+	Month      int    `json:"month"`
 }
 
 // CrossEvent 跨堡事件：某个堡 (或 Silo 1 / 世界) 向目标域投递的延迟消息。
@@ -258,7 +279,11 @@ type JudicialAttachment struct {
 	PactQualified          bool    `json:"pact_qualified"`
 	PublicEvidenceQ        float64 `json:"public_evidence_q"`
 	IndependentPublicFacts int     `json:"independent_public_facts"`
-	PactLocked             bool    `json:"pact_locked"`
+	// PublicFactKeys 已登记的独立公共事实键 (G2)。按登记顺序追加、按键去重，
+	// IndependentPublicFacts 与其长度保持一致；内容层经 authority_public_fact
+	// 效果写入，锁定判定只读计数。
+	PublicFactKeys []string `json:"public_fact_keys,omitempty"`
+	PactLocked     bool     `json:"pact_locked"`
 }
 
 // ShadowAuthority is the independent IT authority state. OrderDeviation is a
@@ -288,6 +313,8 @@ type Silo struct {
 	Legitimacy         float64            `gorm:"default:1.0" json:"legitimacy"`                             // Compatibility mirror of Mayor.Legitimacy.
 	Mayor              MayorOffice        `gorm:"type:text;serializer:json" json:"mayor"`                    // 现任 Mayor 个人正统性
 	Authority          ShadowAuthority    `gorm:"type:text;serializer:json" json:"authority"`                // IT 幕后威势与 Judicial 附着
+	EscapedGroup       EscapeGroup        `gorm:"type:text;serializer:json" json:"escaped_group"`            // 已离开且可能存续的堡外群体 (G5)
+	PreFallSnapshot    PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"`   // 覆灭前夕人口加权思潮快照 (G4)
 	Cohesion           float64            `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
 	Rebellion          float64            `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
 	DeptTension        float64            `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
@@ -340,6 +367,39 @@ func (s *Silo) SetMayorLegitimacy(value float64) {
 	s.Legitimacy = value
 }
 
+// EscapeGroup 逃出群体模型 (G5)：已经离开驻地、在堡外可能存续的人口。
+// 存续的逃出群体是《越岭》的资格事实，也是《寂堡》《遗忘》《断层》的例外：
+// 原驻地毁灭/重置/崩坏时不再追溯判死该群体。
+type EscapeGroup struct {
+	Initialized   bool `json:"initialized"`
+	Population    int  `json:"population"`
+	DepartedYear  int  `json:"departed_year,omitempty"`
+	DepartedMonth int  `json:"departed_month,omitempty"`
+	Surviving     bool `json:"surviving"`
+}
+
+// SurvivingEscapeGroup 报告是否存在真实可读的存续逃出群体 (结局体系 12 §6：
+// 硬失败护栏先读逃出群体)。人口必须为正，未初始化或已覆灭的群体不算。
+func (g EscapeGroup) SurvivingEscapeGroup() bool {
+	return g.Initialized && g.Surviving && g.Population > 0
+}
+
+// PreFallIdeologySnapshot 覆灭前夕思潮快照 (G4／《无人裁决》思潮闸)。
+// 在 Silo 1 覆灭事实置位的瞬间、覆灭余波制造新恐慌之前截取；读取的是
+// Cohort 的人口加权思潮，不是部门派生视图。
+type PreFallIdeologySnapshot struct {
+	Taken      bool               `json:"taken"`
+	Year       int                `json:"year,omitempty"`
+	Month      int                `json:"month,omitempty"`
+	Population int                `json:"population"`
+	Ideologies map[string]float64 `json:"ideologies,omitempty"` // 人口加权 (0-1)
+	// DominantAxis 权重最高的思潮轴；并列时按轴名字典序取小者 (确定性)。
+	DominantAxis string `json:"dominant_axis,omitempty"`
+	// OpenQualified 亲外思潮为主导或复合主导一极即合格；纯种地堡思潮
+	// (忠诚主导) 一律不合格 (结局体系 12 §3.3)。
+	OpenQualified bool `json:"open_qualified"`
+}
+
 // EndingEntityContribution records one entity's weighted support for each outcome.
 type EndingEntityContribution struct {
 	EntityID string             `json:"entity_id"`
@@ -355,12 +415,17 @@ type EndingDecision struct {
 	MinimumScore  float64                    `json:"minimum_score"`
 	Scores        map[string]float64         `json:"scores"`
 	Contributions []EndingEntityContribution `json:"contributions"`
+	// v9 审计字段 (结局体系 12 §9)：解释哪些候选进入评分、哪些因何资格失败、
+	// 哪个硬失败护栏或同分规则生效。Selected 为空串表示"继续模拟"的空池裁决。
+	Reason   string            `json:"reason,omitempty"`
+	Pool     []string          `json:"pool,omitempty"`
+	Excluded map[string]string `json:"excluded,omitempty"`
 }
 
 // VictoryStatus 胜利状态
 type VictoryStatus struct {
 	IsWon       bool            `json:"is_won"`
-	Type        string          `json:"type"` // NONE/INFORMATION/TIME/REBELLION/EXCLUSIONIST/DEATH/AGENT_COMPROMISED
+	Type        string          `json:"type"` // NONE/INFORMATION/TIME/REBELLION/RULE_OF_LAW/PERSONAL_RULE/EXCLUSIONIST/RESET/FRACTURE/DEATH/AGENT_COMPROMISED
 	Description string          `json:"description"`
 	Score       *GameScore      `json:"score,omitempty"`
 	Decision    *EndingDecision `json:"decision,omitempty"`
