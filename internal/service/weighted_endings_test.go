@@ -143,7 +143,9 @@ func TestWeightedEndingUsesSilo1AndDeterministicTieOrder(t *testing.T) {
 func TestWeightedEndingTieBreaksInFixedOrder(t *testing.T) {
 	// INFORMATION and REBELLION receive identical player base and faction
 	// influence weights; with a surviving escape group and public facts both
-	// qualify and tie, so the fixed order must pick INFORMATION.
+	// qualify and tie, so the fixed order must pick INFORMATION. 修复7 后玩家
+	// 碎片贡献读信念覆盖 (2 部门 × 3 事实 = +0.3)，用一个具名居民的野心项
+	// (0.8 × 0.75 × 0.5 = +0.3) 给 REBELLION 补回同分。
 	svc, station, _ := weightedEndingFixture("REBELLION")
 	station.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 150, Surviving: true}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
@@ -155,6 +157,10 @@ func TestWeightedEndingTieBreaksInFixedOrder(t *testing.T) {
 		station.Professions = append(station.Professions, prof)
 	}
 	station.Factions = []model.Faction{{ID: 7, Name: "Charter Circle", Influence: 20, Cohesion: 1}}
+	station.Residents = []model.Resident{{
+		ID: 8, Name: "Ambitious Balancer", Alive: true, Influence: 0.75, Ambition: 0.5,
+		Ideologies: map[string]float64{},
+	}}
 	svc.world.Silo1.Alive = false
 	if peer := svc.silos[1]; peer != nil {
 		peer.Cohesion = 0
@@ -169,7 +175,43 @@ func TestWeightedEndingTieBreaksInFixedOrder(t *testing.T) {
 	}
 	wantOrder := []string{"INFORMATION", "REBELLION", "RULE_OF_LAW", "TIME", "PERSONAL_RULE", "EXCLUSIONIST"}
 	if !reflect.DeepEqual(endingOutcomeOrder, wantOrder) {
-		t.Fatalf("tie-break order changed: %v", endingOutcomeOrder)
+		t.Fatalf("tie-break order changed: %v", wantOrder)
+	}
+}
+
+// TestCompletedBeliefGateOutweighsLivingSilo1Exclusionist locks 修复7: an agent
+// who completes the belief gate must win on the INFORMATION weighting even with
+// zero prestige and no legacy fragments — the old KnownFragments-based player
+// term scored ~0 for commoner professions and let Silo 1's standing
+// EXCLUSIONIST contribution (base 2 + cohesion) steal the settlement by a hair
+// (职业横评 Mechanical-40: 3.985 vs 3.996).
+func TestCompletedBeliefGateOutweighsLivingSilo1Exclusionist(t *testing.T) {
+	svc, station, _ := weightedEndingFixture("INFORMATION")
+	svc.agent.PoliticalPrestige = 0
+	svc.agent.KnownFragments = nil
+	names := []string{"Mayor", "Judicial", "IT", "Police", "Medical", "Supply", "Mechanical", "Mines", "Agricultural"}
+	for i, name := range names {
+		station.Professions = append(station.Professions, model.Profession{
+			ID:   uint(i + 1),
+			Name: name,
+			Beliefs: []model.FactBelief{
+				{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+			},
+		})
+	}
+	// Closed order still dominates: EXCLUSIONIST qualifies, and Silo 1 alive
+	// gives it its standing base+cohesion contribution.
+	station.Cohorts = []model.PopulationCohort{{
+		ID: 1, Count: 100,
+		Ideologies: map[string]float64{model.IdeologyLoyalty: 0.8, model.IdeologyProForeign: 0.1},
+	}}
+
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingInformation {
+		t.Fatalf("completed belief gate must settle INFORMATION, got %+v", decision)
+	}
+	if decision.Scores[endingInformation] <= decision.Scores[endingExclusionist] {
+		t.Fatalf("INFORMATION must outscore the living-Silo1 EXCLUSIONIST base: %+v", decision.Scores)
 	}
 }
 
