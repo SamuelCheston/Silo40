@@ -74,11 +74,11 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }
                             <VStack align="start" gap={1} p={1}>
                                 <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>行动点 (AP)</Text>
                                 <HStack justify="space-between" w="full">
-                                    <Text>基础恢复:</Text>
+                                    <Text>基础恢复/年:</Text>
                                     <Text color="green.300">+{agentStats.ap_base_recovery.toFixed(2)}</Text>
                                 </HStack>
                                 <HStack justify="space-between" w="full">
-                                    <Text>威望加成:</Text>
+                                    <Text>威望加成/年:</Text>
                                     <Text color="green.300">+{agentStats.ap_prestige_bonus.toFixed(2)}</Text>
                                 </HStack>
                                 <Text fontWeight="bold" pt={1} color="blue.300">年度总恢复: {agentStats.ap_total_recovery.toFixed(2)} AP</Text>

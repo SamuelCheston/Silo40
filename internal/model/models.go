@@ -835,15 +835,44 @@ type WorldView struct {
 
 // GameState 后端权威游戏状态快照 (返回给前端)
 type GameState struct {
-	Silo              Silo                   `json:"silo"`
-	Agent             Agent                  `json:"agent"`
-	AgentStats        AgentStats             `json:"agent_stats"`
-	GameOver          bool                   `json:"game_over"`
-	EndingNarrative   string                 `json:"ending_narrative,omitempty"`
-	VictoryStatus     *VictoryStatus         `json:"victory_status,omitempty"`
-	ProfessionActions []ProfessionActionMeta `json:"profession_actions,omitempty"`
-	AvailableActions  []PlayerActionMeta     `json:"available_actions,omitempty"`
-	World             *WorldView             `json:"world,omitempty"`
+	Silo                Silo                   `json:"silo"`
+	Agent               Agent                  `json:"agent"`
+	AgentStats          AgentStats             `json:"agent_stats"`
+	GameOver            bool                   `json:"game_over"`
+	EndingNarrative     string                 `json:"ending_narrative,omitempty"`
+	VictoryStatus       *VictoryStatus         `json:"victory_status,omitempty"`
+	ProfessionActions   []ProfessionActionMeta `json:"profession_actions,omitempty"`
+	AvailableActions    []PlayerActionMeta     `json:"available_actions,omitempty"`
+	World               *WorldView             `json:"world,omitempty"`
+	InformationProgress *InformationProgress   `json:"information_progress,omitempty"`
+}
+
+// InformationChainNode 是《共证》链上单个节点的点亮状态。链的推进只存在于
+// 内容事件状态里，事件历史会被新事件挤出，玩家此前没有任何途径看到"复制
+// 走到第几节、活链是否成立"——本结构把链节点状态提升为一等进度。
+type InformationChainNode struct {
+	Key   string `json:"key"`
+	Title string `json:"title"`
+	Lit   bool   `json:"lit"`
+	Count int    `json:"count,omitempty"`
+}
+
+// DepartmentFactCoverage 单个部门在结局门槛下的事实覆盖：信念层里有多少份
+// 不同事实的浓度达到分享地板。
+type DepartmentFactCoverage struct {
+	Name       string `json:"name"`
+	AboveFloor int    `json:"above_floor"`
+}
+
+// InformationProgress 汇总《共证》线进度。信念层原始值已在
+// Silo.Professions[].Beliefs，登记簿在 Silo.PublicEvidence，Q 在
+// Authority.Judicial.PublicEvidenceQ；本结构补上玩家看不到的链节点状态，
+// 并随附门槛常量，让前端能解释"还差什么"。
+type InformationProgress struct {
+	Nodes         []InformationChainNode   `json:"nodes"`
+	Departments   []DepartmentFactCoverage `json:"departments"`
+	GateFactCount int                      `json:"gate_fact_count"`
+	BeliefFloor   float64                  `json:"belief_floor"`
 }
 
 // AgentStats 后端下发的 Agent 派生指标，用于前端展示，避免 UI 复算引擎公式
@@ -893,15 +922,16 @@ type ActionOutcome struct {
 
 // EventQueueState 当前事件队列与完整游戏快照。
 type EventQueueState struct {
-	Silo             Silo               `json:"silo"`
-	Agent            Agent              `json:"agent"`
-	AgentStats       AgentStats         `json:"agent_stats"`
-	AvailableActions []PlayerActionMeta `json:"available_actions,omitempty"`
-	World            *WorldView         `json:"world,omitempty"`
-	GameOver         bool               `json:"game_over"`
-	EndingNarrative  string             `json:"ending_narrative,omitempty"`
-	PendingEvents    int                `json:"pending_events"`
-	PendingOperation string             `json:"pending_operation,omitempty"`
+	Silo                Silo               `json:"silo"`
+	Agent               Agent              `json:"agent"`
+	AgentStats          AgentStats         `json:"agent_stats"`
+	AvailableActions    []PlayerActionMeta `json:"available_actions,omitempty"`
+	World               *WorldView         `json:"world,omitempty"`
+	GameOver            bool               `json:"game_over"`
+	EndingNarrative     string             `json:"ending_narrative,omitempty"`
+	PendingEvents       int                `json:"pending_events"`
+	PendingOperation    string             `json:"pending_operation,omitempty"`
+	InformationProgress *InformationProgress `json:"information_progress,omitempty"`
 }
 
 // EventStepResult 单步处理一个事件后的完整结果。
@@ -921,6 +951,8 @@ type EventStepResult struct {
 	Logs               []string           `json:"logs,omitempty"`
 	Stories            []StoryEvent       `json:"stories,omitempty"`
 	ActionResult       *ActionResult      `json:"action_result,omitempty"`
+
+	InformationProgress *InformationProgress `json:"information_progress,omitempty"`
 }
 
 // EventHistoryResult 事件历史查询结果

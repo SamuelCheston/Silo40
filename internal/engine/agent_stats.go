@@ -3,7 +3,10 @@ package engine
 import "silo40/internal/model"
 
 const (
-	agentAPBaseRecovery = 10.0
+	// agentAPBaseRecovery 必须与 core_systems.js agent_update 的实际恢复公式
+	// (年恢复 36 + 威望*0.05，TODO(balance)) 保持一致：展示值不能比实际经济
+	// 多一个量级，否则玩家会按错误的预算规划流通节奏。
+	agentAPBaseRecovery = 36.0
 	agentAPMax          = 100.0
 )
 

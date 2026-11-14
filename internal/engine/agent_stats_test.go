@@ -34,9 +34,44 @@ func TestBuildAgentStatsMatchesEngineFormula(t *testing.T) {
 	assertClose(t, "structural prestige", stats.StructuralPrestige, 17)
 	assertClose(t, "political prestige", stats.PoliticalPrestige, 143)
 	assertClose(t, "ap prestige bonus", stats.APPrestigeBonus, 7.15)
-	assertClose(t, "ap total recovery", stats.APTotalRecovery, 17.15)
+	// 修复2：展示口径必须与实际恢复公式一致 (年 36 + 威望*0.05)，
+	// 不再是旧经济的 10 + 威望*0.05。
+	assertClose(t, "ap base recovery", stats.APBaseRecovery, 36)
+	assertClose(t, "ap total recovery", stats.APTotalRecovery, 43.15)
 	assertClose(t, "propaganda multiplier", stats.PropagandaMultiplier, 1.4)
 	assertClose(t, "rebellion base effect", stats.RebellionBaseEffect, 0.336)
+}
+
+// TestDisplayedAPRecoveryMatchesActualRecovery locks 修复2 against drift: the
+// recovery the UI explains (agent_stats formula) must equal, to the digit,
+// what agent_update actually grants. The old display (10/yr) survived the
+// economy re-anchor (36/yr) and told players to plan around a budget four
+// times larger than the real one.
+func TestDisplayedAPRecoveryMatchesActualRecovery(t *testing.T) {
+	eng := NewGameEngine()
+	if eng.MechanicEngine == nil {
+		t.Fatal("mechanic engine unavailable")
+	}
+	if _, ok := eng.MechanicEngine.EventDefinition(EVENT_AGENT_UPDATE); !ok {
+		t.Fatal("agent_update mechanic not loaded from events/mechanics")
+	}
+	silo := &model.Silo{
+		Professions: []model.Profession{
+			{ID: 1, Name: "Mayor", ClassType: "ELITE", PowerLevel: 10},
+		},
+	}
+	agent := &model.Agent{
+		Profession:   "Mayor",
+		ActionPoints: 20,
+		Connections:  []model.Connection{{ProfessionID: 1, Value: 0.5}},
+	}
+	stats := eng.BuildAgentStats(agent, silo)
+
+	before := agent.ActionPoints
+	eng.UpdateAgentState(agent, 1.0, silo, nil)
+	actual := agent.ActionPoints - before
+
+	assertClose(t, "displayed yearly recovery vs actual agent_update recovery", stats.APTotalRecovery, actual)
 }
 
 func assertClose(t *testing.T, label string, got, want float64) {
