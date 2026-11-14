@@ -22,7 +22,7 @@ const operationStatusText: Record<string, string> = {
 
 const nextCounterintelThreshold = (exposure: number) => exposure >= 0.75 ? 'MAX' : `${(Math.floor(exposure * 4) + 1) * 25}%`;
 
-export const WorldPanel: React.FC<WorldPanelProps> = ({ world, agent }) => {
+export const WorldPanel = React.memo(function WorldPanel({ world, agent }: WorldPanelProps) {
     if (!world) return null;
     const suspicion = agent?.suspicion_level || 0;
     const counterintelActive = (world.silo1_counterintel_stage || 0) > 0 || (world.station_counterintel_stage || 0) > 0;
@@ -121,4 +121,4 @@ export const WorldPanel: React.FC<WorldPanelProps> = ({ world, agent }) => {
             </VStack>
         </Box>
     );
-};
+});
