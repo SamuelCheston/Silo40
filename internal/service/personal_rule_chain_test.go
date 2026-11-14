@@ -2,11 +2,83 @@ package service
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
 	"silo40/internal/model"
 )
+
+// TestPersonalRuleEndingNarrativeAndCoexistence locks 32-personal-rule-endgame
+// §2: the PERSONAL_RULE settlement tells the protected-sleep story (not a
+// score formula), reports the order's factual basis with the three-state
+// judicial position, and — when a charter is locked at the same time — states
+// the coexistence instead of denying it.
+func TestPersonalRuleEndingNarrativeAndCoexistence(t *testing.T) {
+	setup := func() (*GameService, *model.Silo) {
+		svc, station, _ := weightedEndingFixture("PERSONAL_RULE")
+		station.Authority.W = 20
+		station.Authority.PoliceObedience = 0.7
+		station.Authority.Judicial.Regime = "SWING"
+		station.SetMayorLegitimacy(0.6)
+		station.Mayor.HolderResidentID = 7
+		station.Mayor.HolderName = "Named Mayor"
+		svc.agent.PoliticalPrestige = 100
+		return svc, station
+	}
+
+	// Variant A: contested judiciary, no charter.
+	svc, station := setup()
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingPersonalRule {
+		t.Fatalf("expected PERSONAL_RULE selection, got %+v", decision)
+	}
+	if strings.Contains(decision.Reason, "P2 加权") {
+		t.Fatalf("score formula still on the ending screen: %q", decision.Reason)
+	}
+	for _, want := range []string{
+		"《人治》成立",
+		"被保护的睡眠",
+		"警察服从 0.70，市长正统性 0.60，幕后威势 W=20.0，司法部处于争夺态",
+		"永不归属市长",
+	} {
+		if !strings.Contains(decision.Reason, want) {
+			t.Fatalf("narrative missing %q: %q", want, decision.Reason)
+		}
+	}
+
+	// Variant B: a locked charter coexists with personal rule; the weighting
+	// (prestige favors personal rule here) settles the concurrence — no
+	// hard-exclusion fiction, and the tie-break rule is stated.
+	svc2, station2 := setup()
+	station2.Authority.Judicial.PactLocked = true
+	station2.Authority.Judicial.Regime = "PACT"
+	station2.Authority.Judicial.IndependentPublicFacts = 2
+	station2.Authority.Judicial.PublicEvidenceQ = 0.9
+	decision2 := svc2.resolveWeightedEnding(station2, svc2.agent)
+	if decision2 == nil {
+		t.Fatal("no decision")
+	}
+	poolHas := func(want string) bool {
+		for _, outcome := range decision2.Pool {
+			if outcome == want {
+				return true
+			}
+		}
+		return false
+	}
+	if !poolHas(endingRuleOfLaw) || !poolHas(endingPersonalRule) {
+		t.Fatalf("charter lock and personal rule must coexist in the pool: pool=%v excluded=%v",
+			decision2.Pool, decision2.Excluded)
+	}
+	if decision2.Selected != endingPersonalRule {
+		t.Fatalf("expected the personal-rule weighting to win here, got %s (%v)",
+			decision2.Selected, decision2.Scores)
+	}
+	if !strings.Contains(decision2.Reason, "公开约章与人治并存") {
+		t.Fatalf("coexistence line missing: %q", decision2.Reason)
+	}
+}
 
 // TestPersonalRuleLineContentLoads locks that the PERSONAL_RULE batch
 // (31-spec §2 "can write today" list) loads from events/ and passes
