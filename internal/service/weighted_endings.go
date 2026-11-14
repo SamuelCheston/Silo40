@@ -136,7 +136,7 @@ func outcomeWeight(weights endingOutcomeWeights, outcome string) float64 {
 var endingDescriptions = map[string]string{
 	endingInformation:  "核心真相已经成为跨部门、可独立复核的公共事实：它有了自己的来源说明、自己的核验路径、自己的保管人。你的沉默、离开或失忆，都不再能把它收回——链不再需要你，这正是任务要的结果。驻地之外是否有人接过这份事实，只写进结算，不改变这个结局。《共证》成立。",
 	endingRebellion:    "有组织的不满转化为了实际离开：一个成规模的群体在堡外继续存续——《越岭》成立。",
-	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。公开约章已经锁定——《公议》成立。",
+	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。第一次按约章裁决的案件里，裁决者引用约章与公开证据，而不是等待上级指示；隐蔽调度不再能进入执行——法警第一次问'依据哪一条'。约章有本地主人，以不可被单方收回的程序锁定；你坐在旁听席，不在裁决席。约章法庭迟早会遇到一个它回答不了的问题——'这条命令到底从哪里来'——答案通向专线与控制网的另一端，但本结局停在这个问题被第一次提出之前。《公议》成立。",
 	endingTime:         "一号地堡权威覆灭，驻地仍有形成历史的能力，覆灭前夕的思潮具备面向外部的一极——《无人裁决》成立。",
 	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者：警察服从、幕后威势退场，司法部不归属市长、也没有回到 IT 手里——《人治》成立。",
 	endingExclusionist: "公开求证与外部经验没有取得公共正当性，封闭秩序延续或自我复制——《深闭》成立。",
@@ -525,8 +525,9 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	// Settlement narrative replaces the score formula on the ending screen:
 	// the structured audit (scores, contributions, pool, exclusions) stays in
 	// the decision fields, Reason carries the story (25-information-endgame
-	// §2.2). INFORMATION appends the spillover settlement line — spillover
-	// never gates victory, it is settlement information only.
+	// §2.2). INFORMATION appends the spillover settlement line and RULE_OF_LAW
+	// appends the charter evidence-base line — neither gates victory; both are
+	// settlement information only.
 	narrative := endingDescriptions[best]
 	if best == endingInformation {
 		sent := s.spilloverSignalCount(station.ID)
@@ -536,6 +537,10 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		} else {
 			narrative += fmt.Sprintf("本局共有 %d 条信号送出驻地，到达 %d 座他堡。", sent, reached)
 		}
+	}
+	if best == endingRuleOfLaw {
+		narrative += fmt.Sprintf("本局约章的证据底座为 %d 项独立公共事实，公开证据强度 Q=%.2f。",
+			station.Authority.Judicial.IndependentPublicFacts, station.Authority.Judicial.PublicEvidenceQ)
 	}
 	decision.Reason = narrative
 	return s.finishArbitration(decision)

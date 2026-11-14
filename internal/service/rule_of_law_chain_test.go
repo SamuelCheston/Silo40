@@ -2,11 +2,88 @@ package service
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
 	"silo40/internal/model"
 )
+
+// TestRuleOfLawEndingNarrativeReplacesFormula locks 28-rule-of-law-endgame
+// §2: the RULE_OF_LAW settlement shows the story, not the P2 score formula,
+// and the charter evidence-base line reports the fact count and Q (§3).
+func TestRuleOfLawEndingNarrativeReplacesFormula(t *testing.T) {
+	svc, station, _ := weightedEndingFixture("RULE_OF_LAW")
+	station.Authority.Judicial.PactLocked = true
+	station.Authority.Judicial.Regime = "PACT"
+	station.Authority.Judicial.IndependentPublicFacts = 2
+	station.Authority.Judicial.PublicEvidenceQ = 0.95
+	svc.agent.PoliticalPrestige = 100
+
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingRuleOfLaw {
+		t.Fatalf("expected RULE_OF_LAW selection, got %+v", decision)
+	}
+	if strings.Contains(decision.Reason, "P2 加权") {
+		t.Fatalf("score formula still on the ending screen: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "《公议》成立") {
+		t.Fatalf("narrative missing: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "这条命令到底从哪里来") {
+		t.Fatalf("honest epilogue (the question the charter cannot answer) missing: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "2 项独立公共事实，公开证据强度 Q=0.95") {
+		t.Fatalf("charter evidence-base settlement line missing: %q", decision.Reason)
+	}
+}
+
+// TestRuleOfLawAndPersonalRuleCoexistInPool locks the new three-state soft
+// exclusion (26-nodes §6): a locked charter (Regime=PACT) does not block
+// PERSONAL_RULE qualification — both candidates enter the pool, and the
+// weighting plus fixed tie-break order settle the concurrence. No judgment
+// reads the abolished "Judicial belongs to the Mayor" state.
+func TestRuleOfLawAndPersonalRuleCoexistInPool(t *testing.T) {
+	svc, station, _ := weightedEndingFixture("RULE_OF_LAW")
+	station.Authority.Judicial.PactLocked = true
+	station.Authority.Judicial.Regime = "PACT"
+	station.Authority.Judicial.IndependentPublicFacts = 2
+	station.Authority.Judicial.PublicEvidenceQ = 0.95
+	// PERSONAL_RULE side: low W, legitimate incumbent, obedient police.
+	station.Authority.W = 10
+	station.Authority.PoliceObedience = 0.7
+	station.SetMayorLegitimacy(0.6)
+	station.Mayor.HolderResidentID = 7
+	station.Mayor.HolderName = "Mayor"
+	// An open-leaning resident pushes the charter score ahead of personal
+	// rule (deterministic weighting, no tie involved).
+	station.Residents = []model.Resident{
+		{ID: 3, Name: "Open Voice", Alive: true, Influence: 1,
+			Ideologies: map[string]float64{model.IdeologyProForeign: 1}},
+	}
+	svc.agent.PoliticalPrestige = 100
+
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil {
+		t.Fatal("no decision")
+	}
+	poolHas := func(want string) bool {
+		for _, outcome := range decision.Pool {
+			if outcome == want {
+				return true
+			}
+		}
+		return false
+	}
+	if !poolHas(endingRuleOfLaw) || !poolHas(endingPersonalRule) {
+		t.Fatalf("charter lock and personal rule must coexist in the pool: pool=%v excluded=%v",
+			decision.Pool, decision.Excluded)
+	}
+	if decision.Selected != endingRuleOfLaw {
+		t.Fatalf("expected the charter candidate to win the open-voice weighting, got %s (%v)",
+			decision.Selected, decision.Scores)
+	}
+}
 
 // TestRuleOfLawLineContentLoads locks that the RULE_OF_LAW batch (27-spec §2
 // "can write today" list) loads from events/ and passes validation alongside
