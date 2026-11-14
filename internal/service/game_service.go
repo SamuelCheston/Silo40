@@ -474,6 +474,23 @@ func (s *GameService) statesMapFor(siloID uint) map[string]model.ContentEventSta
 	return states
 }
 
+// seedBeliefLayers 旧档兼容：为全部特工按 KnownFragments 保守补种信念层
+// (10-it-control-credibility §3.3)。新档无已知碎片时为空操作；不升存档版本。
+// 堡 ID 升序遍历，确定性。
+func (s *GameService) seedBeliefLayers() {
+	if s.agent != nil {
+		engine.SeedLegacyBeliefs(s.agent)
+	}
+	ids := make([]uint, 0, len(s.agents))
+	for siloID := range s.agents {
+		ids = append(ids, siloID)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	for _, siloID := range ids {
+		engine.SeedLegacyBeliefs(s.agents[siloID])
+	}
+}
+
 func (s *GameService) cacheSnapshot() {
 	if cache.GlobalCache == nil || !s.hasSession() {
 		return
@@ -857,6 +874,7 @@ func (s *GameService) Resume() error {
 				s.lastActionResult = nil
 				s.delayTasks = map[string]*delayTask{}
 				s.receivedSignals = map[uint][]string{}
+				s.seedBeliefLayers()
 				s.bindEngineRuntime()
 				if err := s.resumeLlmAdvisor(); err != nil {
 					return err
@@ -966,6 +984,7 @@ func (s *GameService) Resume() error {
 	s.lastActionResult = nil
 	s.delayTasks = map[string]*delayTask{}
 	s.receivedSignals = map[uint][]string{}
+	s.seedBeliefLayers()
 	s.bindEngineRuntime()
 	if err := s.resumeLlmAdvisor(); err != nil {
 		return err
@@ -1181,6 +1200,7 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	s.delayTasks = map[string]*delayTask{}
 	s.pendingOperation = nil
 	s.lastActionResult = nil
+	s.seedBeliefLayers()
 
 	// LLM advisor: fresh timeline — wipe the previous game's log, record the
 	// initial participation level, arm gating for month 1.
@@ -2215,6 +2235,27 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 			return fmt.Errorf("unknown profession action %q", action.ProfessionAction)
 		}
 		action.Cost = def.APCost
+	case model.ActionGatherInfo:
+		// §8.1：AP 与怀疑独立。探查成本随目标部门规范冲突上浮
+		// (ceil(base·(1+0.5·mismatch)))，与检测/怀疑结算分离。
+		base, ok := model.ACTION_COSTS[model.ActionGatherInfo]
+		if !ok {
+			return fmt.Errorf("unknown action type %q", action.Type)
+		}
+		cfg := engine.DefaultInformationConfig()
+		mismatch := 0.0
+		if silo := s.playerActionSilo(); silo != nil && s.agent != nil &&
+			action.TargetDept != "" && action.TargetDept != s.agent.Profession {
+			var target *model.Profession
+			for i := range silo.Professions {
+				if silo.Professions[i].Name == action.TargetDept {
+					target = &silo.Professions[i]
+					break
+				}
+			}
+			mismatch = engine.Mismatch(cfg.GatherDeviation, engine.DeptNorm(target))
+		}
+		action.Cost = engine.APCostWithMismatch(cfg, base, mismatch)
 	default:
 		cost, ok := model.ACTION_COSTS[action.Type]
 		if !ok {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"silo40/internal/model"
@@ -47,6 +48,12 @@ type MechanicMutation struct {
 	IntValue       int      `json:"int_value,omitempty"`
 	BoolValue      bool     `json:"bool_value,omitempty"`
 	Text           string   `json:"text,omitempty"`
+	// actor_belief_observe 载荷 (10-it-control-credibility §3.5)：观察 ID 去重，
+	// 强度由渠道可靠度、相关事实与独立性在 Go 侧统一计算。
+	Observation  string  `json:"observation,omitempty"`
+	Reliability  float64 `json:"reliability,omitempty"`
+	RelatedF     float64 `json:"related_f,omitempty"`
+	Independence float64 `json:"independence,omitempty"`
 }
 
 type MechanicResult struct {
@@ -82,8 +89,8 @@ func NewMechanicEngine() *MechanicEngine {
 		byFormula:          map[string]MechanicDefinition{},
 	}
 
-	// 预编译 Prelude
-	if prog, err := goja.Compile("mechanic_prelude.js", mechanicPrelude, true); err == nil {
+	// 预编译 Prelude (含 InformationConfig 注入段)
+	if prog, err := goja.Compile("mechanic_prelude.js", mechanicPreludeSource(), true); err == nil {
 		m.preludeProgram = prog
 	} else {
 		m.loadErr = fmt.Errorf("failed to compile mechanic prelude: %w", err)
@@ -217,6 +224,7 @@ func (m *MechanicEngine) Run(def MechanicDefinition, ctx MechanicContext) (Mecha
 		result.Mutations[i].Resource = strings.TrimSpace(result.Mutations[i].Resource)
 		result.Mutations[i].FactionName = strings.TrimSpace(result.Mutations[i].FactionName)
 		result.Mutations[i].ConnectionDept = strings.TrimSpace(result.Mutations[i].ConnectionDept)
+		result.Mutations[i].Observation = strings.TrimSpace(result.Mutations[i].Observation)
 	}
 
 	return result, nil
@@ -276,6 +284,76 @@ function randomInt(max) {
   if (!max || max <= 0) return 0;
   return Math.floor(Math.random() * max);
 }
+// ---- 信息与检测 (10-it-control-credibility §3/§8)；常量由 Go 侧 ----
+// ---- InformationConfig 注入 (mechanicPreludeSource)，此处仅函数。 ----
+function fragmentDomain(fragment) {
+  var idx = String(fragment).indexOf("_");
+  return idx > 0 ? String(fragment).slice(0, idx) : String(fragment);
+}
+function beliefOf(ctx, fragment) {
+  var list = (ctx.actor && ctx.actor.beliefs) || [];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].fact_id === fragment) return list[i];
+  }
+  return null;
+}
+function beliefB(ctx, fragment) {
+  var belief = beliefOf(ctx, fragment);
+  return belief ? (belief.b || 0) : 0;
+}
+function relatedF(ctx, fragment) {
+  var domain = fragmentDomain(fragment);
+  var best = 0;
+  ((ctx.actor && ctx.actor.beliefs) || []).forEach(function(item) {
+    if (item.fact_id === fragment) return;
+    if (fragmentDomain(item.fact_id) !== domain) return;
+    if ((item.b || 0) > best) best = item.b || 0;
+  });
+  return best;
+}
+function pGet(fProf, mismatch, alert, related, accessC) {
+  var p = INFO_CFG.p_get_base * fProf
+    * (1 - INFO_CFG.mismatch_penalty * clampUnit(mismatch))
+    * (1 - INFO_CFG.alert_penalty * clampUnit(alert))
+    * (1 + INFO_CFG.related_bonus * clampUnit(related))
+    * accessC;
+  return clamp(p, INFO_CFG.p_get_min, INFO_CFG.p_get_max);
+}
+function deptNorm(prof) {
+  if (!prof) return 0;
+  return clamp(2 * clampUnit((prof.ideologies || {}).pro_foreign || 0) - 1, -1, 1);
+}
+function mismatchFor(ctx, targetDept, deviation) {
+  var prof = professionByName(ctx, targetDept);
+  var d = deptNorm(prof);
+  var a = clamp(deviation, -1, 1);
+  if (a === 0) return 0;
+  var sign = a < 0 ? -1 : 1;
+  return Math.abs(a) * Math.max(0, -sign * d);
+}
+function detectionClass(ctx, targetDept, protocolTouch) {
+  if (protocolTouch) return "DIRECT_PROTOCOL";
+  var profession = ctx.actor ? ctx.actor.profession : "";
+  if (profession === "Mines" || targetDept === "Mines") return "UNSAMPLED";
+  return "SAMPLED";
+}
+function sampledSuspicion(base, vIdentity, fFit, wWitness, rRecord, mismatch) {
+  return base * vIdentity * fFit * wWitness * rRecord * (1 + clampUnit(mismatch));
+}
+function vIdentityFor(profession) {
+  var table = INFO_CFG.v_identity || {};
+  return table[profession] !== undefined ? table[profession] : 1.0;
+}
+function gatherChannelFor(ctx, targetDept) {
+  var channels = INFO_CFG.channels;
+  if (ctx.actor && ctx.actor.profession === targetDept) {
+    return { id: "internal", access_c: channels.internal.access, reliability_c: channels.internal.reliability };
+  }
+  if (actorConnectionTo(ctx, targetDept) >= 0.3) {
+    return { id: "informant", access_c: channels.informant.access, reliability_c: channels.informant.reliability };
+  }
+  return { id: "rumor", access_c: channels.rumor.access, reliability_c: channels.rumor.reliability };
+}
 function __mechanicStrip(value) {
   if (Array.isArray(value)) return value.map(__mechanicStrip);
   if (!value || typeof value !== "object") return value;
@@ -311,35 +389,56 @@ function unknownFragmentsFrom(ctx, profession) {
   var known = actorKnownSet(ctx);
   return (prof.all_fragments || []).filter(function(fragment) { return !known[fragment]; });
 }
-function professionSuspicionFactor(profession, traits) {
-  var factor = 1.0;
-  switch (profession) {
-    case "Mayor":
-      factor *= 2.0;
-      break;
-    case "IT":
-      factor *= 0.3;
-      break;
-    case "Police":
-      factor *= 0.7;
-      break;
-    case "Mines":
-      factor *= 0.3;
-      break;
-  }
-  if ((traits || []).indexOf("隐秘行事") !== -1) {
-    factor *= 0.8;
-  }
-  return factor;
-}
+// suspicionDelta 结构化检测 (§8.2/§8.3)：UNSAMPLED (矿工结构性不采样) 与
+// DIRECT_PROTOCOL (触及条款) 不产生普通怀疑；SAMPLED 按身份可见度折算。
+// 旧的"统一职业倍率"已被设计裁决替换 (10-it-control-credibility §1.3)。
 function suspicionDelta(ctx, base) {
-  return {
-    type: "actor_metric_delta",
-    field: "suspicion_level",
-    value: base * professionSuspicionFactor(ctx.actor.profession, ctx.actor.traits || []),
-  };
+  var cls = detectionClass(ctx, (ctx.action && ctx.action.target_dept) || "", false);
+  if (cls !== "SAMPLED") {
+    return { type: "actor_metric_delta", field: "suspicion_level", value: 0 };
+  }
+  var trait = ((ctx.actor && ctx.actor.traits) || []).indexOf("隐秘行事") !== -1 ? INFO_CFG.trait_stealth : 1.0;
+  var profession = ctx.actor ? ctx.actor.profession : "";
+  return { type: "actor_metric_delta", field: "suspicion_level", value: base * vIdentityFor(profession) * trait };
 }
 `
+
+// mechanicPreludeSource 拼装注入段与基础 prelude。INFO_CFG 由 Go 侧
+// InformationConfig 单一来源生成，脚本与 Go 公式不出现两套常量。
+func mechanicPreludeSource() string {
+	return informationPreludeJS(DefaultInformationConfig()) + mechanicPrelude
+}
+
+func informationPreludeJS(cfg InformationConfig) string {
+	return "var INFO_CFG = {\n" +
+		"  p_get_base: " + strconv.FormatFloat(cfg.PGetBase, 'g', -1, 64) + ",\n" +
+		"  p_get_min: " + strconv.FormatFloat(cfg.PGetMin, 'g', -1, 64) + ",\n" +
+		"  p_get_max: " + strconv.FormatFloat(cfg.PGetMax, 'g', -1, 64) + ",\n" +
+		"  mismatch_penalty: " + strconv.FormatFloat(cfg.MismatchPenalty, 'g', -1, 64) + ",\n" +
+		"  alert_penalty: " + strconv.FormatFloat(cfg.AlertPenalty, 'g', -1, 64) + ",\n" +
+		"  related_bonus: " + strconv.FormatFloat(cfg.RelatedBonus, 'g', -1, 64) + ",\n" +
+		"  f_prof_match: " + strconv.FormatFloat(cfg.FProfMatch, 'g', -1, 64) + ",\n" +
+		"  f_prof_mismatch: " + strconv.FormatFloat(cfg.FProfMismatch, 'g', -1, 64) + ",\n" +
+		"  qual_rumor: " + strconv.FormatFloat(cfg.QualRumor, 'g', -1, 64) + ",\n" +
+		"  gather_deviation: " + strconv.FormatFloat(cfg.GatherDeviation, 'g', -1, 64) + ",\n" +
+		"  probe_base_suspicion: " + strconv.FormatFloat(cfg.ProbeBaseSuspicion, 'g', -1, 64) + ",\n" +
+		"  probe_fit_cross: " + strconv.FormatFloat(cfg.ProbeFitCross, 'g', -1, 64) + ",\n" +
+		"  probe_fit_own: " + strconv.FormatFloat(cfg.ProbeFitOwn, 'g', -1, 64) + ",\n" +
+		"  alert_on_failed_probe: " + strconv.FormatFloat(cfg.AlertOnFailedProbe, 'g', -1, 64) + ",\n" +
+		"  probe_witness: " + strconv.FormatFloat(cfg.ProbeWitness, 'g', -1, 64) + ",\n" +
+		"  probe_record: " + strconv.FormatFloat(cfg.ProbeRecord, 'g', -1, 64) + ",\n" +
+		"  probe_visibility: " + strconv.FormatFloat(cfg.ProbeVisibility, 'g', -1, 64) + ",\n" +
+		"  trait_stealth: 0.8,\n" +
+		"  v_identity: { Mayor: 2.0, IT: 0.3, Police: 0.7 },\n" +
+		"  channels: {\n" +
+		"    internal: { access: " + strconv.FormatFloat(cfg.ChannelInternalAccess, 'g', -1, 64) + ", reliability: " + strconv.FormatFloat(cfg.ChannelInternalRel, 'g', -1, 64) + " },\n" +
+		"    archive: { access: " + strconv.FormatFloat(cfg.ChannelArchiveAccess, 'g', -1, 64) + ", reliability: " + strconv.FormatFloat(cfg.ChannelArchiveRel, 'g', -1, 64) + " },\n" +
+		"    informant: { access: " + strconv.FormatFloat(cfg.ChannelInformantAccess, 'g', -1, 64) + ", reliability: " + strconv.FormatFloat(cfg.ChannelInformantRel, 'g', -1, 64) + " },\n" +
+		"    testimony: { access: " + strconv.FormatFloat(cfg.ChannelTestimonyAccess, 'g', -1, 64) + ", reliability: " + strconv.FormatFloat(cfg.ChannelTestimonyRel, 'g', -1, 64) + " },\n" +
+		"    rumor: { access: " + strconv.FormatFloat(cfg.ChannelRumorAccess, 'g', -1, 64) + ", reliability: " + strconv.FormatFloat(cfg.ChannelRumorRel, 'g', -1, 64) + " }\n" +
+		"  }\n" +
+		"};\n"
+}
 
 func loadMechanicFile(path string) ([]MechanicDefinition, error) {
 	sourceBytes, err := os.ReadFile(path)
@@ -356,7 +455,7 @@ func loadMechanicFile(path string) ([]MechanicDefinition, error) {
 
 	runtime := goja.New()
 	runtime.SetRandSource(rng.Float64)
-	if _, err := runtime.RunString(mechanicPrelude); err != nil {
+	if _, err := runtime.RunString(mechanicPreludeSource()); err != nil {
 		return nil, err
 	}
 	if _, err := runtime.RunProgram(prog); err != nil {
@@ -526,6 +625,7 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 				"productivity":    prof.Productivity,
 				"power_level":     prof.PowerLevel,
 				"action_points":   prof.ActionPoints,
+				"alertness":       prof.Alertness,
 				"known_fragments": append([]string(nil), prof.KnownFragments...),
 				"all_fragments":   allFragments,
 				"ideologies":      cloneFloatMap(prof.Ideologies),
@@ -583,6 +683,18 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			"is_representative":  ctx.Actor.IsRepresentative(),
 			"is_faction_leader":  actorLeadsFaction(ctx.Silo, ctx.Actor),
 			"connections":        []map[string]interface{}{},
+			"beliefs":            []map[string]interface{}{},
+		}
+		if agent := ctx.Actor.Agent(); agent != nil {
+			beliefs := make([]map[string]interface{}, 0, len(agent.Beliefs))
+			for i := range agent.Beliefs {
+				beliefs = append(beliefs, map[string]interface{}{
+					"fact_id":   agent.Beliefs[i].FactID,
+					"b":         agent.Beliefs[i].B,
+					"obs_count": agent.Beliefs[i].ObsCount,
+				})
+			}
+			actorPayload["beliefs"] = beliefs
 		}
 		if prof := professionByActor(ctx.Silo, ctx.Actor); prof != nil {
 			actorPayload["power_level"] = prof.PowerLevel
@@ -746,6 +858,12 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 		e.applyActorConnectionDelta(silo, actor, mutation.ConnectionDept, mutation.Value)
 	case "actor_fragment_add":
 		e.applyActorFragmentAdd(actor, mutation.Fragment)
+	case "actor_belief_observe":
+		e.applyActorBeliefObserve(actor, mutation)
+	case "profession_alertness_delta":
+		if prof := findDept(silo, mutation.Profession); prof != nil {
+			prof.Alertness = clampUnit(prof.Alertness + mutation.Value)
+		}
 	case "profession_metric_delta":
 		if prof := findDept(silo, mutation.Profession); prof != nil {
 			e.applyProfessionMetricDelta(prof, mutation.Field, mutation.Value)
@@ -852,6 +970,32 @@ func (e *GameEngine) applyActorConnectionDelta(silo *model.Silo, actor *ActorVie
 		return
 	}
 	actor.AddConnection(target.ID, delta)
+}
+
+// applyActorBeliefObserve 吸收一次观察进玩家信念层 (§3.5)：observation_id
+// 去重 (不重放 RNG 与收益)、B 更新、π 贝叶斯更新。信念层本轮只覆盖玩家
+// (agent)；部门×阶层观察者属于分层曝光子项。
+func (e *GameEngine) applyActorBeliefObserve(actor *ActorView, mutation MechanicMutation) {
+	if actor == nil || !actor.IsPlayer() || mutation.Fragment == "" {
+		return
+	}
+	agent := actor.Agent()
+	if agent == nil {
+		return
+	}
+	cfg := DefaultInformationConfig()
+	spec := FragmentSpecFor(mutation.Fragment)
+	belief := EnsureBelief(agent, mutation.Fragment)
+	independence := mutation.Independence
+	if independence <= 0 {
+		independence = cfg.IndependenceNew
+	}
+	s := AbsorptionStrength(cfg, mutation.Reliability, mutation.RelatedF, independence)
+	if !ObserveFact(cfg, belief, spec, mutation.Observation, s) {
+		return
+	}
+	// KnownFragments 维持"已有观察"的记录语义 (UI/门控兼容)。
+	e.applyActorFragmentAdd(actor, mutation.Fragment)
 }
 
 func (e *GameEngine) applyActorFragmentAdd(actor *ActorView, fragment string) {

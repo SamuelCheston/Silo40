@@ -78,7 +78,9 @@ func TestResolvedCostMatchesPlayerActionMeta(t *testing.T) {
 	}
 }
 
-// End to end: submitting cost=0 must still charge the full definition cost.
+// End to end: submitting cost=0 must still charge the full server-resolved
+// cost. For Gather Info that is the §8.1 mismatch-adjusted AP (AP settles
+// independently of suspicion), computed from the same engine formula.
 func TestExecuteActionChargesServerCostDespiteClientZero(t *testing.T) {
 	svc := newActionCostTestService(t, "Mechanical")
 	before := svc.agent.ActionPoints
@@ -92,7 +94,10 @@ func TestExecuteActionChargesServerCostDespiteClientZero(t *testing.T) {
 	if !outcome.Result.Executed {
 		t.Fatalf("expected action to execute, got %q", outcome.Result.Message)
 	}
-	want := model.ACTION_COSTS[model.ActionGatherInfo]
+	cfg := engine.DefaultInformationConfig()
+	mayor := findProfessionByName(svc.silo, "Mayor")
+	want := engine.APCostWithMismatch(cfg, model.ACTION_COSTS[model.ActionGatherInfo],
+		engine.Mismatch(cfg.GatherDeviation, engine.DeptNorm(mayor)))
 	if got := before - svc.agent.ActionPoints; got != want {
 		t.Errorf("AP deduction = %v, want server cost %v (client sent 0)", got, want)
 	}
@@ -112,7 +117,20 @@ func TestBeginActionStoresServerCost(t *testing.T) {
 	if svc.pendingOperation == nil || svc.pendingOperation.Action == nil {
 		t.Fatalf("expected pending action operation")
 	}
-	if got := svc.pendingOperation.Action.Cost; got != model.ACTION_COSTS[model.ActionGatherInfo] {
-		t.Errorf("pending action cost = %v, want %v", got, model.ACTION_COSTS[model.ActionGatherInfo])
+	cfg := engine.DefaultInformationConfig()
+	mayor := findProfessionByName(svc.silo, "Mayor")
+	want := engine.APCostWithMismatch(cfg, model.ACTION_COSTS[model.ActionGatherInfo],
+		engine.Mismatch(cfg.GatherDeviation, engine.DeptNorm(mayor)))
+	if got := svc.pendingOperation.Action.Cost; got != want {
+		t.Errorf("pending action cost = %v, want %v", got, want)
 	}
+}
+
+func findProfessionByName(silo *model.Silo, name string) *model.Profession {
+	for i := range silo.Professions {
+		if silo.Professions[i].Name == name {
+			return &silo.Professions[i]
+		}
+	}
+	return nil
 }

@@ -3,7 +3,7 @@ defineMechanics([
     id: "action_gather_info",
     action_type: "GATHER_INFO",
     label: "Gather Info",
-    description: "Collect information from a department.",
+    description: "Probe a department for information. Success depends on fit, alertness and channels; failure raises the target's alertness.",
     target_type: "DEPT",
     ap_cost: 10,
     duration_months: 0,
@@ -12,18 +12,62 @@ defineMechanics([
       if (!target) {
         return { action_result: { executed: false, message: "Invalid target department." } };
       }
+      const profession = professionByName(ctx, target);
+      if (!profession) {
+        return { action_result: { executed: false, message: "Target department not found." } };
+      }
       const unknown = unknownFragmentsFrom(ctx, target);
       if (unknown.length === 0) {
         return { action_result: { executed: false, message: "Your department already knows everything about " + target + "." } };
       }
+      // 单次获取 (10-it-control-credibility §3.4)：先抽碎片再滚获取概率，
+      // 两次抽样都走单一 RNG 流。失败不产生确信，只结算 AP/检测/戒备。
       const fragment = unknown[randomInt(unknown.length)];
+      const channel = gatherChannelFor(ctx, target);
+      const ownDept = ctx.actor.profession === target;
+      const deviation = ownDept ? 0 : INFO_CFG.gather_deviation;
+      const mismatch = mismatchFor(ctx, target, deviation);
+      const alert = profession.alertness || 0;
+      const related = relatedF(ctx, fragment);
+      const fProf = fragmentDomain(fragment) === ctx.actor.profession ? INFO_CFG.f_prof_match : INFO_CFG.f_prof_mismatch;
+      const p = pGet(fProf, mismatch, alert, related, channel.access_c);
+      const detection = detectionClass(ctx, target, false);
+      const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
+      const sampled = detection === "SAMPLED";
+      if (randomFloat() >= p) {
+        mutations.push({ type: "profession_alertness_delta", profession: target, value: INFO_CFG.alert_on_failed_probe });
+        if (sampled) {
+          const fit = ownDept ? INFO_CFG.probe_fit_own : INFO_CFG.probe_fit_cross;
+          mutations.push({
+            type: "actor_metric_delta",
+            field: "suspicion_level",
+            value: sampledSuspicion(INFO_CFG.probe_base_suspicion, INFO_CFG.probe_visibility, fit, INFO_CFG.probe_witness, INFO_CFG.probe_record, mismatch),
+          });
+        }
+        return {
+          mutations,
+          action_result: { executed: true, message: "The probe on " + target + " found nothing this time (chance " + Math.round(p * 100) + "%). The department grows more alert." },
+        };
+      }
+      mutations.push({
+        type: "actor_belief_observe",
+        fragment,
+        observation: "gather:" + fragment,
+        reliability: channel.reliability_c,
+        related_f: related,
+        independence: 1,
+      });
+      if (sampled) {
+        const fit = ownDept ? INFO_CFG.probe_fit_own : INFO_CFG.probe_fit_cross;
+        mutations.push({
+          type: "actor_metric_delta",
+          field: "suspicion_level",
+          value: sampledSuspicion(INFO_CFG.probe_base_suspicion, INFO_CFG.probe_visibility, fit, INFO_CFG.probe_witness, INFO_CFG.probe_record, mismatch),
+        });
+      }
       return {
-        mutations: [
-          { type: "actor_fragment_add", fragment },
-          { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
-          { type: "actor_metric_delta", field: "suspicion_level", value: 0.005 * professionSuspicionFactor(ctx.actor.profession, ctx.actor.traits || []) },
-        ],
-        action_result: { executed: true, message: "Gathered intel on " + fragment + "." },
+        mutations,
+        action_result: { executed: true, message: "Observed new material on " + fragment + " from " + target + " via " + channel.id + " (chance " + Math.round(p * 100) + "%)." },
       };
     },
   },
@@ -50,6 +94,10 @@ defineMechanics([
       for (const fragment of fragmentIds) {
         if (!known[fragment]) {
           unexplainedCount += 1;
+        }
+        // §3.6 行动资格：B < 0.30 的材料只是私人笔记，不能作为事实分享。
+        if (beliefB(ctx, fragment) < INFO_CFG.qual_rumor) {
+          return { action_result: { executed: false, message: fragment + " is still private suspicion (belief below " + INFO_CFG.qual_rumor + "); it cannot be shared as a fact." } };
         }
       }
       const connectionValue = actorConnectionTo(ctx, target);
@@ -122,7 +170,7 @@ defineMechanics([
         mutations: [
           { type: "actor_connection_delta", connection_dept: target, value: increase },
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
-          { type: "actor_metric_delta", field: "suspicion_level", value: 0.01 * professionSuspicionFactor(ctx.actor.profession, ctx.actor.traits || []) },
+          suspicionDelta(ctx, 0.01),
         ],
         action_result: { executed: true, message: "Successfully built connections with " + profession.name + "." },
       };
@@ -149,7 +197,7 @@ defineMechanics([
         mutations.push({ type: "profession_metric_delta", profession: profession.name, field: "panic_value", value: finalEffect });
         mutations.push({ type: "profession_ideology_delta", profession: profession.name, ideology: "pro_foreign", value: finalEffect * 0.5 });
       }
-      mutations.push({ type: "actor_metric_delta", field: "suspicion_level", value: 0.05 * professionSuspicionFactor(ctx.actor.profession, ctx.actor.traits || []) });
+      mutations.push(suspicionDelta(ctx, 0.05));
       return {
         mutations,
         action_result: { executed: true, message: "Incited unrest among all commoner departments." },
@@ -169,7 +217,7 @@ defineMechanics([
         mutations: [
           { type: "actor_metric_delta", field: "propaganda_level", value: 1.0 },
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
-          { type: "actor_metric_delta", field: "suspicion_level", value: 0.02 * professionSuspicionFactor(ctx.actor.profession, ctx.actor.traits || []) },
+          suspicionDelta(ctx, 0.02),
         ],
         action_result: { executed: true, message: "Conducted propaganda. Propaganda Level increased by 1.0." },
       };
@@ -203,5 +251,5 @@ defineMechanics([
   },
 ]);
 
-// professionSuspicionFactor lives in the mechanic prelude (shared with
-// profession_actions.js); suspicion gains are single-tracked there.
+// suspicionDelta / detectionClass live in the mechanic prelude; detection is
+// structural (UNSAMPLED / SAMPLED / DIRECT_PROTOCOL), not a profession factor.

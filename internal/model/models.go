@@ -62,24 +62,39 @@ type User struct {
 
 // Agent 特工模型 (玩家角色)
 type Agent struct {
-	ID                uint           `gorm:"primarykey" json:"id"`
-	UserID            uint           `gorm:"index" json:"user_id"`
-	SiloID            uint           `gorm:"index" json:"silo_id"`                   // Current simulated silo; the player belongs to the assigned station.
-	StationSiloID     uint           `gorm:"index" json:"station_silo_id,omitempty"` // Player's assigned station; zero marks an incompatible pre-v6 save.
-	Name              string         `gorm:"size:64" json:"name"`
-	Profession        string         `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
-	Traits            []string       `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
-	PoliticalPrestige float64        `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
-	PoliticalPoints   float64        `gorm:"default:0.0" json:"political_points"`     // 政治点数
-	ActionPoints      float64        `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
-	PropagandaLevel   float64        `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
-	SuspicionLevel    float64        `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
-	Connections       []Connection   `gorm:"foreignKey:AgentID" json:"connections"`
-	KnownFragments    []string       `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
-	Relics            []Relic        `gorm:"foreignKey:AgentID" json:"relics,omitempty"`       // 特工私吞的遗物
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
-	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                uint         `gorm:"primarykey" json:"id"`
+	UserID            uint         `gorm:"index" json:"user_id"`
+	SiloID            uint         `gorm:"index" json:"silo_id"`                   // Current simulated silo; the player belongs to the assigned station.
+	StationSiloID     uint         `gorm:"index" json:"station_silo_id,omitempty"` // Player's assigned station; zero marks an incompatible pre-v6 save.
+	Name              string       `gorm:"size:64" json:"name"`
+	Profession        string       `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
+	Traits            []string     `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
+	PoliticalPrestige float64      `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
+	PoliticalPoints   float64      `gorm:"default:0.0" json:"political_points"`     // 政治点数
+	ActionPoints      float64      `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
+	PropagandaLevel   float64      `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
+	SuspicionLevel    float64      `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
+	Connections       []Connection `gorm:"foreignKey:AgentID" json:"connections"`
+	KnownFragments    []string     `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
+	// Beliefs 分层信念层 (10-it-control-credibility §3.3/§3.5)：每个事实的连续
+	// 确信 B、解释版本分布 π 与去重观察记录。旧档没有该字段时为空，读取时按
+	// KnownFragments 保守补种 (engine.SeedLegacyBeliefs)，不升存档版本。
+	Beliefs   []FactBelief   `gorm:"type:text;serializer:json" json:"beliefs,omitempty"`
+	Relics    []Relic        `gorm:"foreignKey:AgentID" json:"relics,omitempty"` // 特工私吞的遗物
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// FactBelief 单个观察者对单个事实的分层信念 (10-it-control-credibility §3.3)。
+// B 是事实成立的确信度；Versions 是事实成立时各解释版本的条件概率 π (和为 1)；
+// Observations 按 observation_id 去重，同一观察不重放收益；ObsCount 是有效观察数 n。
+type FactBelief struct {
+	FactID       string             `json:"fact_id"`
+	B            float64            `json:"b"`
+	Versions     map[string]float64 `json:"versions,omitempty"`
+	Observations []string           `json:"observations,omitempty"`
+	ObsCount     int                `json:"obs_count"`
 }
 
 // Connection 各部门人脉值
@@ -496,14 +511,17 @@ type Resource struct {
 
 // Profession 职业/部门模型
 type Profession struct {
-	ID             uint               `gorm:"primarykey" json:"id"`
-	SiloID         uint               `gorm:"index" json:"silo_id"`
-	Name           string             `gorm:"size:50" json:"name"`
-	ClassType      string             `gorm:"size:20" json:"class_type"` // ELITE / COMMONER
-	Population     int                `gorm:"default:0" json:"population"`
-	Ideologies     map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"` // 各项思潮值 (0-1)
-	PanicValue     float64            `gorm:"default:0.0" json:"panic_value"`              // 恐慌值
-	Productivity   float64            `gorm:"default:1.0" json:"productivity"`             // 生产力值
+	ID           uint               `gorm:"primarykey" json:"id"`
+	SiloID       uint               `gorm:"index" json:"silo_id"`
+	Name         string             `gorm:"size:50" json:"name"`
+	ClassType    string             `gorm:"size:20" json:"class_type"` // ELITE / COMMONER
+	Population   int                `gorm:"default:0" json:"population"`
+	Ideologies   map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"` // 各项思潮值 (0-1)
+	PanicValue   float64            `gorm:"default:0.0" json:"panic_value"`              // 恐慌值
+	Productivity float64            `gorm:"default:1.0" json:"productivity"`             // 生产力值
+	// Alertness 部门戒备 (10-it-control-credibility §3.4 的 alert_d)：失败探查与
+	// 信息管控抬高，压低对该部门的碎片获取概率。旧档缺省 0。
+	Alertness      float64            `gorm:"default:0.0" json:"alertness"`
 	PowerLevel     int                `gorm:"default:1" json:"power_level"`
 	Zone           string             `gorm:"size:20" json:"zone"`
 	KnownFragments []string           `gorm:"type:text;serializer:json" json:"known_fragments"`     // 掌握的其他部门信息碎片来源
@@ -765,21 +783,21 @@ type RumorView struct {
 
 // WorldView 下发前端的世界级快照 (增量字段，不破坏单堡消费方)。
 type WorldView struct {
-	ID                       uint             `json:"id"`
-	Seed                     int64            `json:"seed"`
-	CurrentYear              int              `json:"current_year"`
-	CurrentMonth             int              `json:"current_month"`
-	PlayerSiloID             uint             `json:"player_silo_id"`
-	ProgressStage            string           `json:"progress_stage"`
-	Pacing                   WorldPacing      `json:"pacing"`
-	Silo1Alive               bool             `json:"silo1_alive"`
-	Silo1Simulated           bool             `json:"silo1_simulated"`
-	Silo1Departments         []string         `json:"silo1_departments,omitempty"`
-	Silo1LastReport          string           `json:"silo1_last_report,omitempty"`
-	Silo1Exposure            float64          `json:"silo1_exposure"`
-	Silo1CounterintelStage   int              `json:"silo1_counterintel_stage"`
-	Silo1Operations          []Silo1Operation `json:"silo1_operations,omitempty"`
-	StationSiloID            uint             `json:"station_silo_id,omitempty"`
+	ID                     uint             `json:"id"`
+	Seed                   int64            `json:"seed"`
+	CurrentYear            int              `json:"current_year"`
+	CurrentMonth           int              `json:"current_month"`
+	PlayerSiloID           uint             `json:"player_silo_id"`
+	ProgressStage          string           `json:"progress_stage"`
+	Pacing                 WorldPacing      `json:"pacing"`
+	Silo1Alive             bool             `json:"silo1_alive"`
+	Silo1Simulated         bool             `json:"silo1_simulated"`
+	Silo1Departments       []string         `json:"silo1_departments,omitempty"`
+	Silo1LastReport        string           `json:"silo1_last_report,omitempty"`
+	Silo1Exposure          float64          `json:"silo1_exposure"`
+	Silo1CounterintelStage int              `json:"silo1_counterintel_stage"`
+	Silo1Operations        []Silo1Operation `json:"silo1_operations,omitempty"`
+	StationSiloID          uint             `json:"station_silo_id,omitempty"`
 	// 驻地不再整堡重复序列化：StationSiloID 即引用，驻地完整快照随 GameState.Silo
 	// 单份下发 (二者为同一堡)，避免每个回合快照重复携带 floors/residents 等死重量。
 	StationLastReport        string           `json:"station_last_report,omitempty"`
