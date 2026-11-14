@@ -13,7 +13,7 @@
 | `charter_contact_accept` | player_actions | 玩家选择 | — | 完成键 | `schedule_event(charter_window_expiry, 6)` |
 | `charter_draft_step` | player_actions | `all(event_triggered 接受键, playerActionIs(Share Info))`，需两次 | 抉择 L-C：约章由本地人起草，玩家供证不代笔 | 职务结果照常 | `charter_draft_convened` |
 | `charter_draft_convened` | special，ONCE | `event_triggered("player_action","charter_draft_step")`（`trigger_count ≥ 2`） | 起草会议召开 | `history_burden +0.03`（sim 校准起点） | 锁定日解锁 |
-| `charter_lock_day` | special，ONCE | `all(event_triggered charter_draft_convened, timestampAtOrAfter(5,1))`（相对 Y5 起） | 抉择 L-D：妥协版本对不可逆锁定 | `rebellion −0.04`、`panic_value −0.04`（sim 校准起点） | **缺口 G2**：锁定事实（`PactLocked`）无内容写入入口 |
+| `charter_lock_day` | special，ONCE | `all(event_triggered charter_draft_convened, timestampAtOrAfter(5,1))`（相对 Y5 起） | 抉择 L-D：妥协版本对不可逆锁定 | `rebellion −0.04`、`panic_value −0.04`（sim 校准起点） | 锁定事实（`PactLocked`）经 `authority_pact_qualify` 等写入通路供给；具体供给事件待编写 |
 | `charter_window_expiry` | crisis，纯调度 | `canTrigger: () => false` | 守卫：`charter_lock_day` 已触发则空转；未触发则动能流失 | 未锁定分支：`rebellion +0.04`、`panic_value +0.04`（sim 校准起点） | — |
 
 ## 2. 分支与改道
@@ -21,8 +21,8 @@
 | 完成键／事实 | 去向 |
 | --- | --- |
 | 拒绝或暂缓接触卡 | 本线关闭；材料可转喂 Mayor 圈层（转《人治》节点群） |
-| 锁定日前 `W` 仍高（设计口径） | 约章锁不定：剧情上 IT 反扑成立；机制上 G2 未落地前以叙事节点表达 |
-| 锁定完成 | 作为《共证》的制度尾声候选（同分时《共证》优先）；候选资格属 G1 |
+| 锁定日前 `W` 仍高 | 约章锁不定：剧情上 IT 反扑成立；`canTrigger` 可读 `ctx.authority.W` 校验（机制底座已暴露） |
+| 锁定完成 | 作为《共证》的制度尾声候选（同分时《共证》优先）；候选已在仲裁池 |
 | 清洗链在锁定日前完成 | 转《遗忘》：`reset_completed` 事实键先于制度成就 |
 
 ## 3. 超时与失败结算

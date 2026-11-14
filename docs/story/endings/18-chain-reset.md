@@ -13,14 +13,14 @@
 | `reset_countermeasure_offer` | 门控接触卡 | 解锁：`event_completed reset_omen_requisition` | 抉择 F-B 三向：分发托管（本卡）／渠道反制（见《寂堡》线 `termination_*`，共用接触骨架）／抬高执行成本（部门关系步骤） | 完成键 | 接受解锁步骤 |
 | `copies_distributed` | special，ONCE | `all(event_triggered 接受键, event_triggered("player_action","action_share_info"))`（`trigger_count` 达配置次数） | 副本离开清洗范围：把材料分发给多个部门接收者 | `professionFragmentAdd()`×2 | 写完成键 `player_action:reset_countermeasure_done` |
 | `reset_execution` | crisis，纯调度 | `canTrigger: () => false` | **守卫**：`apply` 读 `ctx.states["player_action:reset_countermeasure_done"]`；已完成→空转；未完成→结算 | 结算分支：`siloPopulationDelta(−1500)`（减口）、`history_burden −0.15`（清档）、`panic_value +0.10`、`rebellion +0.06`（sim 校准起点）；并 `emit ["special:reset_completed"]` | 完成事实 |
-| `reset_completed` | special，纯调度 | `canTrigger: () => false` | 重置完成事实键：只被 `reset_execution` 的未守卫分支唤起 | `history_burden +0.02` | 供终局仲裁读取（G1） |
+| `reset_completed` | special，纯调度 | `canTrigger: () => false` | 重置完成事实键：只被 `reset_execution` 的未守卫分支唤起 | `history_burden +0.02` | 供终局仲裁读取（已实现，P0.2） |
 
 ## 2. 分支与改道
 
 | 事实 | 去向 |
 | --- | --- |
 | 守卫通过（反制完成） | 不判《遗忘》；处置评估继续，局面可滑向其他线；IT 可能改用缓慢绞杀（二次 `archive_purge_order` 链） |
-| 独立逃出群体已先成立（设计口径） | 原驻地重置只作《越岭》尾声；`reset_completed` 仍记录本地事实（G5 落地前为口径） |
+| 独立逃出群体已先成立 | 原驻地重置只作《越岭》尾声；`reset_completed` 仍记录本地事实（仲裁例外读取已实现；完整存续结算依赖逃离模型，roadmap） |
 | 执行分支结算且玩家仍在驻地 | 接《除名》线：玩家材料失去全部接收者，封顶压力上升 |
 | 清洗链（`archive_purge_order`→`purge_backlash`） | 缓慢绞杀路径：不经过本线节点，直接以既有清洗链表达局部清档；只有全量执行才走 `reset_execution` |
 
@@ -38,4 +38,4 @@
 
 ## 5. 能力缺口
 
-G1（RESET 候选缺失）、G5（逃出群体例外判定）、G8（终局画面展示）。碎片清除的精确表达也受限：`profession_fragment_remove` 需要指明部门与碎片，内容作者只能写死少量代表性清除对，无法"按持有状态动态清档"——登记为碎片系统的策略缺口（作者手册 §9）。
+G8（终局画面展示）。原 G1（RESET 候选）已随机制底座落地；逃出群体例外读取已实现，完整逃离模型见 roadmap。碎片清除的精确表达也受限：`profession_fragment_remove` 需要指明部门与碎片，内容作者只能写死少量代表性清除对，无法"按持有状态动态清档"——登记为碎片系统的策略缺口（作者手册 §9）。
