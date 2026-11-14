@@ -732,6 +732,7 @@ export namespace model {
 	    source_dept: string;
 	    discovery_year: number;
 	    effects: Record<string, number>;
+	    location_tag?: string;
 	    agent_id?: number;
 	    profession_id?: number;
 	    // Go type: time
@@ -752,6 +753,7 @@ export namespace model {
 	        this.source_dept = source["source_dept"];
 	        this.discovery_year = source["discovery_year"];
 	        this.effects = source["effects"];
+	        this.location_tag = source["location_tag"];
 	        this.agent_id = source["agent_id"];
 	        this.profession_id = source["profession_id"];
 	        this.created_at = this.convertValues(source["created_at"], null);

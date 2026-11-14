@@ -89,7 +89,7 @@
 31. **行动门控与多实体结局 (v7)**：`events/action_gates.json` 声明有序阶段、动作完成节点/属性/关系条件和行动解锁；`action_gates.go` 统一求值并在快照与两条执行 API 中判定。LOCKED 不下发，UNLOCKED 带 `disabled_reason`，AVAILABLE 才可执行；`World.ProgressStage` 与 `UnlockedActions` 持久化且只向前。玩家开局仅有本职业 2 个碎片，成功动作才写 `player_action:<id>` 完成节点，空转月份不推进阶段。生产启动加载配置，旧机制单测不加载时保留原 fixture。
    - **多主体仲裁**：`WeightedEndingResolver` 在 `VICTORY_CHECK` 后仅处理驻地的非灾难 trigger，JS 小写类型先规范化。玩家、驻地派系、具名关键人物和 Silo 1 按稳定 ID 顺序贡献权重，固定候选顺序解决同分；`VictoryStatus.Decision` 保存主体明细和候选总分。权重与阈值集中于 `weighted_endings.go`，全部 TODO(balance)，不代表已调平衡。
    - **正典边界**：Silo 18 不接入仲裁钩子，N1–N9 时序不变；Silo 1 的 N9 世界覆灭事实优先于其他本地结局，禁止 peer 同步将其复活。耦合测试使用观察 fixture，不要求固定玩家结局类型。
-   - **发布与显示护栏**：`syncActionGateConfig` 在已有 events 目录上也同步嵌入注册表，缺失配置显式报错并 fail-closed；`start-playable.sh` 拒绝缺文件的旧包。AP 灰项保留两位小数，避免把 19.925 显示成 20。
+   - **发布与显示护栏**：`syncRootContentConfigs`（原 `syncActionGateConfig`）在已有 events 目录上也同步嵌入根级配置（action_gates.json、relics.json），缺失配置显式报错并 fail-closed；`start-playable.sh` 拒绝缺文件的旧包。AP 灰项保留两位小数，避免把 19.925 显示成 20。
    - **存档**：v7 持久化阶段、解锁和仲裁记录；v6 显式拒绝，v5 继续旧身份拒绝。覆盖 `action_gates_test.go`、`weighted_endings_test.go`、engine hook 和 v6 拒绝测试；本轮不做批量对局或 parity 重建。
 
 32. **权威状态骨架 (v8)**：`MayorOffice` 绑定现任具名 Resident 与个人正统性，旧 `Silo.Legitimacy` 仅为兼容镜像，结算统一经 `MayorLegitimacy()` / `SetMayorLegitimacy()`。`ShadowAuthority` 独立保存 W、K/D/P/X/E、Police 服从和 Judicial `A/T/O`；`AuthorityConfig` 集中文档参数。Police 单向因果响应 `O←O+0.35(L−O)`（0.35 为 TODO(balance)）；W 按 `50+25K+12D+10P+12X−40E` 与 8 月半衰期更新，OrderDeviation 仅保留输入位。

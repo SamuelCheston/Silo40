@@ -56,6 +56,7 @@ type GameService struct {
 	contentStates       map[uint]map[string]model.ContentEventState // siloID -> 事件触发状态
 	contentUnsubscribes []func()
 	actionGates         actionGateRuntime
+	relicCatalog        relicCatalogRuntime
 	delayCounter        int
 	delayTasks          map[string]*delayTask
 	pendingOperation    *pendingOperation
@@ -295,6 +296,9 @@ func (s *GameService) BootstrapContent(events embed.FS) error {
 	if err := s.loadActionGates(dirs); err != nil {
 		return err
 	}
+	if err := s.loadRelicCatalog(dirs); err != nil {
+		return err
+	}
 	if err := s.loadContentDefinitions(); err != nil {
 		return err
 	}
@@ -307,8 +311,9 @@ func (s *GameService) BootstrapContent(events embed.FS) error {
 // events/ tree on disk instead of extracting the embedded copy. Headless
 // tools that run inside a source checkout (cmd/agenthost) use this; the
 // production GUI binary keeps the fail-closed embedded path
-// (BootstrapContent). The action-gate registry is loaded from disk with
-// the same fail-closed guarantee (missing file = explicit error).
+// (BootstrapContent). The action-gate registry and the relic catalog are
+// loaded from disk with the same fail-closed guarantee (missing file =
+// explicit error).
 func (s *GameService) BootstrapContentFromDisk() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -321,6 +326,9 @@ func (s *GameService) BootstrapContentFromDisk() error {
 		return err
 	}
 	if err := s.loadActionGates(dirs); err != nil {
+		return err
+	}
+	if err := s.loadRelicCatalog(dirs); err != nil {
 		return err
 	}
 	if err := s.loadContentDefinitions(); err != nil {
@@ -339,10 +347,10 @@ func (s *GameService) ensureEventsExtracted(events embed.FS) error {
 	exeDir := filepath.Dir(exePath)
 	targetDir := filepath.Join(exeDir, "events")
 
-	// Existing packages may predate a required content file. Sync the gate
-	// registry even when the rest of the events directory is already present.
+	// Existing packages may predate a required content file. Sync the root
+	// configs even when the rest of the events directory is already present.
 	if _, err := os.Stat(targetDir); err == nil {
-		return syncActionGateConfig(events, targetDir)
+		return syncRootContentConfigs(events, targetDir)
 	}
 
 	// 没有则释放
@@ -375,20 +383,27 @@ func (s *GameService) ensureEventsExtracted(events embed.FS) error {
 	}); err != nil {
 		return err
 	}
-	return syncActionGateConfig(events, targetDir)
+	return syncRootContentConfigs(events, targetDir)
 }
 
-// syncActionGateConfig keeps the executable-local registry aligned with the
-// embedded build artifact, preventing stale packages from silently opening every action.
-func syncActionGateConfig(events fs.FS, targetDir string) error {
-	data, err := fs.ReadFile(events, "events/action_gates.json")
-	if err != nil {
-		return fmt.Errorf("required embedded action gate config is missing: %w", err)
+// syncRootContentConfigs keeps the executable-local root configs
+// (action_gates.json, relics.json) aligned with the embedded build
+// artifacts, preventing stale packages from silently running with outdated
+// or missing declarations.
+func syncRootContentConfigs(events fs.FS, targetDir string) error {
+	for _, name := range []string{"action_gates.json", "relics.json"} {
+		data, err := fs.ReadFile(events, "events/"+name)
+		if err != nil {
+			return fmt.Errorf("required embedded content config %s is missing: %w", name, err)
+		}
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(targetDir, name), data, 0o644); err != nil {
+			return err
+		}
 	}
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(targetDir, "action_gates.json"), data, 0o644)
+	return nil
 }
 
 // ---------- 内部辅助 ----------
@@ -679,6 +694,9 @@ func normalizeSiloSubIDs(silo *model.Silo) {
 			silo.Residents[i].ID = uint(i + 1)
 		}
 	}
+	for i := range silo.Relics {
+		silo.Relics[i].SiloID = siloID
+	}
 }
 
 // deleteWorldGraph 物理清除本世界全部堡及其子表、全部操作者特工与人脉。
@@ -702,6 +720,10 @@ func deleteWorldGraph(tx *gorm.DB, siloIDs []uint) error {
 		if err := tx.Unscoped().Where("id IN ?", agentIDs).Delete(&model.Agent{}).Error; err != nil {
 			return err
 		}
+	}
+	// Relic 含软删除字段，需 Unscoped 物理删除，避免旧行残留。
+	if err := tx.Unscoped().Where("silo_id IN ?", siloIDs).Delete(&model.Relic{}).Error; err != nil {
+		return err
 	}
 	// Silo 含软删除字段，需 Unscoped 物理删除以复用固定主键。
 	if err := tx.Unscoped().Where("id IN ?", siloIDs).Delete(&model.Silo{}).Error; err != nil {
@@ -745,7 +767,32 @@ func createSiloSubRows(tx *gorm.DB, silo *model.Silo, base uint) error {
 	if err := tx.Create(&residents).Error; err != nil {
 		return err
 	}
+	if len(silo.Relics) > 0 {
+		relics := offsetRelics(silo.Relics, silo.ID, base)
+		if err := tx.Create(&relics).Error; err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// offsetRelics 生成遗物落库副本：主键沿用 (全局自增，无堡内编号)，
+// 部门/特工外键与子表统一加 base。
+func offsetRelics(in []model.Relic, siloID, base uint) []model.Relic {
+	out := make([]model.Relic, len(in))
+	for i, r := range in {
+		r.SiloID = siloID
+		if r.ProfessionID != nil && *r.ProfessionID != 0 {
+			pid := *r.ProfessionID + base
+			r.ProfessionID = &pid
+		}
+		if r.AgentID != nil && *r.AgentID != 0 {
+			aid := *r.AgentID + base
+			r.AgentID = &aid
+		}
+		out[i] = r
+	}
+	return out
 }
 
 // 以下 offset* 函数生成子表的落库副本：主键与堡内外键统一加 base。对指针外键
@@ -920,6 +967,7 @@ func (s *GameService) Resume() error {
 	if err := s.db.Order("id asc").Where("world_id = ?", ActiveWorldID).
 		Preload("Resources").Preload("Professions").Preload("Floors").
 		Preload("Cohorts").Preload("Residents").Preload("Factions").
+		Preload("Relics").
 		Find(&silos).Error; err != nil {
 		return err
 	}
@@ -1046,6 +1094,18 @@ func unoffsetSiloSubIDs(silo *model.Silo, base uint) {
 			r.FactionID = &fid
 		}
 	}
+	// 遗物主键为全局自增，不做堡内偏移；仅还原部门/特工外键。
+	for i := range silo.Relics {
+		r := &silo.Relics[i]
+		if r.ProfessionID != nil && *r.ProfessionID >= base {
+			pid := *r.ProfessionID - base
+			r.ProfessionID = &pid
+		}
+		if r.AgentID != nil && *r.AgentID >= base {
+			aid := *r.AgentID - base
+			r.AgentID = &aid
+		}
+	}
 }
 
 func unoffsetConnections(conns []model.Connection, base uint) {
@@ -1106,6 +1166,9 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	silo.RNGSeed = seed
 	silo.WorldID = ActiveWorldID
 	silo.ID = ActiveSiloID
+	// 遗物实例化：仅注入玩家被分配堡（一号/十八号受保护堡不注入），在
+	// 特工初始化之前按清单声明顺序消费单一 RNG 流，保证同种子可复现。
+	s.seedStationRelics(silo, startYear)
 	agent := engine.CreateInitialAgent(req.AgentName, req.Profession, req.TraitIds, silo)
 	limitPlayerKnowledge(agent)
 	agent.ID = ActiveAgentID
@@ -2109,7 +2172,13 @@ func directoryHasContentEventFiles(dir string) (bool, error) {
 		return false, err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == "action_gates.json" {
+		if entry.IsDir() {
+			continue
+		}
+		switch entry.Name() {
+		case "action_gates.json", "relics.json":
+			// Root-level non-event configs must never be parsed as content
+			// event definitions in the legacy flat layout.
 			continue
 		}
 		switch strings.ToLower(filepath.Ext(entry.Name())) {
