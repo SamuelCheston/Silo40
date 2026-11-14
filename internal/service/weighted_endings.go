@@ -337,10 +337,18 @@ func personalRuleEligible(station *model.Silo) (bool, string) {
 //	keeps the engine's status untouched; Selected == "" means "no qualified
 //	candidate — continue simulating" and the engine clears the request.
 func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Agent) *model.EndingDecision {
-	if station == nil || station.VictoryStatus == nil || agent == nil {
+	if station == nil || agent == nil {
 		return nil
 	}
-	trigger := strings.ToUpper(station.VictoryStatus.Type)
+	trigger := ""
+	if station.VictoryStatus != nil {
+		trigger = strings.ToUpper(station.VictoryStatus.Type)
+	} else if !s.contentFactTriggered(station.ID, resetFactKey) {
+		// Most endings still require a legacy victory_check request. RESET is a
+		// content-only hard failure, so its completion fact must be able to open
+		// arbitration even while the ordinary simulation status is nil.
+		return nil
+	}
 	config := defaultEndingWeightConfig
 	decision := &model.EndingDecision{
 		ConfigVersion: config.Version,

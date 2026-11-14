@@ -186,6 +186,7 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		if svc.gameOver() {
 			break
 		}
+		progressResetCountermeasureForRoute(t, svc, execute)
 
 		// INFORMATION now requires circulation to outrun belief forgetting.
 		// Keep sharing the strongest missing fact with the neediest department,

@@ -95,6 +95,17 @@ func runSilo18ObserverGame(t *testing.T, seed int64, months int) *GameService {
 	if _, err := svc.CreateGame(threeSiloRequest(seed)); err != nil {
 		t.Fatalf("create observer game: %v", err)
 	}
+	// RESET is an autonomous hard failure, not part of this signal observer.
+	// Exclude only its entry node so a terminal station cannot consume and drop
+	// the canon signals this harness is meant to record. RESET has its own
+	// zero-preset playable tests with the complete production content set.
+	defs := svc.contentDefinitions[:0]
+	for _, def := range svc.contentDefinitions {
+		if def.Key != "special:reset_omen_census" {
+			defs = append(defs, def)
+		}
+	}
+	svc.contentDefinitions = defs
 	for m := 1; m <= months; m++ {
 		svc.silo.VictoryStatus = nil
 		svc.silo.Rebellion = 0
