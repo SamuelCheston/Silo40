@@ -443,7 +443,8 @@ function App() {
 
                                 {/* Right Side: Operations */}
                                 <VStack gap={6} flex={{ base: "1 1 100%", lg: 1 }} w="full" position="sticky" top="0px">
-                                    {/* Actions Panel */}
+                                    {/* Actions Panel — 结局已定后收起操作区，服务端也会拒绝动作 */}
+                                    {!silo?.victory_status && (
                                     <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
                                         <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>Agent Action Interface</Heading>
                                         <VStack gap={5} align="stretch">
@@ -567,6 +568,7 @@ function App() {
                                             </VStack>
                                         </VStack>
                                     </Box>
+                                    )}
 
                                     <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
                                         <Heading size="sm" mb={3} color="gray.800">情报与故事记录</Heading>
