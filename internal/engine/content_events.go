@@ -22,6 +22,11 @@ const (
 )
 
 // ContentEventDefinition 文件驱动的剧情事件定义。
+//
+// DeadlineYear / DeadlineMonth 是"到点强制拉起"兜底 (15/22 分册约定)：到该日历
+// 时点仍未触发过的事件在月度评估里无条件点火一次，绕过 trigger 与
+// script.canTrigger。用于剧情上必须发生的窗口内事件 (如 charter_lock_day)，
+// 防止前置早于时点完成时一次性评估永不点火、反被窗口超时先杀线。
 type ContentEventDefinition struct {
 	ID             uint
 	Key            string
@@ -34,6 +39,8 @@ type ContentEventDefinition struct {
 	Type           string                   `json:"type"`
 	FireMode       string                   `json:"fire_mode"`
 	CooldownMonths int                      `json:"cooldown_months,omitempty"`
+	DeadlineYear   int                      `json:"deadline_year,omitempty"`
+	DeadlineMonth  int                      `json:"deadline_month,omitempty"`
 	Trigger        ContentTrigger           `json:"trigger"`
 	Effects        []ContentEffect          `json:"effects"`
 	PlayerAction   *ContentPlayerActionSpec `json:"player_action,omitempty"`
@@ -88,6 +95,9 @@ type ContentEffect struct {
 	BoolValue   bool    `json:"bool_value,omitempty"`
 	DelayMonths int     `json:"delay_months,omitempty"`
 	EventID     string  `json:"event_id,omitempty"`
+	// Action 仅用于 player_action_complete：写入的玩家完成键动作 ID
+	// (服务层加 "player_action:" 前缀，如 reset_countermeasure_done)。
+	Action string `json:"action,omitempty"`
 }
 
 // ContentPlayerActionSpec describes how a player action event is shown in UI.
@@ -239,6 +249,9 @@ func normalizeContentEventDefinition(def *ContentEventDefinition) {
 		def.FireMode = ContentFireModeOnce
 	}
 	def.Type = strings.ToUpper(strings.TrimSpace(def.Type))
+	if def.DeadlineYear > 0 && def.DeadlineMonth == 0 {
+		def.DeadlineMonth = 1
+	}
 	normalizeTrigger(&def.Trigger)
 	for i := range def.Effects {
 		def.Effects[i].Type = strings.ToLower(strings.TrimSpace(def.Effects[i].Type))
@@ -249,6 +262,7 @@ func normalizeContentEventDefinition(def *ContentEventDefinition) {
 		def.Effects[i].Fragment = strings.TrimSpace(def.Effects[i].Fragment)
 		def.Effects[i].Zone = strings.TrimSpace(def.Effects[i].Zone)
 		def.Effects[i].EventID = strings.TrimSpace(def.Effects[i].EventID)
+		def.Effects[i].Action = strings.TrimSpace(def.Effects[i].Action)
 	}
 	normalizePlayerActionSpec(def)
 }
@@ -324,6 +338,11 @@ func ValidateContentEventDefinition(def ContentEventDefinition) error {
 	case ContentFireModeOnce, ContentFireModeRepeatable:
 	default:
 		return fmt.Errorf("unsupported fire_mode %q", def.FireMode)
+	}
+	if def.DeadlineYear > 0 || def.DeadlineMonth > 0 {
+		if def.DeadlineYear <= 0 || def.DeadlineMonth < 1 || def.DeadlineMonth > 12 {
+			return fmt.Errorf("deadline requires a positive year and a month in 1-12")
+		}
 	}
 	if def.Trigger.Type != "" {
 		if err := validateTrigger(def.Trigger); err != nil {
@@ -513,6 +532,12 @@ func validateEffect(effect ContentEffect) error {
 		// G5: move population out of the silo into a surviving escape group.
 	case "escape_group_status":
 		// G5: mark the escape group surviving or destroyed (bool_value).
+	case "player_action_complete":
+		// 玩家完成键写入路径 (18 分册 copies_distributed 一类节点)：内容事件
+		// 由此写入 player_action:<action> 完成键，服务层负责落状态并发总线事件。
+		if strings.TrimSpace(effect.Action) == "" {
+			return fmt.Errorf("player_action_complete requires action")
+		}
 	default:
 		return fmt.Errorf("unsupported effect type %q", effect.Type)
 	}
@@ -753,18 +778,6 @@ func ContentTriggerEventNames(def ContentEventDefinition) []string {
 	return result
 }
 
-func HasEventTriggeredTrigger(trigger ContentTrigger) bool {
-	if trigger.Type == "event_triggered" {
-		return true
-	}
-	for _, child := range trigger.Conditions {
-		if HasEventTriggeredTrigger(child) {
-			return true
-		}
-	}
-	return false
-}
-
 func collectContentTriggerEventNames(def ContentEventDefinition, trigger ContentTrigger, names map[string]bool) {
 	if trigger.Type == "event_triggered" && trigger.EventID != "" {
 		category := trigger.Category
@@ -833,6 +846,9 @@ type ScopeContext struct {
 	Silos []*model.Silo // 世界内全部堡，按 SiloID 升序
 	// CrossSignals 收集 cross_signal 效果 (服务层提供入队汇点)；nil = 无处投递。
 	CrossSignals *[]CrossSignalRequest
+	// CompletionKeys 收集 player_action_complete 效果的动作 ID (服务层写入
+	// 完成键并发总线事件)；nil = 无处投递 (引擎内直调时静默跳过)。
+	CompletionKeys *[]string
 	// Errors 收集目标解析失败等显式错误 (对齐 07 §12：不静默丢弃)。
 	Errors *[]string
 }
@@ -852,15 +868,24 @@ func ApplyContentEffects(effects []ContentEffect, silo *model.Silo) []ContentSch
 }
 
 // ApplyContentEffectsScoped 按 scope 施加效果。schedule_event 仍按本地调度
-// 语义收集返回 (只作用于 self)；cross_signal 进入 ScopeContext.CrossSignals。
+// 语义收集返回 (只作用于 self)；cross_signal 进入 ScopeContext.CrossSignals；
+// player_action_complete 的动作 ID 进入 ScopeContext.CompletionKeys，由服务层
+// 写入完成键并发总线事件 (效果施加顺序即写入顺序，确定性)。
 func ApplyContentEffectsScoped(effects []ContentEffect, sc *ScopeContext) []ContentScheduledEvent {
 	var scheduled []ContentScheduledEvent
 	for _, effect := range effects {
-		if effect.Type == "schedule_event" {
+		switch effect.Type {
+		case "schedule_event":
 			scheduled = append(scheduled, ContentScheduledEvent{
 				EventID:     effect.EventID,
 				DelayMonths: effect.DelayMonths,
 			})
+			continue
+		case "player_action_complete":
+			action := strings.TrimSpace(effect.Action)
+			if action != "" && sc != nil && sc.CompletionKeys != nil {
+				*sc.CompletionKeys = append(*sc.CompletionKeys, action)
+			}
 			continue
 		}
 		applyContentEffectScoped(effect, sc)
@@ -1441,4 +1466,10 @@ func clampUnit(v float64) float64 {
 
 func contentGameTimestamp(year, month int) int {
 	return ((year-contentTimestampBaseYear)*contentMonthsPerYear + (month - 1)) * contentDaysPerMonth
+}
+
+// ContentGameTimestamp exposes the content timestamp scale (days since the
+// base year) for service-side deadline evaluation.
+func ContentGameTimestamp(year, month int) int {
+	return contentGameTimestamp(year, month)
 }

@@ -260,11 +260,16 @@ type MayorOffice struct {
 	Legitimacy       float64 `json:"legitimacy"`
 }
 
-// JudicialAttachment stores the three-way allegiance and its hysteresis state.
-// Pact fields are structural qualifications only; no current content grants them.
+// JudicialAttachment stores the Judicial allegiance and its hysteresis state.
+// G12 ruling: attachment is the IT/pact split only (IT + Pact == 1); the Mayor
+// field persists as a bounded influence modifier (pressure / replacement /
+// per-case relaxation) and never feeds Regime. Regime ∈ IT/SWING/PACT; legacy
+// saves may still carry "MAYOR", which the authority engine normalizes to
+// SWING on the next advance. Pact fields are structural qualifications only;
+// no current content grants them.
 type JudicialAttachment struct {
 	IT                     float64 `json:"a_it"`
-	Mayor                  float64 `json:"a_mayor"`
+	Mayor                  float64 `json:"a_mayor"` // influence modifier, not an attachment share (G12)
 	Pact                   float64 `json:"a_pact"`
 	TargetIT               float64 `json:"target_it"`
 	TargetMayor            float64 `json:"target_mayor"`
@@ -304,39 +309,39 @@ type ShadowAuthority struct {
 
 // Silo 地堡核心模型
 type Silo struct {
-	ID                 uint               `gorm:"primarykey" json:"id"`
-	WorldID            uint               `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
-	Name               string             `gorm:"size:100" json:"name"`
-	Traits             []string           `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
-	SafeguardRisk      float64            `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
-	TotalPopulation    int                `gorm:"default:10000" json:"total_population"`
-	Legitimacy         float64            `gorm:"default:1.0" json:"legitimacy"`                             // Compatibility mirror of Mayor.Legitimacy.
-	Mayor              MayorOffice        `gorm:"type:text;serializer:json" json:"mayor"`                    // 现任 Mayor 个人正统性
-	Authority          ShadowAuthority    `gorm:"type:text;serializer:json" json:"authority"`                // IT 幕后威势与 Judicial 附着
-	EscapedGroup       EscapeGroup        `gorm:"type:text;serializer:json" json:"escaped_group"`            // 已离开且可能存续的堡外群体 (G5)
-	PreFallSnapshot    PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"`   // 覆灭前夕人口加权思潮快照 (G4)
-	Cohesion           float64            `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
-	Rebellion          float64            `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
-	DeptTension        float64            `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
-	ClassFragmentation float64            `gorm:"default:0.0" json:"class_fragmentation"`                    // 精英与平民割裂程度 (0-1)
-	HistoryBurden      float64            `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
-	EventTrigger       float64            `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
-	CurrentYear        int                `gorm:"default:122" json:"current_year"`                           // 当前年份
-	CurrentMonth       int                `gorm:"default:1" json:"current_month"`                            // 当前月份 (1-12)
-	Countdown          float64            `gorm:"default:500.0" json:"countdown"`                            // 500年倒计时 (时间胜利)
-	Silo1Destroyed     bool               `gorm:"default:false" json:"silo1_destroyed"`                      // 1号地堡是否已覆灭
-	RNGSeed            int64              `gorm:"default:0" json:"-"`                                        // 本局 RNG 种子 (读档时重建随机源，保证同种子复现)
-	VictoryStatus      *VictoryStatus     `gorm:"type:text;serializer:json" json:"victory_status,omitempty"` // 胜利判定结果
-	Resources          []Resource         `gorm:"foreignKey:SiloID" json:"resources"`
-	Professions        []Profession       `gorm:"foreignKey:SiloID" json:"professions"`
-	Floors             []Floor            `gorm:"foreignKey:SiloID" json:"floors"`
-	Cohorts            []PopulationCohort `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
-	Residents          []Resident         `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
-	Factions           []Faction          `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
-	Relics             []Relic            `gorm:"foreignKey:SiloID" json:"relics,omitempty"` // 地堡中存在的所有遗物
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
-	DeletedAt          gorm.DeletedAt     `gorm:"index" json:"-"`
+	ID                 uint                    `gorm:"primarykey" json:"id"`
+	WorldID            uint                    `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
+	Name               string                  `gorm:"size:100" json:"name"`
+	Traits             []string                `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
+	SafeguardRisk      float64                 `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
+	TotalPopulation    int                     `gorm:"default:10000" json:"total_population"`
+	Legitimacy         float64                 `gorm:"default:1.0" json:"legitimacy"`                             // Compatibility mirror of Mayor.Legitimacy.
+	Mayor              MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`                    // 现任 Mayor 个人正统性
+	Authority          ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`                // IT 幕后威势与 Judicial 附着
+	EscapedGroup       EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`            // 已离开且可能存续的堡外群体 (G5)
+	PreFallSnapshot    PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"`        // 覆灭前夕人口加权思潮快照 (G4)
+	Cohesion           float64                 `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
+	Rebellion          float64                 `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
+	DeptTension        float64                 `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
+	ClassFragmentation float64                 `gorm:"default:0.0" json:"class_fragmentation"`                    // 精英与平民割裂程度 (0-1)
+	HistoryBurden      float64                 `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
+	EventTrigger       float64                 `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
+	CurrentYear        int                     `gorm:"default:122" json:"current_year"`                           // 当前年份
+	CurrentMonth       int                     `gorm:"default:1" json:"current_month"`                            // 当前月份 (1-12)
+	Countdown          float64                 `gorm:"default:500.0" json:"countdown"`                            // 500年倒计时 (时间胜利)
+	Silo1Destroyed     bool                    `gorm:"default:false" json:"silo1_destroyed"`                      // 1号地堡是否已覆灭
+	RNGSeed            int64                   `gorm:"default:0" json:"-"`                                        // 本局 RNG 种子 (读档时重建随机源，保证同种子复现)
+	VictoryStatus      *VictoryStatus          `gorm:"type:text;serializer:json" json:"victory_status,omitempty"` // 胜利判定结果
+	Resources          []Resource              `gorm:"foreignKey:SiloID" json:"resources"`
+	Professions        []Profession            `gorm:"foreignKey:SiloID" json:"professions"`
+	Floors             []Floor                 `gorm:"foreignKey:SiloID" json:"floors"`
+	Cohorts            []PopulationCohort      `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
+	Residents          []Resident              `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
+	Factions           []Faction               `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
+	Relics             []Relic                 `gorm:"foreignKey:SiloID" json:"relics,omitempty"` // 地堡中存在的所有遗物
+	CreatedAt          time.Time               `json:"created_at"`
+	UpdatedAt          time.Time               `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt          `gorm:"index" json:"-"`
 }
 
 // MayorLegitimacy is the sole legitimacy read used by simulation settlement.

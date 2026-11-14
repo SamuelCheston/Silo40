@@ -258,6 +258,80 @@ func TestWeightedEndingP0FactKeyOrder(t *testing.T) {
 	}
 }
 
+// personalRuleStation builds a station standing on the G12 ruling: a named
+// Mayor with personal legitimacy, high police obedience, low W, and a Judicial
+// in the contested state (neutral — neither IT's nor the Mayor's).
+func personalRuleStation() *model.Silo {
+	station := &model.Silo{ID: 1, Name: "10 号地堡"}
+	station.Mayor = model.MayorOffice{Initialized: true, HolderResidentID: 7, HolderName: "Named Mayor", Legitimacy: 0.6}
+	station.Authority = model.ShadowAuthority{
+		Initialized: true, W: 20, PoliceObedience: 0.7,
+		Judicial: model.JudicialAttachment{IT: 1, Regime: "SWING"},
+	}
+	return station
+}
+
+// TestPersonalRuleEligibilityFollowsRuling locks the G12 qualification: police
+// obedience + Mayor legitimacy, with the Judicial's neutrality no obstacle —
+// only its return to IT control blocks. No judgment reads "Judicial belongs to
+// the Mayor" (02-personal-rule §4, 16-chain-personal-rule §4).
+func TestPersonalRuleEligibilityFollowsRuling(t *testing.T) {
+	if ok, reason := personalRuleEligible(personalRuleStation()); !ok {
+		t.Fatalf("obedience + legitimacy + neutral Judicial must qualify: %s", reason)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*model.Silo)
+	}{
+		{"Judicial back in IT hands", func(s *model.Silo) { s.Authority.Judicial.Regime = "IT" }},
+		{"W still high", func(s *model.Silo) { s.Authority.W = 40 }},
+		{"obedience too low", func(s *model.Silo) { s.Authority.PoliceObedience = 0.4 }},
+		{"legitimacy too low", func(s *model.Silo) { s.Mayor.Legitimacy = 0.2 }},
+		{"no named holder", func(s *model.Silo) { s.Mayor.HolderResidentID = 0 }},
+	}
+	for _, tc := range cases {
+		station := personalRuleStation()
+		tc.mutate(station)
+		if ok, reason := personalRuleEligible(station); ok {
+			t.Fatalf("%s must disqualify PERSONAL_RULE", tc.name)
+		} else if reason == "" {
+			t.Fatalf("%s must carry an exclusion reason", tc.name)
+		}
+	}
+
+	// A locked pact does not block PERSONAL_RULE; the two convergences may
+	// coexist and the fixed tie order prefers RULE_OF_LAW (02 §4 last row).
+	pacted := personalRuleStation()
+	pacted.Authority.Judicial.Regime = "PACT"
+	pacted.Authority.Judicial.PactLocked = true
+	if ok, reason := personalRuleEligible(pacted); !ok {
+		t.Fatalf("pact lock must not disqualify PERSONAL_RULE: %s", reason)
+	}
+}
+
+// TestWeightedEndingPersonalRuleArbitratesWithoutJudicialAttachment locks the
+// end-to-end path: the ruling-state station enters the pool and wins on its
+// own support, and the same station with the Judicial back in IT hands no
+// longer qualifies.
+func TestWeightedEndingPersonalRuleArbitratesWithoutJudicialAttachment(t *testing.T) {
+	svc, station, agent := weightedEndingFixture("PERSONAL_RULE")
+	*station = *personalRuleStation()
+	station.VictoryStatus = &model.VictoryStatus{IsWon: true, Type: "PERSONAL_RULE"}
+	agent.PoliticalPrestige = 100 // pushes the personal-rule score past the minimum
+
+	decision := svc.resolveWeightedEnding(station, agent)
+	if decision == nil || decision.Selected != "PERSONAL_RULE" {
+		t.Fatalf("ruling-state station must arbitrate PERSONAL_RULE: %+v", decision)
+	}
+
+	station.Authority.Judicial.Regime = "IT"
+	blocked := svc.resolveWeightedEnding(station, agent)
+	if blocked != nil && blocked.Selected == "PERSONAL_RULE" {
+		t.Fatalf("Judicial back in IT hands must block PERSONAL_RULE: %+v", blocked)
+	}
+}
+
 func TestWeightedEndingEmptyPoolContinuesSimulation(t *testing.T) {
 	// A rebellion peak without escape, fracture, or other qualified candidates
 	// must not force an ending: the request is rejected and simulation goes on.

@@ -59,6 +59,9 @@ type GameService struct {
 	delayCounter        int
 	delayTasks          map[string]*delayTask
 	pendingOperation    *pendingOperation
+	// lastActionResult 缓存最近一次完成操作的结果。完成键会发布总线事件唤醒
+	// 后续链，排空可能延续到 pendingOperation 清空之后；最终步仍要带上结果。
+	lastActionResult *model.ActionResult
 
 	// currentSilo/currentAgent 世界 tick 的逐堡结算上下文：指向正在被推进的堡。
 	// nil 时所有模拟路径回退到玩家堡 (单堡语义逐位不变)。
@@ -851,6 +854,7 @@ func (s *GameService) Resume() error {
 				engine.SetRNG(rand.New(rand.NewSource(sessionSeed(s.silo))))
 				s.engine = engine.NewGameEngine()
 				s.pendingOperation = nil
+				s.lastActionResult = nil
 				s.delayTasks = map[string]*delayTask{}
 				s.receivedSignals = map[uint][]string{}
 				s.bindEngineRuntime()
@@ -959,6 +963,7 @@ func (s *GameService) Resume() error {
 	engine.SetRNG(rand.New(rand.NewSource(sessionSeed(s.silo))))
 	s.engine = engine.NewGameEngine()
 	s.pendingOperation = nil
+	s.lastActionResult = nil
 	s.delayTasks = map[string]*delayTask{}
 	s.receivedSignals = map[uint][]string{}
 	s.bindEngineRuntime()
@@ -1175,6 +1180,7 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	s.contentStates = map[uint]map[string]model.ContentEventState{}
 	s.delayTasks = map[string]*delayTask{}
 	s.pendingOperation = nil
+	s.lastActionResult = nil
 
 	// LLM advisor: fresh timeline — wipe the previous game's log, record the
 	// initial participation level, arm gating for month 1.
@@ -1300,6 +1306,8 @@ func (s *GameService) advancePendingOperationAfterDrain() {
 			op.ActionResult = &failed
 		}
 		if !op.ActionResult.Executed {
+			failedResult := *op.ActionResult
+			s.lastActionResult = &failedResult
 			s.pendingOperation = nil
 			return
 		}
@@ -1323,6 +1331,12 @@ func (s *GameService) advancePendingOperationAfterDrain() {
 		if op.Action != nil {
 			s.completePlayerAction(*op.Action)
 		}
+		if op.ActionResult != nil {
+			result := *op.ActionResult
+			s.lastActionResult = &result
+		} else {
+			s.lastActionResult = nil
+		}
 		s.pendingOperation = nil
 	}
 }
@@ -1338,14 +1352,7 @@ func (s *GameService) completePlayerAction(action model.AgentAction) {
 	if s.silo == nil {
 		return
 	}
-	key := "player_action:" + s.actionIDForGate(action)
-	state := s.statesMapFor(s.silo.ID)[key]
-	state.SiloID = s.silo.ID
-	state.EventKey = key
-	state.Triggered = true
-	state.TriggerCount++
-	state.LastTriggeredTimestamp = gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth)
-	s.statesMapFor(s.silo.ID)[key] = state
+	s.writeCompletionKey(s.silo.ID, "player_action:"+s.actionIDForGate(action))
 	s.recordFirstLocalObservation(action)
 	s.refreshActionProgress()
 }
@@ -1365,13 +1372,67 @@ func (s *GameService) recordFirstLocalObservation(action model.AgentAction) {
 	if existing, ok := states[observationFirstLocalKey]; ok && existing.Triggered {
 		return
 	}
-	state := states[observationFirstLocalKey]
-	state.SiloID = s.silo.ID
-	state.EventKey = observationFirstLocalKey
+	s.writeCompletionKey(s.silo.ID, observationFirstLocalKey)
+}
+
+// writeCompletionKey records a content-addressable completion node and emits it
+// on the bus so event_triggered follow-ups wake up within the same drain.
+// Built-in action completions used to write state silently while events with
+// event_triggered triggers stayed excluded from the monthly sweep, so chain
+// progression nodes never fired (硬伤 #1：完成键不发总线事件). Both built-in
+// completions and player_action_complete content effects route through here.
+func (s *GameService) writeCompletionKey(siloID uint, key string) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	silo := s.siloByID(siloID)
+	if silo == nil && s.silo != nil && s.silo.ID == siloID {
+		silo = s.silo
+	}
+	if silo == nil {
+		return
+	}
+	states := s.statesMapFor(siloID)
+	state := states[key]
+	state.SiloID = siloID
+	state.EventKey = key
 	state.Triggered = true
 	state.TriggerCount++
-	state.LastTriggeredTimestamp = gameTimestamp(s.silo.CurrentYear, s.silo.CurrentMonth)
-	states[observationFirstLocalKey] = state
+	state.LastTriggeredTimestamp = gameTimestamp(silo.CurrentYear, silo.CurrentMonth)
+	states[key] = state
+
+	if s.engine == nil || s.engine.Bus == nil {
+		return
+	}
+	agent := s.agents[siloID]
+	if agent == nil {
+		agent = s.agent
+	}
+	// The event type is the completion key itself (e.g.
+	// "player_action:action_share_info"), matching the names that
+	// ContentTriggerEventNames derives for event_triggered subscriptions.
+	data := map[string]interface{}{
+		"silo":           silo,
+		"agent":          agent,
+		"content_source": "COMPLETION:" + key,
+	}
+	s.engine.Bus.Publish(engine.CreateEvent("completion#"+key+"#"+strconv.Itoa(len(s.eventLogs)+1), key, data))
+}
+
+// writeCompletionKeysFromEffects applies player_action_complete effects (硬伤
+// #4：内容事件写不了玩家完成键). Keys are written in effect order,
+// deduplicated; each write emits its bus event like a built-in completion.
+func (s *GameService) writeCompletionKeysFromEffects(siloID uint, actionIDs []string) {
+	seen := map[string]bool{}
+	for _, actionID := range actionIDs {
+		key := "player_action:" + strings.TrimSpace(actionID)
+		if key == "player_action:" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		s.writeCompletionKey(siloID, key)
+	}
 }
 
 func (s *GameService) nextDelayTaskID() string {
@@ -1499,6 +1560,7 @@ func (s *GameService) BeginPassTime(months int) (*model.EventQueueState, error) 
 		Phase:           phaseQueued,
 		RemainingMonths: months,
 	}
+	s.lastActionResult = nil
 	s.cacheSnapshot()
 	return s.buildQueueState(), nil
 }
@@ -1546,6 +1608,7 @@ func (s *GameService) BeginAction(action model.AgentAction) (*model.EventQueueSt
 		op.Phase = phaseActionRoot
 	}
 	s.pendingOperation = op
+	s.lastActionResult = nil
 	s.seedPendingOperation()
 	s.cacheSnapshot()
 	return s.buildQueueState(), nil
@@ -1766,6 +1829,11 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 
 	if result.Executed {
 		s.completePlayerAction(action)
+		// 完成键会发布总线事件唤醒 event_triggered 后续链；同步 API 内就地排空，
+		// 让后续节点的效果与故事并入本次结果，而不是滞留到下一次 Step。
+		completionLogs, completionStories := s.drainQueuedEvents()
+		allLogs = append(allLogs, completionLogs...)
+		allStories = append(allStories, completionStories...)
 	}
 	if s.gameOver() {
 		if err := s.persist(); err != nil {
@@ -2094,9 +2162,10 @@ func (s *GameService) queueSystemContentEvents(source string) int {
 		if def.SourceGroup == "player_actions" || def.SourceGroup == "player_action" {
 			return false
 		}
-		if engine.HasEventTriggeredTrigger(def.Trigger) {
-			return false
-		}
+		// 硬伤 #1/#2：带 event_triggered 的事件不再被月度通道排除。完成键状态
+		// 持久存在，月度持续评估既让纯事件链在点火后仍能被补评估 (一次性评估
+		// 的死锁，如 charter_lock_day 前置早于时点完成)，也让 any() 里的数值
+		// 分支不再因同组含 event_triggered 而被整组丢弃。ONCE/冷却由状态守卫。
 		// P0.5 多堡：正史 (histories) 锚定玩家堡叙事，只在玩家堡评估；
 		// 单堡时玩家堡即唯一堡，过滤恒为真，行为不变。
 		if !isPlayerSilo && def.SourceGroup == "histories" {
@@ -2110,8 +2179,7 @@ func (s *GameService) queueSystemContentEvents(source string) int {
 func (s *GameService) triggerSystemContentEvents(source string) ([]string, []model.StoryEvent) {
 	return s.triggerContentEvents(source, nil, func(def engine.ContentEventDefinition) bool {
 		return def.SourceGroup != "player_actions" &&
-			def.SourceGroup != "player_action" &&
-			!engine.HasEventTriggeredTrigger(def.Trigger)
+			def.SourceGroup != "player_action"
 	})
 }
 
@@ -2249,7 +2317,17 @@ func (s *GameService) queueContentEvents(source string, action *model.AgentActio
 			TriggerCount:           state.TriggerCount,
 			LastTriggeredTimestamp: state.LastTriggeredTimestamp,
 		}
-		if !engine.CanTriggerContentEvent(def, ctx) {
+		// 硬伤 #3：到点强制拉起兜底。声明了 deadline 且尚未触发的事件，到时后
+		// 无条件点火一次 (绕过 trigger 与 canTrigger)，保证剧情上必须发生的窗口
+		// 内事件不会被前置时序或窗口超时杀死。
+		forced := false
+		if def.DeadlineYear > 0 && !state.Triggered {
+			deadline := engine.ContentGameTimestamp(def.DeadlineYear, def.DeadlineMonth)
+			if engine.ContentGameTimestamp(simSilo.CurrentYear, simSilo.CurrentMonth) >= deadline {
+				forced = true
+			}
+		}
+		if !forced && !engine.CanTriggerContentEvent(def, ctx) {
 			continue
 		}
 		if s.emitContentEvent(def, source, engine.NewEventContext(), action, &stories, &logs) {
@@ -2419,12 +2497,17 @@ func (s *GameService) handleTimeContentEvent(event *engine.GameEvent) {
 
 func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, event *engine.GameEvent, ctx *engine.EventContext) {
 	simSilo := s.simSilo()
+	siloID := s.simSiloID()
+	completionKeys := []string{}
 	scopeCtx := s.scopeContextFor(simSilo)
+	scopeCtx.CompletionKeys = &completionKeys
 	story, scheduled := engine.ApplyContentEventScoped(def, scopeCtx)
 	s.flushScopeResults(scopeCtx, event)
+	// 硬伤 #4：结构化效果里的 player_action_complete 在此落地 (写完成键并发
+	// 总线事件)，与脚本效果各自独立结算。
+	s.writeCompletionKeysFromEffects(siloID, completionKeys)
 
 	state, legacyKey := s.contentStateForDefinition(def)
-	siloID := s.simSiloID()
 	state.SiloID = siloID
 	state.DefinitionID = def.ID
 	state.EventKey = def.Key
@@ -2480,9 +2563,12 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		s.appendContentLog(event, fmt.Sprintf("[ContentEvent] Script apply failed for %s: %v", def.Key, err))
 		return
 	}
+	scriptCompletionKeys := []string{}
 	scriptScopeCtx := s.scopeContextFor(simSilo)
+	scriptScopeCtx.CompletionKeys = &scriptCompletionKeys
 	scheduledFromScript := engine.ApplyContentEffectsScoped(scriptResult.Effects, scriptScopeCtx)
 	s.flushScopeResults(scriptScopeCtx, event)
+	s.writeCompletionKeysFromEffects(siloID, scriptCompletionKeys)
 	s.scheduleContentEvents(scheduledFromScript, event, ctx)
 	s.scheduleContentEvents(scriptResult.Schedule, event, ctx)
 
@@ -2706,11 +2792,16 @@ func (s *GameService) buildStepResult(processed *engine.GameEvent, logs []string
 }
 
 func (s *GameService) pendingActionResult() *model.ActionResult {
-	if s.pendingOperation == nil || s.pendingOperation.ActionResult == nil {
-		return nil
+	if s.pendingOperation != nil && s.pendingOperation.ActionResult != nil {
+		result := *s.pendingOperation.ActionResult
+		return &result
 	}
-	result := *s.pendingOperation.ActionResult
-	return &result
+	// 完成键总线事件可能把排空延续到操作清空之后；最终步带回缓存的结果。
+	if s.pendingOperation == nil && s.lastActionResult != nil {
+		result := *s.lastActionResult
+		return &result
+	}
+	return nil
 }
 
 func (s *GameService) actionDurationMonths(action model.AgentAction) int {

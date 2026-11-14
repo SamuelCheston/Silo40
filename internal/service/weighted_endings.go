@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"silo40/internal/engine"
 	"silo40/internal/model"
 )
 
@@ -137,7 +138,7 @@ var endingDescriptions = map[string]string{
 	endingRebellion:    "有组织的不满转化为了实际离开：一个成规模的群体在堡外继续存续——《越岭》成立。",
 	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。公开约章已经锁定——《公议》成立。",
 	endingTime:         "一号地堡权威覆灭，驻地仍有形成历史的能力，覆灭前夕的思潮具备面向外部的一极——《无人裁决》成立。",
-	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者，Judicial 附着于 Mayor——《人治》成立。",
+	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者：警察服从、幕后威势退场，司法部不归属市长、也没有回到 IT 手里——《人治》成立。",
 	endingExclusionist: "公开求证与外部经验没有取得公共正当性，封闭秩序延续或自我复制——《深闭》成立。",
 	endingReset:        "减口、抹忆与清档系统性完成，任务赖以继续的公共事实被拆除——《遗忘》成立。",
 	endingFracture:     "叛乱与损耗造成了不可逆的维存崩溃，且没有独立幸存的逃出群体——《断层》成立。",
@@ -263,6 +264,34 @@ func allDepartmentsHoldFragments(station *model.Silo) bool {
 	return true
 }
 
+// personalRuleEligible implements the G12 ruling (02-personal-rule §4,
+// 16-chain-personal-rule §4): PERSONAL_RULE rests on police obedience and the
+// Mayor's personal legitimacy. The Judicial never attaches to the Mayor, so no
+// judgment reads "Judicial belongs to the Mayor" — its neutrality or hostility
+// does not block establishment; only its return to IT control does. Thresholds
+// reuse the authority config's named bars (MayorOpenW doubles as the "low W"
+// bar; PersonalRuleMinObedience mirrors the pre-ruling committed bar).
+func personalRuleEligible(station *model.Silo) (bool, string) {
+	cfg := engine.DefaultAuthorityConfig()
+	authority := &station.Authority
+	if station.Mayor.HolderResidentID == 0 {
+		return false, "无现任具名 Mayor，秩序无人承载"
+	}
+	if authority.W > cfg.MayorOpenW {
+		return false, "幕后威势未退，秩序仍由 IT 隐蔽调度"
+	}
+	if station.MayorLegitimacy() < cfg.MayorMinLegitimacy {
+		return false, "Mayor 个人正统性不足"
+	}
+	if authority.PoliceObedience < cfg.PersonalRuleMinObedience {
+		return false, "警察服从不足"
+	}
+	if authority.Judicial.Regime == "IT" {
+		return false, "Judicial 已回到 IT 手里"
+	}
+	return true, ""
+}
+
 // resolveWeightedEnding arbitrates the terminal evaluation requested by
 // victory_check (G1/G9). It implements the fixed pipeline of 结局体系 12 §6.2:
 //
@@ -354,10 +383,10 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	} else {
 		decision.Excluded[endingRuleOfLaw] = "公开约章未锁定"
 	}
-	if station.Authority.Judicial.Regime == "MAYOR" {
+	if ok, reason := personalRuleEligible(station); ok {
 		pool[endingPersonalRule] = true
 	} else {
-		decision.Excluded[endingPersonalRule] = "Judicial 未附着于现任 Mayor"
+		decision.Excluded[endingPersonalRule] = reason
 	}
 	// EXCLUSIONIST eligibility (结局体系 12 §6.2 P1): the closed order still
 	// dominates, or Silo 1 is destroyed without another qualified new order

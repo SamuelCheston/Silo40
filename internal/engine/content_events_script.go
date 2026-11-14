@@ -120,6 +120,9 @@ function escapeGroupDepart(count, scope) {
 function escapeGroupStatus(boolValue, scope) {
   return __withScope({ type: "escape_group_status", bool_value: !!boolValue }, scope);
 }
+function completePlayerAction(actionId) {
+  return { type: "player_action_complete", action: actionId };
+}
 function __contentStrip(value) {
   if (Array.isArray(value)) {
     return value.map(__contentStrip);
@@ -345,16 +348,16 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 		// pact qualification, police obedience). Mutation stays on the Go side.
 		judicial := ctx.Silo.Authority.Judicial
 		result["authority"] = map[string]interface{}{
-			"initialized":       ctx.Silo.Authority.Initialized,
-			"w":                 ctx.Silo.Authority.W,
-			"police_obedience":  ctx.Silo.Authority.PoliceObedience,
-			"a_it":              judicial.IT,
-			"a_mayor":           judicial.Mayor,
-			"a_pact":            judicial.Pact,
-			"regime":            judicial.Regime,
-			"pact_qualified":    judicial.PactQualified,
-			"pact_locked":       judicial.PactLocked,
-			"public_evidence_q": judicial.PublicEvidenceQ,
+			"initialized":              ctx.Silo.Authority.Initialized,
+			"w":                        ctx.Silo.Authority.W,
+			"police_obedience":         ctx.Silo.Authority.PoliceObedience,
+			"a_it":                     judicial.IT,
+			"a_mayor":                  judicial.Mayor,
+			"a_pact":                   judicial.Pact,
+			"regime":                   judicial.Regime,
+			"pact_qualified":           judicial.PactQualified,
+			"pact_locked":              judicial.PactLocked,
+			"public_evidence_q":        judicial.PublicEvidenceQ,
 			"independent_public_facts": judicial.IndependentPublicFacts,
 		}
 		result["escaped_group"] = map[string]interface{}{
@@ -455,6 +458,7 @@ func normalizeContentScriptApplyResult(exported any) (ContentScriptApplyResult, 
 		payload.Effects[i].Fragment = strings.TrimSpace(payload.Effects[i].Fragment)
 		payload.Effects[i].Zone = strings.TrimSpace(payload.Effects[i].Zone)
 		payload.Effects[i].EventID = strings.TrimSpace(payload.Effects[i].EventID)
+		payload.Effects[i].Action = strings.TrimSpace(payload.Effects[i].Action)
 		if err := validateEffect(payload.Effects[i]); err != nil {
 			return ContentScriptApplyResult{}, err
 		}

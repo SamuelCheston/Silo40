@@ -10,26 +10,44 @@ import (
 // AuthorityConfig centralizes the first authority-skeleton parameters.
 // PoliceObedienceResponseRate is TODO(balance): the design specifies a causal
 // response but not its tuning constant yet.
+//
+// G12 ruling: the Judicial never attaches to the Mayor — it attaches only to
+// IT or to the pact. The low/high-W windows below therefore move the Judicial
+// between IT control and the contested state (SWING); the Mayor keeps an
+// influence modifier only (MayorOpenW / MayorMinLegitimacy / MayorHighWCap).
 type AuthorityConfig struct {
-	NewGameW                    float64
-	LegacyConservativeW         float64
-	BaseW                       float64
-	KWeight                     float64
-	DWeight                     float64
-	PWeight                     float64
-	XWeight                     float64
-	EWeight                     float64
-	WHalfLifeMonths             float64
-	BailiffWeight               float64
-	ITInternalWeight            float64
-	SigmoidMidpoint             float64
-	SigmoidWidth                float64
-	MayorOpenW                  float64
-	MayorReturnW                float64
-	MayorMinLegitimacy          float64
-	MayorEntryMonths            int
-	MayorReturnMonths           int
-	MayorAttachmentThreshold    float64
+	NewGameW            float64
+	LegacyConservativeW float64
+	BaseW               float64
+	KWeight             float64
+	DWeight             float64
+	PWeight             float64
+	XWeight             float64
+	EWeight             float64
+	WHalfLifeMonths     float64
+	BailiffWeight       float64
+	ITInternalWeight    float64
+	SigmoidMidpoint     float64
+	SigmoidWidth        float64
+	// MayorOpenW is the W at/below which IT's grip on the Judicial loosens
+	// (and the Mayor's influence modifier opens). It doubles as the "low W"
+	// bar for PERSONAL_RULE qualification.
+	MayorOpenW float64
+	// MayorReturnW is the W at/above which the dark order re-asserts the
+	// Judicial (contested state returns to IT control).
+	MayorReturnW float64
+	// MayorMinLegitimacy floors both the Mayor's influence modifier and the
+	// PERSONAL_RULE legitimacy read.
+	MayorMinLegitimacy float64
+	// MayorEntryMonths / MayorReturnMonths are the sustained-month windows for
+	// the IT→SWING and SWING→IT regime transitions.
+	MayorEntryMonths  int
+	MayorReturnMonths int
+	// PersonalRuleMinObedience is the police-obedience floor for PERSONAL_RULE.
+	// TODO(balance): mirrors the pre-ruling 0.60 attachment-committed bar; the
+	// ruling moves that bar from Judicial attachment to police obedience and
+	// leaves the constant for sim tuning.
+	PersonalRuleMinObedience    float64
 	MayorHighWCap               float64
 	AttachmentInertia           float64
 	PactOpenW                   float64
@@ -47,7 +65,7 @@ func DefaultAuthorityConfig() AuthorityConfig {
 		WHalfLifeMonths: 8, BailiffWeight: 0.65, ITInternalWeight: 0.35,
 		SigmoidMidpoint: 38, SigmoidWidth: 3.5,
 		MayorOpenW: 30, MayorReturnW: 45, MayorMinLegitimacy: 0.35,
-		MayorEntryMonths: 2, MayorReturnMonths: 3, MayorAttachmentThreshold: 0.60,
+		MayorEntryMonths: 2, MayorReturnMonths: 3, PersonalRuleMinObedience: 0.60,
 		MayorHighWCap: 0.075, AttachmentInertia: 0.6,
 		PactOpenW: 18, PactMinQ: 0.85, PactMinFacts: 2, PactEntryMonths: 3,
 		PactAttachmentThreshold:     0.55,
@@ -82,16 +100,18 @@ func InitializeAuthorityState(silo *model.Silo, migrated bool) {
 		w = cfg.LegacyConservativeW
 		source = "v7_conservative_w50"
 	}
+	// G12: IT/Pact form the attachment split (summing to 1); the Mayor field
+	// starts as a small influence modifier, not an attachment share.
 	silo.Authority = model.ShadowAuthority{
 		Initialized: true, InitializationSource: source, W: w,
 		PoliceObedience: silo.MayorLegitimacy(),
-		Judicial:        model.JudicialAttachment{IT: 0.85, Mayor: 0.10, Pact: 0.05, Regime: "IT"},
+		Judicial:        model.JudicialAttachment{IT: 0.90, Mayor: 0.10, Pact: 0.10, Regime: "IT"},
 	}
 	j := &silo.Authority.Judicial
 	j.TargetIT, j.TargetMayor, j.TargetPact = j.IT, j.Mayor, j.Pact
 	s := 1 / (1 + math.Exp(-(w-cfg.SigmoidMidpoint)/cfg.SigmoidWidth))
 	j.CommandIT = j.IT * s
-	j.CommandMayor = j.Mayor * (0.75 + 0.25*silo.MayorLegitimacy())
+	j.CommandMayor = j.Mayor
 	mirrorAuthorityRelations(silo)
 }
 
@@ -167,12 +187,24 @@ func AdvanceAuthorityWithConfig(silo *model.Silo, inputs AuthorityInputs, cfg Au
 	mirrorAuthorityRelations(silo)
 }
 
+// advanceJudicialAttachment implements the G12 ruling: the Judicial attaches
+// only to IT or to the pact. The Mayor never owns it — the Mayor keeps an
+// influence modifier (pressure / replacement / per-case relaxation) that never
+// feeds Regime and stays out of the IT/pact split. Regime moves IT → SWING
+// when IT's grip loosens (sustained low W) and SWING → IT when the dark order
+// re-asserts itself (sustained high W); the pact lock is a one-way fact.
 func advanceJudicialAttachment(silo *model.Silo, cfg AuthorityConfig) {
 	a := &silo.Authority
 	j := &a.Judicial
 	l := silo.MayorLegitimacy()
-	rawMayorOpen := a.W <= cfg.MayorOpenW && l >= cfg.MayorMinLegitimacy
-	if rawMayorOpen {
+
+	// Legacy saves may still carry the pre-ruling MAYOR regime; normalize it
+	// into the contested state on sight (no save-version bump this round).
+	if j.Regime == "MAYOR" {
+		j.Regime = "SWING"
+	}
+
+	if a.W <= cfg.MayorOpenW {
 		j.MayorLowMonths++
 	} else {
 		j.MayorLowMonths = 0
@@ -182,12 +214,15 @@ func advanceJudicialAttachment(silo *model.Silo, cfg AuthorityConfig) {
 	} else {
 		j.MayorHighMonths = 0
 	}
-	if j.Regime == "MAYOR" && j.MayorHighMonths >= cfg.MayorReturnMonths {
-		j.Regime = "IT"
-		j.MayorLowMonths = 0
-		j.MayorHighMonths = 0
+	if j.Regime != "PACT" {
+		if j.Regime == "IT" && j.MayorLowMonths >= cfg.MayorEntryMonths {
+			j.Regime = "SWING"
+			j.MayorHighMonths = 0
+		} else if j.Regime == "SWING" && j.MayorHighMonths >= cfg.MayorReturnMonths {
+			j.Regime = "IT"
+			j.MayorLowMonths = 0
+		}
 	}
-	mayorOpen := rawMayorOpen || j.Regime == "MAYOR"
 
 	pactOpen := j.PactQualified && a.W <= cfg.PactOpenW && j.PublicEvidenceQ >= cfg.PactMinQ && j.IndependentPublicFacts >= cfg.PactMinFacts
 	if pactOpen {
@@ -203,61 +238,55 @@ func advanceJudicialAttachment(silo *model.Silo, cfg AuthorityConfig) {
 	s := 1 / (1 + math.Exp(-(a.W-cfg.SigmoidMidpoint)/cfg.SigmoidWidth))
 	f := 1 - s
 	mayorMultiplier := 0.75 + 0.25*l
-	var targetIT, targetMayor, targetPact float64
-	if j.PactLocked {
+	var targetIT, targetPact float64
+	switch {
+	case j.PactLocked:
 		targetPact = 1
-	} else if !pactOpen {
-		h := 0.0
-		if mayorOpen {
-			h = 1
-		}
-		targetMayor = h*f*mayorMultiplier + (1-h)*cfg.MayorHighWCap*l
-		targetIT = 1 - targetMayor
-	} else {
-		h := 0.0
-		if mayorOpen {
-			h = 1
-		}
-		zIT := s + (1-h)*f
-		zMayor := h * f * mayorMultiplier
+	case !pactOpen:
+		targetIT = 1
+	default:
+		zIT := s
 		zPact := 1.5 * f * j.PublicEvidenceQ
-		z := zIT + zMayor + zPact
-		if z > 0 {
-			targetIT, targetMayor, targetPact = zIT/z, zMayor/z, zPact/z
+		if z := zIT + zPact; z > 0 {
+			targetIT, targetPact = zIT/z, zPact/z
 		} else {
 			targetIT = 1
 		}
 	}
 
+	// Mayor influence modifier (not an attachment share).
+	targetMayor := cfg.MayorHighWCap * l
+	if a.W <= cfg.MayorOpenW && l >= cfg.MayorMinLegitimacy {
+		targetMayor = f * mayorMultiplier
+	}
+
 	migration := cfg.AttachmentInertia
 	j.IT = (1-migration)*j.IT + migration*targetIT
-	j.Mayor = (1-migration)*j.Mayor + migration*targetMayor
 	j.Pact = (1-migration)*j.Pact + migration*targetPact
+	j.Mayor = (1-migration)*j.Mayor + migration*targetMayor
 	normalizeAttachment(j)
-	if j.Regime != "MAYOR" && j.MayorLowMonths >= cfg.MayorEntryMonths && j.Mayor >= cfg.MayorAttachmentThreshold {
-		j.Regime = "MAYOR"
-		j.MayorHighMonths = 0
-	}
 	j.TargetIT, j.TargetMayor, j.TargetPact = targetIT, targetMayor, targetPact
 	j.CommandIT = j.IT * s
-	j.CommandMayor = j.Mayor * mayorMultiplier
+	j.CommandMayor = j.Mayor
 	j.CommandPact = j.Pact * j.PublicEvidenceQ
 	if j.PactLocked {
 		j.CommandPact = j.Pact
 	}
 }
 
+// normalizeAttachment keeps the IT/pact attachment split summing to 1. The
+// Mayor field is an influence modifier (G12) and is deliberately excluded from
+// the split.
 func normalizeAttachment(j *model.JudicialAttachment) {
-	j.IT = clamp01(j.IT)
 	j.Mayor = clamp01(j.Mayor)
+	j.IT = clamp01(j.IT)
 	j.Pact = clamp01(j.Pact)
-	sum := j.IT + j.Mayor + j.Pact
+	sum := j.IT + j.Pact
 	if sum <= 0 {
-		j.IT, j.Mayor, j.Pact = 1, 0, 0
+		j.IT, j.Pact = 1, 0
 		return
 	}
 	j.IT /= sum
-	j.Mayor /= sum
 	j.Pact /= sum
 }
 
@@ -312,14 +341,16 @@ func refreshMayorHolder(silo *model.Silo) {
 	}
 }
 
+// resetJudicialForNewMayor drops the outgoing holder's influence (G12: there
+// is no Mayor attachment share to release) and returns the Judicial to the
+// contested state unless the pact already locked it — the charter lock is a
+// one-way fact and survives Mayor succession.
 func resetJudicialForNewMayor(silo *model.Silo) {
 	j := &silo.Authority.Judicial
-	released := j.Mayor * 0.75
 	j.Mayor *= 0.25
 	if !j.PactLocked {
-		j.IT += released
+		j.Regime = "SWING"
 	}
-	j.Regime = "SWING"
 	j.MayorLowMonths = 0
 	j.MayorHighMonths = 0
 	normalizeAttachment(j)

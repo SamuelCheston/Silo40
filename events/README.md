@@ -26,6 +26,10 @@
 - `type`: 事件类型，例如 `SOCIAL` / `TECHNICAL` / `EXTERNAL`
 - `fire_mode`: `ONCE` 或 `REPEATABLE`
 - `cooldown_months`: 可重复事件的冷却月数（可选）
+- `deadline_year` / `deadline_month`: 到点强制拉起兜底（可选）。到该日历时点仍
+  未触发过的事件在月度评估里无条件点火一次（绕过 `trigger` 与
+  `script.canTrigger`）。只用于剧情上必须发生的窗口内事件（如
+  `charter_lock_day`），防止前置早于时点完成时被窗口超时先杀线
 - `trigger`: 结构化触发条件
 - `effects`: 结构化事件效果列表
 - `player_action`: 仅用于 `events/player_actions/`，声明该动作在 UI 中如何展示与提交
@@ -93,6 +97,11 @@ trigger: { type: "silo_population_lte", value: 6000 },
 - `event_triggered`: 用于 `crisis` 等升级事件，要求某个上游事件已经在本局内触发过。常用字段：
   - `category`: 上游事件分类，例如 `special`
   - `event_id`: 上游事件 ID
+  - 评估通道：上游事件点火时的总线唤醒（即时链）＋月度通道的持续评估（完成键
+    状态持久存在）。含 `event_triggered` 的组合不再被月度通道排除，`any()` 里
+    的数值分支可独立点火；内建动作完成键（`player_action:*`、
+    `observation:first_local`）与 `player_action_complete` 效果写入的完成键都会
+    发布同名总线事件唤醒后续链
 - `player_action_is`: 用于 `player_actions` 目录，要求当前玩家执行的 action 与指定值一致。常用字段：
   - `action`: 可以是内建动作名，例如 `CONDUCT_PROPAGANDA`，也可以是文件驱动动作自己的 `player_action.id`
 
@@ -128,3 +137,6 @@ trigger: { type: "silo_population_lte", value: 6000 },
 - `profession_fragment_remove`（必须同时给 `profession` 与 `fragment`）
 - `floor_stability_delta`（`zone` 空 = 全部楼层；否则按 `Upper`/`Mid`/`Lower` 过滤；`value` 为稳定度增量，0–1 截断）
 - `schedule_event`（`event_id` + `delay_months > 0`）
+- `player_action_complete`（`action` = 动作 ID；写入 `player_action:<action>`
+  完成键并发同名总线事件，供 `event_triggered` 与行动门控读取。JS helper：
+  `completePlayerAction(actionId)`）

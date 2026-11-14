@@ -61,7 +61,11 @@ func TestShadowAuthorityFormulaAndReservedOrderInput(t *testing.T) {
 	}
 }
 
-func TestJudicialThresholdCrossingAndHysteresis(t *testing.T) {
+// TestJudicialRegimeWindowsAndHysteresis locks the G12 regime dynamics: the
+// Judicial leaves IT control into the contested state after sustained low W and
+// returns to IT after sustained high W. It must never pass through a MAYOR
+// regime — the ruling removed Mayor ownership entirely.
+func TestJudicialRegimeWindowsAndHysteresis(t *testing.T) {
 	silo := CreateInitialSilo("Judicial Fixture", 122, nil)
 	silo.SetMayorLegitimacy(0.8)
 	cfg := DefaultAuthorityConfig()
@@ -70,15 +74,18 @@ func TestJudicialThresholdCrossingAndHysteresis(t *testing.T) {
 		silo.Authority.W = 30
 		advanceJudicialAttachment(silo, cfg)
 		assertAttachmentSum(t, silo)
+		if silo.Authority.Judicial.Regime == "MAYOR" {
+			t.Fatalf("month %d: the Judicial must never attach to the Mayor: %+v", month, silo.Authority.Judicial)
+		}
 	}
-	if silo.Authority.Judicial.Regime != "MAYOR" || silo.Authority.Judicial.Mayor < cfg.MayorAttachmentThreshold {
-		t.Fatalf("two qualifying months must complete the institutional shift: %+v", silo.Authority.Judicial)
+	if silo.Authority.Judicial.Regime != "SWING" {
+		t.Fatalf("two low-W months must loosen IT's grip into the contested state: %+v", silo.Authority.Judicial)
 	}
 
 	for _, w := range []float64{31, 44, 30.5, 44.9, 37} {
 		silo.Authority.W = w
 		advanceJudicialAttachment(silo, cfg)
-		if silo.Authority.Judicial.Regime != "MAYOR" {
+		if silo.Authority.Judicial.Regime != "SWING" {
 			t.Fatalf("hysteresis oscillated at W=%v: %+v", w, silo.Authority.Judicial)
 		}
 		assertAttachmentSum(t, silo)
@@ -87,15 +94,53 @@ func TestJudicialThresholdCrossingAndHysteresis(t *testing.T) {
 	for month := 1; month <= 2; month++ {
 		silo.Authority.W = 45
 		advanceJudicialAttachment(silo, cfg)
-		if silo.Authority.Judicial.Regime != "MAYOR" {
+		if silo.Authority.Judicial.Regime != "SWING" {
 			t.Fatalf("returned before three high months at month %d", month)
 		}
 	}
 	silo.Authority.W = 45
 	advanceJudicialAttachment(silo, cfg)
 	if silo.Authority.Judicial.Regime != "IT" {
-		t.Fatalf("three high months must return attachment to IT: %+v", silo.Authority.Judicial)
+		t.Fatalf("three high months must return the Judicial to IT control: %+v", silo.Authority.Judicial)
 	}
+}
+
+// TestLegacyMayorRegimeNormalizesToSwing locks the save-compat path: pre-ruling
+// saves may persist Regime == "MAYOR"; the next advance normalizes it into the
+// contested state without a save-version bump.
+func TestLegacyMayorRegimeNormalizesToSwing(t *testing.T) {
+	silo := CreateInitialSilo("Legacy Fixture", 122, nil)
+	silo.Authority.Judicial.Regime = "MAYOR"
+	silo.Authority.W = 35
+	advanceJudicialAttachment(silo, DefaultAuthorityConfig())
+	if silo.Authority.Judicial.Regime != "SWING" {
+		t.Fatalf("legacy MAYOR regime must normalize to SWING: %+v", silo.Authority.Judicial)
+	}
+}
+
+// TestMayorKeepsInfluenceWithoutAttachment locks the ruling's influence
+// modifier: with low W and a legitimate Mayor the Judicial's Mayor-facing
+// influence stays positive and equals CommandMayor, while the attachment split
+// remains IT/pact only and Regime never becomes MAYOR.
+func TestMayorKeepsInfluenceWithoutAttachment(t *testing.T) {
+	silo := CreateInitialSilo("Influence Fixture", 122, nil)
+	silo.SetMayorLegitimacy(0.8)
+	cfg := DefaultAuthorityConfig()
+	for month := 1; month <= 2; month++ {
+		silo.Authority.W = 20
+		advanceJudicialAttachment(silo, cfg)
+	}
+	judicial := silo.Authority.Judicial
+	if judicial.Regime == "MAYOR" {
+		t.Fatalf("the Mayor must never own the Judicial: %+v", judicial)
+	}
+	if judicial.Mayor <= 0 {
+		t.Fatalf("low W with a legitimate Mayor must keep a positive influence modifier: %+v", judicial)
+	}
+	if math.Abs(judicial.CommandMayor-judicial.Mayor) > 1e-12 {
+		t.Fatalf("CommandMayor must equal the influence modifier: %+v", judicial)
+	}
+	assertAttachmentSum(t, silo)
 }
 
 func TestHighMayorLegitimacyCannotOpenLowWGate(t *testing.T) {
@@ -122,10 +167,12 @@ func TestPactQualificationRemainsStructuralOnly(t *testing.T) {
 	}
 }
 
+// assertAttachmentSum locks the G12 shape: attachment is the IT/pact split
+// (summing to 1); the Mayor field is an influence modifier outside the split.
 func assertAttachmentSum(t *testing.T, silo *model.Silo) {
 	t.Helper()
 	j := silo.Authority.Judicial
-	if j.IT < 0 || j.Mayor < 0 || j.Pact < 0 || math.Abs(j.IT+j.Mayor+j.Pact-1) > 1e-12 {
+	if j.IT < 0 || j.Mayor < 0 || j.Pact < 0 || math.Abs(j.IT+j.Pact-1) > 1e-12 {
 		t.Fatalf("attachment weights invalid: %+v", j)
 	}
 }
