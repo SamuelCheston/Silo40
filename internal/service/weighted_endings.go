@@ -264,18 +264,36 @@ func clampUnitIdeology(v float64) float64 {
 	return v
 }
 
-// allDepartmentsHoldFragments is the local public-fact structural bridge: every
-// department holds at least five unique fragments (12 分册 §4 现状口径).
+// informationGateFactCount is the re-anchored structural bridge depth: every
+// department must hold at least this many facts at or above the sharing floor
+// in its belief layer. TODO(balance): 5 → 3. Derivation (17-information-economy
+// §5): one share absorbs B_player·transmit·receptivity ≈ 0.22–0.34, so a fact
+// needs ~2 shares to cross the 0.30 floor and stay there against forgetting;
+// 3 facts × 9 departments × ~2 shares ≈ 54 shares ≈ 162 AP, reachable inside
+// the ~410 AP lifetime income while 5 facts (≈270 AP + upkeep) is not.
+const informationGateFactCount = 3
+
+// allDepartmentsHoldFragments is the local public-fact structural bridge,
+// re-anchored to the belief layer after the belief rework: the legacy
+// KnownFragments layer is no longer fed by Share Info (which now absorbs into
+// Profession.Beliefs), so the gate reads the live layer — every department
+// must hold at least informationGateFactCount facts with belief at or above
+// the sharing floor. Department beliefs decay at the constant forgetting rate
+// (engine.ApplyBeliefForgetting), so the gate only stays true while
+// circulation outpaces forgetting (25-information-economy §修复A/B).
 func allDepartmentsHoldFragments(station *model.Silo) bool {
 	if len(station.Professions) == 0 {
 		return false
 	}
+	qualRumor := engine.DefaultInformationConfig().QualRumor
 	for _, prof := range station.Professions {
-		unique := map[string]bool{}
-		for _, f := range prof.KnownFragments {
-			unique[f] = true
+		count := 0
+		for _, belief := range prof.Beliefs {
+			if belief.B >= qualRumor {
+				count++
+			}
 		}
-		if len(unique) < 5 {
+		if count < informationGateFactCount {
 			return false
 		}
 	}

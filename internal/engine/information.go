@@ -61,6 +61,13 @@ type InformationConfig struct {
 	QualReport      float64 // ≥0.85 正式举报/申请归档
 	QualPublish     float64 // ≥0.90 核验后公开
 
+	// 恒定淡忘系数 (25-information-economy §修复A)：部门信念层每个事实的 B
+	// 每月减去该系数 (下限 0)。玩家的流通 (Share 吸收) 抵住淡忘——情报不会
+	// 自己站住，链必须被持续推动。仅部门层衰减：特工层不衰减 (见证者记得)，
+	// 具名人物层暂不衰减 (公开传播的再评估留给后续批次)。
+	// TODO(balance): sim 起点，见 17 号经济设计文档的推导。
+	ForgetRateMonthly float64
+
 	// §8.1 AP 与怀疑独立：AP_cost = ceil(base·(1+0.5·mismatch))。
 	APMismatchSlope float64
 
@@ -140,6 +147,12 @@ func DefaultInformationConfig() InformationConfig {
 		QualInvestigate: 0.60,
 		QualReport:      0.85,
 		QualPublish:     0.90,
+
+		// TODO(balance): 淡忘 sim 起点。推导：单次分享吸收约 0.2–0.7
+		// (B_player·transmit·receptivity)，0.01/月 使一次充分吸收的事实约
+		// 30 个月跌回分享地板，9 部门×5 事实的维持需求约 1.5 次分享/月，
+		// 与 AP 经济修复后的月收入 3/月、分享成本 3 相匹配 (17 号文档 §4)。
+		ForgetRateMonthly: 0.01,
 
 		APMismatchSlope: 0.5,
 
@@ -441,6 +454,25 @@ func AbsorbSharedFact(cfg InformationConfig, beliefs *[]model.FactBelief, factID
 	obsID := prefix + strconv.Itoa(k+1)
 	spec := FragmentSpecFor(factID)
 	return ObserveFact(cfg, belief, spec, obsID, clamp01(strength)*independence)
+}
+
+// ApplyBeliefForgetting 部门信念层恒定淡忘 (25-information-economy §修复A)。
+// 确定性：每月每事实 B 减去 ForgetRateMonthly (下限 0)，无随机源；部门切片
+// 与信念切片均按既有持久化顺序遍历。仅部门层衰减：特工层不衰减 (见证者
+// 记得)，具名人物层暂不衰减。零系数或空堡为无操作。
+func ApplyBeliefForgetting(silo *model.Silo, cfg InformationConfig) {
+	if silo == nil || cfg.ForgetRateMonthly <= 0 {
+		return
+	}
+	for i := range silo.Professions {
+		for j := range silo.Professions[i].Beliefs {
+			belief := &silo.Professions[i].Beliefs[j]
+			belief.B -= cfg.ForgetRateMonthly
+			if belief.B < 0 {
+				belief.B = 0
+			}
+		}
+	}
 }
 
 // RegisterPublicEvidence §3.7：登记/更新一份公开证据。同一事实只登记一次，
