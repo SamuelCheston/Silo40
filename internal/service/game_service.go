@@ -77,6 +77,10 @@ type GameService struct {
 	// masterRng 非 nil 时表示设置了 SILO40_SEED：每局新游戏从它派生确定性种子。
 	masterRng *rand.Rand
 
+	// protocolClauses 真实 Order 条款 (events/protocol 加载；不进存档、不可伪造)。
+	protocolClauses []model.ProtocolClause
+	protocolVersion int
+
 	// llmAdvisor 非 nil 时表示启用了 LLM 辅助 (SILO40_LLM_MODE=shadow|on)。
 	// 决策日志与参与度切换记录在 llm_decision_logs 表 (append-only)。
 	llmAdvisor   *llm.Advisor
@@ -295,6 +299,9 @@ func (s *GameService) BootstrapContent(events embed.FS) error {
 	if err := s.loadActionGates(dirs); err != nil {
 		return err
 	}
+	if err := s.loadProtocolClauses(dirs); err != nil {
+		return err
+	}
 	if err := s.loadContentDefinitions(); err != nil {
 		return err
 	}
@@ -321,6 +328,9 @@ func (s *GameService) BootstrapContentFromDisk() error {
 		return err
 	}
 	if err := s.loadActionGates(dirs); err != nil {
+		return err
+	}
+	if err := s.loadProtocolClauses(dirs); err != nil {
 		return err
 	}
 	if err := s.loadContentDefinitions(); err != nil {
@@ -472,6 +482,40 @@ func (s *GameService) statesMapFor(siloID uint) map[string]model.ContentEventSta
 		s.contentStates[siloID] = states
 	}
 	return states
+}
+
+// loadProtocolClauses 加载真实 Order 条款 (子项 4)。真实副本不进存档、
+// 不可伪造；目录缺失时机制保持沉默 (无条款 = 无偏离)。
+func (s *GameService) loadProtocolClauses(dirs map[string]string) error {
+	dir := dirs["protocol"]
+	if dir == "" {
+		s.protocolClauses = nil
+		s.protocolVersion = 0
+	} else {
+		clauses, version, err := engine.LoadProtocolDir(dir)
+		if err != nil {
+			return fmt.Errorf("load protocol clauses: %w", err)
+		}
+		s.protocolClauses = clauses
+		s.protocolVersion = version
+	}
+	if s.engine != nil {
+		s.engine.ProtocolClauses = s.protocolClauses
+		s.engine.ProtocolVersion = s.protocolVersion
+	}
+	return nil
+}
+
+// seedProtocolStates 为全部堡初始化 Protocol 状态 (首次把真实条款拷为
+// believed 副本)。旧档无 Protocol 字段时为零值，等价首次初始化。
+func (s *GameService) seedProtocolStates() {
+	for _, siloID := range sortedSiloIDs(s.silos) {
+		silo := s.siloByID(siloID)
+		if silo == nil {
+			continue
+		}
+		engine.EnsureProtocolInitialized(silo, s.protocolClauses, s.protocolVersion)
+	}
 }
 
 // seedBeliefLayers 旧档兼容：为全部特工按 KnownFragments 保守补种信念层
@@ -875,6 +919,7 @@ func (s *GameService) Resume() error {
 				s.delayTasks = map[string]*delayTask{}
 				s.receivedSignals = map[uint][]string{}
 				s.seedBeliefLayers()
+				s.seedProtocolStates()
 				s.bindEngineRuntime()
 				if err := s.resumeLlmAdvisor(); err != nil {
 					return err
@@ -985,6 +1030,7 @@ func (s *GameService) Resume() error {
 	s.delayTasks = map[string]*delayTask{}
 	s.receivedSignals = map[uint][]string{}
 	s.seedBeliefLayers()
+	s.seedProtocolStates()
 	s.bindEngineRuntime()
 	if err := s.resumeLlmAdvisor(); err != nil {
 		return err
@@ -1201,6 +1247,7 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	s.pendingOperation = nil
 	s.lastActionResult = nil
 	s.seedBeliefLayers()
+	s.seedProtocolStates()
 
 	// LLM advisor: fresh timeline — wipe the previous game's log, record the
 	// initial participation level, arm gating for month 1.
@@ -1260,6 +1307,8 @@ func (s *GameService) bindEngineRuntime() {
 	if s.engine == nil {
 		return
 	}
+	s.engine.ProtocolClauses = s.protocolClauses
+	s.engine.ProtocolVersion = s.protocolVersion
 	s.engine.RuleEngine.OnSchedule = func(event *engine.GameEvent, delayMonths int, source *engine.GameEvent) {
 		s.scheduleDelayedEvent(event, delayMonths, source)
 	}

@@ -108,6 +108,68 @@ type PublicEvidenceRecord struct {
 	Month      int     `json:"month"`
 }
 
+// ProtocolClause Order 的一条版本化条款 (10-it-control-credibility §6.1)。
+// 真实副本由加载器持有 (不可伪造)；believed 副本持久化在存档里。
+type ProtocolClause struct {
+	ID                   string   `json:"id"`
+	Version              int      `json:"version"`
+	Category             string   `json:"category"` // prohibition/required_response/outcome_target/reporting/gap
+	Description          string   `json:"description,omitempty"`
+	ForbiddenAction      string   `json:"forbidden_action,omitempty"`
+	RequiredAction       string   `json:"required_action,omitempty"`
+	TriggerMetric        string   `json:"trigger_metric,omitempty"`
+	TriggerAtLeast       float64  `json:"trigger_at_least,omitempty"`
+	DeadlineMonths       int      `json:"deadline_months,omitempty"`
+	TargetMetric         string   `json:"target_metric,omitempty"`
+	TargetMin            *float64 `json:"target_min,omitempty"`
+	TargetMax            *float64 `json:"target_max,omitempty"`
+	ReviewIntervalMonths int      `json:"review_interval_months,omitempty"`
+	Severity             string   `json:"severity"` // minor/major/existential/critical
+	InterventionPoints   float64  `json:"intervention_points"`
+	ReportingRequirement string   `json:"reporting_requirement,omitempty"`
+	KnownGaps            string   `json:"known_gaps,omitempty"`
+}
+
+// ProtocolDeviation 一条已记录的偏离。每个条款每类只记一次 (§6.2)。
+type ProtocolDeviation struct {
+	ClauseID     string `json:"clause_id"`
+	Kind         string `json:"kind"` // violation/lapse/unmet
+	Severity     string `json:"severity"`
+	Year         int    `json:"year"`
+	Month        int    `json:"month"`
+	Open         bool   `json:"open"`
+	MissedCount  int    `json:"missed_count"` // 逾期月数 / 连续失败 review 数
+	Acknowledged bool   `json:"acknowledged"` // 关键联盟是否知悉 (决定 W 惩罚)
+}
+
+// PendingRequirement 一个被激活、等待限期完成的必需动作。
+type PendingRequirement struct {
+	ClauseID       string `json:"clause_id"`
+	DueTimestamp   int    `json:"due_timestamp"`
+	ActivatedYear  int    `json:"activated_year"`
+	ActivatedMonth int    `json:"activated_month"`
+}
+
+// ProtocolState 堡级 Protocol 运行时状态 (持久化)。
+type ProtocolState struct {
+	ConfigVersion     int                  `json:"config_version"`
+	BelievedVersion   int                  `json:"believed_version"`
+	BelievedClauses   []ProtocolClause     `json:"believed_clauses,omitempty"`
+	Deviations        []ProtocolDeviation  `json:"deviations,omitempty"`
+	Pending           []PendingRequirement `json:"pending,omitempty"`
+	ReviewAnchors     map[string]int       `json:"review_anchors,omitempty"` // clauseID -> 上次 review 时间戳
+	J                 float64              `json:"j"`
+	WarningIssued     bool                 `json:"warning_issued"`
+	InterventionStage string               `json:"intervention_stage,omitempty"` // warning/correction/override/assessment
+	StageMonths       int                  `json:"stage_months"`
+	FailedReviews     int                  `json:"failed_reviews"` // 关键目标连续未恢复的 review 数
+	G                 float64              `json:"g"`              // 主任对上层控制方的认知 (§6.4)
+	// DirectorBeliefs 主任对上层控制方相关事实 (Order_*) 的信念；G 由其聚合。
+	// 三类生成器 (§6.5) 只经观察推进它，不直接改 G/W/E/Q。
+	DirectorBeliefs   []FactBelief         `json:"director_beliefs,omitempty"`
+	ChannelOpen       bool                 `json:"channel_open"`   // 控制通道仅在介入链开启
+}
+
 // Connection 各部门人脉值
 type Connection struct {
 	ID           uint    `gorm:"primarykey" json:"id"`
@@ -310,9 +372,9 @@ type JudicialAttachment struct {
 	PactQualified          bool    `json:"pact_qualified"`
 	PublicEvidenceQ        float64 `json:"public_evidence_q"`
 	IndependentPublicFacts int     `json:"independent_public_facts"`
-	// PublicFactKeys 已登记的独立公共事实键 (G2)。按登记顺序追加、按键去重，
-	// IndependentPublicFacts 与其长度保持一致；内容层经 authority_public_fact
-	// 效果写入，锁定判定只读计数。
+	// PublicFactKeys 已登记的独立公共事实键。子项 3 起由公开证据登记的合格事实
+	// 月度覆写 (engine.ComputeInformationEnvironment)；authority_public_fact 为
+	// 遗留通路。与 IndependentPublicFacts 长度保持一致。
 	PublicFactKeys []string `json:"public_fact_keys,omitempty"`
 	PactLocked     bool     `json:"pact_locked"`
 }
@@ -320,17 +382,20 @@ type JudicialAttachment struct {
 // ShadowAuthority is the independent IT authority state. OrderDeviation is a
 // reserved input interface and is deliberately absent from the v8 W formula.
 type ShadowAuthority struct {
-	Initialized          bool               `json:"initialized"`
-	InitializationSource string             `json:"initialization_source"`
-	W                    float64            `json:"w"`
-	K                    float64            `json:"k"`
-	E                    float64            `json:"e"`
-	D                    float64            `json:"d"`
-	P                    float64            `json:"p"`
-	X                    float64            `json:"x"`
-	OrderDeviation       float64            `json:"order_deviation"`
-	PoliceObedience      float64            `json:"police_obedience"`
-	Judicial             JudicialAttachment `json:"judicial"`
+	Initialized          bool    `json:"initialized"`
+	InitializationSource string  `json:"initialization_source"`
+	W                    float64 `json:"w"`
+	K                    float64 `json:"k"`
+	E                    float64 `json:"e"`
+	D                    float64 `json:"d"`
+	P                    float64 `json:"p"`
+	X                    float64 `json:"x"`
+	OrderDeviation       float64 `json:"order_deviation"`
+	// Shocks 待消费的 W 冲击队列 (§3.2 的 Σδe)：Protocol 偏离等写入，下一次
+	// 月度权威更新消费一次 (单月合计 cap ±12)。
+	Shocks          []float64          `json:"shocks,omitempty"`
+	PoliceObedience float64            `json:"police_obedience"`
+	Judicial        JudicialAttachment `json:"judicial"`
 }
 
 // Silo 地堡核心模型
@@ -348,29 +413,32 @@ type Silo struct {
 	PreFallSnapshot PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
 	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
 	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
-	PublicEvidence     []PublicEvidenceRecord `gorm:"type:text;serializer:json" json:"public_evidence,omitempty"`
-	Cohesion           float64                `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
-	Rebellion          float64                `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
-	DeptTension        float64                `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
-	ClassFragmentation float64                `gorm:"default:0.0" json:"class_fragmentation"`                    // 精英与平民割裂程度 (0-1)
-	HistoryBurden      float64                `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
-	EventTrigger       float64                `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
-	CurrentYear        int                    `gorm:"default:122" json:"current_year"`                           // 当前年份
-	CurrentMonth       int                    `gorm:"default:1" json:"current_month"`                            // 当前月份 (1-12)
-	Countdown          float64                `gorm:"default:500.0" json:"countdown"`                            // 500年倒计时 (时间胜利)
-	Silo1Destroyed     bool                   `gorm:"default:false" json:"silo1_destroyed"`                      // 1号地堡是否已覆灭
-	RNGSeed            int64                  `gorm:"default:0" json:"-"`                                        // 本局 RNG 种子 (读档时重建随机源，保证同种子复现)
-	VictoryStatus      *VictoryStatus         `gorm:"type:text;serializer:json" json:"victory_status,omitempty"` // 胜利判定结果
-	Resources          []Resource             `gorm:"foreignKey:SiloID" json:"resources"`
-	Professions        []Profession           `gorm:"foreignKey:SiloID" json:"professions"`
-	Floors             []Floor                `gorm:"foreignKey:SiloID" json:"floors"`
-	Cohorts            []PopulationCohort     `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
-	Residents          []Resident             `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
-	Factions           []Faction              `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
-	Relics             []Relic                `gorm:"foreignKey:SiloID" json:"relics,omitempty"` // 地堡中存在的所有遗物
-	CreatedAt          time.Time              `json:"created_at"`
-	UpdatedAt          time.Time              `json:"updated_at"`
-	DeletedAt          gorm.DeletedAt         `gorm:"index" json:"-"`
+	PublicEvidence []PublicEvidenceRecord `gorm:"type:text;serializer:json" json:"public_evidence,omitempty"`
+	// Protocol Order 条款运行时状态 (子项 4)：believed 副本、偏离记录、介入链
+	// 与主任认知 G。真实条款由加载器持有，不持久化、不可伪造。
+	Protocol           ProtocolState      `gorm:"type:text;serializer:json" json:"protocol"`
+	Cohesion           float64            `gorm:"default:1.0" json:"cohesion"`                               // 凝聚力值
+	Rebellion          float64            `gorm:"default:0.0" json:"rebellion"`                              // 地堡叛乱值
+	DeptTension        float64            `gorm:"default:0.0" json:"dept_tension"`                           // 部门间紧张程度 (0-1)
+	ClassFragmentation float64            `gorm:"default:0.0" json:"class_fragmentation"`                    // 精英与平民割裂程度 (0-1)
+	HistoryBurden      float64            `gorm:"default:0.0" json:"history_burden"`                         // 历史包袱值 (罪恶/荣誉)
+	EventTrigger       float64            `gorm:"default:0.0" json:"event_trigger"`                          // 外部事件触发值
+	CurrentYear        int                `gorm:"default:122" json:"current_year"`                           // 当前年份
+	CurrentMonth       int                `gorm:"default:1" json:"current_month"`                            // 当前月份 (1-12)
+	Countdown          float64            `gorm:"default:500.0" json:"countdown"`                            // 500年倒计时 (时间胜利)
+	Silo1Destroyed     bool               `gorm:"default:false" json:"silo1_destroyed"`                      // 1号地堡是否已覆灭
+	RNGSeed            int64              `gorm:"default:0" json:"-"`                                        // 本局 RNG 种子 (读档时重建随机源，保证同种子复现)
+	VictoryStatus      *VictoryStatus     `gorm:"type:text;serializer:json" json:"victory_status,omitempty"` // 胜利判定结果
+	Resources          []Resource         `gorm:"foreignKey:SiloID" json:"resources"`
+	Professions        []Profession       `gorm:"foreignKey:SiloID" json:"professions"`
+	Floors             []Floor            `gorm:"foreignKey:SiloID" json:"floors"`
+	Cohorts            []PopulationCohort `gorm:"foreignKey:SiloID" json:"cohorts,omitempty"`
+	Residents          []Resident         `gorm:"foreignKey:SiloID" json:"residents,omitempty"`
+	Factions           []Faction          `gorm:"foreignKey:SiloID" json:"factions,omitempty"`
+	Relics             []Relic            `gorm:"foreignKey:SiloID" json:"relics,omitempty"` // 地堡中存在的所有遗物
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt     `gorm:"index" json:"-"`
 }
 
 // MayorLegitimacy is the sole legitimacy read used by simulation settlement.

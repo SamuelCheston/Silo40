@@ -36,6 +36,10 @@ type GameEngine struct {
 	MechanicEngine  *MechanicEngine
 	RuleEngine      *RuleEngine
 	TriggerEngine   *TriggerEngine
+	// ProtocolClauses 真实 Order 条款 (服务层从 events/protocol 加载)。
+	// 真实判定只读它；IT 的 believed 副本在存档内，可被伪造。
+	ProtocolClauses []model.ProtocolClause
+	ProtocolVersion int
 	EventEngine     *EventEngine
 
 	// 内部结果收集
@@ -337,6 +341,9 @@ func (e *GameEngine) RunLocalPhase(silo *model.Silo, agent *model.Agent, deltaYe
 
 	// 4. 权威状态：月度更新后才允许影响本月 NPC 决策；零月路径不进入这里。
 	AdvanceAuthorityMonthly(silo)
+
+	// 4.5 Order 条款结算：三类偏离、J 与介入链 (确定性，无 RNG)。
+	e.AdvanceProtocolMonthly(silo)
 
 	// 5. NPC 自主行为
 	e.RunNpcTurn(silo, agent, deltaYears, e.logf)
