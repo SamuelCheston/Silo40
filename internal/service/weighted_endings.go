@@ -317,6 +317,35 @@ func beliefCoverageFactCount(station *model.Silo) int {
 	return count
 }
 
+// ruleOfLawExplanation 补齐《公议》候选的四维解释 (10 §9 审计口径)：
+// 证据 = Q 与独立合格事实；附着 = Judicial 的约章附着与锁定；介入 = Order
+// 介入链阶段与 J；动机 = 推动公开规则的势力 (玩家威望与开放派系)。
+func ruleOfLawExplanation(station *model.Silo, agent *model.Agent) string {
+	judicial := station.Authority.Judicial
+	evidence := fmt.Sprintf("证据: Q=%.2f, 合格独立事实 %d 项", judicial.PublicEvidenceQ, judicial.IndependentPublicFacts)
+	if len(judicial.PublicFactKeys) > 0 {
+		evidence += " (" + strings.Join(judicial.PublicFactKeys, ", ") + ")"
+	}
+	adhesion := fmt.Sprintf("附着: Judicial regime=%s, 约章附着=%.2f, 锁定=%v", judicial.Regime, judicial.Pact, judicial.PactLocked)
+	stage := station.Protocol.InterventionStage
+	if stage == "" {
+		stage = "无接触"
+	}
+	intervention := fmt.Sprintf("介入: 介入链=%s, J=%.2f, 主任认知 G=%.2f", stage, station.Protocol.J, station.Protocol.G)
+	openFactions := 0
+	for _, faction := range station.Factions {
+		if strings.Contains(faction.Signature, "pro_foreign:High") || strings.Contains(strings.ToLower(faction.Stance), "open") {
+			openFactions++
+		}
+	}
+	prestige := 0.0
+	if agent != nil {
+		prestige = agent.PoliticalPrestige
+	}
+	motive := fmt.Sprintf("动机: 玩家威望=%.0f, 开放派系 %d 个", prestige, openFactions)
+	return motive + "; " + intervention + "; " + evidence + "; " + adhesion
+}
+
 // personalRuleEligible implements the G12 ruling (02-personal-rule §4,
 // 16-chain-personal-rule §4): PERSONAL_RULE rests on police obedience and the
 // Mayor's personal legitimacy. The Judicial never attaches to the Mayor, so no
@@ -375,6 +404,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		Scores:        map[string]float64{},
 		Contributions: []model.EndingEntityContribution{},
 		Excluded:      map[string]string{},
+		Explanations:  map[string]string{},
 	}
 	for _, outcome := range endingOutcomeOrder {
 		decision.Scores[outcome] = 0
@@ -447,6 +477,8 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	} else {
 		decision.Excluded[endingRuleOfLaw] = "公开约章未锁定"
 	}
+	// 子项 7：《公议》候选的四维审计解释 (动机/介入/证据/附着)，无论入池与否。
+	decision.Explanations[endingRuleOfLaw] = ruleOfLawExplanation(station, agent)
 	if ok, reason := personalRuleEligible(station); ok {
 		pool[endingPersonalRule] = true
 	} else {
