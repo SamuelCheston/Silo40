@@ -199,6 +199,238 @@
       "unlock": { "stage_at_least": "archive_awakened" },
       "available": {},
       "reason": "需要档案唤醒阶段"
+    },
+    {
+      "id": "ROUTE_SURVEY_OFFER",
+      "unlock": {
+        "all": [
+          { "stage_at_least": "first_signal" },
+          { "relation": "Mechanical", "min": 0.2 },
+          { "event_completed": "special:departure_willingness" }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿出现、首档阶段与 Mechanical 关系 0.20（13 分册 §1，初始校准值）"
+    },
+    {
+      "id": "ROUTE_SURVEY_ACCEPT",
+      "unlock": { "event_completed": "player_actions:route_survey_offer" },
+      "available": {},
+      "reason": "需要先完成路线勘察接触"
+    },
+    {
+      "id": "ROUTE_SURVEY_DECLINE",
+      "unlock": { "event_completed": "player_actions:route_survey_offer" },
+      "available": {},
+      "reason": "需要先完成路线勘察接触"
+    },
+    {
+      "id": "ROUTE_SURVEY_DEFER",
+      "unlock": { "event_completed": "player_actions:route_survey_offer" },
+      "available": {},
+      "reason": "需要先完成路线勘察接触"
+    },
+    {
+      "id": "ADVANCE_PARTY_DISPATCH",
+      "unlock": { "event_completed": "special:route_confirmed" },
+      "available": {},
+      "reason": "需要先遣事实成立（路线成形）"
+    },
+    {
+      "id": "ESCAPE_WINDOW_ORDERLY",
+      "unlock": { "event_completed": "special:escape_window_open" },
+      "available": {},
+      "reason": "需要撤离窗口打开"
+    },
+    {
+      "id": "ESCAPE_WINDOW_RIOT",
+      "unlock": { "event_completed": "special:escape_window_open" },
+      "available": {},
+      "reason": "需要撤离窗口打开"
+    },
+    {
+      "id": "ESCAPE_NEGOTIATION_GUARANTEE",
+      "unlock": { "event_completed": "special:escape_window_open" },
+      "available": {},
+      "reason": "需要撤离窗口打开（开窗后顶层才开始重新掂量立场）"
+    },
+    {
+      "id": "ESCAPE_DEPARTURE_LAUNCH",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:escape_window_open" },
+          {
+            "any": [
+              { "event_completed": "player_actions:escape_window_orderly" },
+              { "event_completed": "player_actions:escape_window_riot" }
+            ]
+          }
+        ]
+      },
+      "available": {},
+      "reason": "需要撤离窗口打开并已选定开窗方式（R-D）"
+    },
+    {
+      "id": "ESCAPE_PREP_SUIT_REPAIR",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Mechanical", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Mechanical 关系 0.25（换胶带门控，初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PREP_SUIT_WAREHOUSE",
+      "unlock": { "event_completed": "special:departure_willingness" },
+      "available": {},
+      "reason": "需要离开意愿；实际可得性由 IT 立场（配合）决定"
+    },
+    {
+      "id": "ESCAPE_PREP_TRANSFER_SUPPLIES",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Supply", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Supply 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PREP_TRANSFER_MATERIALS",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Supply", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Supply 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PLAN_MECHANICAL",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Mechanical", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Mechanical 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PLAN_MINES",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Mines", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Mines 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PLAN_SUPPLY",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Supply", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Supply 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PLAN_MEDICAL",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Medical", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Medical 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PLAN_AGRICULTURAL",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Agricultural", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Agricultural 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PLAN_ORDER",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Mayor", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Mayor 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_DRILL",
+      "unlock": { "event_completed": "special:departure_willingness" },
+      "available": {},
+      "reason": "需要离开意愿"
+    },
+    {
+      "id": "ESCAPE_PREP_CARE",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Medical", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Medical 关系 0.25（初始校准值）"
+    },
+    {
+      "id": "ESCAPE_PREP_PRODUCTION",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:departure_willingness" },
+          { "relation": "Agricultural", "min": 0.25 }
+        ]
+      },
+      "available": {},
+      "reason": "需要离开意愿与 Agricultural 关系 0.25；材料门槛由事件触发器读账本"
+    },
+    {
+      "id": "ESCAPE_RECEPTION_STOCKING",
+      "unlock": { "event_completed": "player_actions:advance_party_dispatch" },
+      "available": {},
+      "reason": "需要先遣派遣；接应点确认由事件 canTrigger 读账本档位"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_IT_LINE",
+      "unlock": {
+        "all": [
+          { "stage_at_least": "first_signal" },
+          { "relation": "IT", "min": 0.3 }
+        ]
+      },
+      "available": {},
+      "reason": "需要首档阶段与 IT 关系 0.30（受限知情层，初始校准值）"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_CROSS_SIGNAL",
+      "unlock": { "stage_at_least": "first_signal" },
+      "available": {},
+      "reason": "需要首档阶段"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_PHYSICAL",
+      "unlock": { "event_completed": "special:departure_willingness" },
+      "available": {},
+      "reason": "需要离开意愿"
     }
   ]
 }

@@ -92,6 +92,11 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV8ToEndingsSave(a.db, dbFileName); err != nil {
 		log.Fatalf("v8 endings upgrade failed: %v", err)
 	}
+	// v9 endings saves gain the preparation ledgers and top stance
+	// (16 Layer 0/1); zero values keep pre-upgrade behaviour bit-identical.
+	if _, err := service.UpgradeV9ToPreparationSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v9 preparation upgrade failed: %v", err)
+	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)

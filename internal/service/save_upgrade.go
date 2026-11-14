@@ -573,6 +573,86 @@ func upgradeV8ToEndings(tx *gorm.DB) error {
 
 const endingsSaveVersion = 9
 
+// UpgradeV9ToPreparationSave adds the preparation ledgers and top stance
+// (16 Layer 0/1): EscapePrep / SpilloverPrep / TopStance on the Silo
+// aggregate plus the EscapeGroup audit fields (Departed/Fragile). All new
+// fields are zero-valued in v9 saves (nothing could write them before v10):
+// zero ledger = no preparation, zero stance = block, so upgraded saves keep
+// their exact pre-upgrade behaviour — the ledgers have no ending consumer
+// until the departure settlement exists (Layer 1 discipline). Same safety
+// contract as v8→v9: backup + one transaction + readback verification.
+func UpgradeV9ToPreparationSave(db *gorm.DB, dbPath string) (bool, error) {
+	var meta model.SaveMeta
+	err := db.First(&meta, "`key` = ?", saveMetaKey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("v10 preparation upgrade: read save meta: %w", err)
+	}
+	if meta.SaveVersion != 9 {
+		return false, nil
+	}
+	backupPath := fmt.Sprintf("%s.bak-%s-v10preparation", dbPath, time.Now().Format("20060102-150405"))
+	if err := backupSaveFile(db, backupPath); err != nil {
+		return false, fmt.Errorf("v10 preparation upgrade: backup to %s failed: %w（数据库未改动）", backupPath, err)
+	}
+	if err := db.Transaction(upgradeV9ToPreparation); err != nil {
+		return false, fmt.Errorf("v10 preparation upgrade: %w（数据库未改动，备份保留在 %s，可用它还原）", err, backupPath)
+	}
+	log.Printf("v9 save upgraded to v10 preparation model (backup: %s)——准备账本空起步、立场零值=阻挠，不回填推测状态", backupPath)
+	return true, nil
+}
+
+func upgradeV9ToPreparation(tx *gorm.DB) error {
+	var silos []model.Silo
+	if err := tx.Order("id ASC").Find(&silos).Error; err != nil {
+		return fmt.Errorf("load silos: %w", err)
+	}
+	for i := range silos {
+		silo := &silos[i]
+		// Re-save so the new serialized fields exist explicitly; zero values
+		// are the documented v9 semantics (no preparation, stance = block).
+		if err := tx.Save(silo).Error; err != nil {
+			return fmt.Errorf("resave silo %d: %w", silo.ID, err)
+		}
+	}
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: model.CurrentSaveVersion}).Error; err != nil {
+		return fmt.Errorf("bump save meta: %w", err)
+	}
+
+	var checkSilos []model.Silo
+	if err := tx.Order("id ASC").Find(&checkSilos).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload silos: %w", err)
+	}
+	if len(checkSilos) != len(silos) {
+		return fmt.Errorf("post-write verification failed: silo count changed")
+	}
+	for i := range checkSilos {
+		silo := &checkSilos[i]
+		prep := silo.EscapePrep
+		if prep.Initialized || prep.SuitsFunctional != 0 || prep.SuppliesPacked != 0 ||
+			prep.MaterialsPacked != 0 || prep.DrillLevel != 0 || prep.CareReady != 0 ||
+			prep.ProductionStart || len(prep.PlanRoles) != 0 || prep.PrepExposure != 0 {
+			return fmt.Errorf("post-write verification failed: silo %d gained escape preparation during migration", silo.ID)
+		}
+		if len(silo.SpilloverPrep.Channels) != 0 || silo.SpilloverPrep.PackageQuality != 0 {
+			return fmt.Errorf("post-write verification failed: silo %d gained spillover preparation during migration", silo.ID)
+		}
+		if silo.TopStance.Initialized || silo.TopStance.Guarantee != 0 {
+			return fmt.Errorf("post-write verification failed: silo %d gained stance state during migration", silo.ID)
+		}
+	}
+	var checkMeta model.SaveMeta
+	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
+	}
+	if checkMeta.SaveVersion != model.CurrentSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, model.CurrentSaveVersion)
+	}
+	return nil
+}
+
 // legacyUnaffiliatedSignature 与 engine.unaffiliatedSignature 一致 (跨包不导出，
 // 升级器按字面值对齐)。
 const legacyUnaffiliatedSignature = "special:unaffiliated"

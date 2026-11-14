@@ -2909,6 +2909,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	wShocks := []float64{}
 	decisiveShocks := []engine.DecisiveShockRequest{}
 	allianceDeltas := []engine.AllianceLoyaltyDelta{}
+	escapeSettleRequested := false
 	scopeCtx := s.scopeContextFor(simSilo)
 	scopeCtx.CompletionKeys = &completionKeys
 	scopeCtx.BeliefObservations = &beliefRequests
@@ -2917,6 +2918,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scopeCtx.WShocks = &wShocks
 	scopeCtx.DecisiveShocks = &decisiveShocks
 	scopeCtx.AllianceDeltas = &allianceDeltas
+	scopeCtx.EscapeDepartureSettle = &escapeSettleRequested
 	story, scheduled := engine.ApplyContentEventScoped(def, scopeCtx)
 	s.flushScopeResults(scopeCtx, event)
 	// 硬伤 #4：结构化效果里的 player_action_complete 在此落地 (写完成键并发
@@ -2964,6 +2966,12 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 
 	s.scheduleContentEvents(scheduled, event, ctx)
 
+	// 16 §3.4 出发结算点：结构化效果请求的结算在全部结构化效果施加后执行。
+	if escapeSettleRequested {
+		s.settleEscapeDeparture(simSilo, event)
+		escapeSettleRequested = false
+	}
+
 	if !def.ScriptHooks.Apply {
 		return
 	}
@@ -2994,6 +3002,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptWShocks := []float64{}
 	scriptDecisiveShocks := []engine.DecisiveShockRequest{}
 	scriptAllianceDeltas := []engine.AllianceLoyaltyDelta{}
+	scriptEscapeSettle := false
 	scriptScopeCtx := s.scopeContextFor(simSilo)
 	scriptScopeCtx.CompletionKeys = &scriptCompletionKeys
 	scriptScopeCtx.BeliefObservations = &scriptBeliefRequests
@@ -3002,6 +3011,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptScopeCtx.WShocks = &scriptWShocks
 	scriptScopeCtx.DecisiveShocks = &scriptDecisiveShocks
 	scriptScopeCtx.AllianceDeltas = &scriptAllianceDeltas
+	scriptScopeCtx.EscapeDepartureSettle = &scriptEscapeSettle
 	scheduledFromScript := engine.ApplyContentEffectsScoped(scriptResult.Effects, scriptScopeCtx)
 	s.flushScopeResults(scriptScopeCtx, event)
 	s.writeCompletionKeysFromEffects(siloID, scriptCompletionKeys)
@@ -3018,6 +3028,12 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		if !s.emitContentEventByName(name, event, ctx) {
 			s.appendContentLog(event, fmt.Sprintf("[ContentEvent] Script emit target not found: %s", name))
 		}
+	}
+
+	// 16 §3.4 出发结算点：脚本效果请求的结算在脚本效果施加后执行
+	// (出发事件用结构化或脚本之一声明结算，只执行一次)。
+	if escapeSettleRequested || scriptEscapeSettle {
+		s.settleEscapeDeparture(simSilo, event)
 	}
 }
 
