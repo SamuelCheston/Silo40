@@ -136,10 +136,17 @@ def tracked_files(root):
     return [root / item.decode("utf-8") for item in result.stdout.split(b"\0") if item]
 
 
+# Directories that never hold authored content: VCS metadata, third-party
+# dependencies, and generated build output. Scanning minified dependency code
+# produces false positives (e.g. a bundler mentioning a blocked word), so the
+# full-worktree scan prunes them. Authored sources are still fully covered.
+EXCLUDED_DIRS = {".git", "node_modules", "dist"}
+
+
 def all_files(root):
     files = []
     for directory, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(name for name in dirnames if name != ".git")
+        dirnames[:] = sorted(name for name in dirnames if name not in EXCLUDED_DIRS)
         for filename in sorted(filenames):
             files.append(Path(directory) / filename)
     return files
