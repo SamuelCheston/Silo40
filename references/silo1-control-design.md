@@ -396,6 +396,6 @@ AI 只判断“是否参与这次反制/规避/交接”，不判断“是否加
 - **[S4]** 本轮核对时读取的本地改编母题研究资料 §4.1、§4.3：反制改编建议及其与正典证据的区别；仅采用抽象机制，不采用外部人物、机构、工艺或场景。
 - **[S5]** 本轮核对时读取的本地人物研究资料 §2：Juliette 的 Mechanical → Sheriff → Mayor 经历及非 IT 路径。
 - **现有机制实现**：[authority.go](../internal/engine/authority.go#L121-L168)、[Judicial 附着](../internal/engine/authority.go#L170-L248)、[models.go](../internal/model/models.go#L242-L278)、[03-gameplay-mechanics.md §6](../knowledge/03-gameplay-mechanics.md#L75-L88)。
-- **既有目标设计**：[10-it-control-credibility.md §3、§6–7](../docs/research/10-it-control-credibility.md#L93-L144)、[介入链](../docs/research/10-it-control-credibility.md#L340-L364)、[Judicial 三方附着](../docs/research/10-it-control-credibility.md#L532-L585)。
+- **既有目标设计**：[10-it-control-credibility.md §3](../docs/research/10-it-control-credibility/03-prestige-state-and-information.md)、[§6 Protocol 资产、偏离与介入链](../docs/research/10-it-control-credibility/06-protocol-assets-and-deviation.md)、[§7 Judicial 三方附着](../docs/research/10-it-control-credibility/12-judicial-adhesion.md)（10 篇已拆分，总索引见 [10-it-control-credibility.md](../docs/research/10-it-control-credibility.md)）。
 
 公开链接仅复列本地研究资料已有的二级出处，本轮未另行抓取；小说事实标签以本轮实际读取的本地资料为准。
