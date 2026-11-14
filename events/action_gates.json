@@ -5,7 +5,9 @@
   "stages": [
     { "id": "arrival", "when": {} },
     { "id": "first_signal", "when": { "event_completed": "observation:first_local" } },
-    { "id": "archive_awakened", "when": { "event_completed": "player_action:action_share_info" } }
+    { "id": "archive_awakened", "when": { "event_completed": "player_action:action_share_info" } },
+    { "id": "chain_living", "when": { "event_completed": "special:living_chain_confirmed" } },
+    { "id": "chain_public_fact", "when": { "event_completed": "special:public_fact_cross_dept" } }
   ],
   "actions": [
     {
@@ -80,7 +82,7 @@
       "id": "RECEIVER_VERIFY_ACCOMPANY",
       "unlock": { "event_completed": "player_action:action_share_info" },
       "available": { "relation": "Judicial", "min": 0.1 },
-      "reason": "需要先完成一次分享，并与司法侧建立最低信任（初始校准值）"
+      "reason": "需要先完成一次分享，并与司法侧建立最低信任（Judicial 关系 ≥ 0.10）"
     },
     {
       "id": "CHARTER_CONTACT_OFFER",

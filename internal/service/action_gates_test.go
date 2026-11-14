@@ -103,6 +103,55 @@ func TestActionGatesStartNarrowAndUnlockFromStoryStage(t *testing.T) {
 	}
 }
 
+// TestActionGatesKeepAdvancingThroughLateChain locks 修复5: the stage track
+// must not go silent after archive_awakened (month 1) — the late 《共证》
+// milestones (living chain, public fact) advance it, so the stage line in the
+// world panel keeps reflecting progress through the endgame.
+func TestActionGatesKeepAdvancingThroughLateChain(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "gates-late-chain.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(103)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	completeGateEvent(svc, observationFirstLocalKey)
+	completeGateEvent(svc, "player_action:action_share_info")
+	if svc.world.ProgressStage != "archive_awakened" {
+		t.Fatalf("opening chain did not reach archive_awakened: %s", svc.world.ProgressStage)
+	}
+
+	completeGateEvent(svc, "special:living_chain_confirmed")
+	if svc.world.ProgressStage != "chain_living" {
+		t.Fatalf("living chain milestone did not advance the stage: %s", svc.world.ProgressStage)
+	}
+	completeGateEvent(svc, "special:public_fact_cross_dept")
+	if svc.world.ProgressStage != "chain_public_fact" {
+		t.Fatalf("public fact milestone did not advance the stage: %s", svc.world.ProgressStage)
+	}
+}
+
+// TestReceiverVerifyGateReasonStaysReadable locks the gate-reason wording: the
+// player-facing reason states the concrete Judicial bar and never leaks
+// balance jargon like 初始校准值.
+func TestReceiverVerifyGateReasonStaysReadable(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "gates-receiver-reason.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(104)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	completeGateEvent(svc, observationFirstLocalKey)
+	completeGateEvent(svc, "player_action:action_share_info")
+	setGateConnection(svc, "Judicial", 0)
+
+	receiver := actionByID(svc.availablePlayerActions(), "RECEIVER_VERIFY_ACCOMPANY")
+	if receiver == nil {
+		t.Fatal("receiver verification missing once unlocked")
+	}
+	if receiver.Enabled {
+		t.Fatal("receiver verification must be disabled without Judicial trust")
+	}
+	if !strings.Contains(receiver.DisabledReason, "0.10") || strings.Contains(receiver.DisabledReason, "校准") {
+		t.Fatalf("gate reason is not player-readable: %q", receiver.DisabledReason)
+	}
+}
+
 func TestActionGatesUseAttributesRelationsAndAPReasons(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "gates-thresholds.db"))
 	if _, err := svc.CreateGame(threeSiloRequest(102)); err != nil {
