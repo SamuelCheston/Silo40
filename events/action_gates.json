@@ -157,6 +157,24 @@
       "unlock": { "event_completed": "special:mayor_public_stand" },
       "available": {},
       "reason": "需要先有至少一次公开担当时刻"
+    },
+    {
+      "id": "PRE_FALL_LOYALTY_MOBILIZATION",
+      "unlock": { "event_completed": "special:pre_fall_choice" },
+      "available": {},
+      "reason": "需要覆灭前夕的抉择时刻到来"
+    },
+    {
+      "id": "PRE_FALL_TOTAL_RIOT",
+      "unlock": { "event_completed": "special:pre_fall_choice" },
+      "available": {},
+      "reason": "需要覆灭前夕的抉择时刻到来"
+    },
+    {
+      "id": "PRE_FALL_OPEN_INQUIRY",
+      "unlock": { "event_completed": "special:pre_fall_choice" },
+      "available": {},
+      "reason": "需要覆灭前夕的抉择时刻到来"
     }
   ]
 }

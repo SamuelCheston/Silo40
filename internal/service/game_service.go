@@ -2233,6 +2233,8 @@ func (s *GameService) syncContentDefinitions(dirs map[string]string) error {
 				Type:             def.Type,
 				FireMode:         def.FireMode,
 				CooldownMonths:   def.CooldownMonths,
+				DeadlineYear:     def.DeadlineYear,
+				DeadlineMonth:    def.DeadlineMonth,
 				Enabled:          true,
 				TriggerSpec:      string(triggerJSON),
 				EffectsSpec:      string(effectsJSON),
@@ -2244,7 +2246,7 @@ func (s *GameService) syncContentDefinitions(dirs map[string]string) error {
 
 			err = tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "key"}},
-				DoUpdates: clause.AssignmentColumns([]string{"source_group", "source_file", "source_format", "event_id", "title", "description", "type", "fire_mode", "cooldown_months", "enabled", "trigger_spec", "effects_spec", "player_action_spec", "script_source", "script_can_trigger", "script_apply", "updated_at"}),
+				DoUpdates: clause.AssignmentColumns([]string{"source_group", "source_file", "source_format", "event_id", "title", "description", "type", "fire_mode", "cooldown_months", "deadline_year", "deadline_month", "enabled", "trigger_spec", "effects_spec", "player_action_spec", "script_source", "script_can_trigger", "script_apply", "updated_at"}),
 			}).Create(&record).Error
 			if err != nil {
 				return fmt.Errorf("failed to upsert content event %s: %w", def.Key, err)
@@ -2284,6 +2286,8 @@ func (s *GameService) loadContentDefinitions() error {
 			Type:           row.Type,
 			FireMode:       row.FireMode,
 			CooldownMonths: row.CooldownMonths,
+			DeadlineYear:   row.DeadlineYear,
+			DeadlineMonth:  row.DeadlineMonth,
 			ScriptSource:   row.ScriptSource,
 			ScriptHooks: engine.ContentScriptHooks{
 				CanTrigger: row.ScriptCanTrigger,
