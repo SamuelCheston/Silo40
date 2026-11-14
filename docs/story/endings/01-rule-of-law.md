@@ -96,7 +96,7 @@ Judicial 在公开证据 `Q` 与独立公共事实支持下宣告附着公开约
 ## 5. 机制接口
 
 - `Judicial.PactLocked / PublicEvidenceQ / IndependentPublicFacts / Regime`、幕后威势 `W`；Mayor 更替或普通威势回升不能随意撤销已锁定的约章。
-- 玩家行动沿用既有门控：Gather／Share Info、Build Connection、STATION_INTEL；本线不新增行动、不新增 stage。
+- 玩家行动沿用现行行动设计：基础职务（伴随 Observation）、Share Info、Build Network；专用情报入口已移除，本地状态确认由职务伴随观察与既有信道事件承担。本线不新增行动、不新增 stage。
 - 玩家、派系、具名人物与 Silo 1 仍按统一仲裁参与；公开约章本身不成为投票主体。
 
 ## 6. 设定自检

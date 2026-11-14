@@ -88,7 +88,7 @@
 
 - `MayorOffice.HolderResidentID / Legitimacy`、Police 对 Mayor 的服从、Judicial 的 Mayor 附着、幕后威势 `W`。
 - Mayor 现任者以具名人物身份参与贡献；其职位与正统性用于资格与解释，不新增"Mayor 阵营"主体。
-- 玩家行动沿用既有门控：Gather／Share Info、Build Connection、STATION_INTEL；本线不新增行动、不新增 stage。
+- 玩家行动沿用现行行动设计：基础职务（伴随 Observation）、Share Info、Build Network；专用情报入口已移除，本地状态确认由职务伴随观察与既有信道事件承担。本线不新增行动、不新增 stage。
 
 ## 6. 设定自检
 
