@@ -402,7 +402,7 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		switch {
 		case svc.silo.Rebellion >= 0.7:
 			// Lie low while rebellion runs hot.
-		case ap >= shareCost && month >= 4:
+		case ap >= shareCost && month >= 4 && month%2 == 0:
 			// Neediest-first over ALL departments, skipping capped pairs: a fact
 			// that stalls below the floor for one department (repeat penalty)
 			// must neither be re-shared forever nor block the portfolio's other
@@ -434,6 +434,10 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		case ap >= buildCost && month < 12:
 			attemptCirculation(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
 		case ap >= gatherCost:
+			// Odd months (and any month with nothing shareable) gather: the
+			// portfolio must keep growing — a strong fourth fact is what the
+			// hardest department (zero-population Mayor) needs for its third
+			// above-floor belief.
 			attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 		}
 	}
