@@ -75,7 +75,7 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 触发条件 | `any`：`crisis:food_poisoning`／`crisis:water_leak`／`special:energy_rolling_blackout` 任一已触发，或 `rebellion ≥ 0.3`（sim 校准起点）；`REPEATABLE`，冷却 9 月（sim 校准起点） |
+| 触发条件 | `all`：接受键（`player_action:mayor_ally_accept`）已触发 ＋ `any`：`crisis:food_poisoning`／`crisis:water_leak`／`special:energy_rolling_blackout` 任一已触发，或 `rebellion ≥ 0.3`（sim 校准起点）；`REPEATABLE`，冷却 9 月（sim 校准起点）。舞台属于本线：未接受接触的市长不会自行开场（线是玩家可达的路径，不是后台进程；资格仍是引擎读数） |
 | 含义 | 危机给 Mayor 合法舞台（抉择 P-C：预期走向是等舞台而不是推他提前对抗）。机会窗口而非倒计时——同一危机也被《断层》《遗忘》消费，不设互斥闸 |
 | 效果 | 全部门 `panic_value +0.03`（sim 校准起点） |
 | 产出完成键 | `special:mayor_crisis_stage` |

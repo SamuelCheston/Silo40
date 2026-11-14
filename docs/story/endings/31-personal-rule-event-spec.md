@@ -56,7 +56,7 @@
 | 字段 | 规格 |
 | --- | --- |
 | 事件文件 | `events/special/mayor_crisis_stage.js` |
-| 触发条件 | `any(eventTriggered("crisis","food_poisoning"), eventTriggered("crisis","water_leak"), eventTriggered("special","energy_rolling_blackout"), siloMetricGte("rebellion", 0.3))`；`fire_mode: "REPEATABLE"`，`cooldown_months: 9`（`TODO(balance)`） |
+| 触发条件 | `all(eventTriggered("player_action","mayor_ally_accept"), any(eventTriggered("crisis","food_poisoning"), eventTriggered("crisis","water_leak"), eventTriggered("special","energy_rolling_blackout"), siloMetricGte("rebellion", 0.3)))`；`fire_mode: "REPEATABLE"`，`cooldown_months: 9`（`TODO(balance)`）。舞台挂在接受键后：未入线的市长不自行开场，避免本线成为后台进程 |
 | 效果 | `professionMetricDeltaAll("panic_value", +0.03)`（`TODO(balance)`） |
 | 完成键 | `special:mayor_crisis_stage` |
 | DSL 能力 | 全部现有（`any` 混 `event_triggered` 与数值分支已被硬伤 #2 修复保护） |

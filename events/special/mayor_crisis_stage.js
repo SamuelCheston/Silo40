@@ -7,13 +7,20 @@ defineEvent({
   cooldown_months: 9, // initial calibration, TODO(balance)
   // S-1 (30-nodes §3, 31-spec §1): crises give the Mayor a legitimate stage
   // (choice P-C). Opportunity window, not a countdown — the same crisis is
-  // also fuel for FRACTURE and cover for RESET; no exclusion gate. The any()
-  // mixes event_triggered with a numeric branch (safe since 硬伤 #2).
-  trigger: any(
-    eventTriggered("crisis", "food_poisoning"),
-    eventTriggered("crisis", "water_leak"),
-    eventTriggered("special", "energy_rolling_blackout"),
-    siloMetricGte("rebellion", 0.3) // initial calibration, TODO(balance)
+  // also fuel for FRACTURE and cover for RESET; no exclusion gate. The stage
+  // belongs to the line: it requires the ally-accept key, so an unsupported
+  // Mayor never starts staging stands on their own (keeps the line a player-
+  // accessible route, not a background process; qualification stays an engine
+  // read). The any() mixes event_triggered with a numeric branch (safe since
+  // 硬伤 #2).
+  trigger: all(
+    eventTriggered("player_action", "mayor_ally_accept"),
+    any(
+      eventTriggered("crisis", "food_poisoning"),
+      eventTriggered("crisis", "water_leak"),
+      eventTriggered("special", "energy_rolling_blackout"),
+      siloMetricGte("rebellion", 0.3) // initial calibration, TODO(balance)
+    )
   ),
   effects: [
     professionMetricDeltaAll("panic_value", 0.03), // initial calibration, TODO(balance)
