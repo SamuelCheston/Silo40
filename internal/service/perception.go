@@ -81,85 +81,85 @@ func isContentFiringSource(source string) bool {
 	return len(source) > 8 && (source[len(source)-8:] == ":CONTENT")
 }
 
-// mergeNeighborStoryCopies 同月多堡发生同一事件时，把邻堡副本合并成一条
-// 汇总条目——玩家的情报记录不该靠堡名前缀堆出文本墙。玩家堡自己的条目
-// 不参与合并 (亲身经历与听来的传闻是两回事)。
-func mergeNeighborStoryCopies(stories []model.StoryEvent, playerSiloID uint) []model.StoryEvent {
-	firstIndex := map[string]int{}
-	siloNames := map[string][]string{}
+// mergeNeighborStoryCopies 同月重复条目合并：同一事件、同一标题的多条
+// (多堡副本，或同一堡经不同路径重复) 并成一条带来源堡列表的汇总——
+// 玩家的情报记录不该靠堡名前缀堆出文本墙。亲身经历与谣言版本标题不同，
+// 自然分开保留。
+func mergeNeighborStoryCopies(stories []model.StoryEvent) []model.StoryEvent {
+	type key struct{ id, title string }
+	firstIndex := map[key]int{}
+	names := map[key][]string{}
 	for i, story := range stories {
-		if story.SiloID == 0 || story.SiloID == playerSiloID {
-			continue
+		k := key{story.ID, story.Title}
+		if _, seen := firstIndex[k]; !seen {
+			firstIndex[k] = i
 		}
-		if _, seen := firstIndex[story.ID]; !seen {
-			firstIndex[story.ID] = i
-		}
-		siloNames[story.ID] = append(siloNames[story.ID], story.SiloName)
+		names[k] = append(names[k], story.SiloName)
 	}
 	out := make([]model.StoryEvent, 0, len(stories))
 	for i, story := range stories {
-		if story.SiloID != 0 && story.SiloID != playerSiloID {
-			if firstIndex[story.ID] != i {
-				continue // 已并入首条
-			}
-			if names := siloNames[story.ID]; len(names) > 1 {
-				story.Title = story.Title + "（" + strings.Join(names, "、") + "）"
-				// 归属仍是多堡的：SiloID 保留首堡，SiloName 列出全部来源堡。
-				story.SiloName = strings.Join(names, "、")
-			}
+		k := key{story.ID, story.Title}
+		if firstIndex[k] != i {
+			continue // 已并入首条
+		}
+		sort.Strings(names[k])
+		if unique := uniqueNames(names[k]); len(unique) > 1 {
+			story.Title = story.Title + "（" + strings.Join(unique, "、") + "）"
+			// 归属仍是多堡的：SiloID 保留首条，SiloName 列出全部来源堡。
+			story.SiloName = strings.Join(unique, "、")
 		}
 		out = append(out, story)
 	}
 	return out
 }
 
-// mergeNeighborHistoryCopies 读取侧合并：持久化历史里同年同月同一事件的
-// 邻堡条目并入首条 (附来源堡列表)，玩家堡条目原样保留。输入为最新在前。
+// mergeNeighborHistoryCopies 读取侧合并：持久化历史里同年同月同一事件同一
+// 标题的条目 (不必相邻) 并入最新一条，附来源堡列表。输入为最新在前。
 func (s *GameService) mergeNeighborHistoryCopies(events []model.StoryEventLog) []model.StoryEventLog {
-	playerID := uint(0)
-	if s.world != nil {
-		playerID = s.world.PlayerSiloID
+	type key struct {
+		year, month int
+		id, title   string
+	}
+	firstIndex := map[key]int{}
+	siloIDs := map[key][]uint{}
+	for i, entry := range events {
+		k := key{entry.Year, entry.Month, entry.EventID, entry.Title}
+		if _, seen := firstIndex[k]; !seen {
+			firstIndex[k] = i
+		}
+		siloIDs[k] = append(siloIDs[k], entry.SiloID)
 	}
 	out := make([]model.StoryEventLog, 0, len(events))
-	for i := 0; i < len(events); {
-		j := i + 1
-		for j < len(events) && events[j].Year == events[i].Year &&
-			events[j].Month == events[i].Month && events[j].EventID == events[i].EventID {
-			j++
+	for i, entry := range events {
+		k := key{entry.Year, entry.Month, entry.EventID, entry.Title}
+		if firstIndex[k] != i {
+			continue // 已并入最新一条
 		}
-		run := events[i:j]
-		i = j
-		if len(run) < 2 {
-			out = append(out, run...)
+		var names []string
+		for _, id := range siloIDs[k] {
+			if silo := s.siloByID(id); silo != nil {
+				names = append(names, silo.Name)
+			}
+		}
+		sort.Strings(names)
+		if unique := uniqueNames(names); len(unique) > 1 {
+			entry.Title = entry.Title + "（" + strings.Join(unique, "、") + "）"
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+// uniqueNames 去重并保序。
+func uniqueNames(names []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" || seen[name] {
 			continue
 		}
-		var neighborNames []string
-		for _, entry := range run {
-			if entry.SiloID == 0 || entry.SiloID == playerID {
-				continue
-			}
-			name := ""
-			if silo := s.siloByID(entry.SiloID); silo != nil {
-				name = silo.Name
-			}
-			neighborNames = append(neighborNames, name)
-		}
-		sort.Strings(neighborNames)
-		mergedNeighbor := false
-		for _, entry := range run {
-			if entry.SiloID == 0 || entry.SiloID == playerID {
-				out = append(out, entry)
-				continue
-			}
-			if mergedNeighbor {
-				continue
-			}
-			mergedNeighbor = true
-			if len(neighborNames) > 1 {
-				entry.Title = entry.Title + "（" + strings.Join(neighborNames, "、") + "）"
-			}
-			out = append(out, entry)
-		}
+		seen[name] = true
+		out = append(out, name)
 	}
 	return out
 }

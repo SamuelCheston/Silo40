@@ -81,18 +81,21 @@ func TestPlayerFeedCarriesNoNeighborRoutine(t *testing.T) {
 	}
 }
 
-// TestSameMonthNeighborCopiesMerge locks 削减同月堆叠：同月多堡的同一事件
-// 合并为一条带来源堡列表的汇总条目，玩家堡自己的条目不参与合并。
+// TestSameMonthNeighborCopiesMerge locks 削减同月堆叠：同月同一事件同一
+// 标题的多条合并为一条带来源堡列表的汇总条目；亲身经历与谣言版本标题
+// 不同，分开保留；跨堡同名信号 (玩家与邻堡同收) 也合并。
 func TestSameMonthNeighborCopiesMerge(t *testing.T) {
 	stories := []model.StoryEvent{
 		{ID: "water_leak", Title: "供水管线泄漏", SiloID: 1, SiloName: "16 号地堡"},
 		{ID: "water_leak", Title: "传言：供水管线泄漏", SiloID: 2, SiloName: "1 号地堡"},
 		{ID: "water_leak", Title: "传言：供水管线泄漏", SiloID: 3, SiloName: "18 号地堡"},
 		{ID: "food_poisoning", Title: "传言：群体性食物中毒", SiloID: 3, SiloName: "18 号地堡"},
+		{ID: "silo18_refuser_crossed", Title: "强信号：拒洁者走出了视野", SiloID: 1, SiloName: "16 号地堡"},
+		{ID: "silo18_refuser_crossed", Title: "强信号：拒洁者走出了视野", SiloID: 2, SiloName: "1 号地堡"},
 	}
-	merged := mergeNeighborStoryCopies(stories, 1)
-	if len(merged) != 3 {
-		t.Fatalf("expected 3 entries after merge, got %d: %+v", len(merged), merged)
+	merged := mergeNeighborStoryCopies(stories)
+	if len(merged) != 4 {
+		t.Fatalf("expected 4 entries after merge, got %d: %+v", len(merged), merged)
 	}
 	if merged[0].Title != "供水管线泄漏" || merged[0].SiloName != "16 号地堡" {
 		t.Fatalf("player silo entry must stay untouched: %+v", merged[0])
@@ -102,6 +105,9 @@ func TestSameMonthNeighborCopiesMerge(t *testing.T) {
 	}
 	if merged[2].Title != "传言：群体性食物中毒" {
 		t.Fatalf("single neighbor entry must not gain a suffix: %+v", merged[2])
+	}
+	if merged[3].Title != "强信号：拒洁者走出了视野（1 号地堡、16 号地堡）" {
+		t.Fatalf("identical cross-silo signals must merge: %+v", merged[3])
 	}
 }
 
