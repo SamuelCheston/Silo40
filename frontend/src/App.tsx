@@ -11,6 +11,7 @@ import { FactionView } from './components/FactionView';
 import { HeaderStats } from './components/HeaderStats';
 import { WorldPanel } from './components/WorldPanel';
 import { InformationProgressPanel } from './components/InformationProgressPanel';
+import { MissionPanel } from './components/MissionPanel';
 import { Silo, Agent, AgentAction, AgentActionType, GameState, AgentStats, PlayerActionMeta, StoryEventLog } from './logic/models';
 import { LayoutGrid, Users } from 'lucide-react';
 
@@ -421,7 +422,9 @@ function App() {
                                     _focus={{ border: "1px solid", borderColor: "blue.500", bg: "white" }}
                                 />
                                 <Text textAlign="center" color="gray.600">
-                                    你是 40 号地堡的特工。通过情报、关系与隐蔽行动引导其他地堡，而不是经营人口。
+                                    你是 40 号地堡的特工，被派往一座仍在运转的地堡。
+                                    这一局的目标：让 40 号的覆灭与 1 号的控制方式不再只能由控制者单方叙述——
+                                    使真相能被独立核验、被驻地的人保有。你通过情报、关系与隐蔽行动引导驻地，而不是经营人口。
                                 </Text>
                                 <Button colorPalette="blue" size="lg" w="full" onClick={() => setShowSetup(true)}>
                                     以 Silo 40 特工身份开局
@@ -437,6 +440,7 @@ function App() {
                             <HStack align="start" gap={6} w="full" wrap="wrap">
                                 {/* Left Side: View Content */}
                                 <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
+                                    <MissionPanel world={world} agent={agent} progress={infoProgress} />
                                     <WorldPanel world={world} agent={agent} />
                                     {activeView === 'map' ? (
                                         silo && <BunkerMap silo={silo} agent={agent} />
