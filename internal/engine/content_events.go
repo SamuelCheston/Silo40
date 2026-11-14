@@ -619,6 +619,25 @@ func CanTriggerContentEvent(def ContentEventDefinition, ctx ContentEvaluationCon
 	return canTriggerContentEvent(def, ctx, false)
 }
 
+// HasPlayerActionTrigger reports whether the trigger tree contains a
+// player_action_is node. Player-action-group definitions without one must not
+// ride along on unrelated actions (they fire only when explicitly submitted).
+func HasPlayerActionTrigger(def ContentEventDefinition) bool {
+	return hasPlayerActionTrigger(def.Trigger)
+}
+
+func hasPlayerActionTrigger(trigger ContentTrigger) bool {
+	if trigger.Type == "player_action_is" {
+		return true
+	}
+	for _, child := range trigger.Conditions {
+		if hasPlayerActionTrigger(child) {
+			return true
+		}
+	}
+	return false
+}
+
 // CanDisplayPlayerAction checks current availability while ignoring player_action_is.
 func CanDisplayPlayerAction(def ContentEventDefinition, ctx ContentEvaluationContext) bool {
 	return canTriggerContentEvent(def, ctx, true)

@@ -2596,11 +2596,12 @@ func (s *GameService) queuePlayerActionEvents(action model.AgentAction) (bool, m
 		}
 		// 提交的玩家动作只点火与之匹配的那一个动作事件；同组其他动作即使
 		// canTrigger 通过也不搭车 (否则一次提交会连带执行多个动作)。
-		// 职业动作仍按 player_action_is 触发器匹配 (接触链步骤节点)。
+		// 职业动作按 player_action_is 触发器匹配 (接触链步骤节点)：没有该
+		// 触发器的动作事件不随其他动作点火。
 		if action.Type == model.ActionPlayerEvent {
 			return engine.ContentPlayerActionID(def) == action.ActionID
 		}
-		return true
+		return engine.HasPlayerActionTrigger(def)
 	})
 	_ = logs
 	_ = stories
