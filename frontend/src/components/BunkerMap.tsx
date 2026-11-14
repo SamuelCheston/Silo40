@@ -25,7 +25,7 @@ const CLASS_DATA = [
     { id: 'COMMONER', name: '平民阶层 (Commoner Class)', color: 'green', bg: 'green.50', borderColor: 'green.500' }
 ];
 
-export const BunkerMap: React.FC<BunkerMapProps> = ({ silo, agent }) => {
+export const BunkerMap = React.memo(function BunkerMap({ silo, agent }: BunkerMapProps) {
     const [selectedDept, setSelectedDept] = useState<Profession | null>(null);
 
     const getConnValue = (profId: number) => {
@@ -243,4 +243,4 @@ export const BunkerMap: React.FC<BunkerMapProps> = ({ silo, agent }) => {
             </HStack>
         </VStack>
     );
-};
+});

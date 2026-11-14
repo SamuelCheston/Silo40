@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import './App.css';
 import { CreateGame, GetGameState, HasActiveGame, BeginPassTime, BeginAction, ProcessNextEvent, GetAllFragments, GetEventHistory, SaveGame } from "../wailsjs/go/main/App";
 import { Box, Button, Heading, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
@@ -38,9 +38,9 @@ function App() {
     const [playerActionId, setPlayerActionId] = useState<string>('');
     const [resourceTarget, setResourceTarget] = useState<string>('');
 
-    const toggleFragment = (f: string) => {
+    const toggleFragment = useCallback((f: string) => {
         setSelectedFragments(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
-    };
+    }, []);
 
     const getIdeologyLabel = (type: string, val: number) => {
         const v = val * 100;
@@ -54,25 +54,25 @@ function App() {
         return "亲外";
     };
 
-    const groupedActions = availableActions.reduce((acc, action) => {
+    const groupedActions = useMemo(() => availableActions.reduce((acc, action) => {
         if (!acc[action.group]) {
             acc[action.group] = [];
         }
         acc[action.group].push(action);
         return acc;
-    }, {} as Record<string, PlayerActionMeta[]>);
+    }, {} as Record<string, PlayerActionMeta[]>), [availableActions]);
 
-    const selectedActionMeta = availableActions.find((action) => {
+    const selectedActionMeta = useMemo(() => availableActions.find((action) => {
         if (action.action_type !== actionType) return false;
         if (action.action_type === 'PROFESSION_ACTION') return action.id === professionActionId;
         if (action.action_type === 'PLAYER_EVENT' || action.action_type === 'SILO1_OPERATION' || action.action_type === 'STATION_OPERATION') return action.id === playerActionId;
         return action.id === actionType;
-    });
+    }), [availableActions, actionType, professionActionId, playerActionId]);
     const showDeptSelector = selectedActionMeta?.target_type === 'DEPT';
     const showResourceSelector = selectedActionMeta?.target_type === 'RESOURCE';
 
     // 应用后端返回的游戏状态快照
-    const applyGameState = (state: GameState) => {
+    const applyGameState = useCallback((state: GameState) => {
         setSilo(state.silo);
         setAgent(state.agent);
         setAgentStats(state.agent_stats);
@@ -82,9 +82,9 @@ function App() {
         setPendingOperation('');
         setGameStarted(true);
         setShowSetup(false);
-    };
+    }, []);
 
-    const applyEventState = (state: any) => {
+    const applyEventState = useCallback((state: any) => {
         setSilo(state.silo);
         setAgent(state.agent);
         setAgentStats(state.agent_stats);
@@ -94,7 +94,7 @@ function App() {
         setPendingOperation(state.pending_operation || '');
         setGameStarted(true);
         setShowSetup(false);
-    };
+    }, []);
 
     useEffect(() => {
         if (!availableActions.some((action) => {
@@ -137,27 +137,31 @@ function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const updateName = (e: any) => setName(e.target.value);
-    const updateResultText = (result: string) => setResultText(result);
+    const updateName = useCallback((e: any) => setName(e.target.value), []);
+    const updateResultText = useCallback((result: string) => setResultText(result), []);
 
-    const refreshEventHistory = async () => {
+    const refreshEventHistory = useCallback(async () => {
         const history = await GetEventHistory(40);
         setEventHistory(history.events || []);
-    };
+    }, []);
 
-    const drainOperation = async () => {
+    const drainOperation = useCallback(async () => {
+        let last: any = null;
         for (let i = 0; i < 256; i++) {
             const step = await ProcessNextEvent();
-            applyEventState(step);
-            if (step.operation_complete) {
-                await refreshEventHistory();
-                return step;
-            }
+            last = step;
+            if (step.operation_complete) break;
         }
-        throw new Error('Operation exceeded 256 event steps; save was not attempted.');
-    };
+        if (!last || !last.operation_complete) {
+            throw new Error('Operation exceeded 256 event steps; save was not attempted.');
+        }
+        // 只在最终步应用状态：中间事件步不触发整树重渲染，避免一次操作多次重渲染。
+        applyEventState(last);
+        await refreshEventHistory();
+        return last;
+    }, [applyEventState, refreshEventHistory]);
 
-    const handleNewGame = () => {
+    const handleNewGame = useCallback(() => {
         setGameStarted(false);
         setShowSetup(false);
         setSilo(null);
@@ -165,19 +169,19 @@ function App() {
         setWorld(null);
         setEventHistory([]);
         setResultText('Start a new Silo 40 operation. Your previous save remains until the new game is created.');
-    };
+    }, []);
 
-    const handleSave = async () => {
+    const handleSave = useCallback(async () => {
         try {
             await SaveGame();
-            updateResultText(`Saved ${world?.station_silo?.name || 'station'} at Y${silo?.current_year} M${silo?.current_month}.`);
+            updateResultText(`Saved ${silo?.name || 'station'} at Y${silo?.current_year} M${silo?.current_month}.`);
         } catch (err) {
             updateResultText(`Save failed: ${err}`);
         }
-    };
+    }, [silo, updateResultText]);
 
     // 新建游戏：初始化/落库/缓存全部由 Go 后端完成
-    const handleSetupComplete = async (selectedTraitIds: string[], profession: string) => {
+    const handleSetupComplete = useCallback(async (selectedTraitIds: string[], profession: string) => {
         const agentName = name || "Operative";
         const siloName = "ASSIGNED_STATION";
 
@@ -193,13 +197,13 @@ function App() {
             });
             applyGameState(state);
             setEventHistory([]);
-            updateResultText(`40 号派出，现驻 ${state.world?.station_silo?.name || '未知地堡'}。你的行动只作用于驻地；1 号仅开放有限情报与欺骗通道。`);
+            updateResultText(`40 号派出，现驻 ${state.silo?.name || '未知地堡'}。你的行动只作用于驻地；1 号仅开放有限情报与欺骗通道。`);
         } catch (err) {
             updateResultText(`Failed to initialize silo: ${err}`);
         }
-    };
+    }, [name, startYear, applyGameState, updateResultText]);
 
-    const handlePassTime = async () => {
+    const handlePassTime = useCallback(async () => {
         if (!silo || !agent || busy) return;
 
         setBusy(true);
@@ -214,10 +218,10 @@ function App() {
         } finally {
             setBusy(false);
         }
-    };
+    }, [silo, agent, busy, applyEventState, drainOperation, updateResultText]);
 
     // 表单提交：执行动作 (执行/结算/NPC 回合均在 Go)
-    const handleExecuteAction = async () => {
+    const handleExecuteAction = useCallback(async () => {
         if (!silo || !agent) return;
 
         const selected = selectedActionMeta;
@@ -268,12 +272,12 @@ function App() {
         } finally {
             setBusy(false);
         }
-    };
+    }, [silo, agent, selectedActionMeta, targetDept, resourceTarget, actionType, selectedFragments, professionActionId, playerActionId, busy, applyEventState, drainOperation, updateResultText]);
 
     const groupOrder = ['station', 'silo1', 'common', 'profession', 'profession_group', 'faction_member', 'faction_leader'];
     const groupTitle: Record<string, string> = {
         silo1: 'Cross-Silo Operations: Silo 1',
-        station: `Assigned Station Operations: ${world?.station_silo?.name || 'Loading...'}`,
+        station: `Assigned Station Operations: ${silo?.name || 'Loading...'}`,
         common: 'Common Actions',
         profession: `Profession Actions: ${agent?.profession || ''}`,
         profession_group: 'Profession Group Actions',
@@ -289,12 +293,12 @@ function App() {
         faction_member: 'teal',
         faction_leader: 'red',
     };
-    const orderedGroups = groupOrder.filter((group) => (groupedActions[group] || []).length > 0);
-    const selectAction = (action: PlayerActionMeta) => {
+    const orderedGroups = useMemo(() => groupOrder.filter((group) => (groupedActions[group] || []).length > 0), [groupedActions]);
+    const selectAction = useCallback((action: PlayerActionMeta) => {
         setActionType(action.action_type as AgentActionType);
         setProfessionActionId(action.action_type === 'PROFESSION_ACTION' ? action.id : '');
         setPlayerActionId(action.action_type === 'PLAYER_EVENT' || action.action_type === 'SILO1_OPERATION' || action.action_type === 'STATION_OPERATION' ? action.id : '');
-    };
+    }, []);
 
     return (
         <Box minH="100vh" bg="white" color="gray.800" display="flex" flexDirection="column">
@@ -347,10 +351,10 @@ function App() {
                     <VStack gap={8} w="full">
                         <Heading size="md" textAlign="center" color="blue.600">{resultText}</Heading>
 
-                        {gameStarted && world?.station_silo && (
+                        {gameStarted && silo && (
                             <Box w="full" p={4} bg="purple.50" border="1px solid" borderColor="purple.300" borderRadius="md">
                                 <HStack justify="space-between" wrap="wrap">
-                                    <Text fontWeight="bold" color="purple.800">40 号派出，现驻 {world.station_silo.name}</Text>
+                                    <Text fontWeight="bold" color="purple.800">40 号派出，现驻 {silo.name}</Text>
                                     <Text fontSize="sm" color="gray.600">可操作：驻地 + 1 号限定通道 · 40 号与 18 号不可操作</Text>
                                 </HStack>
                             </Box>
@@ -423,9 +427,9 @@ function App() {
                                 <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
                                     <WorldPanel world={world} agent={agent} />
                                     {activeView === 'map' ? (
-                                        silo && <BunkerMap silo={world?.station_silo || silo} agent={agent} />
+                                        silo && <BunkerMap silo={silo} agent={agent} />
                                     ) : (
-                                        silo && <FactionView silo={world?.station_silo || silo} />
+                                        silo && <FactionView silo={silo} />
                                     )}
                                 </VStack>
 

@@ -20,7 +20,7 @@ interface FactionViewProps {
     silo: Silo;
 }
 
-export const FactionView: React.FC<FactionViewProps> = ({ silo }) => {
+export const FactionView = React.memo(function FactionView({ silo }: FactionViewProps) {
     const factions = silo.factions || [];
     const cohorts = silo.cohorts || [];
 
@@ -39,7 +39,7 @@ export const FactionView: React.FC<FactionViewProps> = ({ silo }) => {
             ))}
         </VStack>
     );
-};
+});
 
 interface FactionCardProps {
     faction: Faction;

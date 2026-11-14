@@ -2737,7 +2737,6 @@ func (s *GameService) publicWorldView() *model.WorldView {
 		Silo1CounterintelStage:   s.world.Silo1.CounterintelStage,
 		Silo1Operations:          append([]model.Silo1Operation(nil), s.world.Silo1.Operations...),
 		StationSiloID:            s.agent.StationSiloID,
-		StationSilo:              s.stationSilo(),
 		StationLastReport:        s.world.StationOps.LastReport,
 		StationExposure:          s.world.StationOps.Exposure,
 		StationCounterintelStage: s.world.StationOps.CounterintelStage,
@@ -3210,5 +3209,8 @@ func (s *GameService) publicSiloSnapshot() model.Silo {
 	// Residents stay in the backend/session snapshot for simulation, but we avoid
 	// returning the full resident list on every UI round-trip.
 	snap.Residents = nil
+	// Floors are simulation-only (floor stability mechanics read the in-memory
+	// silo); the UI never renders them, so keep them out of every wire snapshot.
+	snap.Floors = nil
 	return snap
 }

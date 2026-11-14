@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Box, HStack, Text, VStack, Badge } from "@chakra-ui/react";
 import { Agent, AgentStats, Silo } from "../logic/models";
 import { Zap, Eye, Star, Megaphone, Users, Clock, Shield, Flame } from 'lucide-react';
@@ -9,7 +10,7 @@ interface HeaderStatsProps {
     agentStats: AgentStats | null;
 }
 
-export const HeaderStats = ({ agent, silo, agentStats }: HeaderStatsProps) => {
+export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }: HeaderStatsProps) {
     if (!agent || !silo || !agentStats) return null;
 
     return (
@@ -200,4 +201,4 @@ export const HeaderStats = ({ agent, silo, agentStats }: HeaderStatsProps) => {
             </HStack>
         </Box>
     );
-};
+});
