@@ -46,7 +46,7 @@
 9. **阵营生成与影响**：政治 faction 由 `pro_foreign` 强度门槛 (进 0.7 / 出 0.6 滞回带) 准入，距离聚类成组；总人数不足 `MinFactionSize` 的簇并入 `Unaffiliated`；签名 (质心档位+最大成员 drive) 每 tick 派生，只供展示/命名与既有消费方，不再是分组键；
 10. **代表机制**：每个 faction 通过动态选举产生一个 representative；
 11. **政治系统驱动**：Tick 执行顺序为：资源结算 -> 思潮演化 (Cohort级别) -> 阵营重建 -> **派系忠诚度演化（显式时间缩放步骤 `ApplyFactionLoyaltyDynamics`）** -> 指标结算。`RebuildImplicitFactions` 为纯分组（不改忠诚度）；忠诚度回调按 `1-(1-base)^(12*dt)` 折算到实际时间片，零时长步骤（0 月动作的即时结算）不推进演化。`loyalty` 在 faction 划分之后，基于地堡合法性 (`Legitimacy`) 与 faction 的政治倾向进行动态回调，因此政治指标反映的是“结盟后的忠诚度”而不是静态初值。职业行动 (Profession Actions) 的政治后果通过修改人口忠诚度间接起效。派系聚类的全部可调常数集中在 `engine.FactionConfig`（`internal/engine/faction_config.go`），政治化准入门槛带滞回带（进 0.7 / 出 0.6）。P1 起分组为距离聚类 + 归属惯性，派系为持久实体（稳定 ID/名/立场/记忆/诉求，见第 28 条）。
-12. **响应裁剪**：后端在会话/持久化中保留 `cohorts` 与关键 `residents`；UI 快照会回传 `cohorts` 与 `factions` 供前端展示阵营构成，但仍裁掉完整 `residents` 列表以控制响应体积。
+12. **响应裁剪**：后端在会话/持久化中保留 `cohorts` 与关键 `residents`；UI 快照会回传 `cohorts` 与 `factions` 供前端展示阵营构成，但裁掉完整 `residents` 与模拟专用的 `floors`（UI 从不读取）以控制响应体积。驻地不再经 `WorldView.station_silo` 整堡重复下发：`WorldView` 仅保留 `station_silo_id` 引用，驻地完整快照随 `GameState.Silo` 单份下发（二者为同一堡），前端读顶层 `silo`。
 13. **派生展示指标后端化**：`GameState` / `TickResult` / `ActionOutcome` 额外包含 `agent_stats`，由 Go 直接下发 AP 恢复、威望拆解、宣传倍率等 Tooltip 所需数值，前端不再重算这些引擎公式。
 14. **程序流与领域事件的分离 (Program Flow vs. Domain Events)**：为了解决高频脚本调用下的性能瓶颈与结算顺序的不确定性，系统将“程序逻辑”从 `EventBus` 中剥离。
    - **硬编码流水线 (Hardcoded Pipeline)**：`GameEngine.runTickPipeline` 显式定义了结算顺序（特工 -> 资源 -> 思潮 -> NPC -> 指标 -> 胜利判定 -> 时间推进），不再通过事件订阅编排。
