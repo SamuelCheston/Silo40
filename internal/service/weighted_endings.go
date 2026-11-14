@@ -139,11 +139,11 @@ var endingDescriptions = map[string]string{
 	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。第一次按约章裁决的案件里，裁决者引用约章与公开证据，而不是等待上级指示；隐蔽调度不再能进入执行——法警第一次问'依据哪一条'。约章有本地主人，以不可被单方收回的程序锁定；你坐在旁听席，不在裁决席。约章法庭迟早会遇到一个它回答不了的问题——'这条命令到底从哪里来'——答案通向专线与控制网的另一端，但本结局停在这个问题被第一次提出之前。《公议》成立。",
 	endingTime:         "一号地堡权威覆灭，驻地仍有形成历史的能力，覆灭前夕的思潮具备面向外部的一极——《无人裁决》成立。",
 	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者：警察服从、幕后威势退场，司法部不归属市长、也没有回到 IT 手里——《人治》成立。",
-	endingExclusionist: "公开求证与外部经验没有取得公共正当性，封闭秩序延续或自我复制——《深闭》成立。",
-	endingReset:        "减口、抹忆与清档系统性完成，任务赖以继续的公共事实被拆除——《遗忘》成立。",
-	endingFracture:     "叛乱与损耗造成了不可逆的维存崩溃，且没有独立幸存的逃出群体——《断层》成立。",
-	endingDeath:        "没有任何可确认的幸存社会——《寂堡》成立。",
-	endingCompromised:  "特工身份彻底暴露，任务不可继续——《除名》成立。",
+	endingExclusionist: "什么都没有毁灭，也什么都没有改变。封闭秩序不是靠镇压守住的，是靠习惯：证人老去，接收者调离，封闭的叙事逐年硬化，始终没有遇到它的对抗版本。危机到来时驻地集体选择了旧规则，是自愿的——提供可核验替代方案的最后窗口，就这样安静地关上了。任务没有战败，它失去了战场。《深闭》成立。",
+	endingReset:        "驻地安静而有序——重置总是伴随'恢复正常'。有人喊邻居的名字，对方迟疑了一下才应答；新刷的墙面盖住了旧刻痕；官方记录里只有一次'燃气事故'，或者什么都没有。减口、抹忆与清档系统性完成了：你的任务赖以继续的公共事实，与能核验它们的人，被一并拆除。征兆其实从未缺席——变长的档案'维护'窗口、远超平常的请领、深夜的人数清点——它们被当成了噪音，或者反制窗口被花在了别处。你输掉的不是一场对抗，是整块记忆。《遗忘》成立。",
+	endingFracture:     "撕碎驻地的不是攻击，是它自己的手。无人控制的破坏落到了维生基础上：轮班断裂，部门停止共享，关键岗位弃守——愤怒达到了它的目的，目的却跟着塌了。你点燃的是愤怒，没有来得及建起接住它的组织：期待跑得比组织快，而维存是一张协作网，每撕掉一条网眼，都不会因为任何一方'胜利'而自动复原。驻地的灯一层一层熄灭，不是因为攻击，是因为没有人再在开关旁边。《断层》成立。",
+	endingDeath:        "驻地的最后时刻不是爆炸，是顺序：灯、门、静默。没有人剩下可以承接任何东西——里面没有人知道结束他们的东西叫什么。《寂堡》成立。",
+	endingCompromised:  "你的身份先于任务死去了。每一次深度行动都在纸面上留下与过去对不上的痕迹：某年的空缺，某段对不上的履历，某次回指到你自己的暴露。痕迹从一开始就在那里，你一直赌下一次行动是最后一次——直到复查到来。抹除以本地名义包装：来历存疑、刑事罪名，或者无声失踪；没有人会知道你真正是什么。驻地以'一个来历存疑的人'的名义归档——档案合上的声音，就是任务合上的声音。《除名》成立。",
 }
 
 type endingScoreAccumulator struct {
@@ -378,19 +378,20 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	switch {
 	case deathFact && !escapeAlive:
 		decision.Selected = endingDeath
-		decision.Reason = "P0.1 寂堡：无可确认的幸存社会，先于一切历史加权。"
+		decision.Reason = deathNarrative(s, station, trigger, terminationFact, strikeFact)
 		return s.finishArbitration(decision)
 	case resetFact && !escapeAlive:
 		decision.Selected = endingReset
-		decision.Reason = "P0.2 遗忘：reset_completed 事实键成立，先于断层、除名与历史加权。"
+		decision.Reason = endingDescriptions[endingReset] + fmt.Sprintf("重置之后驻地仍有居民 %d 人，历史包袱降至 %.2f——人还在，记忆不在了；任务死于接收者的消失，不是死于镇压。",
+			station.TotalPopulation, station.HistoryBurden)
 		return s.finishArbitration(decision)
 	case fractureFact && !escapeAlive:
 		decision.Selected = endingFracture
-		decision.Reason = "P0.3 断层：fracture_confirmed 事实键成立，先于除名与历史加权。"
+		decision.Reason = endingDescriptions[endingFracture] + fractureSettlementLine(station)
 		return s.finishArbitration(decision)
 	case trigger == endingCompromised:
 		decision.Selected = endingCompromised
-		decision.Reason = "P0.4 除名：怀疑度封顶，身份暴露不可挽回。"
+		decision.Reason = endingDescriptions[endingCompromised] + compromisedSettlementLine(station)
 		return s.finishArbitration(decision)
 	case deathFact || resetFact || fractureFact:
 		// escapeAlive == true here: the local fall becomes a pyrrhic epilogue.
@@ -550,6 +551,20 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		narrative += fmt.Sprintf("本局约章的证据底座为 %d 项独立公共事实，公开证据强度 Q=%.2f。",
 			station.Authority.Judicial.IndependentPublicFacts, station.Authority.Judicial.PublicEvidenceQ)
 	}
+	if best == endingExclusionist {
+		// Two settlement variants (03-exclusionist §5): with Silo 1 alive the
+		// closed order keeps its external support; after the fall, local power
+		// replicates the closure without orders — the order has internalized
+		// its master. The settlement line reports what still runs: the station
+		// survives, the possibility of change is what died.
+		if s.world != nil && !s.world.Silo1.Alive {
+			narrative += "主人没了，秩序却已经内化了它的主人：本地权力在没有命令的情况下执行封闭——为旧仪式发明本地理由，引用'祖制'。封闭从此不再需要外部命令，它自我维持，且连一个可以追责的外部对象都不存在。"
+		} else {
+			narrative += "若干年后，新一任 IT 主管在旧仪式中就职，背诵他不完全理解的词句。你的材料被归档为一个无害怪人的遗物。驻地运转良好。任务没有。"
+		}
+		narrative += fmt.Sprintf("结算时驻地仍有居民 %d 人，正统性 %.2f——驻地仍在运转，死掉的是改变的可能。",
+			station.TotalPopulation, station.MayorLegitimacy())
+	}
 	decision.Reason = narrative
 	return s.finishArbitration(decision)
 }
@@ -561,4 +576,76 @@ func (s *GameService) finishArbitration(decision *model.EndingDecision) *model.E
 		s.world.LastEndingAudit = decision
 	}
 	return decision
+}
+
+// fractureSettlementLine reports what is left after the maintenance collapse:
+// the people, the energy, the floors. Failure does not erase the world — the
+// station is technically alive and has lost its tomorrow (05-fracture §5).
+func fractureSettlementLine(station *model.Silo) string {
+	energy := 0.0
+	for _, res := range station.Resources {
+		if res.Type == "Energy" {
+			energy = res.Amount
+		}
+	}
+	stability := 0.0
+	if len(station.Floors) > 0 {
+		for _, floor := range station.Floors {
+			stability += floor.Stability
+		}
+		stability /= float64(len(station.Floors))
+	}
+	return fmt.Sprintf("断层之后驻地仍有居民 %d 人，剩余能源 %.0f，楼层平均稳定度 %.2f——技术上还活着，已经失去了明天。",
+		station.TotalPopulation, energy, stability)
+}
+
+// compromisedSettlementLine reports that the station goes on without the
+// agent (06-agent-compromised §4 bitter-epilogue variant): the residents,
+// the running departments, and the shareable facts the agent planted — the
+// method keeps being used by people who never learn where it came from.
+func compromisedSettlementLine(station *model.Silo) string {
+	shareableFacts := 0
+	for _, prof := range station.Professions {
+		for _, belief := range prof.Beliefs {
+			if belief.B >= 0.30 {
+				shareableFacts++
+			}
+		}
+	}
+	return fmt.Sprintf("驻地继续运转：%d 名居民，%d 个部门仍在履职，部门信念层里仍有 %d 份可被引用的事实——你教过的方法还在被人使用，只是没有人知道它来自哪里。",
+		station.TotalPopulation, len(station.Professions), shareableFacts)
+}
+
+// deathNarrative composes the P0.1 settlement story (07-death §4): a
+// cause-specific sentence (which step went wrong), the restrained final
+// moment, and what remains — the escape attempt that did not survive, the
+// outside world, the facility itself. The residual-response motif is allowed
+// but promises nothing.
+func deathNarrative(s *GameService, station *model.Silo, trigger string, terminationFact, strikeFact bool) string {
+	var cause string
+	switch {
+	case terminationFact:
+		cause = "终止来自控制网的另一端——驻地的偏离招来了处置：外溢与高调叛乱送出的可操作观察，最终换来了这次关闭。"
+	case strikeFact:
+		cause = "侦察确认了责任链，物理摧毁随之到来——分渠道结算里，这是几乎无解的渠道：干扰一种终止手段，不豁免物理手段。"
+	case trigger == endingDeath && station.SafeguardRisk >= 1.0:
+		cause = "驻地自身的保障机制在冲突中被触发——旧秩序的最后装置，杀死了它要保护的驻地。过度干预把风险推到了封顶。"
+	default:
+		cause = "没有战争。最后一班没有人接——人口在叛乱、流失与沉寂里耗尽，驻地再也凑不齐下一轮轮值。"
+	}
+	narrative := cause + endingDescriptions[endingDeath]
+	if g := station.EscapedGroup; g.Initialized && g.Population > 0 && !g.Surviving {
+		narrative += fmt.Sprintf("曾有 %d 人离开，但他们没能存续到最后——逃离成了残酷的注脚。", g.Population)
+	}
+	if s.world != nil && !s.world.Silo1.Alive {
+		narrative += "外面同样寂静：1 号地堡已经覆灭，没有人来清点这份寂静。"
+	} else {
+		narrative += "控制网的某一端，这座驻地被标记为已处理；Pact 的计数减一。"
+	}
+	if strikeFact {
+		narrative += "堡体不再矗立，原地只剩残骸的形状。几十年后也许有人会碰到一条还给出微弱应答的线路——但那不是胜利，不改变这个结局。"
+	} else {
+		narrative += "驻地仍然矗立——作为正常运转的地堡，覆灭了。几十年后也许有人会碰到一条还给出微弱应答的线路——但那不是胜利，不改变这个结局。"
+	}
+	return narrative
 }
