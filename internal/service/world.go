@@ -51,6 +51,14 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 		s.currentSilo = silo
 		s.currentAgent = s.agents[silo.ID]
 		s.publishStagedDelayedEvents(staged, silo.ID)
+		// 到期的延迟 (schedule) 事件必须在这里一次性排空并回收故事，不能让它们
+		// 滞留在总线上等 RunLocalPhase 的 NPC SubmitAction 顺带 Drain——那条路径
+		// 会把故事丢弃，导致通牒余波/轮班怨气/整肃执行/终止投放等延迟链是否可见
+		// 取决于当月该堡 NPC 是否行动。固定在本地阶段前排空，保证故事必然进入
+		// 当月反馈，且派发时点确定 (不依赖 RNG 决定的 NPC 行为)。
+		delayedLogs, delayedStories := s.engine.Drain(silo, s.currentAgent)
+		logs = append(logs, delayedLogs...)
+		stories = append(stories, derefStories(delayedStories)...)
 		s.engine.PrepareTick(silo, s.currentAgent)
 		s.engine.RunLocalPhase(silo, s.currentAgent, 1.0/12.0)
 		phaseLogs, phaseStories := s.engine.Drain(silo, s.currentAgent)
