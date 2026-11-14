@@ -31,6 +31,10 @@ func TestWeightedEndingRecordsAllEntityKinds(t *testing.T) {
 	station.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 120, Surviving: true}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
+		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		prof.Beliefs = []model.FactBelief{
+			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		}
 		station.Professions = append(station.Professions, prof)
 	}
 	station.Factions = []model.Faction{{
@@ -78,6 +82,10 @@ func TestWeightedEndingFactionsAndNamedResidentsCanOverridePlayer(t *testing.T) 
 	station.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 200, Surviving: true}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
+		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		prof.Beliefs = []model.FactBelief{
+			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		}
 		station.Professions = append(station.Professions, prof)
 	}
 	baseline := svc.resolveWeightedEnding(station, svc.agent)
@@ -140,6 +148,10 @@ func TestWeightedEndingTieBreaksInFixedOrder(t *testing.T) {
 	station.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 150, Surviving: true}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
+		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		prof.Beliefs = []model.FactBelief{
+			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		}
 		station.Professions = append(station.Professions, prof)
 	}
 	station.Factions = []model.Faction{{ID: 7, Name: "Charter Circle", Influence: 20, Cohesion: 1}}

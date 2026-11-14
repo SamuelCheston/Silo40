@@ -15,6 +15,10 @@ func TestInformationEndingNarrativeReplacesFormula(t *testing.T) {
 	svc, station, _ := weightedEndingFixture("INFORMATION")
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
+		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		prof.Beliefs = []model.FactBelief{
+			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		}
 		station.Professions = append(station.Professions, prof)
 	}
 	// Two outbound signals reaching one other silo.
@@ -44,6 +48,10 @@ func TestInformationEndingNarrativeZeroSpillover(t *testing.T) {
 	svc, station, _ := weightedEndingFixture("INFORMATION")
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
+		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		prof.Beliefs = []model.FactBelief{
+			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		}
 		station.Professions = append(station.Professions, prof)
 	}
 
