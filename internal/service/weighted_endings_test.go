@@ -4,6 +4,7 @@ import (
 	"math"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"silo40/internal/model"
@@ -329,6 +330,23 @@ func TestWeightedEndingPersonalRuleArbitratesWithoutJudicialAttachment(t *testin
 	blocked := svc.resolveWeightedEnding(station, agent)
 	if blocked != nil && blocked.Selected == "PERSONAL_RULE" {
 		t.Fatalf("Judicial back in IT hands must block PERSONAL_RULE: %+v", blocked)
+	}
+}
+
+// TestRuleOfLawExplanationCoversFourDimensions locks 子项 7: the RULE_OF_LAW
+// arbitration carries the four-dimension audit explanation (motive /
+// intervention / evidence / adhesion, 10 §9), whether or not it qualifies.
+func TestRuleOfLawExplanationCoversFourDimensions(t *testing.T) {
+	svc, station, agent := weightedEndingFixture("RULE_OF_LAW")
+	decision := svc.resolveWeightedEnding(station, agent)
+	if decision == nil {
+		t.Fatal("expected a decision")
+	}
+	explanation := decision.Explanations["RULE_OF_LAW"]
+	for _, dimension := range []string{"动机:", "介入:", "证据:", "附着:"} {
+		if !strings.Contains(explanation, dimension) {
+			t.Fatalf("RULE_OF_LAW explanation missing %s: %q", dimension, explanation)
+		}
 	}
 }
 

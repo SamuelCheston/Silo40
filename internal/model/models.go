@@ -543,6 +543,8 @@ type EndingDecision struct {
 	Reason   string            `json:"reason,omitempty"`
 	Pool     []string          `json:"pool,omitempty"`
 	Excluded map[string]string `json:"excluded,omitempty"`
+	// Explanations 候选结局的四维审计解释 (10 §9：动机/介入/证据/附着)。
+	Explanations map[string]string `json:"explanations,omitempty"`
 }
 
 // VictoryStatus 胜利状态
