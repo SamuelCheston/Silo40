@@ -99,6 +99,69 @@ func TestInformationVigilEveFires(t *testing.T) {
 	}
 }
 
+// vigilFixtureService builds the vigil scenario: P-1 lit, rebellion calm,
+// clock set before the final year so only the foreshadow window can fire.
+func vigilFixtureService(t *testing.T) *GameService {
+	t.Helper()
+	boot := bootstrapRealContent(t)
+	var vigilDef engine.ContentEventDefinition
+	for _, def := range boot.contentDefinitions {
+		if def.Key == "special:info_vigil_eve" {
+			vigilDef = def
+		}
+	}
+	if vigilDef.Key == "" {
+		t.Fatal("special:info_vigil_eve did not load from events/special/")
+	}
+	svc := chainTestService(vigilDef)
+	svc.silo.CurrentYear, svc.silo.CurrentMonth = 127, 1
+	svc.silo.Rebellion = 0.2
+	svc.statesMapFor(svc.silo.ID)["special:public_fact_cross_dept"] = model.ContentEventState{
+		SiloID: svc.silo.ID, EventKey: "special:public_fact_cross_dept", Triggered: true,
+	}
+	return svc
+}
+
+// TestInformationVigilForeshadowsNearGate locks 修复4: the ending settles the
+// month the belief gate is met, so the old final-year-only vigil was pure
+// foreshadow that fast playthroughs never saw. With coverage within one
+// department of the gate the vigil lights early; far from the gate it stays
+// dark until the final year.
+func TestInformationVigilForeshadowsNearGate(t *testing.T) {
+	svc := vigilFixtureService(t)
+	// One department complete, one missing two facts: within the 3-fact gap.
+	svc.silo.Professions = []model.Profession{
+		{Name: "IT", Beliefs: []model.FactBelief{
+			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		}},
+		{Name: "Judicial", Beliefs: []model.FactBelief{{FactID: "d", B: 0.5}}},
+	}
+	if svc.queueSystemContentEvents("TEST") == 0 {
+		t.Fatal("vigil did not foreshadow while coverage was within one department of the gate")
+	}
+	svc.drainQueuedEvents()
+	if !contentTriggered(svc, "special:info_vigil_eve") {
+		t.Fatal("info_vigil_eve never fired in the foreshadow window")
+	}
+}
+
+func TestInformationVigilStaysDarkFarFromGate(t *testing.T) {
+	svc := vigilFixtureService(t)
+	// Three departments with nothing above the floor: 9 facts missing > gap 3.
+	svc.silo.Professions = []model.Profession{
+		{Name: "IT", Beliefs: []model.FactBelief{{FactID: "a", B: 0.1}}},
+		{Name: "Judicial"},
+		{Name: "Medical"},
+	}
+	if svc.queueSystemContentEvents("TEST") != 0 {
+		t.Fatal("vigil fired long before the gate was in sight")
+	}
+	svc.drainQueuedEvents()
+	if contentTriggered(svc, "special:info_vigil_eve") {
+		t.Fatal("info_vigil_eve fired far from the gate")
+	}
+}
+
 // TestInformationProgressExposedInState locks 修复3: the 《共证》 chain state
 // (node lights, replication count, department coverage, gate constants) is a
 // first-class part of every state snapshot, so the player can see 复制进展 /
