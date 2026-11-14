@@ -58,12 +58,16 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 		// 当月反馈，且派发时点确定 (不依赖 RNG 决定的 NPC 行为)。
 		delayedLogs, delayedStories := s.engine.Drain(silo, s.currentAgent)
 		logs = append(logs, delayedLogs...)
-		stories = append(stories, derefStories(delayedStories)...)
+		delayedDeref := derefStories(delayedStories)
+		stampSilo(delayedDeref, silo)
+		stories = append(stories, delayedDeref...)
 		s.engine.PrepareTick(silo, s.currentAgent)
 		s.engine.RunLocalPhase(silo, s.currentAgent, 1.0/12.0)
 		phaseLogs, phaseStories := s.engine.Drain(silo, s.currentAgent)
 		logs = append(logs, phaseLogs...)
-		stories = append(stories, derefStories(phaseStories)...)
+		phaseDeref := derefStories(phaseStories)
+		stampSilo(phaseDeref, silo)
+		stories = append(stories, phaseDeref...)
 	}
 
 	// 阶段 2a：跨堡队列派发 (各堡本地结算后、时钟推进前)。
@@ -92,7 +96,9 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 		s.engine.RunPostPhase(silo, s.currentAgent, source)
 		phaseLogs, phaseStories := s.engine.Drain(silo, s.currentAgent)
 		logs = append(logs, phaseLogs...)
-		stories = append(stories, derefStories(phaseStories)...)
+		postDeref := derefStories(phaseStories)
+		stampSilo(postDeref, silo)
+		stories = append(stories, postDeref...)
 	}
 
 	// 收尾：清空本月跨堡信号、复位结算上下文。
@@ -127,6 +133,19 @@ func derefStories(stories []*model.StoryEvent) []model.StoryEvent {
 	return out
 }
 
+// stampSilo 就地给一批故事打上来源堡归属。多堡同月会触发相同内容 (初始状态相同、
+// 触发条件多为全局时间戳)，月度反馈若不标注来源堡，玩家看到的就是一堵分不清彼此的
+// 重复文本墙。
+func stampSilo(stories []model.StoryEvent, silo *model.Silo) {
+	if silo == nil {
+		return
+	}
+	for i := range stories {
+		stories[i].SiloID = silo.ID
+		stories[i].SiloName = silo.Name
+	}
+}
+
 // ============ 阶段 0b：第二堡 AI 代操作 ============
 
 // runAIPhase 为非玩家堡执行确定性 AI 动作 (零时长，避免在阶段 0 内推进时间)。
@@ -157,6 +176,7 @@ func (s *GameService) runAIPhase(logs *[]string, stories *[]model.StoryEvent) {
 		s.engine.EnqueueAction(actor, silo, *action, agent)
 		actionLogs, actionStories := s.drainQueuedEvents()
 		*logs = append(*logs, actionLogs...)
+		stampSilo(actionStories, silo)
 		*stories = append(*stories, actionStories...)
 		_ = s.engine.ConsumeActionResult()
 		s.currentSilo = nil
@@ -291,6 +311,7 @@ func (s *GameService) fireCrossEvent(entry model.CrossEvent, logs *[]string, sto
 		if s.emitContentEvent(def, "CROSS_SIGNAL", engine.NewEventContext(), nil, nil, nil) {
 			moreLogs, moreStories := s.drainQueuedEvents()
 			*logs = append(*logs, moreLogs...)
+			stampSilo(moreStories, target)
 			*stories = append(*stories, moreStories...)
 		}
 		s.currentSilo = nil

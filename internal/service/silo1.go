@@ -131,6 +131,8 @@ func (s *GameService) captureSilo1Signals(logs *[]string, stories *[]model.Story
 		Title:       "截获：1 号地堡部门信号",
 		Description: report,
 		Type:        "EXTERNAL",
+		SiloID:      target.ID,
+		SiloName:    target.Name,
 	}
 	s.currentSilo = s.silo
 	s.currentAgent = s.agent

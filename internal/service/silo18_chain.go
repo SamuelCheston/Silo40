@@ -225,6 +225,10 @@ func (s *GameService) emitSilo18ChainStory(node silo18ChainNode, stories *[]mode
 		Description: node.Description,
 		Type:        "EXTERNAL",
 	}
+	if silo18 := s.silo18Canon(); silo18 != nil {
+		story.SiloID = silo18.ID
+		story.SiloName = silo18.Name
+	}
 	*stories = append(*stories, story)
 	storyCopy := story
 	s.recordStories([]*model.StoryEvent{&storyCopy}, "SILO18_CHAIN:"+node.ID)

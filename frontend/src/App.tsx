@@ -13,6 +13,14 @@ import { WorldPanel } from './components/WorldPanel';
 import { Silo, Agent, AgentAction, AgentActionType, GameState, AgentStats, PlayerActionMeta, StoryEventLog } from './logic/models';
 import { LayoutGrid, Users } from 'lucide-react';
 
+// 月度反馈里的故事带上来源堡前缀，多堡同月触发相同内容时玩家才分得清是谁家的事。
+function formatStory(story: any): string {
+    if (story && story.silo_name) {
+        return `[${story.silo_name}] ${story.title}`;
+    }
+    return story ? story.title : '';
+}
+
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
     const [name, setName] = useState('');
@@ -211,7 +219,7 @@ function App() {
             const state = await BeginPassTime(1);
             applyEventState(state);
             const step = await drainOperation();
-            const stories = (step.stories || []).map((story: any) => story.title).join(' | ');
+            const stories = (step.stories || []).map(formatStory).join(' | ');
             updateResultText(`Advanced to Y${step.silo.current_year} M${step.silo.current_month}.${stories ? ` ${stories}` : ' No new story event.'}`);
         } catch (err) {
             updateResultText(`Failed to advance time: ${err}`);
@@ -265,7 +273,7 @@ function App() {
             applyEventState(state);
             const step = await drainOperation();
             const result = step.action_result?.message || 'Action resolved.';
-            const stories = (step.stories || []).map((story: any) => story.title).join(' | ');
+            const stories = (step.stories || []).map(formatStory).join(' | ');
             updateResultText(`${result}${stories ? ` | ${stories}` : ''}`);
         } catch (err) {
             updateResultText(`Failed to execute action: ${err}`);

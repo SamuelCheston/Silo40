@@ -190,6 +190,10 @@ func (s *GameService) recordSilo1OperationStories(op *model.Silo1Operation, repo
 		ID: "silo1_operation_report", Category: "player_action",
 		Title: "跨堡行动回执：" + op.Label, Description: report, Type: "EXTERNAL",
 	}
+	if target := s.fullSilo1(); target != nil {
+		playerStory.SiloID = target.ID
+		playerStory.SiloName = target.Name
+	}
 	s.currentSilo = s.stationSilo()
 	s.currentAgent = s.agent
 	s.recordStories([]*model.StoryEvent{playerStory}, "OPERATION_REPORT:SILO1")

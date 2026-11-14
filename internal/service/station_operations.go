@@ -238,6 +238,10 @@ func (s *GameService) recordStationOperationStories(op *model.Silo1Operation, re
 		ID: "station_operation_report", Category: "player_action",
 		Title: "驻地行动回执：" + op.Label, Description: report, Type: "EXTERNAL",
 	}
+	if target != nil {
+		playerStory.SiloID = target.ID
+		playerStory.SiloName = target.Name
+	}
 	s.recordStories([]*model.StoryEvent{playerStory}, "OPERATION_REPORT:STATION")
 	s.currentSilo = nil
 	s.currentAgent = nil
