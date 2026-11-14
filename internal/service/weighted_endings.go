@@ -139,7 +139,7 @@ var endingDescriptions = map[string]string{
 	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。第一次按约章裁决的案件里，裁决者引用约章与公开证据，而不是等待上级指示；隐蔽调度不再能进入执行——法警第一次问'依据哪一条'。约章有本地主人，以不可被单方收回的程序锁定；你坐在旁听席，不在裁决席。约章法庭迟早会遇到一个它回答不了的问题——'这条命令到底从哪里来'——答案通向专线与控制网的另一端，但本结局停在这个问题被第一次提出之前。《公议》成立。",
 	endingTime:         "一号地堡权威覆灭，驻地仍有形成历史的能力，覆灭前夕的思潮具备面向外部的一极——《无人裁决》成立。",
 	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者：警察服从、幕后威势退场，司法部不归属市长、也没有回到 IT 手里——《人治》成立。",
-	endingExclusionist: "公开求证与外部经验没有取得公共正当性，封闭秩序延续或自我复制——《深闭》成立。",
+	endingExclusionist: "什么都没有毁灭，也什么都没有改变。封闭秩序不是靠镇压守住的，是靠习惯：证人老去，接收者调离，封闭的叙事逐年硬化，始终没有遇到它的对抗版本。危机到来时驻地集体选择了旧规则，是自愿的——提供可核验替代方案的最后窗口，就这样安静地关上了。任务没有战败，它失去了战场。《深闭》成立。",
 	endingReset:        "减口、抹忆与清档系统性完成，任务赖以继续的公共事实被拆除——《遗忘》成立。",
 	endingFracture:     "叛乱与损耗造成了不可逆的维存崩溃，且没有独立幸存的逃出群体——《断层》成立。",
 	endingDeath:        "没有任何可确认的幸存社会——《寂堡》成立。",
@@ -541,6 +541,20 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if best == endingRuleOfLaw {
 		narrative += fmt.Sprintf("本局约章的证据底座为 %d 项独立公共事实，公开证据强度 Q=%.2f。",
 			station.Authority.Judicial.IndependentPublicFacts, station.Authority.Judicial.PublicEvidenceQ)
+	}
+	if best == endingExclusionist {
+		// Two settlement variants (03-exclusionist §5): with Silo 1 alive the
+		// closed order keeps its external support; after the fall, local power
+		// replicates the closure without orders — the order has internalized
+		// its master. The settlement line reports what still runs: the station
+		// survives, the possibility of change is what died.
+		if s.world != nil && !s.world.Silo1.Alive {
+			narrative += "主人没了，秩序却已经内化了它的主人：本地权力在没有命令的情况下执行封闭——为旧仪式发明本地理由，引用'祖制'。封闭从此不再需要外部命令，它自我维持，且连一个可以追责的外部对象都不存在。"
+		} else {
+			narrative += "若干年后，新一任 IT 主管在旧仪式中就职，背诵他不完全理解的词句。你的材料被归档为一个无害怪人的遗物。驻地运转良好。任务没有。"
+		}
+		narrative += fmt.Sprintf("结算时驻地仍有居民 %d 人，正统性 %.2f——驻地仍在运转，死掉的是改变的可能。",
+			station.TotalPopulation, station.MayorLegitimacy())
 	}
 	decision.Reason = narrative
 	return s.finishArbitration(decision)
