@@ -23,6 +23,7 @@
 | 独立逃出群体已先成立 | 原驻地重置只作《越岭》尾声；`reset_completed` 仍记录本地事实（仲裁例外读取已实现；完整存续结算依赖逃离模型，roadmap） |
 | 执行分支结算且玩家仍在驻地 | 接《除名》线：玩家材料失去全部接收者，封顶压力上升 |
 | 清洗链（`archive_purge_order`→`purge_backlash`） | 缓慢绞杀路径：不经过本线节点，直接以既有清洗链表达局部清档；只有全量执行才走 `reset_execution` |
+| 本地整肃链（已实现：`silo1_purge_omen`→`silo1_purge_execution`，守卫 `silo1_purge_exposed`） | 通牒之后叛乱仍居高（≥0.8）时的本地执行链内容实现：投药、清档、减口；被曝光则整肃停滞。与本线 `reset_execution` 设计同构（守卫范式），落地时二者择一或合并 |
 
 ## 3. 超时与失败结算
 

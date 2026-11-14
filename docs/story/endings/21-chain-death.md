@@ -11,8 +11,8 @@
 | `silo1_ultimatum` 链 | 既有 histories | Y4M1 | 第一终止征兆：定向警告与信号测试；抉择 D-A | 既有 | 本线入口 |
 | `termination_channel_test` | special，ONCE | `all(event_triggered("history","silo1_ultimatum"), timestampAtOrAfter(5,1))`（相对 Y5 起） | "没有成功"的关闭指令：渠道被试探 | `panic_value +0.05`、`rebellion +0.03`（sim 校准起点） | 反制接触解锁 |
 | `termination_countermeasure_offer` | 门控接触卡 | 解锁：`event_completed termination_channel_test` + `relation Mechanical min 0.2`（或 IT 联系人） | 抉择 D-B：渠道反制（本卡）／降低偏离／让人离开（转《越岭》节点群）；接触方是既有部门联系人，不新增组织 | 完成键 | 接受解锁步骤 |
-| `termination_channel_disrupted` | special，ONCE | `all(event_triggered 接受键, event_triggered("player_action","action_share_info"))`（反制知识跨过部门边界的代理） | 单一终止渠道失效——只免疫该渠道，不免疫物理手段（分渠道纪律） | `history_burden +0.03`（sim 校准起点） | 世界 flag `network_jammed` 的消费方已实现（干扰期间暂停通牒签发）；**写入通路仍是缺口**（内容效果不能写世界 flag） |
-| `bombing_terminal` | crisis，纯调度 | `canTrigger: () => false`；只经上游（通牒链末端或机制层介入评估）调度 | 物理摧毁：分渠道结算下基本无解的渠道 | `siloPopulationDelta` 至 0（一次性大额负 delta） | 下一 tick `victory_check` 判 DEATH |
+| `termination_channel_disrupted` | special，ONCE | `all(event_triggered 接受键, event_triggered("player_action","action_share_info"))`（反制知识跨过部门边界的代理） | 单一终止渠道失效——只免疫该渠道，不免疫物理手段（分渠道纪律） | `history_burden +0.03`（sim 校准起点） | **已实现**：`worldFlagSet("network_jammed", true)`；`termination_release`（纯调度投放节点）读该 flag，被干扰则空转 |
+| `bombing_terminal` | crisis，纯调度 | `canTrigger: () => false`；由 `strike_reconnaissance`（通牒后、相对 Y6 起、rebellion≥0.8）调度（+3 月） | 物理摧毁：分渠道结算下基本无解的渠道 | `siloPopulationDelta` 至 0（一次性大额负 delta） | 下一 tick `victory_check` 判 DEATH |
 | Safeguard 路径 | 机制层 | `safeguard_risk ≥ 1.0` | 既有硬护栏；`safeguard_risk` 已可由内容效果写入（机制底座） | DEATH | — |
 
 ## 2. 分支与改道
@@ -26,8 +26,8 @@
 
 ## 3. 超时与失败结算
 
-- `bombing_terminal` 是纯调度终局事件：由上游（通牒链末端、机制层介入评估）决定何时调度，内容层不自行点火。延迟链允许溢出，但覆灭结算是终局时钟：终局破坏节点必须调度在覆灭结算之前，否则在本局不再有结算意义；若通牒链走完仍未点火，由兜底在结算前强制拉起。
-- 无守卫：物理摧毁没有反制守卫（设计口径）；唯一的"守卫"是人已经离开（逃离模型，roadmap 未实装）。
+- `bombing_terminal` 是纯调度终局事件：调度方已实现（`strike_reconnaissance`：通牒之后局势仍不收敛、rebellion≥0.8 时为物理投送侦察校位，+3 月调度终局节点）。延迟链允许溢出，但覆灭结算是终局时钟：终局破坏节点必须在覆灭结算前成立，否则在本局不再有结算意义。
+- 无守卫：物理摧毁没有反制守卫（设计口径）；唯一的"守卫"是人已经离开（逃离模型，roadmap 未实装）。远程终止渠道则有守卫：`termination_release` 读 `network_jammed`，被干扰的渠道投放空转。
 
 ## 4. 与结局判定的对接
 
@@ -38,6 +38,6 @@
 ## 5. 能力缺口
 
 - 逃出群体例外：仲裁读取已实现（最小状态基础）；完整存续结算依赖逃离模型（roadmap，未实装）。
-- `network_jammed`：消费方已实现（干扰期间暂停通牒签发）；**内容侧写入通路仍是缺口**（世界 flag 无内容写入入口）。
+- `network_jammed`：写入（`worldFlagSet`）与消费（通牒暂停、`termination_release` 守卫）均已实现。
 - G8（终局画面展示）。原 G6（内容→`safeguard_risk`）已随机制底座落地。
-- `bombing_terminal` 的调度方（机制层介入评估）本身仍属待建工程：内容只预留纯调度节点，不假装已有调度者。
+- 本线的终止征兆→渠道反制→物理投送链已有内容实现（`termination_channel_test / termination_channel_disrupted / termination_release / strike_reconnaissance / bombing_terminal`）；本分册的接触卡设计（`termination_countermeasure_offer`）作为该实现之上的玩家决断层，落地时与既有节点对齐。
