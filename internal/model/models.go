@@ -758,6 +758,10 @@ type StoryEvent struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Type        string `json:"type"` // SOCIAL / TECHNICAL / EXTERNAL
+	// 来源堡归属 (月度反馈用)：多堡同月触发相同内容时，玩家需要分清是哪座堡的事。
+	// 仅下发快照使用，不参与持久化 (持久化的 StoryEventLog 自带 SiloID)。
+	SiloID   uint   `json:"silo_id,omitempty"`
+	SiloName string `json:"silo_name,omitempty"`
 }
 
 // CreateGameRequest 新建游戏请求

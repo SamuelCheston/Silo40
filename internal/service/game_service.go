@@ -1742,6 +1742,9 @@ func (s *GameService) BeginAction(action model.AgentAction) (*model.EventQueueSt
 	if err := s.ensureNoPendingOperation(); err != nil {
 		return nil, err
 	}
+	if s.gameOver() {
+		return nil, fmt.Errorf("the game has ended; no further actions can be taken")
+	}
 	if err := s.resolveActionCost(&action); err != nil {
 		return nil, err
 	}
@@ -1948,6 +1951,9 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 	defer s.mu.Unlock()
 	if !s.hasSession() {
 		return nil, fmt.Errorf("no active game session")
+	}
+	if s.gameOver() {
+		return nil, fmt.Errorf("the game has ended; no further actions can be taken")
 	}
 	if err := s.resolveActionCost(&action); err != nil {
 		return nil, err

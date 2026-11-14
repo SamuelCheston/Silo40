@@ -51,11 +51,23 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 		s.currentSilo = silo
 		s.currentAgent = s.agents[silo.ID]
 		s.publishStagedDelayedEvents(staged, silo.ID)
+		// 到期的延迟 (schedule) 事件必须在这里一次性排空并回收故事，不能让它们
+		// 滞留在总线上等 RunLocalPhase 的 NPC SubmitAction 顺带 Drain——那条路径
+		// 会把故事丢弃，导致通牒余波/轮班怨气/整肃执行/终止投放等延迟链是否可见
+		// 取决于当月该堡 NPC 是否行动。固定在本地阶段前排空，保证故事必然进入
+		// 当月反馈，且派发时点确定 (不依赖 RNG 决定的 NPC 行为)。
+		delayedLogs, delayedStories := s.engine.Drain(silo, s.currentAgent)
+		logs = append(logs, delayedLogs...)
+		delayedDeref := derefStories(delayedStories)
+		stampSilo(delayedDeref, silo)
+		stories = append(stories, delayedDeref...)
 		s.engine.PrepareTick(silo, s.currentAgent)
 		s.engine.RunLocalPhase(silo, s.currentAgent, 1.0/12.0)
 		phaseLogs, phaseStories := s.engine.Drain(silo, s.currentAgent)
 		logs = append(logs, phaseLogs...)
-		stories = append(stories, derefStories(phaseStories)...)
+		phaseDeref := derefStories(phaseStories)
+		stampSilo(phaseDeref, silo)
+		stories = append(stories, phaseDeref...)
 	}
 
 	// 阶段 2a：跨堡队列派发 (各堡本地结算后、时钟推进前)。
@@ -84,7 +96,9 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 		s.engine.RunPostPhase(silo, s.currentAgent, source)
 		phaseLogs, phaseStories := s.engine.Drain(silo, s.currentAgent)
 		logs = append(logs, phaseLogs...)
-		stories = append(stories, derefStories(phaseStories)...)
+		postDeref := derefStories(phaseStories)
+		stampSilo(postDeref, silo)
+		stories = append(stories, postDeref...)
 	}
 
 	// 收尾：清空本月跨堡信号、复位结算上下文。
@@ -119,6 +133,19 @@ func derefStories(stories []*model.StoryEvent) []model.StoryEvent {
 	return out
 }
 
+// stampSilo 就地给一批故事打上来源堡归属。多堡同月会触发相同内容 (初始状态相同、
+// 触发条件多为全局时间戳)，月度反馈若不标注来源堡，玩家看到的就是一堵分不清彼此的
+// 重复文本墙。
+func stampSilo(stories []model.StoryEvent, silo *model.Silo) {
+	if silo == nil {
+		return
+	}
+	for i := range stories {
+		stories[i].SiloID = silo.ID
+		stories[i].SiloName = silo.Name
+	}
+}
+
 // ============ 阶段 0b：第二堡 AI 代操作 ============
 
 // runAIPhase 为非玩家堡执行确定性 AI 动作 (零时长，避免在阶段 0 内推进时间)。
@@ -149,6 +176,7 @@ func (s *GameService) runAIPhase(logs *[]string, stories *[]model.StoryEvent) {
 		s.engine.EnqueueAction(actor, silo, *action, agent)
 		actionLogs, actionStories := s.drainQueuedEvents()
 		*logs = append(*logs, actionLogs...)
+		stampSilo(actionStories, silo)
 		*stories = append(*stories, actionStories...)
 		_ = s.engine.ConsumeActionResult()
 		s.currentSilo = nil
@@ -275,13 +303,15 @@ func (s *GameService) fireCrossEvent(entry model.CrossEvent, logs *[]string, sto
 		})
 		s.currentSilo = target
 		s.currentAgent = s.agents[target.ID]
-		localStories := []model.StoryEvent{}
-		localLogs := []string{}
-		if s.emitContentEvent(def, "CROSS_SIGNAL", engine.NewEventContext(), nil, &localStories, &localLogs) {
+		// 传 nil 作为 story/log 汇点：handleContentEvent 会同时把故事写进
+		// story_sink 与 step_story_sink，若这里再提供 story_sink，同一故事会被
+		// drainQueuedEvents 经 step_stories 再收一次，月度反馈里跨堡故事因此翻倍
+		// (持久化历史走 recordStories 单份，本就正确)。只经 drain 收一次，与月度
+		// 本地通道的取值方式对齐。
+		if s.emitContentEvent(def, "CROSS_SIGNAL", engine.NewEventContext(), nil, nil, nil) {
 			moreLogs, moreStories := s.drainQueuedEvents()
-			*logs = append(*logs, localLogs...)
 			*logs = append(*logs, moreLogs...)
-			*stories = append(*stories, localStories...)
+			stampSilo(moreStories, target)
 			*stories = append(*stories, moreStories...)
 		}
 		s.currentSilo = nil
