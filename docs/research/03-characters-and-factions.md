@@ -9,7 +9,7 @@
 
 ```text
 Silo 1: Shepherd（Donald / Thurman）
-   └─ 隐秘线路（只有各地堡 IT 主管知道）
+   └─ 隐秘线路（只有各地堡 IT 主管接触；主管眼中线那头是系统，极少数才悟出背后是人）
 Silo 18 表面秩序: Mayor（Jahns）→ Sheriff（Holston→Juliette）
 Silo 18 真实权力: IT 主管 Bernard（依 Pact 在市长死后自动接任代理市长）
 Down Deep: Mechanical（Knox / Walker / Shirly）— 掌握“东西怎么转”，被系统性蒙蔽
