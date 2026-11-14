@@ -174,11 +174,11 @@ function App() {
     const handleSave = useCallback(async () => {
         try {
             await SaveGame();
-            updateResultText(`Saved ${world?.station_silo?.name || 'station'} at Y${silo?.current_year} M${silo?.current_month}.`);
+            updateResultText(`Saved ${silo?.name || 'station'} at Y${silo?.current_year} M${silo?.current_month}.`);
         } catch (err) {
             updateResultText(`Save failed: ${err}`);
         }
-    }, [world, silo, updateResultText]);
+    }, [silo, updateResultText]);
 
     // 新建游戏：初始化/落库/缓存全部由 Go 后端完成
     const handleSetupComplete = useCallback(async (selectedTraitIds: string[], profession: string) => {
@@ -197,7 +197,7 @@ function App() {
             });
             applyGameState(state);
             setEventHistory([]);
-            updateResultText(`40 号派出，现驻 ${state.world?.station_silo?.name || '未知地堡'}。你的行动只作用于驻地；1 号仅开放有限情报与欺骗通道。`);
+            updateResultText(`40 号派出，现驻 ${state.silo?.name || '未知地堡'}。你的行动只作用于驻地；1 号仅开放有限情报与欺骗通道。`);
         } catch (err) {
             updateResultText(`Failed to initialize silo: ${err}`);
         }
@@ -277,7 +277,7 @@ function App() {
     const groupOrder = ['station', 'silo1', 'common', 'profession', 'profession_group', 'faction_member', 'faction_leader'];
     const groupTitle: Record<string, string> = {
         silo1: 'Cross-Silo Operations: Silo 1',
-        station: `Assigned Station Operations: ${world?.station_silo?.name || 'Loading...'}`,
+        station: `Assigned Station Operations: ${silo?.name || 'Loading...'}`,
         common: 'Common Actions',
         profession: `Profession Actions: ${agent?.profession || ''}`,
         profession_group: 'Profession Group Actions',
@@ -351,10 +351,10 @@ function App() {
                     <VStack gap={8} w="full">
                         <Heading size="md" textAlign="center" color="blue.600">{resultText}</Heading>
 
-                        {gameStarted && world?.station_silo && (
+                        {gameStarted && silo && (
                             <Box w="full" p={4} bg="purple.50" border="1px solid" borderColor="purple.300" borderRadius="md">
                                 <HStack justify="space-between" wrap="wrap">
-                                    <Text fontWeight="bold" color="purple.800">40 号派出，现驻 {world.station_silo.name}</Text>
+                                    <Text fontWeight="bold" color="purple.800">40 号派出，现驻 {silo.name}</Text>
                                     <Text fontSize="sm" color="gray.600">可操作：驻地 + 1 号限定通道 · 40 号与 18 号不可操作</Text>
                                 </HStack>
                             </Box>
@@ -427,9 +427,9 @@ function App() {
                                 <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
                                     <WorldPanel world={world} agent={agent} />
                                     {activeView === 'map' ? (
-                                        silo && <BunkerMap silo={world?.station_silo || silo} agent={agent} />
+                                        silo && <BunkerMap silo={silo} agent={agent} />
                                     ) : (
-                                        silo && <FactionView silo={world?.station_silo || silo} />
+                                        silo && <FactionView silo={silo} />
                                     )}
                                 </VStack>
 

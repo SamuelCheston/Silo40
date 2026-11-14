@@ -266,7 +266,6 @@ export namespace model {
 	    silo1_counterintel_stage: number;
 	    silo1_operations?: Silo1Operation[];
 	    station_silo_id?: number;
-	    station_silo?: Silo;
 	    station_last_report?: string;
 	    station_exposure: number;
 	    station_counterintel_stage: number;
@@ -295,7 +294,6 @@ export namespace model {
 	        this.silo1_counterintel_stage = source["silo1_counterintel_stage"];
 	        this.silo1_operations = this.convertValues(source["silo1_operations"], Silo1Operation);
 	        this.station_silo_id = source["station_silo_id"];
-	        this.station_silo = this.convertValues(source["station_silo"], Silo);
 	        this.station_last_report = source["station_last_report"];
 	        this.station_exposure = source["station_exposure"];
 	        this.station_counterintel_stage = source["station_counterintel_stage"];

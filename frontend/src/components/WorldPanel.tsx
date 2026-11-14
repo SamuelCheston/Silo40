@@ -26,17 +26,19 @@ export const WorldPanel = React.memo(function WorldPanel({ world, agent }: World
     if (!world) return null;
     const suspicion = agent?.suspicion_level || 0;
     const counterintelActive = (world.silo1_counterintel_stage || 0) > 0 || (world.station_counterintel_stage || 0) > 0;
+    // 驻地不再随 world 整堡下发：名称从 world.silos 的 is_station 引用读取。
+    const stationName = (world.silos || []).find((ref: any) => ref.is_station)?.name;
 
     return (
         <Box w="full" p={5} bg="blue.50" borderRadius="md" border="1px solid" borderColor="blue.200">
             <HStack justify="space-between" align="start" mb={3}>
                 <Box>
                     <Heading size="sm" color="blue.800">驻地与外部地堡情报网</Heading>
-                    <Text fontSize="xs" color="gray.600">Y{world.current_year} M{world.current_month} · 阶段 {world.progress_stage || 'arrival'} · 40 号派出，现驻 {world.station_silo?.name || '未知地堡'}</Text>
+                    <Text fontSize="xs" color="gray.600">Y{world.current_year} M{world.current_month} · 阶段 {world.progress_stage || 'arrival'} · 40 号派出，现驻 {stationName || '未知地堡'}</Text>
                 </Box>
                 <VStack align="end" gap={1}>
                     <Badge colorPalette={world.silo1_simulated ? 'green' : 'gray'}>
-                        {world.station_silo ? 'STATION ACTIVE' : 'LEGACY WORLD'}
+                        {world.station_silo_id ? 'STATION ACTIVE' : 'LEGACY WORLD'}
                     </Badge>
                     <Badge colorPalette={suspicion >= 0.7 ? 'red' : suspicion >= 0.4 ? 'orange' : 'blue'}>
                         特工怀疑度 {suspicion.toFixed(2)} / 1.00
@@ -94,10 +96,10 @@ export const WorldPanel = React.memo(function WorldPanel({ world, agent }: World
                     </Box>
                 )}
 
-                {world.station_silo && (
+                {world.station_silo_id > 0 && (
                     <Box p={3} bg="white" borderRadius="md" border="1px solid" borderColor="purple.200">
                         <HStack justify="space-between">
-                            <Text fontWeight="bold">驻地行动反馈 · {world.station_silo.name}</Text>
+                            <Text fontWeight="bold">驻地行动反馈 · {stationName}</Text>
                             <Badge colorPalette={(world.station_counterintel_stage || 0) > 0 ? 'red' : 'gray'}>反间谍阶段 {world.station_counterintel_stage || 0}</Badge>
                         </HStack>
                         <Text fontSize="sm" fontWeight="bold" mt={2}>反向追查暴露：{Math.round((world.station_exposure || 0) * 100)}% · 下一阈值 {nextCounterintelThreshold(world.station_exposure || 0)}</Text>
