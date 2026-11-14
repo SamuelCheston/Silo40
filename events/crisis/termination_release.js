@@ -4,31 +4,24 @@ defineEvent({
   description: "那条远程通道在深夜完成了一次完整的投放。没有爆炸，没有火光——只有通风系统里一阵说不清的甜腥味，和随后开始减少的应答声。",
   type: "EXTERNAL",
   fire_mode: "ONCE",
-  // Scheduled-only execution node: fired via schedule_event from
-  // termination_channel_test. Guard reads the network_jammed world flag (G11):
-  // a disrupted channel no-ops; only an intact channel delivers.
+  // Scheduled-only settlement hook: fired via schedule_event from
+  // termination_channel_test. Ruling: the settlement writes NO safeguard-risk
+  // delta — it connects directly to the ending arbitration. Its completion key
+  // crisis:termination_release is read there as a DEATH fact (《寂堡》).
+  //
+  // TODO(Countermeasure binding): the countermeasure guard belongs here. When
+  // the countermeasure-in-everyday-actions system lands, this apply must check
+  // the disrupted-channel fact (e.g. network_jammed) and settle as a no-op when
+  // the delivery handshake was broken. This round ships no countermeasure, so
+  // the hook is unconditional.
   script: {
     canTrigger: function(ctx) {
       return false;
     },
     apply: function(ctx) {
-      var flags = ctx.world_flags || {};
-      if (flags["network_jammed"]) {
-        // Channel was disrupted: the delivery handshake never completes.
-        return {
-          effects: [siloMetricDelta("history_burden", 0.02)],
-        };
-      }
-      // Intact channel: the termination drives intervention risk to the hard
-      // guardrail, which victory_check settles as 《寂堡》 (DEATH).
-      // TODO(balance): magnitude is a sim-calibration starting point.
-      return {
-        effects: [
-          siloMetricDelta("safeguard_risk", 1.0),
-          professionMetricDeltaAll("panic_value", 0.1),
-        ],
-      };
+      // Settlement hook: no numerical consequence. The completion key itself is
+      // the terminal fact; arbitration settles the ending.
+      return {};
     },
   },
-  effects: [],
 });

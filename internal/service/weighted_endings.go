@@ -27,6 +27,14 @@ const (
 	// Fact keys produced by content chains (18/19 分册); arbitration only reads them.
 	resetFactKey    = "special:reset_completed"
 	fractureFactKey = "special:fracture_confirmed"
+
+	// Silo 1 reaction-chain settlement hooks (《寂堡》链 21). The remote-termination
+	// and remote-physical-strike settlements carry no numerical effect of their
+	// own; firing one records its completion key, which arbitration reads as a
+	// DEATH fact. The local-purge settlement is deliberately NOT a DEATH fact —
+	// it has no modeled consequence this round (see its TODO).
+	terminationFactKey = "crisis:termination_release"
+	strikeFactKey      = "crisis:bombing_terminal"
 )
 
 // endingOutcomeOrder is the P3 tie-break order (结局体系 12 §6.2 P3). It exists
@@ -281,9 +289,15 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	}
 
 	escapeAlive := station.EscapedGroup.SurvivingEscapeGroup()
-	deathFact := trigger == endingDeath
 	resetFact := s.contentFactTriggered(station.ID, resetFactKey)
 	fractureFact := s.contentFactTriggered(station.ID, fractureFactKey)
+	// Silo 1 reaction-chain settlements are DEATH facts: the engine's own DEATH
+	// trigger (safeguard/population) OR a fired remote-termination /
+	// remote-physical-strike settlement hook. Both keep the escape-group
+	// exception below.
+	terminationFact := s.contentFactTriggered(station.ID, terminationFactKey)
+	strikeFact := s.contentFactTriggered(station.ID, strikeFactKey)
+	deathFact := trigger == endingDeath || terminationFact || strikeFact
 
 	// P0 (结局体系 12 §6.2): the first three guardrails must read the escape
 	// group before condemning anyone; a surviving group is never retroactively

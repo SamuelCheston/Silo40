@@ -49,117 +49,104 @@ func TestSilo1ReactionChainEventsLoad(t *testing.T) {
 	}
 }
 
-// TestTerminationReleaseGuardedByNetworkJammed locks the remote-termination
-// countermeasure: a disrupted channel (network_jammed, G11) makes the release a
-// no-op, while an intact channel drives safeguard_risk to the DEATH guardrail.
-func TestTerminationReleaseGuardedByNetworkJammed(t *testing.T) {
+// TestReactionSettlementsAreNonNumericalHooks locks the ruling that settlements
+// write no population figures and no safeguard-risk deltas: all three settlement
+// nodes are apply-hooks with no population/risk effects. The remote-termination
+// and remote-strike hooks connect to the ending purely through their completion
+// keys; the local purge is a no-op TODO hook.
+func TestReactionSettlementsAreNonNumericalHooks(t *testing.T) {
 	svc := bootstrapRealContent(t)
-	def := findContentDefinitionByKey(t, svc, "crisis:termination_release")
-	if !def.ScriptHooks.Apply {
-		t.Fatalf("termination_release must expose an apply guard")
-	}
-
-	hasSafeguardSpike := func(result engine.ContentScriptApplyResult) bool {
-		for _, effect := range result.Effects {
-			if effect.Type == "silo_metric_delta" && effect.Metric == "safeguard_risk" && effect.Value > 0 {
-				return true
+	for _, key := range []string{
+		"crisis:bombing_terminal",
+		"crisis:termination_release",
+		"crisis:silo1_purge_execution",
+	} {
+		def := findContentDefinitionByKey(t, svc, key)
+		if !def.ScriptHooks.Apply {
+			t.Fatalf("%s must be an apply settlement hook", key)
+		}
+		for _, effect := range def.Effects {
+			if effect.Type == "silo_population_delta" {
+				t.Fatalf("%s must not reduce population", key)
+			}
+			if effect.Type == "silo_metric_delta" && effect.Metric == "safeguard_risk" {
+				t.Fatalf("%s must not touch safeguard_risk", key)
 			}
 		}
-		return false
-	}
-
-	silo := &model.Silo{ID: 1, CurrentYear: 127, CurrentMonth: 6}
-
-	// Intact channel: the release spikes intervention risk toward DEATH.
-	intact, err := engine.RunContentEventApplyScript(def, engine.ContentEvaluationContext{
-		Silo:  silo,
-		World: &model.World{Flags: map[string]bool{}},
-	})
-	if err != nil {
-		t.Fatalf("apply intact channel: %v", err)
-	}
-	if !hasSafeguardSpike(intact) {
-		t.Fatalf("intact termination release must raise safeguard_risk, got %+v", intact.Effects)
-	}
-
-	// Jammed channel: the delivery handshake never completes, no risk spike.
-	jammed, err := engine.RunContentEventApplyScript(def, engine.ContentEvaluationContext{
-		Silo:  silo,
-		World: &model.World{Flags: map[string]bool{model.WorldFlagNetworkJammed: true}},
-	})
-	if err != nil {
-		t.Fatalf("apply jammed channel: %v", err)
-	}
-	if hasSafeguardSpike(jammed) {
-		t.Fatalf("jammed termination release must not raise safeguard_risk, got %+v", jammed.Effects)
 	}
 }
 
-// TestLocalPurgeExecutionGuardedByExposure locks the local-execution
-// countermeasure: an exposed plot stalls the crackdown, an unopposed one
-// carries out attrition.
-func TestLocalPurgeExecutionGuardedByExposure(t *testing.T) {
+// TestReactionCountermeasureHooksAreDeclaredButUnbound locks that the
+// countermeasure windows are declared but NOT bound: Share Info and propaganda
+// are not countermeasures, so even with the omen fired and those actions
+// completed the hooks must not trigger this round.
+func TestReactionCountermeasureHooksAreDeclaredButUnbound(t *testing.T) {
 	svc := bootstrapRealContent(t)
-	def := findContentDefinitionByKey(t, svc, "crisis:silo1_purge_execution")
-	if !def.ScriptHooks.Apply {
-		t.Fatalf("silo1_purge_execution must expose an apply guard")
-	}
-
-	hasPopulationLoss := func(result engine.ContentScriptApplyResult) bool {
-		for _, effect := range result.Effects {
-			if effect.Type == "silo_population_delta" && effect.Value < 0 {
-				return true
-			}
+	for _, key := range []string{
+		"special:termination_channel_disrupted",
+		"special:silo1_purge_exposed",
+	} {
+		def := findContentDefinitionByKey(t, svc, key)
+		if !def.ScriptHooks.CanTrigger {
+			t.Fatalf("%s must declare a canTrigger hook (declared-but-unbound)", key)
 		}
-		return false
-	}
-
-	silo := &model.Silo{ID: 1, CurrentYear: 127, CurrentMonth: 1}
-
-	// Unopposed: the crackdown kills and clears records.
-	unopposed, err := engine.RunContentEventApplyScript(def, engine.ContentEvaluationContext{
-		Silo:   silo,
-		States: map[string]engine.ContentEventRuntime{},
-	})
-	if err != nil {
-		t.Fatalf("apply unopposed purge: %v", err)
-	}
-	if !hasPopulationLoss(unopposed) {
-		t.Fatalf("unopposed purge must reduce population, got %+v", unopposed.Effects)
-	}
-
-	// Exposed: the plot loses surprise, no attrition.
-	exposed, err := engine.RunContentEventApplyScript(def, engine.ContentEvaluationContext{
-		Silo: silo,
-		States: map[string]engine.ContentEventRuntime{
-			"special:silo1_purge_exposed": {Triggered: true},
-		},
-	})
-	if err != nil {
-		t.Fatalf("apply exposed purge: %v", err)
-	}
-	if hasPopulationLoss(exposed) {
-		t.Fatalf("exposed purge must not reduce population, got %+v", exposed.Effects)
+		silo := &model.Silo{ID: 1, CurrentYear: 127, CurrentMonth: 1}
+		ok, err := engine.RunContentEventCanTriggerScript(def, engine.ContentEvaluationContext{
+			Silo: silo,
+			States: map[string]engine.ContentEventRuntime{
+				"special:termination_channel_test":          {Triggered: true},
+				"special:silo1_purge_omen":                  {Triggered: true},
+				"player_action:action_share_info":           {Triggered: true},
+				"player_action:action_conduct_propaganda":   {Triggered: true},
+			},
+		}, false)
+		if err != nil {
+			t.Fatalf("%s canTrigger: %v", key, err)
+		}
+		if ok {
+			t.Fatalf("%s must stay unbound (canTrigger false) this round", key)
+		}
 	}
 }
 
-// TestBombingTerminalIgnoresNetworkJamming locks channel independence: jamming
-// the remote-termination channel does NOT block the physical strike. The
-// bombing is a plain schedule-only population-collapse node with no network
-// guard; the only mitigation is a surviving escape group, read at arbitration.
-func TestBombingTerminalIgnoresNetworkJamming(t *testing.T) {
-	svc := bootstrapRealContent(t)
-	def := findContentDefinitionByKey(t, svc, "crisis:bombing_terminal")
-	if def.ScriptHooks.Apply {
-		t.Fatalf("bombing_terminal must not gain an apply guard; physical strike is undefendable")
-	}
-	foundCollapse := false
-	for _, effect := range def.Effects {
-		if effect.Type == "silo_population_delta" && effect.Value < 0 {
-			foundCollapse = true
+// TestReactionSettlementFactKeysArbitrateDeath locks the ending wiring: a fired
+// remote-termination or remote-strike settlement is a DEATH fact in arbitration,
+// and a surviving escape group still converts it into the REBELLION pyrrhic
+// epilogue (P0 escape exception).
+func TestReactionSettlementFactKeysArbitrateDeath(t *testing.T) {
+	for _, factKey := range []string{terminationFactKey, strikeFactKey} {
+		svc, station, _ := weightedEndingFixture("TIME")
+		svc.contentStates = map[uint]map[string]model.ContentEventState{
+			station.ID: {factKey: {Triggered: true}},
+		}
+		decision := svc.resolveWeightedEnding(station, svc.agent)
+		if decision == nil || decision.Selected != "DEATH" {
+			t.Fatalf("settlement fact %s must arbitrate DEATH, got %+v", factKey, decision)
+		}
+
+		// With a surviving escape group the same fact becomes a pyrrhic REBELLION.
+		svc2, station2, _ := weightedEndingFixture("TIME")
+		station2.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 120, Surviving: true}
+		svc2.contentStates = map[uint]map[string]model.ContentEventState{
+			station2.ID: {factKey: {Triggered: true}},
+		}
+		pyrrhic := svc2.resolveWeightedEnding(station2, svc2.agent)
+		if pyrrhic == nil || pyrrhic.Selected != "REBELLION" {
+			t.Fatalf("settlement fact %s with escape group must avert DEATH into REBELLION, got %+v", factKey, pyrrhic)
 		}
 	}
-	if !foundCollapse {
-		t.Fatalf("bombing_terminal must collapse the in-silo population, got %+v", def.Effects)
+}
+
+// TestLocalPurgeSettlementIsNotADeathFact locks that the local purge settlement
+// is deliberately NOT wired into the DEATH facts this round (no modeled
+// consequence yet — it must not end the game on its own).
+func TestLocalPurgeSettlementIsNotADeathFact(t *testing.T) {
+	svc, station, _ := weightedEndingFixture("TIME")
+	svc.contentStates = map[uint]map[string]model.ContentEventState{
+		station.ID: {"crisis:silo1_purge_execution": {Triggered: true}},
+	}
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision != nil && decision.Selected == "DEATH" {
+		t.Fatalf("local purge settlement must not arbitrate DEATH this round, got %+v", decision)
 	}
 }

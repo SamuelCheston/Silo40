@@ -1,25 +1,26 @@
 defineEvent({
   id: "termination_channel_disrupted",
   title: "终止信道被干扰",
-  description: "你把链路自检的取证与反制要点分散递给了可信的人。当那条远程通道再次被点亮时，本地一侧的应答被有意的杂讯覆盖——投放指令没能完成握手。信道被干扰了，但谁都清楚，这只会让对方改用别的手段。",
+  description: "那条远程通道再次被点亮时，本地一侧的应答被有意的杂讯覆盖——投放指令没能完成握手。信道被干扰了，但谁都清楚，这只会让对方改用别的手段。",
   type: "EXTERNAL",
   fire_mode: "ONCE",
-  // Countermeasure (《寂堡》链 21)：自检之后，玩家把反制知识跨过部门边界（以
-  // Share Info 为代理），即可干扰该终止信道。只免疫远程终止这一条渠道，不免疫
-  // 本地执行与物理打击（分渠道纪律）。
+  // DECLARED-BUT-UNBOUND countermeasure hook (remote-termination channel).
+  // Ruling: Share Info is NOT a countermeasure and must not act as one, so the
+  // former share-info gate is removed. The real countermeasure will later be
+  // hidden inside everyday small actions (contextualized actions with an object,
+  // place, timing, material and a trace). Until that system lands this node is
+  // intentionally unbound: canTrigger returns false, so it never fires yet.
+  //
+  // TODO(Countermeasure binding): wire canTrigger to the future everyday-action
+  // countermeasure; on success the effect below jams the termination channel.
   trigger: eventTriggered("special", "termination_channel_test"),
   script: {
     canTrigger: function(ctx) {
-      var probe = ctx.states["special:termination_channel_test"];
-      var share = ctx.states["player_action:action_share_info"];
-      if (!probe || !probe.triggered) return false;
-      if (!share || !share.triggered) return false;
-      // The counter-knowledge must actually cross hands after the probe.
-      return share.last_triggered_timestamp >= probe.last_triggered_timestamp;
+      // Unbound: no countermeasure action is wired this round.
+      return false;
     },
   },
   effects: [
     worldFlagSet("network_jammed", true),
-    siloMetricDelta("history_burden", 0.03),
   ],
 });
