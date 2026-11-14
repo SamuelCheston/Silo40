@@ -1295,7 +1295,7 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 // world-level entities. A decision with an empty Selected means "no qualified
 // candidate — continue simulating": the request is cleared and the game goes on.
 func (e *GameEngine) applyWeightedEnding(eventType string, silo *model.Silo, agent *model.Agent) {
-	if eventType != EVENT_VICTORY_CHECK || e.WeightedEndingResolver == nil || silo == nil || silo.VictoryStatus == nil {
+	if eventType != EVENT_VICTORY_CHECK || e.WeightedEndingResolver == nil || silo == nil {
 		return
 	}
 	decision := e.WeightedEndingResolver(silo, agent)
@@ -1305,6 +1305,9 @@ func (e *GameEngine) applyWeightedEnding(eventType string, silo *model.Silo, age
 	if decision.Selected == "" {
 		silo.VictoryStatus = nil
 		return
+	}
+	if silo.VictoryStatus == nil {
+		silo.VictoryStatus = &model.VictoryStatus{}
 	}
 	silo.VictoryStatus.Type = decision.Selected
 	silo.VictoryStatus.IsWon = !isHardFailureEnding(decision.Selected)
