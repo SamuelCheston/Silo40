@@ -2,6 +2,7 @@ package service
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
@@ -172,4 +173,185 @@ func TestPreFallChoicesEffects(t *testing.T) {
 	if svc3.silo.HistoryBurden != before3+0.03 {
 		t.Fatalf("open inquiry must record the moment: %v, want %v", svc3.silo.HistoryBurden, before3+0.03)
 	}
+}
+
+// TestTimeEndingNarrativeAndOverlap locks 35-time-endgame: the TIME
+// settlement tells the no-one-left-to-sign story with the snapshot facts,
+// and the INFORMATION/TIME overlap settles in one pool — different facts,
+// no substitution, fixed tie-break.
+func TestTimeEndingNarrativeAndOverlap(t *testing.T) {
+	newTimeStation := func() (*GameService, *model.Silo) {
+		svc, station, _ := weightedEndingFixture("TIME")
+		// Consistent world state: the station reports the destruction and the
+		// world agrees Silo 1 is gone (destroyed-base weighting).
+		svc.world.Silo1.Alive = false
+		station.Silo1Destroyed = true
+		station.PreFallSnapshot = model.PreFallIdeologySnapshot{
+			Taken: true, Year: 130, Month: 1, Population: 5000,
+			Ideologies:    map[string]float64{model.IdeologyProForeign: 0.55, model.IdeologyLoyalty: 0.35},
+			DominantAxis:  model.IdeologyProForeign,
+			OpenQualified: true,
+		}
+		station.TotalPopulation = 5000
+		svc.agent.PoliticalPrestige = 100
+		return svc, station
+	}
+
+	svc, station := newTimeStation()
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingTime {
+		t.Fatalf("expected TIME selection, got %+v", decision)
+	}
+	if strings.Contains(decision.Reason, "P2 加权") {
+		t.Fatalf("score formula still on the ending screen: %q", decision.Reason)
+	}
+	for _, want := range []string{
+		"《无人裁决》成立",
+		"没有后续签批",
+		"亲外 0.55 对忠诚 0.35",
+		"外部保持沉默",
+		"仍有居民 5000 人",
+	} {
+		if !strings.Contains(decision.Reason, want) {
+			t.Fatalf("narrative missing %q: %q", want, decision.Reason)
+		}
+	}
+
+	// Overlap: the same station also holds the INFORMATION gate facts — both
+	// candidates share one pool; neither qualification substitutes the other.
+	svc2, station2 := newTimeStation()
+	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
+		prof.Beliefs = []model.FactBelief{
+			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		}
+		station2.Professions = append(station2.Professions, prof)
+	}
+	decision2 := svc2.resolveWeightedEnding(station2, svc2.agent)
+	if decision2 == nil {
+		t.Fatal("no decision")
+	}
+	poolHas := func(want string) bool {
+		for _, outcome := range decision2.Pool {
+			if outcome == want {
+				return true
+			}
+		}
+		return false
+	}
+	if !poolHas(endingInformation) || !poolHas(endingTime) {
+		t.Fatalf("INFORMATION and TIME must share the pool when both facts hold: pool=%v excluded=%v",
+			decision2.Pool, decision2.Excluded)
+	}
+	if decision2.Selected != endingInformation && decision2.Selected != endingTime {
+		t.Fatalf("overlap must settle to one of the two: %+v", decision2)
+	}
+
+	// Pure-silo snapshot: TIME excluded, the post-fall replication converges
+	// to EXCLUSIONIST (Silo 1 destroyed makes it eligible).
+	svc3, station3 := newTimeStation()
+	station3.PreFallSnapshot.OpenQualified = false
+	station3.PreFallSnapshot.DominantAxis = model.IdeologyLoyalty
+	station3.PreFallSnapshot.Ideologies = map[string]float64{model.IdeologyProForeign: 0.2, model.IdeologyLoyalty: 0.7}
+	decision3 := svc3.resolveWeightedEnding(station3, svc3.agent)
+	if decision3 == nil || decision3.Selected != endingExclusionist {
+		t.Fatalf("pure-silo snapshot must fall to post-fall replication, got %+v", decision3)
+	}
+	if _, excluded := decision3.Excluded[endingTime]; !excluded {
+		t.Fatalf("TIME must carry an exclusion reason under a pure-silo snapshot: %+v", decision3.Excluded)
+	}
+}
+
+// TestTimeLinePlayableFromNewGame drives the line from a real new game: the
+// station is kept alive and calm (the lethal routes all need rebellion >=
+// 0.8), the farm keeps supplies up and gossips openness into the commoner
+// cohorts, the reset countermeasure is taken when the purge chain stirs, and
+// the pre-fall moment arrives (deadline fallback at the latest). The final
+// settlement must read the engine snapshot: TIME in the pool when
+// open-qualified, excluded when not.
+//
+// Balance note (TODO(balance)): under the current calibration the run below
+// settles with a closed snapshot — resource attrition plus the panic-to-
+// loyalty drift outrun the single agent's openness levers, so the honest
+// outcome demonstrated here is "outlasted into EXCLUSIONIST" (33-time-nodes
+// §2). The positive TIME path is locked by the fixture-driven arbitration
+// test above; making it reachable in play is a tuning batch (drift rate,
+// lever strength, NPC economy), not a wiring gap.
+func TestTimeLinePlayableFromNewGame(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "time-playable.db"))
+	req := threeSiloRequest(3401)
+	req.Profession = "Agricultural"
+	if _, err := svc.CreateGame(req); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	tryExec := func(action model.AgentAction) bool {
+		outcome, err := svc.ExecuteAction(action)
+		return err == nil && outcome.Result.Executed
+	}
+
+	// Opening: gather, two shares (the reset countermeasure later needs
+	// share trigger_count >= 2).
+	tryExec(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
+	if len(svc.agent.KnownFragments) > 0 {
+		tryExec(model.AgentAction{Type: model.ActionShareInfo, TargetDept: "Mayor", FragmentIds: []string{svc.agent.KnownFragments[0]}})
+		tryExec(model.AgentAction{Type: model.ActionShareInfo, TargetDept: "Supply", FragmentIds: []string{svc.agent.KnownFragments[0]}})
+	}
+
+	for month := 1; month <= 100 && !svc.gameOver(); month++ {
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("advance TIME line at month %d: %v", month, err)
+		}
+		if svc.gameOver() {
+			break
+		}
+		ap := svc.agent.ActionPoints
+		countermeasure := actionByID(svc.availablePlayerActions(), "RESET_COUNTERMEASURE_OFFER")
+		inquiry := actionByID(svc.availablePlayerActions(), "PRE_FALL_OPEN_INQUIRY")
+		switch {
+		case countermeasure != nil && countermeasure.Enabled:
+			// The purge countermeasure outranks every other concern.
+			tryExec(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RESET_COUNTERMEASURE_OFFER"})
+		case inquiry != nil && inquiry.Enabled:
+			tryExec(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "PRE_FALL_OPEN_INQUIRY"})
+		case svc.silo.Rebellion >= 0.7:
+			// Lie low: the lethal routes all feed on rebellion >= 0.8.
+		case resourceAmount(svc.silo, "Supplies") < 4500 && ap >= 15:
+			tryExec(model.AgentAction{Type: model.ActionProfession, ProfessionAction: "AGRICULTURAL_INTENSIVE_HARVEST"})
+		case ap >= 10:
+			tryExec(model.AgentAction{Type: model.ActionProfession, ProfessionAction: "AGRICULTURAL_FIELD_GOSSIP", TargetDept: "Mechanical"})
+		}
+	}
+
+	// The pre-fall moment must arrive (deadline fallback at relative Y7M10 at
+	// the latest) and the settlement must have consumed the destruction fact.
+	if !contentTriggered(svc, "special:pre_fall_choice") {
+		t.Errorf("pre_fall_choice never arrived (deadline fallback failed)")
+	}
+	if !svc.silo.Silo1Destroyed {
+		t.Fatalf("silo1_destroyed_signal did not settle the run at %d-%02d", svc.silo.CurrentYear, svc.silo.CurrentMonth)
+	}
+	if !svc.silo.PreFallSnapshot.Taken {
+		t.Fatal("destruction did not take the pre-fall ideology snapshot")
+	}
+	status := svc.silo.VictoryStatus
+	if status == nil || status.Decision == nil {
+		t.Fatalf("destruction did not settle an ending: %+v", status)
+	}
+	inPool, excluded := false, false
+	for _, outcome := range status.Decision.Pool {
+		if outcome == endingTime {
+			inPool = true
+		}
+	}
+	_, excluded = status.Decision.Excluded[endingTime]
+	if svc.silo.PreFallSnapshot.OpenQualified && !inPool {
+		t.Errorf("open-qualified snapshot must put TIME in the pool: %+v", status.Decision)
+	}
+	if !svc.silo.PreFallSnapshot.OpenQualified && !excluded {
+		t.Errorf("pure-silo snapshot must exclude TIME with a reason: %+v", status.Decision)
+	}
+	t.Logf("TIME playable settled: selected=%s open_qualified=%v pf=%.2f loyalty=%.2f dominant=%s population=%d month=%d",
+		status.Decision.Selected, svc.silo.PreFallSnapshot.OpenQualified,
+		svc.silo.PreFallSnapshot.Ideologies[model.IdeologyProForeign],
+		svc.silo.PreFallSnapshot.Ideologies[model.IdeologyLoyalty],
+		svc.silo.PreFallSnapshot.DominantAxis, svc.silo.TotalPopulation, svc.silo.CurrentMonth)
 }
