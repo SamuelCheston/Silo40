@@ -31,6 +31,7 @@
 | --- | --- | --- |
 | [09-ui-information-architecture.md](./09-ui-information-architecture.md) | 五个行动域、三级地堡剖面、情境 Dock、空间与行动联动、响应式和性能约束 | 界面信息架构与交互设计 |
 | [11-information-fragments-design.md](./11-information-fragments-design.md) | Fact/Version/Observation 三层信息模型、共享视角模板、证据组合、有限 LLM 表层变体 | 信息碎片、证据呈现与文本生成边界设计 |
+| [13-action-exposure-incidental-intel.md](./13-action-exposure-incidental-intel.md) | 行动常驻/解锁划分、九部门职务伴随 Observation、既有势力接触与事件门控任务链 | 行动露出、信息获取与第三方委托设计 |
 
 ## 权力与组织机制
 
