@@ -50,7 +50,7 @@ func TestStationOperationUsesDelayedLiveTargetPath(t *testing.T) {
 			t.Fatalf("Silo 40 was created as an entity: %+v", silo)
 		}
 	}
-	if state.World == nil || state.World.StationSilo == nil || state.World.StationSilo.ID != target.ID {
+	if state.World == nil || state.World.StationSiloID != target.ID {
 		t.Fatal("assigned station is missing from the UI snapshot")
 	}
 

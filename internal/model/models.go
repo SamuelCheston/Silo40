@@ -780,7 +780,8 @@ type WorldView struct {
 	Silo1CounterintelStage   int              `json:"silo1_counterintel_stage"`
 	Silo1Operations          []Silo1Operation `json:"silo1_operations,omitempty"`
 	StationSiloID            uint             `json:"station_silo_id,omitempty"`
-	StationSilo              *Silo            `json:"station_silo,omitempty"`
+	// 驻地不再整堡重复序列化：StationSiloID 即引用，驻地完整快照随 GameState.Silo
+	// 单份下发 (二者为同一堡)，避免每个回合快照重复携带 floors/residents 等死重量。
 	StationLastReport        string           `json:"station_last_report,omitempty"`
 	StationExposure          float64          `json:"station_exposure"`
 	StationCounterintelStage int              `json:"station_counterintel_stage"`
