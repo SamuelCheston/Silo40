@@ -80,3 +80,61 @@ func TestPlayerFeedCarriesNoNeighborRoutine(t *testing.T) {
 		t.Fatal("expected at least one neighbor entry in the player feed over 18 months")
 	}
 }
+
+// TestSameMonthNeighborCopiesMerge locks 削减同月堆叠：同月多堡的同一事件
+// 合并为一条带来源堡列表的汇总条目，玩家堡自己的条目不参与合并。
+func TestSameMonthNeighborCopiesMerge(t *testing.T) {
+	stories := []model.StoryEvent{
+		{ID: "water_leak", Title: "供水管线泄漏", SiloID: 1, SiloName: "16 号地堡"},
+		{ID: "water_leak", Title: "传言：供水管线泄漏", SiloID: 2, SiloName: "1 号地堡"},
+		{ID: "water_leak", Title: "传言：供水管线泄漏", SiloID: 3, SiloName: "18 号地堡"},
+		{ID: "food_poisoning", Title: "传言：群体性食物中毒", SiloID: 3, SiloName: "18 号地堡"},
+	}
+	merged := mergeNeighborStoryCopies(stories, 1)
+	if len(merged) != 3 {
+		t.Fatalf("expected 3 entries after merge, got %d: %+v", len(merged), merged)
+	}
+	if merged[0].Title != "供水管线泄漏" || merged[0].SiloName != "16 号地堡" {
+		t.Fatalf("player silo entry must stay untouched: %+v", merged[0])
+	}
+	if merged[1].Title != "传言：供水管线泄漏（1 号地堡、18 号地堡）" || merged[1].SiloName != "" {
+		t.Fatalf("neighbor copies must merge into one summary entry: %+v", merged[1])
+	}
+	if merged[2].Title != "传言：群体性食物中毒" {
+		t.Fatalf("single neighbor entry must not gain a suffix: %+v", merged[2])
+	}
+}
+
+// TestEventHistoryMergesNeighborCopies locks 读取侧合并：持久化历史里同年
+// 同月同一事件的邻堡条目并入首条。
+func TestEventHistoryMergesNeighborCopies(t *testing.T) {
+	svc := chainTestService()
+	svc.world = &model.World{PlayerSiloID: 1}
+	svc.silos = append(svc.silos,
+		&model.Silo{ID: 2, Name: "1 号地堡"},
+		&model.Silo{ID: 3, Name: "18 号地堡"},
+	)
+	mk := func(siloID uint, title string) model.StoryEventLog {
+		return model.StoryEventLog{SiloID: siloID, Year: 123, Month: 3, EventID: "archive_purge_order", Title: title}
+	}
+	svc.eventLogs = []model.StoryEventLog{
+		mk(1, "档案清洗令"),
+		mk(2, "传言：档案清洗令"),
+		mk(3, "传言：档案清洗令"),
+		{SiloID: 3, Year: 123, Month: 4, EventID: "other", Title: "别的传闻"},
+	}
+	history := svc.eventHistory(0)
+	if len(history) != 3 {
+		t.Fatalf("expected 3 history entries after merge, got %d: %+v", len(history), history)
+	}
+	// 最新在前：M4 条目最先；M3 的三条 (玩家＋两邻堡) 合并后剩两条。
+	if history[0].Title != "别的传闻" {
+		t.Fatalf("unrelated entry must pass through: %+v", history[0])
+	}
+	if history[1].Title != "传言：档案清洗令（1 号地堡、18 号地堡）" {
+		t.Fatalf("neighbor history copies must merge: %+v", history[1])
+	}
+	if history[2].Title != "档案清洗令" || history[2].SiloID != 1 {
+		t.Fatalf("player entry must stay untouched: %+v", history[2])
+	}
+}

@@ -3,9 +3,13 @@ package service
 // 玩家对邻堡事件的感知 (事件墙治理 §每堡自己的主题)：玩家对邻堡的认知
 // 本来就是间接的——谣言、信号、道听途说。邻堡的日常琐碎不进入玩家的情报
 // 记录；只有灾难、制度变动与一次性转折会经谣言通道传出，并被改写为
-// "听到的版本"。规则全部确定性，不消耗 RNG。
+// "听到的版本"。同月多堡发生的同一事件合并为一条汇总条目。规则全部
+// 确定性，不消耗 RNG。
 
 import (
+	"sort"
+	"strings"
+
 	"silo40/internal/engine"
 	"silo40/internal/model"
 )
@@ -75,4 +79,86 @@ func isContentFiringSource(source string) bool {
 		return true
 	}
 	return len(source) > 8 && (source[len(source)-8:] == ":CONTENT")
+}
+
+// mergeNeighborStoryCopies 同月多堡发生同一事件时，把邻堡副本合并成一条
+// 汇总条目——玩家的情报记录不该靠堡名前缀堆出文本墙。玩家堡自己的条目
+// 不参与合并 (亲身经历与听来的传闻是两回事)。
+func mergeNeighborStoryCopies(stories []model.StoryEvent, playerSiloID uint) []model.StoryEvent {
+	firstIndex := map[string]int{}
+	siloNames := map[string][]string{}
+	for i, story := range stories {
+		if story.SiloID == 0 || story.SiloID == playerSiloID {
+			continue
+		}
+		if _, seen := firstIndex[story.ID]; !seen {
+			firstIndex[story.ID] = i
+		}
+		siloNames[story.ID] = append(siloNames[story.ID], story.SiloName)
+	}
+	out := make([]model.StoryEvent, 0, len(stories))
+	for i, story := range stories {
+		if story.SiloID != 0 && story.SiloID != playerSiloID {
+			if firstIndex[story.ID] != i {
+				continue // 已并入首条
+			}
+			if names := siloNames[story.ID]; len(names) > 1 {
+				story.Title = story.Title + "（" + strings.Join(names, "、") + "）"
+				story.SiloName = ""
+			}
+		}
+		out = append(out, story)
+	}
+	return out
+}
+
+// mergeNeighborHistoryCopies 读取侧合并：持久化历史里同年同月同一事件的
+// 邻堡条目并入首条 (附来源堡列表)，玩家堡条目原样保留。输入为最新在前。
+func (s *GameService) mergeNeighborHistoryCopies(events []model.StoryEventLog) []model.StoryEventLog {
+	playerID := uint(0)
+	if s.world != nil {
+		playerID = s.world.PlayerSiloID
+	}
+	out := make([]model.StoryEventLog, 0, len(events))
+	for i := 0; i < len(events); {
+		j := i + 1
+		for j < len(events) && events[j].Year == events[i].Year &&
+			events[j].Month == events[i].Month && events[j].EventID == events[i].EventID {
+			j++
+		}
+		run := events[i:j]
+		i = j
+		if len(run) < 2 {
+			out = append(out, run...)
+			continue
+		}
+		var neighborNames []string
+		for _, entry := range run {
+			if entry.SiloID == 0 || entry.SiloID == playerID {
+				continue
+			}
+			name := ""
+			if silo := s.siloByID(entry.SiloID); silo != nil {
+				name = silo.Name
+			}
+			neighborNames = append(neighborNames, name)
+		}
+		sort.Strings(neighborNames)
+		mergedNeighbor := false
+		for _, entry := range run {
+			if entry.SiloID == 0 || entry.SiloID == playerID {
+				out = append(out, entry)
+				continue
+			}
+			if mergedNeighbor {
+				continue
+			}
+			mergedNeighbor = true
+			if len(neighborNames) > 1 {
+				entry.Title = entry.Title + "（" + strings.Join(neighborNames, "、") + "）"
+			}
+			out = append(out, entry)
+		}
+	}
+	return out
 }

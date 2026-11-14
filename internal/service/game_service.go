@@ -3635,7 +3635,8 @@ func (s *GameService) eventHistory(limit int) []model.StoryEventLog {
 	for i := len(s.eventLogs) - 1; i >= 0 && len(events) < max; i-- {
 		events = append(events, s.eventLogs[i])
 	}
-	return events
+	// 读取侧合并：同年同月同一事件的邻堡条目并入首条，玩家堡条目原样保留。
+	return s.mergeNeighborHistoryCopies(events)
 }
 
 func (s *GameService) publicSiloSnapshot() model.Silo {
