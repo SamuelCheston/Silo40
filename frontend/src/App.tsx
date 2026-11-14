@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
 import { CreateGame, GetGameState, HasActiveGame, BeginPassTime, BeginAction, ProcessNextEvent, GetAllFragments, GetEventHistory, SaveGame } from "../wailsjs/go/main/App";
 import { Box, Button, Heading, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
@@ -23,6 +23,31 @@ function formatStory(story: any): string {
     return story ? story.title : '';
 }
 
+// 首次关键反馈：阶段跃迁与第一次吸收是"这套东西是活的"的时刻，
+// 界面要给够分量——不是弹窗，是常驻一屏的醒目横幅，下一次行动时收起。
+const stageMoments: Record<string, { title: string; body: string }> = {
+    first_signal: {
+        title: '第一次本地核验完成',
+        body: '你拿到了能独立成立的材料——它不依赖你的身份、你的记忆，也不依赖某份只有你能解读的文本。「Share Info」已解锁：找到能独立查账的人，让事实到你的叙述之外去成立。',
+    },
+    archive_awakened: {
+        title: '档案苏醒：第一次有本地人用自己的职务语言重新提出问题',
+        body: '材料离手了。对方不是在复述你的句子——他们在查自己的账。感染成立；接下来是复制：让接收者培养出下一位接收者。',
+    },
+    chain_living: {
+        title: '活链成立',
+        body: '感染、复制、隐匿三者齐备：链不需要你逐日维持也能复制。剩下的是公共事实，以及守住宿主活到结算。',
+    },
+    chain_public_fact: {
+        title: '核心真相已成为公共事实',
+        body: '它有了自己的来源说明、自己的核验路径、自己的保管人。你的沉默、离开或失忆，都不再能把它收回。守住宿主，直到结算。',
+    },
+};
+const absorptionMoment = {
+    title: '第一次有部门吸收了你的事实',
+    body: '事实进入了他们的信念层——开始不依赖你而存在，也开始随时间淡忘。这就是"这套东西是活的"：持续流通，才跑赢淡忘。',
+};
+
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
     const [name, setName] = useState('');
@@ -40,6 +65,28 @@ function App() {
     const [world, setWorld] = useState<any>(null);
     const [busy, setBusy] = useState(false);
     const [infoProgress, setInfoProgress] = useState<any>(null);
+    const [moments, setMoments] = useState<{ title: string; body: string }[]>([]);
+    const prevStageRef = useRef<string | null>(null);
+    const prevAbsorbedRef = useRef<number | null>(null);
+
+    // 从状态快照里检测"关键时刻"：阶段跃迁、第一次吸收。只在已有前值
+    // （即非首次加载）时比较，开局与读档不会误报。
+    const detectMoments = useCallback((state: any) => {
+        const fresh: { title: string; body: string }[] = [];
+        const stage = state?.world?.progress_stage || null;
+        if (prevStageRef.current !== null && stage && stage !== prevStageRef.current) {
+            const moment = stageMoments[stage];
+            if (moment) fresh.push(moment);
+        }
+        prevStageRef.current = stage;
+        const absorbed = (state?.information_progress?.departments || [])
+            .reduce((sum: number, dept: any) => sum + (dept.above_floor || 0), 0);
+        if (prevAbsorbedRef.current === 0 && absorbed > 0) {
+            fresh.push(absorptionMoment);
+        }
+        prevAbsorbedRef.current = absorbed;
+        if (fresh.length > 0) setMoments(fresh);
+    }, []);
 
     // Action Form State
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
@@ -94,7 +141,8 @@ function App() {
         setPendingOperation('');
         setGameStarted(true);
         setShowSetup(false);
-    }, []);
+        detectMoments(state);
+    }, [detectMoments]);
 
     const applyEventState = useCallback((state: any) => {
         setSilo(state.silo);
@@ -107,7 +155,8 @@ function App() {
         setPendingOperation(state.pending_operation || '');
         setGameStarted(true);
         setShowSetup(false);
-    }, []);
+        detectMoments(state);
+    }, [detectMoments]);
 
     useEffect(() => {
         if (!availableActions.some((action) => {
@@ -181,6 +230,9 @@ function App() {
         setAgent(null);
         setWorld(null);
         setEventHistory([]);
+        setMoments([]);
+        prevStageRef.current = null;
+        prevAbsorbedRef.current = null;
         setResultText('Start a new Silo 40 operation. Your previous save remains until the new game is created.');
     }, []);
 
@@ -220,6 +272,7 @@ function App() {
         if (!silo || !agent || busy) return;
 
         setBusy(true);
+        setMoments([]);
         try {
             const state = await BeginPassTime(1);
             applyEventState(state);
@@ -273,6 +326,7 @@ function App() {
         };
 
         setBusy(true);
+        setMoments([]);
         try {
             const state = await BeginAction(action);
             applyEventState(state);
@@ -450,6 +504,12 @@ function App() {
                             <HStack align="start" gap={6} w="full" wrap="wrap">
                                 {/* Left Side: View Content */}
                                 <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
+                                    {moments.map(moment => (
+                                        <Box key={moment.title} w="full" p={4} bg="green.50" border="2px solid" borderColor="green.400" borderRadius="md">
+                                            <Heading size="sm" color="green.800">{moment.title}</Heading>
+                                            <Text fontSize="sm" color="gray.700" mt={1}>{moment.body}</Text>
+                                        </Box>
+                                    ))}
                                     <MissionPanel world={world} agent={agent} progress={infoProgress} />
                                     <WorldPanel world={world} agent={agent} />
                                     {activeView === 'map' ? (
