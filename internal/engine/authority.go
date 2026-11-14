@@ -156,9 +156,13 @@ func AdvanceAuthorityMonthly(silo *model.Silo) {
 		// (W/Q/fact count) still decide the pact transition.
 		judicial.PactQualified = true
 	}
+	// §3.2/§5.1：K 只来自二元联盟 (法警 + IT 内部) 的维护忠诚；Police、Mayor
+	// 幕僚与其他部门不进入 K。
+	InitializeItAuthority(silo)
+	alliance := &silo.ItAuthority
 	inputs := AuthorityInputs{
-		BailiffLoyalty:    professionLoyalty(silo, "Judicial"),
-		ITInternalLoyalty: professionLoyalty(silo, "IT"),
+		BailiffLoyalty:    clamp01(alliance.BailiffLoyalty + alliance.BailiffFear),
+		ITInternalLoyalty: clamp01(alliance.ITInternalLoyalty + alliance.ITInternalFear),
 		Exposure:          info.Exposure,
 		Delivery:          1 - 2*professionPanic(silo, "Judicial"),
 		Personnel:         0, // No personnel-continuity observable exists in v8.
@@ -384,31 +388,6 @@ func sortedResidents(silo *model.Silo) []model.Resident {
 	residents := append([]model.Resident(nil), silo.Residents...)
 	sort.SliceStable(residents, func(i, j int) bool { return residents[i].ID < residents[j].ID })
 	return residents
-}
-
-func professionLoyalty(silo *model.Silo, name string) float64 {
-	professionID := uint(0)
-	for i := range silo.Professions {
-		if silo.Professions[i].Name == name {
-			professionID = silo.Professions[i].ID
-			break
-		}
-	}
-	cohorts := append([]model.PopulationCohort(nil), silo.Cohorts...)
-	sort.SliceStable(cohorts, func(i, j int) bool { return cohorts[i].ID < cohorts[j].ID })
-	total, weight := 0.0, 0.0
-	for i := range cohorts {
-		if cohorts[i].ProfessionID != professionID || cohorts[i].Count <= 0 {
-			continue
-		}
-		w := float64(cohorts[i].Count)
-		total += clamp01(cohorts[i].Loyalty) * w
-		weight += w
-	}
-	if weight == 0 {
-		return 0.8
-	}
-	return total / weight
 }
 
 func professionPanic(silo *model.Silo, name string) float64 {
