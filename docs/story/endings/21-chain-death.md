@@ -1,0 +1,40 @@
+# 结局事件链 · `DEATH`《寂堡》
+
+> [返回总索引](../silo40-endings.md) · [机制底座](./10-chain-foundation.md) · [剧情台阶](./07-death.md)
+
+链条形态：**终止征兆 → 反制窗口 → 执行**。本线一半挂在既有通牒链上，一半是终局破坏事件；分渠道结算的纪律贯穿全链。
+
+## 1. 节点表
+
+| 节点 | 分组 | 触发 | 分岔与抉择 | 效果（封闭集） | 后续 |
+| --- | --- | --- | --- | --- | --- |
+| `silo1_ultimatum` 链 | 既有 histories | Y126M1 | 第一终止征兆：定向警告与信号测试；抉择 D-A | 既有 | 本线入口 |
+| `termination_channel_test` | special，ONCE | `all(event_triggered("history","silo1_ultimatum"), timestampAtOrAfter(127,1))` | "没有成功"的关闭指令：渠道被试探 | `panic_value +0.05`、`rebellion +0.03`（sim 校准起点） | 反制接触解锁 |
+| `termination_countermeasure_offer` | 门控接触卡 | 解锁：`event_completed termination_channel_test` + `relation Mechanical min 0.2`（或 IT 联系人） | 抉择 D-B：渠道反制（本卡）／降低偏离／让人离开（转《越岭》节点群）；接触方是既有部门联系人，不新增组织 | 完成键 | 接受解锁步骤 |
+| `termination_channel_disrupted` | special，ONCE | `all(event_triggered 接受键, event_triggered("player_action","action_share_info"))`（反制知识跨过部门边界的代理） | 单一终止渠道失效——只免疫该渠道，不免疫物理手段（分渠道纪律） | `history_burden +0.03`（sim 校准起点） | **缺口 G11**：世界 flag `network_jammed` 已预留，但无内容写入与消费方 |
+| `bombing_terminal` | crisis，纯调度 | `canTrigger: () => false`；只经上游（通牒链末端或机制层介入评估）调度 | 物理摧毁：分渠道结算下基本无解的渠道 | `siloPopulationDelta` 至 0（一次性大额负 delta） | 下一 tick `victory_check` 判 DEATH |
+| Safeguard 路径 | 机制层 | `safeguard_risk ≥ 1.0` | 既有硬护栏；内容不可写 `safeguard_risk`（缺口 G6） | DEATH | — |
+
+## 2. 分支与改道
+
+| 事实 | 去向 |
+| --- | --- |
+| 独立逃出群体已先成立且存续（设计口径） | 毁灭只作《越岭》惨胜尾声，不判《寂堡》；判定前必须先完成逃出群体检查（G5） |
+| 渠道反制成立后 Silo 1 改用物理手段 | 分渠道纪律的叙事时刻：反制成功不等于获救；`bombing_terminal` 不受 `termination_channel_disrupted` 影响 |
+| `fracture_confirmed` 之后人口耗尽 | 本线的维生死寂变体：不经终止节点，由人口杠杆自然抵达 0 |
+| 驻地活到 `silo1_destroyed_signal` | 本线关闭：上游可用性归零，终止不再可能 |
+
+## 3. 超时与失败结算
+
+- `bombing_terminal` 是纯调度终局事件：由上游（通牒链末端、机制层介入评估）决定何时调度，内容层不自行点火。延迟档必须落在 Y130 前。
+- 无守卫：物理摧毁没有反制守卫（设计口径）；唯一的"守卫"是人已经离开（G5）。
+
+## 4. 与结局判定的对接
+
+- 现状：人口 ≤0 与 `safeguard_risk ≥ 1.0` 都判 DEATH——本线完全复用既有硬护栏，无 G1 缺口。
+- `bombing_terminal` 用人口归零触发 DEATH 是现有机制内的表达；它不进入常态控制力叙事（一次性摧毁，作者手册与 Silo 1 控制设计的口径）。
+- 残余应答母题（几十年后微弱的线路应答）不进事件链：它不改变本结局，也不许诺。
+
+## 5. 能力缺口
+
+G5（逃出群体例外判定）、G6（内容→`safeguard_risk` 桥接）、G11（`network_jammed` 写入与消费）、G8（终局画面展示）。`bombing_terminal` 的调度方（机制层介入评估）本身也属待建工程：内容只预留纯调度节点，不假装已有调度者。
