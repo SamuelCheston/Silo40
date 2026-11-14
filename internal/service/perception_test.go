@@ -97,7 +97,7 @@ func TestSameMonthNeighborCopiesMerge(t *testing.T) {
 	if merged[0].Title != "供水管线泄漏" || merged[0].SiloName != "16 号地堡" {
 		t.Fatalf("player silo entry must stay untouched: %+v", merged[0])
 	}
-	if merged[1].Title != "传言：供水管线泄漏（1 号地堡、18 号地堡）" || merged[1].SiloName != "" {
+	if merged[1].Title != "传言：供水管线泄漏（1 号地堡、18 号地堡）" || merged[1].SiloName != "1 号地堡、18 号地堡" {
 		t.Fatalf("neighbor copies must merge into one summary entry: %+v", merged[1])
 	}
 	if merged[2].Title != "传言：群体性食物中毒" {

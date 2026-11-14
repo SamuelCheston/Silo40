@@ -104,7 +104,8 @@ func mergeNeighborStoryCopies(stories []model.StoryEvent, playerSiloID uint) []m
 			}
 			if names := siloNames[story.ID]; len(names) > 1 {
 				story.Title = story.Title + "（" + strings.Join(names, "、") + "）"
-				story.SiloName = ""
+				// 归属仍是多堡的：SiloID 保留首堡，SiloName 列出全部来源堡。
+				story.SiloName = strings.Join(names, "、")
 			}
 		}
 		out = append(out, story)
