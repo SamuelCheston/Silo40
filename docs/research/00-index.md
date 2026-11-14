@@ -43,6 +43,7 @@
 | [12-ending-system-design.md](./12-ending-system-design.md) | 三条胜利路线、好／中性／坏结局谱系、资格闸、互斥排序与四类主体仲裁 | 结局定名、结局判定与多实体加权设计 |
 | [13-ideology-axes-design.md](./13-ideology-axes-design.md) | 五条二元思潮轴、复合族命名、开放联盟、玩家推动与自然漂移、TIME 资格映射 | 思潮系统、派系聚类、行动影响与结局资格设计 |
 | [14-faction-power-design.md](./14-faction-power-design.md) | 群星派系机制拆解、无代议机构的影响形态、本作派系生成规则与七个权力挂载节点 | 派系生成、满意/积怨计量、议程与街头压力设计 |
+| [16-preparation-outcome-design.md](./16-preparation-outcome-design.md) | 逃跑与外溢的准备度账本、容量门＋侧面结算换算、失败与部分成功分级、与仲裁的接口和分层落地 | 逃离模型与外溢模型的准备侧输入、防护服/补给/信道等准备状态设计 |
 
 ## 同类机制对照
 
