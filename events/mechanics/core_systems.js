@@ -69,7 +69,9 @@ defineMechanics([
         mutations.push({ type: "actor_metric_delta", field: "political_points", value: prestige * 0.1 * deltaYears });
       }
 
-      const apGainRate = 10 + prestige * 0.05;
+      // AP 经济修复 (17-information-economy §3, TODO(balance)): 年恢复 10 → 36
+      // (月收入 ~3 点)，使流通动词 (成本 2–4) 可持续推动，跑赢恒定淡忘。
+      const apGainRate = 36 + prestige * 0.05;
       const nextAP = clamp(ctx.actor.action_points + apGainRate * deltaYears, 0, 100);
       mutations.push({ type: "actor_metric_set", field: "action_points", value: nextAP });
 
@@ -176,9 +178,12 @@ defineMechanics([
           drift += profession.panic_value * 0.10 * deltaYears;
         }
         if (drift !== 0) {
+          // 思潮轴修复 (13-ideology-axes §0.2, 17-information-economy §修复C):
+          // 恐慌推向闭守与排外，不产生开放。旧单轴口径把恐慌漂成 pro_foreign，
+          // 使零操作局靠恐慌漂移拿到开放快照获胜；按既定设计改为漂向忠诚。
           mutations.push({
             type: "cohort_ideology_delta",
-            ideology: "pro_foreign",
+            ideology: "loyalty",
             int_value: cohort.id,
             value: drift,
           });
@@ -402,24 +407,31 @@ defineMechanics([
       }
 
       if ((silo.professions || []).length > 0) {
-        let allDeptsHaveFragments = true;
+        // INFORMATION 结构桥 (重锚定到信念层，与仲裁侧
+        // allDepartmentsHoldFragments 对齐)：每个部门须持有至少 3 个
+        // B >= 0.30 (qual_rumor) 的事实。常量须与
+        // weighted_endings.go informationGateFactCount / QualRumor 同步。
+        // 部门信念按恒定淡忘系数衰减，桥只在流通跑赢淡忘时为真。
+        let beliefGate = true;
         for (const profession of silo.professions) {
-          const unique = {};
-          for (const fragment of profession.known_fragments || []) {
-            unique[fragment] = true;
+          let aboveFloor = 0;
+          for (const belief of profession.beliefs || []) {
+            if ((belief.b || 0) >= 0.30) {
+              aboveFloor += 1;
+            }
           }
-          if (Object.keys(unique).length < 5) {
-            allDeptsHaveFragments = false;
+          if (aboveFloor < 3) {
+            beliefGate = false;
             break;
           }
         }
-        if (allDeptsHaveFragments) {
+        if (beliefGate) {
           return {
             mutations: [{
               type: "victory_status_set",
               field: "INFORMATION",
               bool_value: true,
-              text: "终局评估请求：跨部门信息覆盖达成。是否成立《共证》由资格与加权仲裁决定。",
+              text: "终局评估请求：跨部门公共事实达成。是否成立《共证》由资格与加权仲裁决定。",
             }],
           };
         }

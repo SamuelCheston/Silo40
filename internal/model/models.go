@@ -979,11 +979,15 @@ var ALL_FRAGMENTS = []string{
 	"Agricultural_1",
 }
 
-// ACTION_COSTS 通用动作 AP 成本
+// ACTION_COSTS 通用动作 AP 成本。
+// 流通三动词 (收集/分享/建立关系) 的成本按 17 号经济文档 §3 的推导下调：
+// AP 月收入约 3 点时，分享每 ~1 月一次、收集/建联穿插其间，流通才可能
+// 跑赢恒定淡忘。戏剧性动作 (煽动/宣传/公开化) 保持高成本不变。
+// TODO(balance): 全部为 sim 起点。
 var ACTION_COSTS = map[AgentActionType]float64{
-	ActionGatherInfo:        10,
-	ActionShareInfo:         20,
-	ActionBuildConnection:   15,
+	ActionGatherInfo:        2,  // TODO(balance): 10 → 2
+	ActionShareInfo:         3,  // TODO(balance): 20 → 3
+	ActionBuildConnection:   4,  // TODO(balance): 15 → 4
 	ActionInciteRebellion:   30,
 	ActionConductPropaganda: 20,
 	ActionPublicizeFaction:  25,

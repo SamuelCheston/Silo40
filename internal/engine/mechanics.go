@@ -618,6 +618,18 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 					allFragments = append(allFragments, fragment)
 				}
 			}
+			// 部门信念层 (§3.3)：只暴露 B>0 的事实，切片顺序即持久化顺序
+			// (确定性)。victory_check 的 INFORMATION 结构桥读这一层。
+			beliefs := make([]map[string]interface{}, 0, len(prof.Beliefs))
+			for _, belief := range prof.Beliefs {
+				if belief.B <= 0 {
+					continue
+				}
+				beliefs = append(beliefs, map[string]interface{}{
+					"fact_id": belief.FactID,
+					"b":       belief.B,
+				})
+			}
 			professions = append(professions, map[string]interface{}{
 				"id":              prof.ID,
 				"name":            prof.Name,
@@ -631,6 +643,7 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 				"alertness":       prof.Alertness,
 				"known_fragments": append([]string(nil), prof.KnownFragments...),
 				"all_fragments":   allFragments,
+				"beliefs":         beliefs,
 				"ideologies":      cloneFloatMap(prof.Ideologies),
 				"relations":       cloneFloatMap(prof.Relations),
 			})
@@ -1266,6 +1279,9 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 		e.updateResources(silo, deltaYears)
 	case EVENT_METRICS_UPDATE:
 		e.updateSiloMetrics(silo, deltaYears)
+		// 恒定淡忘：部门信念层每月按系数衰减，流通 (分享吸收) 抵住淡忘。
+		// 与月度指标更新同一 dispatch 点，保证每月恰好一次 (确定性)。
+		ApplyBeliefForgetting(silo, DefaultInformationConfig())
 	case EVENT_IDEOLOGY_UPDATE:
 		e.updateIdeology(silo, deltaYears)
 	case EVENT_VICTORY_CHECK:

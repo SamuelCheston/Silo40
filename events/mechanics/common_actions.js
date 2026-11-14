@@ -5,7 +5,9 @@ defineMechanics([
     label: "Gather Info",
     description: "Probe a department for information. Success depends on fit, alertness and channels; failure raises the target's alertness.",
     target_type: "DEPT",
-    ap_cost: 10,
+    // AP 经济修复 (17-information-economy §3, TODO(balance)): 10 → 2。
+    // 流通动词必须便宜到月收入 (~3/月) 可以支撑每月级的节奏。
+    ap_cost: 2,
     duration_months: 0,
     apply(ctx) {
       const target = ctx.action.target_dept;
@@ -77,7 +79,9 @@ defineMechanics([
     label: "Share Info",
     description: "Share real or fake fragments with a department.",
     target_type: "DEPT",
-    ap_cost: 20,
+    // AP 经济修复 (17-information-economy §3, TODO(balance)): 20 → 3。
+    // 分享是流通的主动词：成本 ~ 月收入，才能维持跑赢淡忘的节奏。
+    ap_cost: 3,
     duration_months: 0,
     apply(ctx) {
       const target = ctx.action.target_dept;
@@ -126,7 +130,8 @@ defineMechanics([
     label: "Build Network",
     description: "Build influence with a department over time.",
     target_type: "DEPT",
-    ap_cost: 15,
+    // AP 经济修复 (17-information-economy §3, TODO(balance)): 15 → 4。
+    ap_cost: 4,
     duration_months: 1,
     apply(ctx) {
       const target = ctx.action.target_dept;
