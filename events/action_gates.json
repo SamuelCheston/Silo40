@@ -175,6 +175,30 @@
       "unlock": { "event_completed": "special:pre_fall_choice" },
       "available": {},
       "reason": "需要覆灭前夕的抉择时刻到来"
+    },
+    {
+      "id": "investigate_dispatch",
+      "unlock": { "all": [ { "stage_at_least": "first_signal" }, { "relation": "Judicial", "min": 0.2 } ] },
+      "available": {},
+      "reason": "需要首档阶段与 Judicial 关系 0.20"
+    },
+    {
+      "id": "expose_execution_failure",
+      "unlock": { "stage_at_least": "first_signal" },
+      "available": {},
+      "reason": "需要先建立驻地阶段进度"
+    },
+    {
+      "id": "verify_evidence",
+      "unlock": { "stage_at_least": "archive_awakened" },
+      "available": {},
+      "reason": "需要档案唤醒阶段"
+    },
+    {
+      "id": "publish_evidence",
+      "unlock": { "stage_at_least": "archive_awakened" },
+      "available": {},
+      "reason": "需要档案唤醒阶段"
     }
   ]
 }

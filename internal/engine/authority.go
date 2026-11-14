@@ -156,12 +156,25 @@ func AdvanceAuthorityMonthly(silo *model.Silo) {
 		// (W/Q/fact count) still decide the pact transition.
 		judicial.PactQualified = true
 	}
+	// §3.2/§5.1：K 只来自二元联盟 (法警 + IT 内部) 的维护忠诚；Police、Mayor
+	// 幕僚与其他部门不进入 K。
+	InitializeItAuthority(silo)
+	alliance := &silo.ItAuthority
+	// §4 人事连续性 P：IT 内部倒戈与法警指挥链断裂是负向人事压力
+	// (TODO(balance): 门槛与斜率为 sim 起点)。
+	personnel := 0.0
+	if alliance.ITInternalLoyalty < 0.4 {
+		personnel -= (0.4 - alliance.ITInternalLoyalty) * 2.5
+	}
+	if alliance.BailiffLoyalty < 0.3 {
+		personnel -= (0.3 - alliance.BailiffLoyalty) * 2.0
+	}
 	inputs := AuthorityInputs{
-		BailiffLoyalty:    professionLoyalty(silo, "Judicial"),
-		ITInternalLoyalty: professionLoyalty(silo, "IT"),
+		BailiffLoyalty:    clamp01(alliance.BailiffLoyalty + alliance.BailiffFear),
+		ITInternalLoyalty: clamp01(alliance.ITInternalLoyalty + alliance.ITInternalFear),
 		Exposure:          info.Exposure,
 		Delivery:          1 - 2*professionPanic(silo, "Judicial"),
-		Personnel:         0, // No personnel-continuity observable exists in v8.
+		Personnel:         personnel,
 		ExternalSignal:    0, // Rare external signals are a later content input.
 	}
 	AdvanceAuthority(silo, inputs)
@@ -193,6 +206,21 @@ func AdvanceAuthorityWithConfig(silo *model.Silo, inputs AuthorityInputs, cfg Au
 	wEq := clamp(cfg.BaseW+cfg.KWeight*a.K+cfg.DWeight*a.D+cfg.PWeight*a.P+cfg.XWeight*a.X-cfg.EWeight*a.E, 0, 100)
 	alpha := 1 - math.Pow(2, -1/cfg.WHalfLifeMonths)
 	a.W = clamp(a.W+alpha*(wEq-a.W), 0, 100)
+
+	// §3.2 冲击队列 Σδe：只消费一次，单月合计 cap ±12。
+	if len(a.Shocks) > 0 {
+		shock := 0.0
+		for _, delta := range a.Shocks {
+			shock += delta
+		}
+		a.Shocks = nil
+		shock = clamp(shock, -12, 12)
+		a.W = clamp(a.W+shock, 0, 100)
+	}
+
+	// 裁决的冲击通道：结构性事件的离散负冲击，不受 ±12 上限约束，可击穿
+	// 日常平衡点下限 (日常累积走上面的普通冲击队列，两者分账)。
+	consumeDecisiveShocks(a)
 
 	l := silo.MayorLegitimacy()
 	a.PoliceObedience = clamp01(a.PoliceObedience + cfg.PoliceObedienceResponseRate*(l-a.PoliceObedience))
@@ -373,31 +401,6 @@ func sortedResidents(silo *model.Silo) []model.Resident {
 	residents := append([]model.Resident(nil), silo.Residents...)
 	sort.SliceStable(residents, func(i, j int) bool { return residents[i].ID < residents[j].ID })
 	return residents
-}
-
-func professionLoyalty(silo *model.Silo, name string) float64 {
-	professionID := uint(0)
-	for i := range silo.Professions {
-		if silo.Professions[i].Name == name {
-			professionID = silo.Professions[i].ID
-			break
-		}
-	}
-	cohorts := append([]model.PopulationCohort(nil), silo.Cohorts...)
-	sort.SliceStable(cohorts, func(i, j int) bool { return cohorts[i].ID < cohorts[j].ID })
-	total, weight := 0.0, 0.0
-	for i := range cohorts {
-		if cohorts[i].ProfessionID != professionID || cohorts[i].Count <= 0 {
-			continue
-		}
-		w := float64(cohorts[i].Count)
-		total += clamp01(cohorts[i].Loyalty) * w
-		weight += w
-	}
-	if weight == 0 {
-		return 0.8
-	}
-	return total / weight
 }
 
 func professionPanic(silo *model.Silo, name string) float64 {

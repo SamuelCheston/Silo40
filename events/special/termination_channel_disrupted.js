@@ -22,5 +22,8 @@ defineEvent({
   },
   effects: [
     worldFlagSet("network_jammed", true),
+    // 裁决的冲击通道 (三类触发源之一)：终止链失效是一次结构性事件，直接
+    // 造成离散负冲击 (量级缺省 = 引擎 DecisiveShockMagnitude，同源只发一次)。
+    decisiveShock("termination_channel_disrupted"),
   ],
 });

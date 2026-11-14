@@ -69,8 +69,14 @@ defineMechanics([
         mutations.push({ type: "actor_metric_delta", field: "political_points", value: prestige * 0.1 * deltaYears });
       }
 
-      // AP 经济修复 (17-information-economy §3, TODO(balance)): 年恢复 10 → 36
-      // (月收入 ~3 点)，使流通动词 (成本 2–4) 可持续推动，跑赢恒定淡忘。
+      // AP 经济 (TODO(balance))：两个口径合并后的取值——
+      // 1) 17-information-economy §3：流通动词 (成本 2–4) 必须可持续跑赢恒定淡忘，
+      //    校准为年恢复 36 (~3/月)；
+      // 2) 10 §7.4 拆台节奏：首档 60–75AP/4–6 月、covenant 累计 125–150AP/12–16 月，
+      //    曾按 ~6–8/月 校准。
+      // 合并裁决：取信息线的 36/年——FRACTURE / RULE_OF_LAW / 共证等可玩线
+      // 的日历节奏都按该值标定 (拆台线在 84/年 下会把 FRACTURE 崩塌链打到
+      // 124 年闸之前)。拆台日历目标 (§7.4 首档 4–6 月) 需在 36/年 下重新测量。
       const apGainRate = 36 + prestige * 0.05;
       const nextAP = clamp(ctx.actor.action_points + apGainRate * deltaYears, 0, 100);
       mutations.push({ type: "actor_metric_set", field: "action_points", value: nextAP });

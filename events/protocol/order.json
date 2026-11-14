@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "clauses": [
+    {
+      "id": "P-01",
+      "version": 1,
+      "category": "prohibition",
+      "forbidden_action": "unauthorized_cross_contact",
+      "severity": "major",
+      "intervention_points": 0.6,
+      "description": "禁止未经授权的对外接触与越界联络。"
+    },
+    {
+      "id": "P-02",
+      "version": 1,
+      "category": "prohibition",
+      "forbidden_action": "required_report_cleanup",
+      "severity": "existential",
+      "intervention_points": 1.2,
+      "description": "禁止清理必需报告与留档记录。"
+    },
+    {
+      "id": "P-03",
+      "version": 1,
+      "category": "prohibition",
+      "forbidden_action": "unauthorized_disappearance",
+      "severity": "major",
+      "intervention_points": 0.6,
+      "description": "禁止未经授权的处置性消失；人员处置必须有留档依据。"
+    },
+    {
+      "id": "P-04",
+      "version": 1,
+      "category": "prohibition",
+      "forbidden_action": "evidence_forgery",
+      "severity": "major",
+      "intervention_points": 0.6,
+      "description": "禁止伪造必需报告与留档材料。"
+    },
+    {
+      "id": "R-01",
+      "version": 1,
+      "category": "required_response",
+      "required_action": "anomaly_report",
+      "trigger_metric": "event_trigger",
+      "trigger_at_least": 1.0,
+      "deadline_months": 2,
+      "severity": "minor",
+      "intervention_points": 0.15,
+      "reporting_requirement": "异常信号出现后两月内完成记录与上报。",
+      "description": "异常信号必须在限期上报。"
+    },
+    {
+      "id": "O-01",
+      "version": 1,
+      "category": "outcome_target",
+      "target_metric": "rebellion",
+      "target_max": 0.6,
+      "review_interval_months": 3,
+      "severity": "major",
+      "intervention_points": 0.6,
+      "description": "不得出现失控叛乱；到 review 日读取真实结果。"
+    },
+    {
+      "id": "O-02",
+      "version": 1,
+      "category": "outcome_target",
+      "target_metric": "cohesion",
+      "target_min": 0.3,
+      "review_interval_months": 3,
+      "severity": "minor",
+      "intervention_points": 0.25,
+      "description": "官方叙事必须仍可持续；到 review 日读取真实结果。"
+    },
+    {
+      "id": "G-01",
+      "version": 1,
+      "category": "gap",
+      "severity": "minor",
+      "intervention_points": 0,
+      "known_gaps": "上层介入的完整条件未穷举；极端情境下与 R-01 的限期存在冲突。",
+      "description": "已知缺口：条款未覆盖的情境不自动视为安全。"
+    }
+  ]
+}

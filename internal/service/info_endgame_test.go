@@ -2,6 +2,7 @@ package service
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -252,7 +253,7 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 			t.Fatalf("execute %+v: %v (AP=%v, known=%v, beliefs=%+v)", action, err, svc.agent.ActionPoints, svc.agent.KnownFragments, svc.agent.Beliefs)
 		}
 		if !outcome.Result.Executed {
-			t.Fatalf("execute %+v rejected: %+v (AP=%v, known=%v, beliefs=%+v)", action, outcome.Result, svc.agent.ActionPoints, svc.agent.KnownFragments, svc.agent.Beliefs)
+			t.Fatalf("execute %+v rejected: %+v (AP=%v, verified=%v, evidence=%+v, beliefs=%+v)", action, outcome.Result, svc.agent.ActionPoints, svc.silo.VerifiedEvidence, svc.silo.PublicEvidence, svc.agent.Beliefs)
 		}
 	}
 
@@ -265,8 +266,8 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		FragmentIds: []string{svc.agent.KnownFragments[0]},
 	})
 
-	// Let the real bailiff observation/publication chain run, then let the next
-	// natural monthly authority update compute Q from the registered evidence.
+	// Let the real bailiff observation chain run until the player's belief in
+	// Judicial_2 reaches the publish floor.
 	for month := 0; month < 12 && svc.silo.Authority.Judicial.PublicEvidenceQ <= 0 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance bailiff public evidence at month %d: %v", month, err)
@@ -277,10 +278,61 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	if judicialBelief == nil || judicialBelief.B < publishFloor {
 		t.Fatalf("real actions did not reach the Judicial_2 publish floor %.2f: belief=%+v, known=%v, AP=%v", publishFloor, judicialBelief, svc.agent.KnownFragments, svc.agent.ActionPoints)
 	}
-	for _, key := range []string{"special:bailiff_dispatch_evidence_b", "special:bailiff_evidence_public_b"} {
-		if !contentTriggered(svc, key) {
-			t.Fatalf("%s did not fire through real monthly progression (belief=%+v, evidence=%+v)", key, judicialBelief, svc.silo.PublicEvidence)
+	if !contentTriggered(svc, "special:bailiff_dispatch_evidence_b") {
+		t.Fatalf("special:bailiff_dispatch_evidence_b did not fire through real monthly progression (belief=%+v)", judicialBelief)
+	}
+
+	// Publication is a player decision (sub-item 6 replaced the automatic
+	// scaffold): verify then publish until Judicial_2 is registered, letting
+	// the next natural monthly authority update compute Q from the evidence.
+	verifyReportFloor := engine.DefaultInformationConfig().QualReport
+	for i := 0; i < 6; i++ {
+		published := false
+		for _, record := range svc.silo.PublicEvidence {
+			if record.FactID == "Judicial_2" {
+				published = true
+			}
 		}
+		if published {
+			break
+		}
+		verifiable, publishable := false, false
+		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+			belief := engine.BeliefFor(svc.agent, fact)
+			if belief == nil {
+				continue
+			}
+			verified := false
+			isPublished := false
+			for _, v := range svc.silo.VerifiedEvidence {
+				if v == fact {
+					verified = true
+				}
+			}
+			for _, record := range svc.silo.PublicEvidence {
+				if record.FactID == fact {
+					isPublished = true
+				}
+			}
+			if belief.B >= verifyReportFloor && !verified {
+				verifiable = true
+			}
+			if belief.B >= publishFloor && verified && !isPublished {
+				publishable = true
+			}
+		}
+		if verifiable && svc.agent.ActionPoints >= 15 {
+			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "verify_evidence"})
+		}
+		if publishable && svc.agent.ActionPoints >= 20 {
+			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "publish_evidence"})
+		}
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("advance publication at step %d: %v", i, err)
+		}
+	}
+	if !contentTriggered(svc, "player_action:publish_evidence") {
+		t.Fatalf("player publication never completed (belief=%+v, verified=%v, evidence=%+v)", judicialBelief, svc.silo.VerifiedEvidence, svc.silo.PublicEvidence)
 	}
 	if svc.silo.Authority.Judicial.PublicEvidenceQ <= 0 {
 		t.Fatalf("natural authority updates did not produce Q from bailiff evidence: Q=%v, evidence=%+v", svc.silo.Authority.Judicial.PublicEvidenceQ, svc.silo.PublicEvidence)
@@ -324,6 +376,11 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 			circulationActions++
 		}
 	}
+	// Per-pair share cap (same anti-deadlock as the §7.4 calibration): a fact
+	// that does not absorb past the floor for one department (repeat-penalty
+	// stall) must not be re-shared forever while other departments wait for a
+	// third fact — the loop gathers instead and grows the portfolio.
+	shareAttempts := map[string]int{}
 	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
@@ -345,20 +402,42 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		switch {
 		case svc.silo.Rebellion >= 0.7:
 			// Lie low while rebellion runs hot.
-		case ap >= shareCost && month >= 4:
-			dept := neediestDepartment(svc.silo)
-			fragment, ok := strongestShareableFactFor(svc.agent, departmentByAddress(svc.silo, dept))
-			if ok {
+		case ap >= shareCost && month >= 4 && month%2 == 0:
+			// Neediest-first over ALL departments, skipping capped pairs: a fact
+			// that stalls below the floor for one department (repeat penalty)
+			// must neither be re-shared forever nor block the portfolio's other
+			// facts from reaching that department.
+			order := append([]model.Profession(nil), svc.silo.Professions...)
+			sort.SliceStable(order, func(i, j int) bool {
+				return informationHeldFacts(&order[i]) < informationHeldFacts(&order[j])
+			})
+			shared := false
+			for i := range order {
+				dept := &order[i]
+				fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
+					return shareAttempts[dept.Name+":"+fact] >= 2
+				})
+				if !ok {
+					continue
+				}
+				shareAttempts[dept.Name+":"+fragment]++
 				attemptCirculation(model.AgentAction{
-					Type: model.ActionShareInfo, TargetDept: dept,
+					Type: model.ActionShareInfo, TargetDept: dept.Name,
 					FragmentIds: []string{fragment},
 				})
-			} else if ap >= gatherCost {
+				shared = true
+				break
+			}
+			if !shared && ap >= gatherCost {
 				attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 			}
 		case ap >= buildCost && month < 12:
 			attemptCirculation(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
 		case ap >= gatherCost:
+			// Odd months (and any month with nothing shareable) gather: the
+			// portfolio must keep growing — a strong fourth fact is what the
+			// hardest department (zero-population Mayor) needs for its third
+			// above-floor belief.
 			attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 		}
 	}
@@ -407,4 +486,41 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	if outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"}); err == nil {
 		t.Fatalf("terminal INFORMATION state accepted another action: %+v", outcome.Result)
 	}
+}
+
+// informationHeldFacts counts a department's facts at or above the sharing
+// floor (QualRumor) — the neediness ordering key for the circulation loop.
+func informationHeldFacts(prof *model.Profession) int {
+	count := 0
+	for _, belief := range prof.Beliefs {
+		if belief.B >= engine.DefaultInformationConfig().QualRumor {
+			count++
+		}
+	}
+	return count
+}
+
+// strongestShareableFactExcluding is strongestShareableFactFor with an
+// exclusion predicate on the fact ID (used to skip capped pairs).
+func strongestShareableFactExcluding(agent *model.Agent, dept *model.Profession, skip func(string) bool) (string, bool) {
+	held := map[string]bool{}
+	if dept != nil {
+		for _, belief := range dept.Beliefs {
+			if belief.B >= engine.DefaultInformationConfig().QualRumor {
+				held[belief.FactID] = true
+			}
+		}
+	}
+	best := ""
+	bestB := 0.0
+	for _, belief := range agent.Beliefs {
+		if belief.B < engine.DefaultInformationConfig().QualRumor || held[belief.FactID] || (skip != nil && skip(belief.FactID)) {
+			continue
+		}
+		if belief.B > bestB || (belief.B == bestB && belief.FactID < best) {
+			best = belief.FactID
+			bestB = belief.B
+		}
+	}
+	return best, best != ""
 }

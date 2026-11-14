@@ -479,6 +479,13 @@ func validateEffect(effect ContentEffect) error {
 		if effect.Metric == "" {
 			return fmt.Errorf("profession_metric_delta_all requires metric")
 		}
+	case "profession_metric_delta":
+		if effect.Metric == "" {
+			return fmt.Errorf("profession_metric_delta requires metric")
+		}
+		if strings.TrimSpace(effect.Profession) == "" {
+			return fmt.Errorf("profession_metric_delta requires profession")
+		}
 	case "profession_ideology_delta_all":
 		if effect.Ideology == "" {
 			return fmt.Errorf("profession_ideology_delta_all requires ideology")
@@ -562,6 +569,28 @@ func validateEffect(effect ContentEffect) error {
 		if effect.Provenance <= 0 || effect.Coverage <= 0 {
 			return fmt.Errorf("public_evidence_register requires positive provenance and coverage")
 		}
+	case "evidence_verify":
+		// 子项 6：核验把事实提升为"已核验档案"级 provenance 的前置。
+		if strings.TrimSpace(effect.Fragment) == "" {
+			return fmt.Errorf("evidence_verify requires fragment")
+		}
+	case "authority_w_shock":
+		// 威势冲击 (§3.2 δe)：内容事件经冲击队列影响 W，下次月度更新消费一次。
+		if effect.Value == 0 {
+			return fmt.Errorf("authority_w_shock requires non-zero value")
+		}
+	case "decisive_shock":
+		// 裁决的冲击通道：结构性事件的离散负冲击 (三类触发源)。value 缺省 =
+		// DecisiveShockMagnitude；flag 可选，覆盖冲击源键 (缺省由服务层用事件键)。
+		if effect.Value > 0 {
+			return fmt.Errorf("decisive_shock value must be negative (got %v)", effect.Value)
+		}
+	case "alliance_loyalty_delta":
+		// §5.1：二元联盟忠诚冲击 (公开证据动摇法警/IT 内部)。
+		// observer = "bailiff" / "it_internal"。
+		if effect.Observer != "bailiff" && effect.Observer != "it_internal" {
+			return fmt.Errorf("alliance_loyalty_delta requires observer bailiff or it_internal")
+		}
 	default:
 		return fmt.Errorf("unsupported effect type %q", effect.Type)
 	}
@@ -594,6 +623,25 @@ func validateEffectScope(effect ContentEffect) error {
 // CanTriggerContentEvent 判断当前事件是否满足触发条件以及运行时限制。
 func CanTriggerContentEvent(def ContentEventDefinition, ctx ContentEvaluationContext) bool {
 	return canTriggerContentEvent(def, ctx, false)
+}
+
+// HasPlayerActionTrigger reports whether the trigger tree contains a
+// player_action_is node. Player-action-group definitions without one must not
+// ride along on unrelated actions (they fire only when explicitly submitted).
+func HasPlayerActionTrigger(def ContentEventDefinition) bool {
+	return hasPlayerActionTrigger(def.Trigger)
+}
+
+func hasPlayerActionTrigger(trigger ContentTrigger) bool {
+	if trigger.Type == "player_action_is" {
+		return true
+	}
+	for _, child := range trigger.Conditions {
+		if hasPlayerActionTrigger(child) {
+			return true
+		}
+	}
+	return false
 }
 
 // CanDisplayPlayerAction checks current availability while ignoring player_action_is.
@@ -878,8 +926,30 @@ type ScopeContext struct {
 	BeliefObservations *[]BeliefObservationRequest
 	// PublicEvidenceWrites 收集 public_evidence_register 效果；nil = 无处投递。
 	PublicEvidenceWrites *[]model.PublicEvidenceRecord
+	// VerifiedFacts 收集 evidence_verify 效果；nil = 无处投递。
+	VerifiedFacts *[]string
+	// WShocks 收集 authority_w_shock 效果；nil = 无处投递。
+	WShocks *[]float64
+	// DecisiveShocks 收集 decisive_shock 效果 (裁决的冲击通道)；nil = 无处投递。
+	DecisiveShocks *[]DecisiveShockRequest
+	// AllianceDeltas 收集 alliance_loyalty_delta 效果 (组名 -> 增量列表)；
+	// nil = 无处投递。
+	AllianceDeltas *[]AllianceLoyaltyDelta
 	// Errors 收集目标解析失败等显式错误 (对齐 07 §12：不静默丢弃)。
 	Errors *[]string
+}
+
+// AllianceLoyaltyDelta 一次联盟忠诚冲击。
+type AllianceLoyaltyDelta struct {
+	Group string // bailiff / it_internal
+	Value float64
+}
+
+// DecisiveShockRequest 一次 decisive_shock 效果的落地请求 (裁决的冲击通道)。
+// Source 为空时由服务层以事件键填充；Value 为 0 时取 DecisiveShockMagnitude。
+type DecisiveShockRequest struct {
+	Source string
+	Value  float64
 }
 
 // BeliefObservationRequest 一次 belief_observe 效果的落库请求。ObservationID
@@ -942,6 +1012,32 @@ func ApplyContentEffectsScoped(effects []ContentEffect, sc *ScopeContext) []Cont
 					FactID:     strings.TrimSpace(effect.Fragment),
 					Provenance: effect.Provenance,
 					Coverage:   effect.Coverage,
+				})
+			}
+			continue
+		case "evidence_verify":
+			if sc != nil && sc.VerifiedFacts != nil && strings.TrimSpace(effect.Fragment) != "" {
+				*sc.VerifiedFacts = append(*sc.VerifiedFacts, strings.TrimSpace(effect.Fragment))
+			}
+			continue
+		case "authority_w_shock":
+			if sc != nil && sc.WShocks != nil && effect.Value != 0 {
+				*sc.WShocks = append(*sc.WShocks, effect.Value)
+			}
+			continue
+		case "decisive_shock":
+			if sc != nil && sc.DecisiveShocks != nil {
+				*sc.DecisiveShocks = append(*sc.DecisiveShocks, DecisiveShockRequest{
+					Source: strings.TrimSpace(effect.Flag),
+					Value:  effect.Value,
+				})
+			}
+			continue
+		case "alliance_loyalty_delta":
+			if sc != nil && sc.AllianceDeltas != nil && effect.Value != 0 {
+				*sc.AllianceDeltas = append(*sc.AllianceDeltas, AllianceLoyaltyDelta{
+					Group: effect.Observer,
+					Value: effect.Value,
 				})
 			}
 			continue
@@ -1091,6 +1187,10 @@ func applyContentEffect(effect ContentEffect, silo *model.Silo) {
 	case "profession_metric_delta_all":
 		for i := range silo.Professions {
 			applyProfessionMetricDelta(&silo.Professions[i], effect.Metric, effect.Value)
+		}
+	case "profession_metric_delta":
+		if prof := findDept(silo, effect.Profession); prof != nil {
+			applyProfessionMetricDelta(prof, effect.Metric, effect.Value)
 		}
 	case "profession_ideology_delta_all":
 		for i := range silo.Professions {

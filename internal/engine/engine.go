@@ -36,6 +36,10 @@ type GameEngine struct {
 	MechanicEngine  *MechanicEngine
 	RuleEngine      *RuleEngine
 	TriggerEngine   *TriggerEngine
+	// ProtocolClauses 真实 Order 条款 (服务层从 events/protocol 加载)。
+	// 真实判定只读它；IT 的 believed 副本在存档内，可被伪造。
+	ProtocolClauses []model.ProtocolClause
+	ProtocolVersion int
 	EventEngine     *EventEngine
 
 	// 内部结果收集
@@ -156,10 +160,8 @@ func (e *GameEngine) registerSystems() {
 			e.actionResult = &failed
 			return
 		}
-		// IT 被动机制：任何成功的 IT 行动都会恶化 safeguard 风险 (与成本成正比)。
-		if result.ActionResult != nil && result.ActionResult.Executed && actor.Profession() == "IT" {
-			silo.SafeguardRisk += action.Cost * 0.002
-		}
+		// §11.8：旧的"所有 IT 行动统一加 Safeguard 风险"已被裁决替换——IT 行为
+		// 的保障后果改由 Protocol 三类偏离判定 (子项 4/5)，不再挂统一正惩罚。
 		e.actionResult = result.ActionResult
 	})
 
@@ -337,6 +339,12 @@ func (e *GameEngine) RunLocalPhase(silo *model.Silo, agent *model.Agent, deltaYe
 
 	// 4. 权威状态：月度更新后才允许影响本月 NPC 决策；零月路径不进入这里。
 	AdvanceAuthorityMonthly(silo)
+
+	// 4.5 Order 条款结算：三类偏离、J 与介入链 (确定性，无 RNG)。
+	e.AdvanceProtocolMonthly(silo)
+
+	// 4.6 IT 权威回合：二元联盟维护与隐蔽动作 (§5)。
+	e.RunITAuthorityMonthly(silo, agent)
 
 	// 5. NPC 自主行为
 	e.RunNpcTurn(silo, agent, deltaYears, e.logf)

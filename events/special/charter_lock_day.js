@@ -10,10 +10,12 @@ defineEvent({
   // Q >= 0.85, >= 2 independent facts) sustains; qualification reads that
   // engine fact, never this completion key (ADR-0010).
   //
-  // DEPENDENCY NOTE: reaching W <= 18 currently relies on the exposure
-  // high-water mark accumulating naturally; the discrete negative-W shock
-  // channels (Silo 1 fall / termination-chain failure / mass public evidence)
-  // are being built on a parallel track. Content never writes W and invents
+  // DEPENDENCY NOTE: reaching W <= 18 relies on the exposure high-water mark
+  // accumulating naturally plus the discrete negative-W shock channels
+  // (Silo 1 fall / termination-channel failure / mass public evidence —
+  // engine decisive_shocks.go; publishing the second qualifying fact IS the
+  // mass-evidence shock). The shock must land on a W already ground down by
+  // everyday pressure to break the gate. Content never writes W and invents
   // no W judgment of its own — this node waits for the window, nothing more.
   trigger: all(
     eventTriggered("special", "charter_draft_convened"),

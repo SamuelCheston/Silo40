@@ -77,11 +77,10 @@ func TestClassifyDetection(t *testing.T) {
 	}
 }
 
-// TestITSafeguardRiskCoupling keeps the legacy coupling locked until the
-// Protocol-deviation rework replaces it (sub-item 5): every successful IT
-// action still worsens safeguard risk by cost x 0.002, and IT duty actions
-// gain no ordinary suspicion this round either.
-func TestITSafeguardRiskCoupling(t *testing.T) {
+// TestITSafeguardUnifiedPenaltyRemoved locks §11.8: the old blanket
+// "every IT action adds safeguard risk" coupling is gone — safeguard
+// consequences of IT behavior now come from Protocol deviation judgments.
+func TestITSafeguardUnifiedPenaltyRemoved(t *testing.T) {
 	e := NewGameEngine()
 	silo := CreateInitialSilo("Suspicion Silo", 122, nil)
 	itAgent := CreateInitialAgent("ITAgent", "IT", nil, silo)
@@ -92,26 +91,16 @@ func TestITSafeguardRiskCoupling(t *testing.T) {
 	if !res.Executed {
 		t.Fatalf("expected execution, got %q", res.Message)
 	}
-	if !almostEqual(silo.SafeguardRisk, 15*0.002) {
-		t.Errorf("safeguard_risk = %v, want %v", silo.SafeguardRisk, 15*0.002)
+	if silo.SafeguardRisk != 0 {
+		t.Errorf("safeguard_risk = %v, want 0 (unified IT penalty removed)", silo.SafeguardRisk)
 	}
 	if !almostEqual(itAgent.SuspicionLevel, 0) {
 		t.Errorf("IT_SURVEILLANCE suspicion = %v, want 0", itAgent.SuspicionLevel)
 	}
-
-	before := silo.SafeguardRisk
-	res = e.ExecuteAgentAction(silo, itAgent, model.AgentAction{
-		Type: model.ActionBuildConnection, TargetDept: "Supply", Cost: 15,
-	})
-	if !res.Executed {
-		t.Fatalf("expected execution, got %q", res.Message)
-	}
-	if !almostEqual(silo.SafeguardRisk-before, 15*0.002) {
-		t.Errorf("safeguard_risk delta = %v, want %v", silo.SafeguardRisk-before, 15*0.002)
-	}
 }
 
-// TestSafeguardRiskCouplingOnlyForIT keeps non-IT actors out of the coupling.
+// TestSafeguardRiskCouplingOnlyForIT keeps non-IT actors out of any safeguard
+// coupling (regression guard after the removal).
 func TestSafeguardRiskCouplingOnlyForIT(t *testing.T) {
 	e := NewGameEngine()
 	silo := CreateInitialSilo("Suspicion Silo", 122, nil)
