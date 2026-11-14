@@ -48,9 +48,11 @@ defineMechanics([
           trait_factor: traitFactor,
           structural_prestige: structuralPrestige,
           political_prestige: prestige,
-          ap_base_recovery: 10,
+          // 与 core_systems.js agent_update 的实际恢复公式逐位一致
+          // (年恢复 36 + 威望*0.05，TODO(balance))；这是展示值，不是另一套经济。
+          ap_base_recovery: 36,
           ap_prestige_bonus: prestige * 0.05,
-          ap_total_recovery: 10 + prestige * 0.05,
+          ap_total_recovery: 36 + prestige * 0.05,
           ap_max: 100,
           propaganda_level: ctx.actor.propaganda_level || 0,
           propaganda_multiplier: 1 + (ctx.actor.propaganda_level || 0) * 0.2,
