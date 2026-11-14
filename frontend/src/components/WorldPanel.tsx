@@ -20,6 +20,15 @@ const operationStatusText: Record<string, string> = {
     FAILED: '失败',
 };
 
+// 阶段是后端权威进度 (action_gates.json)；界面不显示裸 key。
+const stageLabel: Record<string, string> = {
+    arrival: '初到驻地',
+    first_signal: '第一次本地观察',
+    archive_awakened: '档案苏醒',
+    chain_living: '活链成立',
+    chain_public_fact: '公共事实',
+};
+
 const nextCounterintelThreshold = (exposure: number) => exposure >= 0.75 ? 'MAX' : `${(Math.floor(exposure * 4) + 1) * 25}%`;
 
 export const WorldPanel = React.memo(function WorldPanel({ world, agent }: WorldPanelProps) {
@@ -34,7 +43,7 @@ export const WorldPanel = React.memo(function WorldPanel({ world, agent }: World
             <HStack justify="space-between" align="start" mb={3}>
                 <Box>
                     <Heading size="sm" color="blue.800">驻地与外部地堡情报网</Heading>
-                    <Text fontSize="xs" color="gray.600">Y{world.current_year} M{world.current_month} · 阶段 {world.progress_stage || 'arrival'} · 40 号派出，现驻 {stationName || '未知地堡'}</Text>
+                    <Text fontSize="xs" color="gray.600">Y{world.current_year} M{world.current_month} · 阶段：{stageLabel[world.progress_stage] || world.progress_stage || 'arrival'} · 40 号派出，现驻 {stationName || '未知地堡'}</Text>
                 </Box>
                 <VStack align="end" gap={1}>
                     <Badge colorPalette={world.silo1_simulated ? 'green' : 'gray'}>

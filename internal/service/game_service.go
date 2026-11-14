@@ -3262,6 +3262,10 @@ func (s *GameService) informationProgress() *model.InformationProgress {
 			AboveFloor: above,
 		})
 	}
+	// 终止链读数：先兆 (crisis:reset_omen_requisition) 与反制成立
+	// (player_action:reset_countermeasure_done，由 copies_distributed 写入)。
+	progress.ResetOmenSeen = states["crisis:reset_omen_requisition"].Triggered
+	progress.ResetCountermeasureDone = states["player_action:reset_countermeasure_done"].Triggered
 	return progress
 }
 

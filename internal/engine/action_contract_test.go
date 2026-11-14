@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"silo40/internal/model"
 )
@@ -40,6 +42,29 @@ func TestContractCommonActionsJSOverridesGoTables(t *testing.T) {
 	} {
 		if _, ok := byType[actionType]; !ok {
 			t.Errorf("built-in action %s has no JS definition", actionType)
+		}
+	}
+}
+
+// 开局自解释契约：通用动作描述必须承载"这个动作在目标里意味着什么"，
+// 不能退回到纯机制速记（"Probe a department" 时代）。描述是玩家理解
+// "我为什么要做这个"的唯一界面通道之一。
+func TestContractCommonActionDescriptionsCarryPurpose(t *testing.T) {
+	e := NewGameEngine()
+	if e.MechanicEngine == nil {
+		t.Fatal("mechanic engine unavailable")
+	}
+	defs := e.MechanicEngine.CommonActionDefinitions()
+	if len(defs) == 0 {
+		t.Fatal("no JS common action definitions loaded")
+	}
+	for _, def := range defs {
+		if strings.TrimSpace(def.Description) == "" {
+			t.Errorf("%s: description is empty", def.ID)
+			continue
+		}
+		if n := utf8.RuneCountInString(def.Description); n < 24 {
+			t.Errorf("%s: description too short to carry purpose (%d runes): %q", def.ID, n, def.Description)
 		}
 	}
 }

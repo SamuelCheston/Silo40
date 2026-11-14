@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
 import { CreateGame, GetGameState, HasActiveGame, BeginPassTime, BeginAction, ProcessNextEvent, GetAllFragments, GetEventHistory, SaveGame } from "../wailsjs/go/main/App";
 import { Box, Button, Heading, Input, Text, VStack, HStack, Badge, SimpleGrid, NativeSelect } from "@chakra-ui/react";
@@ -11,6 +11,7 @@ import { FactionView } from './components/FactionView';
 import { HeaderStats } from './components/HeaderStats';
 import { WorldPanel } from './components/WorldPanel';
 import { InformationProgressPanel } from './components/InformationProgressPanel';
+import { MissionPanel } from './components/MissionPanel';
 import { Silo, Agent, AgentAction, AgentActionType, GameState, AgentStats, PlayerActionMeta, StoryEventLog } from './logic/models';
 import { LayoutGrid, Users } from 'lucide-react';
 
@@ -21,6 +22,31 @@ function formatStory(story: any): string {
     }
     return story ? story.title : '';
 }
+
+// 首次关键反馈：阶段跃迁与第一次吸收是"这套东西是活的"的时刻，
+// 界面要给够分量——不是弹窗，是常驻一屏的醒目横幅，下一次行动时收起。
+const stageMoments: Record<string, { title: string; body: string }> = {
+    first_signal: {
+        title: '第一次本地观察完成',
+        body: '驻地的门开了一条缝——「Share Info」与职务动作已解锁。当你手握确信 B ≥ 0.30 的材料时，把它交给能独立查账的人：事实要到你的叙述之外去成立。',
+    },
+    archive_awakened: {
+        title: '档案苏醒：第一次有本地人用自己的职务语言重新提出问题',
+        body: '材料离手了。对方不是在复述你的句子——他们在查自己的账。感染成立；接下来是复制：让接收者培养出下一位接收者。',
+    },
+    chain_living: {
+        title: '活链成立',
+        body: '感染、复制、隐匿三者齐备：链不需要你逐日维持也能复制。剩下的是公共事实，以及守住宿主活到结算。',
+    },
+    chain_public_fact: {
+        title: '核心真相已成为公共事实',
+        body: '它有了自己的来源说明、自己的核验路径、自己的保管人。你的沉默、离开或失忆，都不再能把它收回。守住宿主，直到结算。',
+    },
+};
+const absorptionMoment = {
+    title: '第一次有部门吸收了你的事实',
+    body: '事实进入了他们的信念层——开始不依赖你而存在，也开始随时间淡忘。这就是"这套东西是活的"：持续流通，才跑赢淡忘。',
+};
 
 function App() {
     const [resultText, setResultText] = useState("Please enter your name below 👇");
@@ -39,6 +65,28 @@ function App() {
     const [world, setWorld] = useState<any>(null);
     const [busy, setBusy] = useState(false);
     const [infoProgress, setInfoProgress] = useState<any>(null);
+    const [moments, setMoments] = useState<{ title: string; body: string }[]>([]);
+    const prevStageRef = useRef<string | null>(null);
+    const prevAbsorbedRef = useRef<number | null>(null);
+
+    // 从状态快照里检测"关键时刻"：阶段跃迁、第一次吸收。只在已有前值
+    // （即非首次加载）时比较，开局与读档不会误报。
+    const detectMoments = useCallback((state: any) => {
+        const fresh: { title: string; body: string }[] = [];
+        const stage = state?.world?.progress_stage || null;
+        if (prevStageRef.current !== null && stage && stage !== prevStageRef.current) {
+            const moment = stageMoments[stage];
+            if (moment) fresh.push(moment);
+        }
+        prevStageRef.current = stage;
+        const absorbed = (state?.information_progress?.departments || [])
+            .reduce((sum: number, dept: any) => sum + (dept.above_floor || 0), 0);
+        if (prevAbsorbedRef.current === 0 && absorbed > 0) {
+            fresh.push(absorptionMoment);
+        }
+        prevAbsorbedRef.current = absorbed;
+        if (fresh.length > 0) setMoments(fresh);
+    }, []);
 
     // Action Form State
     const [actionType, setActionType] = useState<AgentActionType>('GATHER_INFO');
@@ -93,7 +141,8 @@ function App() {
         setPendingOperation('');
         setGameStarted(true);
         setShowSetup(false);
-    }, []);
+        detectMoments(state);
+    }, [detectMoments]);
 
     const applyEventState = useCallback((state: any) => {
         setSilo(state.silo);
@@ -106,7 +155,8 @@ function App() {
         setPendingOperation(state.pending_operation || '');
         setGameStarted(true);
         setShowSetup(false);
-    }, []);
+        detectMoments(state);
+    }, [detectMoments]);
 
     useEffect(() => {
         if (!availableActions.some((action) => {
@@ -180,6 +230,9 @@ function App() {
         setAgent(null);
         setWorld(null);
         setEventHistory([]);
+        setMoments([]);
+        prevStageRef.current = null;
+        prevAbsorbedRef.current = null;
         setResultText('Start a new Silo 40 operation. Your previous save remains until the new game is created.');
     }, []);
 
@@ -219,6 +272,7 @@ function App() {
         if (!silo || !agent || busy) return;
 
         setBusy(true);
+        setMoments([]);
         try {
             const state = await BeginPassTime(1);
             applyEventState(state);
@@ -272,6 +326,7 @@ function App() {
         };
 
         setBusy(true);
+        setMoments([]);
         try {
             const state = await BeginAction(action);
             applyEventState(state);
@@ -304,6 +359,16 @@ function App() {
         profession_group: 'orange',
         faction_member: 'teal',
         faction_leader: 'red',
+    };
+    // 每个动作分组在目标里的意义：玩家要能回答"我为什么要做这些"。
+    const groupNote: Record<string, string> = {
+        common: '流通的主干动词：取材料（Gather）、交材料（Share）、建信任（Build）。《共证》线靠它们推进。',
+        profession: '职务动作是你的合法外壳与就近渠道：维持岗位身份，部分动作能直接取得或深化材料。',
+        profession_group: '职务圈层的协同动作：以岗位身份为掩护，做单人做不了的事。',
+        station: '针对驻地的行动：把本地关系转化为可核验的结果。',
+        silo1: '面向 1 号的有限通道：只有情报与欺骗——驻地的事要经驻地自己的手。',
+        faction_member: '派系成员动作：以公开身份参与派系议程。',
+        faction_leader: '派系领袖动作：公开位置换来的杠杆，用之前想好暴露的代价。',
     };
     const orderedGroups = useMemo(() => groupOrder.filter((group) => (groupedActions[group] || []).length > 0), [groupedActions]);
     const selectAction = useCallback((action: PlayerActionMeta) => {
@@ -421,7 +486,9 @@ function App() {
                                     _focus={{ border: "1px solid", borderColor: "blue.500", bg: "white" }}
                                 />
                                 <Text textAlign="center" color="gray.600">
-                                    你是 40 号地堡的特工。通过情报、关系与隐蔽行动引导其他地堡，而不是经营人口。
+                                    你是 40 号地堡的特工，被派往一座仍在运转的地堡。
+                                    这一局的目标：让 40 号的覆灭与 1 号的控制方式不再只能由控制者单方叙述——
+                                    使真相能被独立核验、被驻地的人保有。你通过情报、关系与隐蔽行动引导驻地，而不是经营人口。
                                 </Text>
                                 <Button colorPalette="blue" size="lg" w="full" onClick={() => setShowSetup(true)}>
                                     以 Silo 40 特工身份开局
@@ -437,6 +504,13 @@ function App() {
                             <HStack align="start" gap={6} w="full" wrap="wrap">
                                 {/* Left Side: View Content */}
                                 <VStack gap={6} flex={{ base: "1 1 100%", lg: 2 }} w="full">
+                                    {moments.map(moment => (
+                                        <Box key={moment.title} w="full" p={4} bg="green.50" border="2px solid" borderColor="green.400" borderRadius="md">
+                                            <Heading size="sm" color="green.800">{moment.title}</Heading>
+                                            <Text fontSize="sm" color="gray.700" mt={1}>{moment.body}</Text>
+                                        </Box>
+                                    ))}
+                                    <MissionPanel world={world} agent={agent} progress={infoProgress} />
                                     <WorldPanel world={world} agent={agent} />
                                     {activeView === 'map' ? (
                                         silo && <BunkerMap silo={silo} agent={agent} />
@@ -458,6 +532,9 @@ function App() {
                                                     <Text fontSize="sm" fontWeight="bold" color={`${groupColor[group] || 'gray'}.700`}>
                                                         {groupTitle[group] || group}
                                                     </Text>
+                                                    {groupNote[group] && (
+                                                        <Text fontSize="xs" color="gray.500">{groupNote[group]}</Text>
+                                                    )}
                                                     <SimpleGrid columns={2} gap={3} w="full">
                                                         {(groupedActions[group] || []).map((action) => {
                                                             const isSelected = selectedActionMeta?.id === action.id && selectedActionMeta?.action_type === action.action_type;
@@ -532,6 +609,11 @@ function App() {
                                                 <>
                                                     <VStack align="start" gap={1}>
                                                         <Text fontSize="sm" fontWeight="bold" color="gray.700">Fragments to Share (Real & Fake):</Text>
+                                                        {(agent?.known_fragments?.length || 0) === 0 && (
+                                                            <Text fontSize="xs" color="orange.700">
+                                                                你还没有任何可作为事实分享的材料——先用「Gather Info」把确信提到 B ≥ 0.30，材料才够格离手。
+                                                            </Text>
+                                                        )}
                                                         <HStack wrap="wrap" gap={2} maxH="200px" overflowY="auto" p={2} border="1px solid" borderColor="gray.200" borderRadius="md" w="full">
                                                             {allFragments.map(f => {
                                                                 const isSelected = selectedFragments.includes(f);
@@ -578,7 +660,7 @@ function App() {
                                     <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
                                         <Heading size="sm" mb={3} color="gray.800">情报与故事记录</Heading>
                                         <VStack align="stretch" gap={3} maxH="360px" overflowY="auto">
-                                            {eventHistory.length === 0 && <Text fontSize="sm" color="gray.500">推进月份后，截获的信号与事件会保留在这里。</Text>}
+                                            {eventHistory.length === 0 && <Text fontSize="sm" color="gray.500">还没有任何记录。你的第一次「Gather Info」与第一次分享会写下最早的条目；此后截获的信号与事件都保留在这里。</Text>}
                                             {eventHistory.map(event => (
                                                 <Box key={`${event.timestamp}:${event.silo_id}:${event.event_id}`} p={3} bg="white" borderRadius="md" borderLeft="3px solid" borderColor="blue.300">
                                                     <Text fontSize="xs" color="gray.500">Y{event.year} M{event.month} · {world?.silos?.find((ref: any) => ref.id === event.silo_id)?.name || `Silo ${event.silo_id}`} · {event.category}</Text>
