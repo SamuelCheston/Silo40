@@ -105,11 +105,14 @@ func TestOperationTargetBoundaries(t *testing.T) {
 			t.Fatal("Silo 18 operation entry is still exposed")
 		}
 	}
-	if stationCount != 4 || silo1Count != 2 || !silo1IDs[Silo1OpIntel] || !silo1IDs[Silo1OpDeceive] {
+	if stationCount != 4 || silo1Count != 1 || !silo1IDs[Silo1OpDeceive] {
 		t.Fatalf("unexpected legal targets: station=%d silo1=%d ids=%v", stationCount, silo1Count, silo1IDs)
 	}
 	if _, err := svc.BeginAction(model.AgentAction{Type: model.AgentActionType("SILO18_OPERATION"), ActionID: "SILO18_DECEIVE"}); err == nil {
 		t.Fatal("legacy Silo 18 operation was not rejected")
+	}
+	if _, err := svc.BeginAction(model.AgentAction{Type: model.ActionSilo1Operation, ActionID: "SILO1_INTEL"}); err == nil {
+		t.Fatal("removed Silo 1 intel operation must not be schedulable")
 	}
 	if _, err := svc.BeginAction(model.AgentAction{Type: model.ActionSilo1Operation, ActionID: Silo1OpInfiltrate}); err == nil {
 		t.Fatal("Silo 1 infiltration must not be available through the limited channel")

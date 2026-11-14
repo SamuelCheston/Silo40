@@ -65,7 +65,7 @@ func TestActionGatesStartNarrowAndUnlockFromStoryStage(t *testing.T) {
 	if len(initial) != 1 || initial[0].ID != "action_gather_info" || initial[0].Visibility != model.ActionAvailable {
 		t.Fatalf("opening must expose only Gather Info: %+v", initial)
 	}
-	if _, err := svc.BeginAction(model.AgentAction{Type: model.ActionSilo1Operation, ActionID: Silo1OpIntel}); err == nil || !strings.Contains(err.Error(), "not been unlocked") {
+	if _, err := svc.BeginAction(model.AgentAction{Type: model.ActionSilo1Operation, ActionID: Silo1OpDeceive}); err == nil || !strings.Contains(err.Error(), "not been unlocked") {
 		t.Fatalf("locked operation bypass was not rejected: %v", err)
 	}
 

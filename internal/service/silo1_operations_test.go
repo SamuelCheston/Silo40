@@ -101,11 +101,6 @@ func TestSilo1OperationEffects(t *testing.T) {
 		actionID string
 		verify   func(*testing.T, *GameService, string)
 	}{
-		{Silo1OpIntel, func(t *testing.T, svc *GameService, report string) {
-			if !strings.Contains(report, "合法性") || !strings.Contains(report, "Archives") {
-				t.Fatalf("intel report lacks target facts: %s", report)
-			}
-		}},
 		{Silo1OpDeceive, func(t *testing.T, svc *GameService, report string) {
 			if !strings.Contains(report, "叛乱 0.04→0.19") || svc.fullSilo1().Rebellion != 0.19 {
 				t.Fatalf("deception did not apply the measured rebellion delta: report=%s rebellion=%v", report, svc.fullSilo1().Rebellion)
@@ -133,6 +128,33 @@ func TestSilo1OperationEffects(t *testing.T) {
 			}
 			tc.verify(t, svc, op.Resolution)
 		})
+	}
+}
+
+// A legacy save may still carry a PENDING SILO1_INTEL operation after the intel
+// entry was removed. Resolution must read it without crashing and settle it as a
+// failed no-op instead of applying a target effect.
+func TestSilo1LegacyIntelOperationResolvesWithoutCrash(t *testing.T) {
+	svc := newTwoSiloService(t, filepath.Join(t.TempDir(), "legacy-intel.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(84)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	svc.world.Silo1.Operations = append(svc.world.Silo1.Operations, model.Silo1Operation{
+		ID: 1, ActionID: "SILO1_INTEL", Label: "渗透情报网", Status: "PENDING",
+		StartYear: svc.world.CurrentYear, StartMonth: svc.world.CurrentMonth,
+		DueYear: svc.world.CurrentYear, DueMonth: svc.world.CurrentMonth,
+	})
+	target := svc.fullSilo1()
+	rebellionBefore := target.Rebellion
+	var logs []string
+	var stories []model.StoryEvent
+	svc.resolveSilo1Operations(&logs, &stories)
+	op := svc.world.Silo1.Operations[0]
+	if op.Status != "FAILED" {
+		t.Fatalf("legacy intel operation must settle as FAILED, got %+v", op)
+	}
+	if target.Rebellion != rebellionBefore {
+		t.Fatalf("legacy intel operation must not mutate the target: %v -> %v", rebellionBefore, target.Rebellion)
 	}
 }
 

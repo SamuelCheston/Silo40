@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	Silo1OpIntel      = "SILO1_INTEL"
 	Silo1OpInfiltrate = "SILO1_INFILTRATE"
 	Silo1OpDeceive    = "SILO1_DECEIVE"
 	Silo1OpTrade      = "SILO1_TRADE"
@@ -29,11 +28,6 @@ type silo1OperationDef struct {
 
 var silo1OperationDefinitions = []silo1OperationDef{
 	{
-		ActionID: Silo1OpIntel, Label: "渗透情报网", APCost: 10, DelayMonths: 1,
-		Description: "1 个月后确认 Silo 1 的精确合法性、凝聚力、叛乱与部门状态。暴露 +4%，结算时怀疑度 +0.01。",
-		Effect:      "获取目标实测报告", Exposure: 0.04, OpeningSuspicion: 0.002, TraceSuspicion: 0.01,
-	},
-	{
 		ActionID: Silo1OpDeceive, Label: "投放伪造档案", APCost: 20, DelayMonths: 2,
 		Description: "2 个月后 Silo 1 叛乱 +0.15，各部门恐慌与亲外思潮上升。暴露 +10%，结算时怀疑度 +0.04。",
 		Effect:      "推动目标叛乱与亲外思潮", Exposure: 0.10, OpeningSuspicion: 0.006, TraceSuspicion: 0.04,
@@ -50,7 +44,7 @@ func silo1OperationDefinition(actionID string) (silo1OperationDef, bool) {
 }
 
 func silo1OperationAllowed(actionID string) bool {
-	return actionID == Silo1OpIntel || actionID == Silo1OpDeceive
+	return actionID == Silo1OpDeceive
 }
 
 func (s *GameService) silo1OperationActions() []model.PlayerActionMeta {
@@ -76,7 +70,7 @@ func (s *GameService) silo1OperationActions() []model.PlayerActionMeta {
 func (s *GameService) scheduleSilo1Operation(action model.AgentAction) model.ActionResult {
 	def, ok := silo1OperationDefinition(action.ActionID)
 	if !ok || !silo1OperationAllowed(action.ActionID) {
-		return model.ActionResult{Executed: false, Message: "Silo 1 channel permits only intelligence and deception."}
+		return model.ActionResult{Executed: false, Message: "Silo 1 channel permits only deception."}
 	}
 	target := s.fullSilo1()
 	if target == nil || s.world == nil || !s.world.Silo1.Alive {
@@ -148,12 +142,6 @@ func (s *GameService) applySilo1Operation(def silo1OperationDef, operationID int
 	target := s.fullSilo1()
 	historyBefore := snapshotHistoryMetrics(target)
 	switch def.ActionID {
-	case Silo1OpIntel:
-		resolution := fmt.Sprintf("Y%d M%d 合法性 %.2f、凝聚力 %.2f、叛乱 %.2f；部门构成 %s。",
-			target.CurrentYear, target.CurrentMonth, target.MayorLegitimacy(), target.Cohesion, target.Rebellion,
-			strings.Join(s.silo1DepartmentNames(), "/"))
-		s.recordHistoryImpact(target, operationID, def, historyBefore, resolution)
-		return resolution
 	case Silo1OpDeceive:
 		before := target.Rebellion
 		target.Rebellion = clampSilo1Unit(target.Rebellion + 0.15)

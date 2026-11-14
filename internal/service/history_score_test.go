@@ -92,20 +92,4 @@ func TestHistoryInfluenceWithoutOperationsIsZero(t *testing.T) {
 	}
 }
 
-func TestHistoryInfluenceIntelRecordsEvidenceWithoutMetricPoints(t *testing.T) {
-	svc := newTwoSiloService(t, filepath.Join(t.TempDir(), "history-intel.db"))
-	if _, err := svc.CreateGame(threeSiloRequest(83)); err != nil {
-		t.Fatalf("create game: %v", err)
-	}
-	if result := svc.scheduleSilo1Operation(model.AgentAction{Type: model.ActionSilo1Operation, ActionID: Silo1OpIntel, Cost: 10}); !result.Executed {
-		t.Fatalf("schedule intel: %s", result.Message)
-	}
-	svc.world.Silo1.Operations[0].DueYear = svc.world.CurrentYear
-	svc.world.Silo1.Operations[0].DueMonth = svc.world.CurrentMonth
-	var logs []string
-	var stories []model.StoryEvent
-	svc.resolveSilo1Operations(&logs, &stories)
-	if len(svc.world.HistoryImpacts) != 1 || svc.world.HistoryImpacts[0].Points != 0 {
-		t.Fatalf("intel should leave zero-delta evidence: %+v", svc.world.HistoryImpacts)
-	}
-}
+

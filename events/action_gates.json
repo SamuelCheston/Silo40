@@ -71,11 +71,6 @@
       "reason": "需要先建立驻地阶段进度"
     },
     {
-      "id": "SILO1_INTEL",
-      "unlock": { "stage_at_least": "first_signal" },
-      "available": {}
-    },
-    {
       "id": "SILO1_DECEIVE",
       "unlock": { "stage_at_least": "archive_awakened" },
       "available": { "metric": "propaganda_level", "min": 1 },
