@@ -172,7 +172,10 @@ func itUtility(action ItAction, silo *model.Silo, cost float64) float64 {
 	if action.RegimeAverting && silo.Authority.Judicial.Regime != "IT" && silo.Authority.Judicial.Regime != "PACT" {
 		regimeAverted = 1
 	}
-	self := action.WShock/6 + 1.5*regimeAverted + 0.5*deltaK
+	// W 收益边际递减：威势接近上限时继续加码的价值趋零，IT 不会在安全期
+	// 无限度消耗资源抬 W (TODO(balance): 线性递减为 sim 起点)。
+	wValue := action.WShock / 6 * (1 - clamp(silo.Authority.W, 0, 100)/100)
+	self := wValue + 1.5*regimeAverted + 0.5*deltaK
 	public := -action.RSDelta / 0.05
 	utility := 0.5*self + 0.5*public - 0.01*cost
 	if action.Counter {

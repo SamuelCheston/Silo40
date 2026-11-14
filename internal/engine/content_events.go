@@ -479,6 +479,13 @@ func validateEffect(effect ContentEffect) error {
 		if effect.Metric == "" {
 			return fmt.Errorf("profession_metric_delta_all requires metric")
 		}
+	case "profession_metric_delta":
+		if effect.Metric == "" {
+			return fmt.Errorf("profession_metric_delta requires metric")
+		}
+		if strings.TrimSpace(effect.Profession) == "" {
+			return fmt.Errorf("profession_metric_delta requires profession")
+		}
 	case "profession_ideology_delta_all":
 		if effect.Ideology == "" {
 			return fmt.Errorf("profession_ideology_delta_all requires ideology")
@@ -1138,6 +1145,10 @@ func applyContentEffect(effect ContentEffect, silo *model.Silo) {
 	case "profession_metric_delta_all":
 		for i := range silo.Professions {
 			applyProfessionMetricDelta(&silo.Professions[i], effect.Metric, effect.Value)
+		}
+	case "profession_metric_delta":
+		if prof := findDept(silo, effect.Profession); prof != nil {
+			applyProfessionMetricDelta(prof, effect.Metric, effect.Value)
 		}
 	case "profession_ideology_delta_all":
 		for i := range silo.Professions {

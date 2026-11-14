@@ -35,7 +35,9 @@ defineEvent({
           allianceLoyaltyDelta("it_internal", -0.15),
           // §4：一次关键忠诚损失 ≈ -5 均衡压力 (经冲击队列，TODO(balance))。
           authorityWShock(-5),
-          { type: "profession_metric_delta_all", metric: "panic_value", value: 0.25 },
+          // 丑闻直接冲击被曝光的司法与 IT 两部门 (§4)，不泛化为全社会恐慌。
+          { type: "profession_metric_delta", profession: "Judicial", metric: "panic_value", value: 0.25 },
+          { type: "profession_metric_delta", profession: "IT", metric: "panic_value", value: 0.25 },
         ],
       };
     },

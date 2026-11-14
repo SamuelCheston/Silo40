@@ -46,7 +46,8 @@ defineEvent({
           beliefObserve("departments", "Judicial_2", 0.6),
           allianceLoyaltyDelta("bailiff", -0.10),
           allianceLoyaltyDelta("it_internal", -0.05),
-          { type: "profession_metric_delta_all", metric: "panic_value", value: 0.15 },
+          { type: "profession_metric_delta", profession: "Judicial", metric: "panic_value", value: 0.15 },
+          { type: "profession_metric_delta", profession: "IT", metric: "panic_value", value: 0.10 },
         ],
       };
     },
