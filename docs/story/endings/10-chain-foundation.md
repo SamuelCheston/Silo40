@@ -15,12 +15,12 @@
 | --- | --- | --- |
 | 事件分组 `histories / special / crisis / rules` | [events/README.md](../../../events/README.md) | 里程碑、条件节点、升级后续、常驻规则 |
 | `player_actions/` 文件驱动玩家动作 | 同上（管线就绪、目录未建） | 玩家决断时刻：接触卡、固定选择、步骤行动 |
-| 触发器封闭集 | [作者手册 §3](../../research/07-content-authoring-guide/02-format-triggers-effects.md) | timestamp、silo 指标/资源/人口阈值、`silo1_destroyed` flag、`event_triggered`、`player_action_is`、部门恐慌/思潮广度计数、all/any、`script.canTrigger` |
-| 效果封闭集 | 作者手册 §4 | 持久杠杆：`rebellion` `history_burden` `panic_value`、资源、人口、碎片收发、楼层稳定度、`schedule_event`；flag 仅 `silo1_destroyed` |
+| 触发器封闭集 | [作者手册 §3](../../research/07-content-authoring-guide/02-format-triggers-effects.md) | timestamp、silo 指标/资源/人口阈值、`silo1_destroyed` flag、`event_triggered`、`player_action_is`、部门恐慌/思潮广度计数、all/any、`script.canTrigger`；机制底座后 `ctx` 另暴露 `authority`（W/附着/约章）、`actor`（怀疑/威望/宣传）、`safeguard_risk` 与逃出群体状态 |
+| 效果封闭集 | 作者手册 §4 | 持久杠杆：`rebellion` `history_burden` `panic_value`、资源、人口、碎片收发、楼层稳定度、`schedule_event`；flag 仅 `silo1_destroyed`；机制底座新增：`authority_evidence_delta / authority_public_fact / authority_pact_qualify`、`cohort_ideology_delta`、`safeguard_risk` 指标、`escape_group_depart/status` |
 | 行动门控 `action_gates.json` | [mechanics-gating-endings.md](../../../references/mechanics-gating-endings.md) | 阶段（`arrival→first_signal→archive_awakened`）与行动解锁；条件节点支持 `event_completed` `stage_at_least` `metric` `relation` |
 | 玩家行动完成键 `player_action:<id>` | 行动设计 15 §5.3 | 链条状态：选择、步骤、结果都以完成键记录，可被 `event_completed` 与 `event_triggered` 消费（已核实 `event_triggered` 按 `category:event_id` 匹配，`player_action` 类别归一化成立） |
-| 脚本上下文 `ctx` | [content_events_script.go](../../../internal/engine/content_events_script.go) | `canTrigger/apply` 只读：silo 指标、资源、人口、部门恐慌与派生思潮、派系状态、事件状态 `states`、`world_flags` |
-| 结局判定 | `core_systems.js` victory_check + `weighted_endings.go` | 硬失败护栏与历史候选加权；现状候选仅 `INFORMATION / TIME / REBELLION / EXCLUSIONIST` |
+| 脚本上下文 `ctx` | [content_events_script.go](../../../internal/engine/content_events_script.go) | `canTrigger/apply` 只读：silo 指标、资源、人口、部门恐慌与派生思潮、派系状态、事件状态 `states`、`world_flags`；机制底座后另含 `authority`、`actor`、`safeguard_risk`、逃出群体 |
+| 结局判定 | `core_systems.js` victory_check + `weighted_endings.go` | 机制底座已实现：硬失败护栏（P0：寂堡→遗忘→断层→除名，先读逃出群体）＋六候选资格池（P1）＋四类主体加权（P2）＋同分顺序（P3）；权重为 TODO(balance) 占位 |
 
 ## 3. 链条状态的表达约定
 
@@ -36,38 +36,41 @@
 - 超时事件本身无论如何都会点火，因此**不得订阅超时事件作为"失败已发生"的条件**；要区分"超时失败"与"已完成"，读完成键，不读超时事件。
 - 需要"失败事实键"时，由超时事件在守卫未通过时 `emit` 一个独立事实事件（如 `special:reset_completed`），订阅者只订阅该事实事件。
 
-**时序纪律**（作者手册 §6）：可玩窗口 Y122M1 → Y130M1（`silo1_destroyed_signal`），约 96 个月。所有节点与延迟落点必须在 Y130 前；延迟发起不晚于 ~Y128；延迟档 2–3 月（短）/ 4–6 月（中）；大事件 ≤1 个/月，循环事件合计 ≤ ~0.55 次/月。
+**时序纪律**（用户裁决口径；作者手册 §6 的旧窗口约束以此为准）：
+
+- **相对历**：以开局为 Y0，不再对齐原著绝对年份；2301→2345 的四十余年只存在于前史，不在游戏中走过。相对年与现行代码时间戳的映射为 Y0=代码 Y122 … Y8=代码 Y130；代码迁移属实现事项，本轮不改代码。
+- **可玩窗口**：Y0M1 开局，约 96 个月。窗口以三个剧情锚点定节奏：**朱丽叶当上警长是中期事件，当选市长是末期事件，覆灭是结算事件**（锚点取 18 号正典链进度；现行链上"当选市长"对应 N5=相对 Y3M1，"覆灭结算"对应 N9=相对 Y8M1，"警长上任"当前链上无独立节点，属实现缺口）。
+- **覆灭是结算动作，不是有日期的世界事件**：窗口走完或结算条件满足，即视为覆灭发生，直接进仲裁。原固定年份覆灭信号（`silo1_destroyed_signal`／N9）降级为**结算触发器**，不再兼任剧情节点。**覆灭后不留内容窗口**：仲裁紧随结算，不安排覆灭之后的接管、余波等内容环节；一切需要在覆灭前完成的事，必须在结算前完成。
+- **延迟链允许溢出**：不强制收进窗口内。事件链可以按自身情况自然触发，也可以按年份强制推进。**必须在窗口内发生的特殊事件设兜底**：到指定时间若还没被事件链唤起，就强制拉起（兜底节点仍须在结算前）。覆灭结算仍是终局时钟：落到结算之后的延迟在本局不再有结算意义。
+- 密度预算不变：大事件 ≤1 个/月，循环事件合计 ≤ ~0.55 次/月；延迟档 2–3 月（短）/ 4–6 月（中）。
 
 ## 4. 与既有事件生态的衔接
 
 事件链不重造已有节点，直接挂接：
 
-| 既有节点 | 时点 | 被哪些线消费 |
+| 既有节点 | 时点（相对历） | 被哪些线消费 |
 | --- | --- | --- |
-| `archive_truth_broadcast`（histories） | Y122M1 | 全线开局背景：历史包袱入局 |
-| `neighbor_silo_silence` → `network_data_cache` | Y124M1 起 | 《无人裁决》衰亡前兆、《共证》受限信道材料 |
-| `silo1_ultimatum` → `ultimatum_aftermath` | Y126M1 起 | 《寂堡》终止征兆、《无人裁决》压力、全线暴露风险 |
+| `archive_truth_broadcast`（histories） | Y0M1 | 全线开局背景：历史包袱入局 |
+| `neighbor_silo_silence` → `network_data_cache` | Y2M1 起 | 《无人裁决》衰亡前兆、《共证》受限信道材料 |
+| `silo1_ultimatum` → `ultimatum_aftermath` | Y4M1 起 | 《寂堡》终止征兆、《无人裁决》压力、全线暴露风险 |
 | `archive_purge_order` → `purge_backlash` | hb≥0.12 | 《遗忘》缓慢绞杀路径、《共证》宿主威胁 |
-| `underground_coordination` | rebellion≥0.62 且 Y126+ | 《越岭》滚雪球、《断层》升级 |
-| `silo1_destroyed_signal` | Y130M1 | 《无人裁决》权威覆灭事实、《深闭》死后复制分岔 |
+| `underground_coordination` | rebellion≥0.62 且 Y4+ | 《越岭》滚雪球、《断层》升级 |
+| `silo1_destroyed_signal` | Y8M1（窗口走完） | **结算触发器**：置 `silo1_destroyed` flag 即进仲裁，不再是剧情节点 |
 
 ## 5. 能力缺口清单
 
-以下需求**现有机制表达不了**，事件链在对应节点标注缺口编号，不假设已落地：
+机制底座（`dc6be5e`，save v9）已落地原 G1–G11 的机制部分：六候选 P0→P3 仲裁、覆灭前夕快照、逃出群体最小状态、内容→Authority/cohort/`safeguard_risk` 写入通路、跨堡出站信号日志、`network_jammed` 消费、`first_signal` 迁移。下表是**仍然存在的缺口**：
 
 | # | 缺口 | 性质 |
 | --- | --- | --- |
-| G1 | `RULE_OF_LAW / PERSONAL_RULE / RESET / FRACTURE` 不在结局候选（现状候选仅四个历史候选加两个硬失败） | 引擎：新结局候选与仲裁 |
-| G2 | 公开约章资格供给：`PublicEvidenceQ / IndependentPublicFacts / PactQualified` 无任何内容效果或机制变异可写（Authority 状态无写入入口） | 引擎：Authority 变异或碎片→`Q` 桥接 |
-| G3 | 内容触发器与脚本读不到 `W`、Judicial 附着、玩家怀疑/威望（`ctx` 无 Authority 与 actor 字段） | 引擎：ctx 扩展或机制层桥接 |
-| G4 | cohort 思潮直写与覆灭前夕快照：内容只有短暂的 `profession_ideology_delta_all`；多轴思潮未实现 | 引擎 |
-| G5 | 逃出群体模型与堡外存续结算：人口只有堡内总数，无"已离开且存续"状态 | 引擎/模型 |
-| G6 | 内容 → `safeguard_risk` 桥接：内容效果封闭集不含它，只有机制变异层可写 | 引擎 |
-| G7 | 跨堡出站信号投递：外溢与外部独立复制的结算需要多堡编排管线（入站 `SignalsReceived` 已有，出站未实现） | 多堡编排 |
-| G8 | 事实性尾声标签：主结局之外的尾声（约章已锁、原驻地毁灭等）无展示载体 | 展示层 |
-| G9 | `victory_check` 的 REBELLION/TIME 占位语义需按结局体系 12 修正（基础触发只请求终局评估；高叛乱无逃离不等于《越岭》；覆灭须过思潮闸） | 引擎 |
-| G10 | `action_gates` 的 `first_signal` 来源迁移：现状仍消费 `player_action:action_gather_info`，行动设计 15 要求改为首份本地 Observation 键 | 实现迁移 |
-| G11 | 世界 flag `network_jammed`（终止信号被干扰）已预留但无写入与消费方 | 编排层 |
+| R1 | **逃离模型未实装（用户裁决，本轮不做，已登 roadmap）**：`EscapedGroup` 最小状态基础已有，但路线事实、分批撤离与堡外存续的完整结算需要单独设计；依赖它的链条节点只预留注释 | 单独设计轮次 |
+| R2 | **外溢准备工作未实装（用户裁决，本轮不做，已登 roadmap）**：外溢不进胜负判定、只作评分项（仲裁已按此实现）；受限渠道、外部接收与独立复制结算需要单独设计 | 单独设计轮次 |
+| G2' | 公开约章资格的**具体供给事件**未编写：写入通路（`authority_evidence_delta / authority_public_fact / authority_pact_qualify`）已有，供给内容待写 | 内容编写 |
+| G8 | 事实性尾声标签：主结局之外的尾声（约章已锁、原驻地毁灭、外溢评分等）无展示载体 | 展示层 |
+| G11' | `network_jammed` 的内容写入通路：消费方已有，写入入口仍无 | 引擎/编排 |
+| G12 | 【裁决对齐】`PERSONAL_RULE` 资格当前读 `Judicial.Regime == "MAYOR"`（裁决前口径）；按裁决应改为警察服从＋市长正统性（司法部只附着 IT 或约章），结语文案同步 | 引擎对齐 |
+| G13 | 相对历呈现迁移：代码时间戳仍为 Y122/Y130，文档口径已改相对历（Y0/Y8）；呈现层迁移属实现事项 | 实现迁移 |
+| — | 十条结局链的**内容事件节点群尚未编写**；仲裁只消费其完成键/事实键。权重系数全部为 TODO(balance) 占位 | 内容编写 |
 
 ## 6. 命名与书写纪律
 

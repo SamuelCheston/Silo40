@@ -8,15 +8,17 @@
 
 | 节点 | 机制载体 | 触发/推进条件 | 现状 |
 | --- | --- | --- | --- |
-| 落脚 | 阶段 `arrival` | 开局即是 | 既有 |
-| 首份本地材料 | 任一基础职务行动，材料作为伴随 Observation | 职务主结果成功 | 行动设计 15 口径；`first_signal` 来源迁移见缺口 G10 |
-| 第一道裂缝 | 阶段 `first_signal` | 现状消费 `player_action:action_gather_info`；目标口径消费首份本地 Observation 键 | 既有阶段，来源待迁移（G10） |
+| 落脚 | 阶段 `arrival` | 开局即是（相对历 Y0M1） | 既有 |
+| 首份本地材料 | 任一基础职务行动，材料作为伴随 Observation | 职务主结果成功 | 既有 |
+| 第一道裂缝 | 阶段 `first_signal` | 首份有效本地 Observation（`observation:first_local`，已迁移） | 既有 |
 | 材料离手 | 阶段 `archive_awakened` | 完成一次 Share Info（`player_action:action_share_info`） | 既有 |
-| 世界锚点一 | `archive_truth_broadcast`（histories） | Y122M1 | 既有 |
-| 世界锚点二 | `neighbor_silo_silence` → `network_data_cache` | Y124M1；缓存节点经 `event_triggered` 跟随 | 既有 |
-| 世界锚点三 | `silo1_ultimatum` → `ultimatum_aftermath`（+3 月） | Y126M1 | 既有 |
+| 世界锚点一 | `archive_truth_broadcast`（histories） | Y0M1 | 既有 |
+| 世界锚点二 | `neighbor_silo_silence` → `network_data_cache` | Y2M1；缓存节点经 `event_triggered` 跟随 | 既有 |
+| 世界锚点三 | `silo1_ultimatum` → `ultimatum_aftermath`（+3 月） | Y4M1 | 既有 |
 | 清洗拉锯 | `archive_purge_order` → `purge_backlash`（+4 月） | `history_burden ≥ 0.12` | 既有 |
-| 终局时钟 | `silo1_destroyed_signal` | Y130M1，置 `silo1_destroyed` flag | 既有 |
+| 结算触发器 | `silo1_destroyed_signal` | 窗口走完（Y8M1）或结算条件满足；置 `silo1_destroyed` flag 即进仲裁 | 既有；**降级为结算触发器，不再是剧情节点** |
+
+窗口节奏由三个剧情锚点标定（用户裁决）：**朱丽叶当上警长是中期事件，当选市长是末期事件，覆灭是结算事件**。锚点取 18 号正典链进度；覆灭结算后不留内容窗口，仲裁紧随结算。
 
 ## 2. 主干上的第一次分岔
 
@@ -37,11 +39,12 @@
 | 历史包袱基线 | `archive_truth_broadcast` +0.08 | 《遗忘》清洗阈值、《深闭》常态化读数 |
 | 跨堡受限材料 | `network_data_cache` 两份碎片 | 《共证》感染材料、《无人裁决》外部视野 |
 | 终止压力 | `silo1_ultimatum` 链 | 《寂堡》《遗忘》《越岭》窗口压缩 |
-| 终局事实 | `silo1_destroyed_signal` | 《无人裁决》资格、《深闭》死后复制分岔 |
+| 终局结算 | `silo1_destroyed_signal`（结算触发器） | 《无人裁决》资格快照、全线进入仲裁 |
 | 叛乱预算 | 既有事件合计注入 ≈ +0.49（事件计划核对） | 无人值守终局 rebellion ≈ 0.5 < 1.0：《越岭》与《断层》的高叛乱前提仍需玩家动作推高 |
 
 ## 4. 主干纪律
 
 1. 空转月份不推进阶段：主干只认成功行动与明确事件结果。
-2. 世界锚点不被玩家改写：`neighbor_silo_silence` 与 `silo1_destroyed_signal` 是权威事实，玩家行动只能改变驻地对这些事实的处置，不能提前或阻止它们。
+2. 世界锚点不被玩家改写：`neighbor_silo_silence` 与覆灭结算是权威事实与结算动作，玩家行动只能改变驻地对这些事实的处置，不能提前或阻止它们。
 3. 主干不产生新结局主体：锚点事件的效果全部落在既有持久杠杆上。
+4. 覆灭后不留内容窗口：结算触发器点火即进仲裁，主干上不得挂任何"覆灭之后"的内容节点。
