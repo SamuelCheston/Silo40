@@ -21,10 +21,11 @@ P0 四条的 `Reason` 原为审计短句，本批替换为完整叙事＋失败�
 ### 2.1 《深闭》：`normalcy_hardens`（本批落地）
 相对 Y3 起，≥4 个部门忠诚思潮 ≥0.6（公共主导档，`TODO(balance)`）时按年点亮（REPEATABLE cd12）："又一年没有改变"。计数即叙事；效果 `history_burden −0.02`、`rebellion −0.02`（常态化的双向磨平，`TODO(balance)`）。
 
-### 2.2 《遗忘》：既有节点，不新增
-- `silo1_purge_omen`（已实现）：通牒之后＋相对 Y4M9 起＋叛乱 ≥0.8——IT 与医务的异常协同，本地整肃的准备信号，+3 月调度执行钩子。
-- `archive_purge_order`（已实现）：`history_burden ≥ 0.12`——档案清洗令，缓慢绞杀路径的可见信号。
-- **依赖**：`reset_completed` 的写入方（《遗忘》执行链，18 分册：征兆→反制窗口→守卫执行）未实装——叙事与征兆就绪，失败本身在链落地前不可达。
+### 2.2 《遗忘》：18 分册链已落地，不新增
+- `reset_omen_census`（已实现）：相对 Y2 起＋`history_burden ≥ 0.2`——一份没有维护编号的异常普查，第一个无法解释的征兆；+3 月调度第二征兆。
+- `reset_omen_requisition`（已实现，纯调度）：镇静与配额类物资的异常请领；解锁反制接触卡，并 +9 月调度执行守卫。
+- 反制窗口：`reset_countermeasure_offer` → `copies_distributed`（写 `player_action:reset_countermeasure_done`）；`reset_execution` 到期守卫：反制完成→空转，未完成→结算并唤起 `reset_completed` 事实键。
+- 并行路径征兆：`silo1_purge_omen`（通牒后＋叛乱 ≥0.8 的本地整肃准备）、`archive_purge_order`（hb ≥0.12 的缓慢绞杀）。
 
 ### 2.3 《断层》：既有节点，不新增
 - `fracture_infrastructure`（已实现）：相对 Y2 起＋叛乱 ≥0.8——无人控制的破坏落到维生基础，先于不可逆点。
@@ -67,6 +68,5 @@ P0 四条的 `Reason` 原为审计短句，本批替换为完整叙事＋失败�
 
 | 依赖/不做 | 说明 |
 | --- | --- |
-| 《遗忘》执行链（18 分册） | `reset_completed` 写入方未实装；叙事与征兆就绪，失败在链落地前不可达 |
-| 反制绑定 | `silo1_purge_exposed`／`termination_channel_disrupted` 的反制动作绑定等"日常动作中的反制"批次（既有 TODO 不变） |
+| 反制绑定 | `silo1_purge_exposed` 的反制动作绑定等"日常动作中的反制"批次（既有 TODO 不变）；《遗忘》链的反制已走 `copies_distributed` 分发托管路径 |
 | 不做 | 不改 P0 顺序与成立条件；不给失败结局加解锁项或再玩钩子；失败叙事不引入影视改编人名 |
