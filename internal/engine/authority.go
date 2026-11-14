@@ -194,6 +194,17 @@ func AdvanceAuthorityWithConfig(silo *model.Silo, inputs AuthorityInputs, cfg Au
 	alpha := 1 - math.Pow(2, -1/cfg.WHalfLifeMonths)
 	a.W = clamp(a.W+alpha*(wEq-a.W), 0, 100)
 
+	// §3.2 冲击队列 Σδe：只消费一次，单月合计 cap ±12。
+	if len(a.Shocks) > 0 {
+		shock := 0.0
+		for _, delta := range a.Shocks {
+			shock += delta
+		}
+		a.Shocks = nil
+		shock = clamp(shock, -12, 12)
+		a.W = clamp(a.W+shock, 0, 100)
+	}
+
 	l := silo.MayorLegitimacy()
 	a.PoliceObedience = clamp01(a.PoliceObedience + cfg.PoliceObedienceResponseRate*(l-a.PoliceObedience))
 	advanceJudicialAttachment(silo, cfg)

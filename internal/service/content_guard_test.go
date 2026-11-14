@@ -61,6 +61,11 @@ func TestContentGuardNoDeadGroups(t *testing.T) {
 			// Loaded separately by the MechanicEngine; guard it below.
 			continue
 		}
+		if group == "protocol" {
+			// Order 条款资产，由 loadProtocolClauses 独立加载 (不是事件组)；
+			// guard it below.
+			continue
+		}
 		if loaded[group] == "" {
 			t.Errorf("dead content: group %q has event files on disk (%s) but is excluded from the content whitelist", group, groupDir)
 		}
@@ -90,6 +95,27 @@ func TestContentGuardMechanicsLoad(t *testing.T) {
 	}
 	if len(defs) == 0 {
 		t.Fatalf("expected mechanics definitions to be loaded from %s", mechanicsDir)
+	}
+}
+
+// TestContentGuardProtocolLoads guards the Order clause asset: the protocol
+// group must exist and load versioned clauses (dead-protocol regression gate,
+// mirroring the mechanics guard).
+func TestContentGuardProtocolLoads(t *testing.T) {
+	dirs, err := resolveContentDirectories()
+	if err != nil {
+		t.Fatalf("resolve content directories: %v", err)
+	}
+	protocolDir := dirs["protocol"]
+	if protocolDir == "" {
+		t.Fatalf("protocol group not discovered under %s", eventsRootFromDirs(t, dirs))
+	}
+	clauses, version, err := engine.LoadProtocolDir(protocolDir)
+	if err != nil {
+		t.Fatalf("protocol clauses failed to load: %v", err)
+	}
+	if len(clauses) == 0 || version == 0 {
+		t.Fatalf("expected versioned protocol clauses from %s", protocolDir)
 	}
 }
 
