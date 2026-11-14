@@ -74,6 +74,33 @@ func TestExclusionistEndingNarrativeAndVariants(t *testing.T) {
 	}
 }
 
+// TestResetEndingNarrative locks 29-failure-endings §4: the RESET settlement
+// tells the formatting story (what went wrong: the omens were read as noise)
+// and reports what remains — the people survive, the memory does not.
+func TestResetEndingNarrative(t *testing.T) {
+	svc, station, _ := weightedEndingFixture("RESET")
+	station.VictoryStatus.IsWon = false
+	station.TotalPopulation = 5200
+	station.HistoryBurden = 0.02
+	svc.contentStates = map[uint]map[string]model.ContentEventState{
+		station.ID: {resetFactKey: {SiloID: station.ID, EventKey: resetFactKey, Triggered: true}},
+	}
+
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingReset {
+		t.Fatalf("expected RESET selection, got %+v", decision)
+	}
+	if !strings.Contains(decision.Reason, "《遗忘》成立") {
+		t.Fatalf("narrative missing: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "被当成了噪音") {
+		t.Fatalf("what-went-wrong beat missing: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "仍有居民 5200 人，历史包袱降至 0.02") {
+		t.Fatalf("post-failure settlement line missing: %q", decision.Reason)
+	}
+}
+
 // TestNormalcyHardensFires locks the EXCLUSIONIST omen (29-failure-endings
 // §2.1): from relative Y3 on, once four departments' loyalty stands above the
 // public-dominance bar, the hardening heartbeat lights and records that
