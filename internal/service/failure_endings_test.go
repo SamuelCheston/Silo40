@@ -134,6 +134,75 @@ func TestFractureEndingNarrative(t *testing.T) {
 	}
 }
 
+// TestCompromisedEndingNarrative locks 29-failure-endings §6: the
+// AGENT_COMPROMISED settlement tells the exposure story (the traces were
+// there from the start; the erasure is packaged under a local pretext) and
+// reports that the station goes on — the bitter-epilogue variant.
+func TestCompromisedEndingNarrative(t *testing.T) {
+	svc, station, _ := weightedEndingFixture("AGENT_COMPROMISED")
+	station.VictoryStatus.IsWon = false
+	station.TotalPopulation = 5600
+	station.Professions = []model.Profession{
+		{ID: 1, Name: "Judicial", Beliefs: []model.FactBelief{{FactID: "Judicial_1", B: 0.5}}},
+		{ID: 2, Name: "IT", Beliefs: []model.FactBelief{{FactID: "IT_1", B: 0.4}, {FactID: "IT_2", B: 0.1}}},
+	}
+
+	decision := svc.resolveWeightedEnding(station, svc.agent)
+	if decision == nil || decision.Selected != endingCompromised {
+		t.Fatalf("expected AGENT_COMPROMISED selection, got %+v", decision)
+	}
+	if !strings.Contains(decision.Reason, "《除名》成立") {
+		t.Fatalf("narrative missing: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "没有人会知道你真正是什么") {
+		t.Fatalf("local-pretext staging constraint missing: %q", decision.Reason)
+	}
+	if !strings.Contains(decision.Reason, "5600 名居民，2 个部门仍在履职，部门信念层里仍有 2 份可被引用的事实") {
+		t.Fatalf("post-failure settlement line missing: %q", decision.Reason)
+	}
+}
+
+// TestCompromisedOmenChainFires locks the three designed exposure omens
+// (20-chain-agent-compromised §1): covert-operation traces accumulate, the
+// archive review opens at the fifth trace, and the erasure staging lights as
+// suspicion approaches the cap — all before the failure itself.
+func TestCompromisedOmenChainFires(t *testing.T) {
+	boot := bootstrapRealContent(t)
+	svc := chainTestService(
+		pickContentDef(t, boot, "special:identity_trace_accumulates"),
+		pickContentDef(t, boot, "special:archive_review_opened"),
+		pickContentDef(t, boot, "special:agent_erasure_staged"),
+	)
+	svc.silo.CurrentYear, svc.silo.CurrentMonth = 123, 1
+	svc.agent.SuspicionLevel = 0.75
+	// A covert operation completed earlier; its completion key persists.
+	svc.statesMapFor(svc.silo.ID)["player_action:STATION_INFILTRATE"] = model.ContentEventState{
+		SiloID: svc.silo.ID, EventKey: "player_action:STATION_INFILTRATE", Triggered: true, TriggerCount: 1,
+	}
+
+	// Eleven months: the trace heartbeat (cd 2) fires at least five times and
+	// both follower omens pick the count/suspicion up via continuous
+	// evaluation.
+	for i := 0; i < 11; i++ {
+		svc.silo.CurrentMonth++
+		if svc.silo.CurrentMonth > 12 {
+			svc.silo.CurrentMonth = 1
+			svc.silo.CurrentYear++
+		}
+		svc.queueSystemContentEvents("TEST")
+		svc.drainQueuedEvents()
+	}
+
+	if count := svc.contentStates[svc.silo.ID]["special:identity_trace_accumulates"].TriggerCount; count < 5 {
+		t.Fatalf("identity traces accumulated %d times, want >= 5", count)
+	}
+	for _, key := range []string{"special:archive_review_opened", "special:agent_erasure_staged"} {
+		if !contentTriggered(svc, key) {
+			t.Fatalf("%s never fired before the exposure cap", key)
+		}
+	}
+}
+
 // TestNormalcyHardensFires locks the EXCLUSIONIST omen (29-failure-endings
 // §2.1): from relative Y3 on, once four departments' loyalty stands above the
 // public-dominance bar, the hardening heartbeat lights and records that

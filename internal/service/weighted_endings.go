@@ -143,7 +143,7 @@ var endingDescriptions = map[string]string{
 	endingReset:        "驻地安静而有序——重置总是伴随'恢复正常'。有人喊邻居的名字，对方迟疑了一下才应答；新刷的墙面盖住了旧刻痕；官方记录里只有一次'燃气事故'，或者什么都没有。减口、抹忆与清档系统性完成了：你的任务赖以继续的公共事实，与能核验它们的人，被一并拆除。征兆其实从未缺席——变长的档案'维护'窗口、远超平常的请领、深夜的人数清点——它们被当成了噪音，或者反制窗口被花在了别处。你输掉的不是一场对抗，是整块记忆。《遗忘》成立。",
 	endingFracture:     "撕碎驻地的不是攻击，是它自己的手。无人控制的破坏落到了维生基础上：轮班断裂，部门停止共享，关键岗位弃守——愤怒达到了它的目的，目的却跟着塌了。你点燃的是愤怒，没有来得及建起接住它的组织：期待跑得比组织快，而维存是一张协作网，每撕掉一条网眼，都不会因为任何一方'胜利'而自动复原。驻地的灯一层一层熄灭，不是因为攻击，是因为没有人再在开关旁边。《断层》成立。",
 	endingDeath:        "没有任何可确认的幸存社会——《寂堡》成立。",
-	endingCompromised:  "特工身份彻底暴露，任务不可继续——《除名》成立。",
+	endingCompromised:  "你的身份先于任务死去了。每一次深度行动都在纸面上留下与过去对不上的痕迹：某年的空缺，某段对不上的履历，某次回指到你自己的暴露。痕迹从一开始就在那里，你一直赌下一次行动是最后一次——直到复查到来。抹除以本地名义包装：来历存疑、刑事罪名，或者无声失踪；没有人会知道你真正是什么。驻地以'一个来历存疑的人'的名义归档——档案合上的声音，就是任务合上的声音。《除名》成立。",
 }
 
 type endingScoreAccumulator struct {
@@ -383,7 +383,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		return s.finishArbitration(decision)
 	case trigger == endingCompromised:
 		decision.Selected = endingCompromised
-		decision.Reason = "P0.4 除名：怀疑度封顶，身份暴露不可挽回。"
+		decision.Reason = endingDescriptions[endingCompromised] + compromisedSettlementLine(station)
 		return s.finishArbitration(decision)
 	case deathFact || resetFact || fractureFact:
 		// escapeAlive == true here: the local fall becomes a pyrrhic epilogue.
@@ -589,4 +589,21 @@ func fractureSettlementLine(station *model.Silo) string {
 	}
 	return fmt.Sprintf("断层之后驻地仍有居民 %d 人，剩余能源 %.0f，楼层平均稳定度 %.2f——技术上还活着，已经失去了明天。",
 		station.TotalPopulation, energy, stability)
+}
+
+// compromisedSettlementLine reports that the station goes on without the
+// agent (06-agent-compromised §4 bitter-epilogue variant): the residents,
+// the running departments, and the shareable facts the agent planted — the
+// method keeps being used by people who never learn where it came from.
+func compromisedSettlementLine(station *model.Silo) string {
+	shareableFacts := 0
+	for _, prof := range station.Professions {
+		for _, belief := range prof.Beliefs {
+			if belief.B >= 0.30 {
+				shareableFacts++
+			}
+		}
+	}
+	return fmt.Sprintf("驻地继续运转：%d 名居民，%d 个部门仍在履职，部门信念层里仍有 %d 份可被引用的事实——你教过的方法还在被人使用，只是没有人知道它来自哪里。",
+		station.TotalPopulation, len(station.Professions), shareableFacts)
 }
