@@ -105,15 +105,16 @@ func runParityGame(t *testing.T, seed int64) parityRecord {
 		}
 		months = m
 
-		// Scripted deterministic actions.
-		if m%7 == 0 && svc.agent.ActionPoints >= 10 {
+		// Scripted deterministic actions. The server refuses actions once the
+		// game has ended (P0-4), so skip the scripted moves past the ending.
+		if !svc.gameOver() && m%7 == 0 && svc.agent.ActionPoints >= 10 {
 			if _, err := svc.ExecuteAction(model.AgentAction{
 				Type: model.ActionGatherInfo, TargetDept: "Mayor", Cost: 0,
 			}); err != nil {
 				t.Fatalf("seed %d gather month %d: %v", seed, m, err)
 			}
 		}
-		if m%23 == 0 && svc.agent.ActionPoints >= 15 && policy.Float64() < 0.8 {
+		if !svc.gameOver() && m%23 == 0 && svc.agent.ActionPoints >= 15 && policy.Float64() < 0.8 {
 			if _, err := svc.ExecuteAction(model.AgentAction{
 				Type: model.ActionBuildConnection, TargetDept: "Mines", Cost: 0,
 			}); err != nil {
