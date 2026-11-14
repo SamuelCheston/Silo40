@@ -32,9 +32,10 @@
 
 ## 4. 与结局判定的对接
 
-- 引擎已有 Pact 附着动力学：`W ≤ 18` 且 `Q ≥ 0.85` 且独立公共事实 ≥2 且 `PactQualified` 时 Judicial 可附着约章并锁定（[authority.go](../../../internal/engine/authority.go)）。
-- 但 `PublicEvidenceQ / IndependentPublicFacts / PactQualified` 无任何内容或机制写入入口（G2），`RULE_OF_LAW` 也不在仲裁候选（G1）。本线事件链因此只落到**政治剧情层**：它生产"锁定应当发生"的全部剧情事实，把资格供给留给引擎工程。
+- 引擎已有 Pact 附着动力学：`W ≤ 18` 且 `Q ≥ 0.85` 且独立公共事实 ≥2 且 `PactQualified` 时 Judicial 可附着约章并锁定（[authority.go](../../../internal/engine/authority.go)）。【裁决更新】司法部只附着两个对象：IT 或约章；市长对司法部只有影响力（施压、换人、个案松弛），不构成归属——《公议》与《人治》因此不构成附着层面的硬互斥。
+- 资格供给入口已由机制底座落地：`authority_evidence_delta / authority_public_fact / authority_pact_qualify` 内容写入通路；`RULE_OF_LAW` 已在仲裁候选，资格读 `PactLocked`。尚缺的是**具体供给事件**（哪份材料、经哪次公开核验、记为哪条独立事实），属内容编写。
+- 锁定是单向事实：Mayor 更替或普通威势回升不能随意撤销已锁定的约章。
 
 ## 5. 能力缺口
 
-G1（候选缺失）、G2（约章资格供给）、G3（内容读不到 `W`，锁定日无法以 `W` 为触发条件，只能用时间＋完成键近似）、G8（制度尾声展示）。
+G8（制度尾声展示）。原 G1/G2 的机制部分已随底座落地；剩余工作是供给事件的内容编写与 `W` 阈值、`Q` 权重的 sim 校准（TODO(balance)）。
