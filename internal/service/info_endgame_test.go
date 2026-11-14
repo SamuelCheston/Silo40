@@ -167,10 +167,56 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	}
 	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY"})
 
-	for month := 0; month < 96 && !svc.gameOver(); month++ {
+	circulationActions := 0
+	attemptCirculation := func(action model.AgentAction) {
+		t.Helper()
+		outcome, err := svc.ExecuteAction(action)
+		if err != nil {
+			t.Fatalf("circulate with %+v: %v", action, err)
+		}
+		if outcome.Result.Executed {
+			circulationActions++
+		}
+	}
+	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
+	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance INFORMATION line at month %d: %v", month, err)
 		}
+		if svc.gameOver() {
+			break
+		}
+
+		// INFORMATION now requires circulation to outrun belief forgetting.
+		// Keep sharing the strongest missing fact with the neediest department,
+		// gathering across departments when no useful fact can be shared.
+		ap := svc.agent.ActionPoints
+		shareCost := model.ACTION_COSTS[model.ActionShareInfo]
+		gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
+		buildCost := model.ACTION_COSTS[model.ActionBuildConnection]
+		gatherFrom := rotation[month%len(rotation)]
+		switch {
+		case svc.silo.Rebellion >= 0.7:
+			// Lie low while rebellion runs hot.
+		case ap >= shareCost && month >= 4:
+			dept := neediestDepartment(svc.silo)
+			fragment, ok := strongestShareableFactFor(svc.agent, departmentByAddress(svc.silo, dept))
+			if ok {
+				attemptCirculation(model.AgentAction{
+					Type: model.ActionShareInfo, TargetDept: dept,
+					FragmentIds: []string{fragment},
+				})
+			} else if ap >= gatherCost {
+				attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
+			}
+		case ap >= buildCost && month < 12:
+			attemptCirculation(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
+		case ap >= gatherCost:
+			attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
+		}
+	}
+	if circulationActions == 0 {
+		t.Fatal("playable line reached its ending without any sustained circulation action")
 	}
 	for _, key := range []string{
 		"player_actions:receiver_verify_accompany",
