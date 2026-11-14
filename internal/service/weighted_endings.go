@@ -25,9 +25,10 @@ const (
 	endingDeath        = "DEATH"
 	endingCompromised  = "AGENT_COMPROMISED"
 
-	// Fact keys produced by content chains (18/19 分册); arbitration only reads them.
+	// Fact keys produced by content chains; arbitration only reads them.
 	resetFactKey    = "special:reset_completed"
 	fractureFactKey = "special:fracture_confirmed"
+	normalcyFactKey = "special:normalcy_hardens"
 
 	// Silo 1 reaction-chain settlement hooks (《寂堡》链 21). The remote-termination
 	// and remote-physical-strike settlements carry no numerical effect of their
@@ -328,8 +329,8 @@ func personalRuleEligible(station *model.Silo) (bool, string) {
 	return true, ""
 }
 
-// resolveWeightedEnding arbitrates the terminal evaluation requested by
-// victory_check (G1/G9). It implements the fixed pipeline of 结局体系 12 §6.2:
+// resolveWeightedEnding arbitrates terminal evaluations requested by
+// victory_check or content facts (G1/G9). It implements 结局体系 12 §6.2:
 //
 //	P0 hard-failure guardrails (DEATH → RESET → FRACTURE → AGENT_COMPROMISED),
 //	reading the escape group first; P1 qualification pool; P2 four-entity
@@ -341,12 +342,14 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		return nil
 	}
 	trigger := ""
+	normalcyConvergence := s.contentFactTriggered(station.ID, normalcyFactKey) &&
+		s.world != nil && s.world.ProgressStage == "arrival"
 	if station.VictoryStatus != nil {
 		trigger = strings.ToUpper(station.VictoryStatus.Type)
-	} else if !s.contentFactTriggered(station.ID, resetFactKey) {
+	} else if !s.contentFactTriggered(station.ID, resetFactKey) && !normalcyConvergence {
 		// Most endings still require a legacy victory_check request. RESET is a
-		// content-only hard failure, so its completion fact must be able to open
-		// arbitration even while the ordinary simulation status is nil.
+		// content-only hard failure. EXCLUSIONIST may converge from normalcy only
+		// while no other chain has left arrival; an active chain is a crawl-out.
 		return nil
 	}
 	config := defaultEndingWeightConfig
