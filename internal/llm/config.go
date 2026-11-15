@@ -26,12 +26,22 @@ const (
 	// model spend when predicted work cannot finish before the next tick.
 	EnvWarmup   = "SILO40_LLM_WARMUP"
 	EnvPrefetch = "SILO40_LLM_PREFETCH"
+
+	// Context level (how much situation the prompt carries) and its
+	// independent switches, orthogonal to EnvParticipation.
+	EnvContext       = "SILO40_LLM_CONTEXT"         // minimal | standard | rich | world
+	EnvCtxMemory     = "SILO40_LLM_CTX_MEMORY"      // actor traits/fragments/relations
+	EnvCtxProtocol   = "SILO40_LLM_CTX_PROTOCOL"    // Order clause list
+	EnvCtxEventLimit = "SILO40_LLM_CTX_EVENT_LIMIT" // recent event summary entries
+	EnvCtxPeerIntel  = "SILO40_LLM_CTX_PEER_INTEL"  // rumor-grade other-silo intel
 )
 
 // EnvConfig is the parsed environment configuration.
 type EnvConfig struct {
 	Mode            Mode
 	Level           Level
+	Context         ContextLevel
+	ContextOptions  ContextOptions
 	BaseURL         string
 	APIKey          string
 	Model           string
@@ -42,6 +52,7 @@ type EnvConfig struct {
 	Prefetch        bool
 	ModeParseErr    error
 	LevelParseErr   error
+	ContextParseErr error
 }
 
 // envFlagDefault parses an explicit boolean switch and applies defaultValue
@@ -79,6 +90,24 @@ func LoadEnv() EnvConfig {
 		// the old "enabled but never intervenes" behavior.
 		cfg.Level = LevelKey
 	}
+
+	// Context level + independent switches. Defaults keep the historical
+	// prompt shape (standard level, memory on, everything else off), so an
+	// upgraded deployment behaves exactly as before until the user opts in.
+	cfg.Context, cfg.ContextParseErr = ParseContextLevel(os.Getenv(EnvContext))
+	if cfg.ContextParseErr != nil {
+		cfg.Context = DefaultContextLevel
+	}
+	cfg.ContextOptions = DefaultContextOptions()
+	cfg.ContextOptions.PersonalMemory = envFlagDefault(os.Getenv(EnvCtxMemory), cfg.ContextOptions.PersonalMemory)
+	cfg.ContextOptions.ProtocolClauses = envFlagDefault(os.Getenv(EnvCtxProtocol), cfg.ContextOptions.ProtocolClauses)
+	cfg.ContextOptions.PeerSiloIntel = envFlagDefault(os.Getenv(EnvCtxPeerIntel), cfg.ContextOptions.PeerSiloIntel)
+	if v := os.Getenv(EnvCtxEventLimit); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			cfg.ContextOptions.EventSummaryLimit = n
+		}
+	}
+
 	cfg.BaseURL = os.Getenv(EnvBaseURL)
 	cfg.Model = os.Getenv(EnvModel)
 	cfg.ReasoningEffort = os.Getenv(EnvReasoningEffort)

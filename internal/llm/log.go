@@ -9,8 +9,9 @@ import (
 
 // Log entry kinds.
 const (
-	KindDecision = "decision"
-	KindConfig   = "config"
+	KindDecision      = "decision"
+	KindConfig        = "config"         // participation level switch
+	KindContextConfig = "context_config" // context level / switches change
 )
 
 // Decision sources recorded per entry.
@@ -46,6 +47,10 @@ type DecisionLog struct {
 	// Config payload (Kind=config).
 	ConfigLevel  string `gorm:"size:16" json:"config_level,omitempty"`
 	ConfigSource string `gorm:"size:16" json:"config_source,omitempty"` // env | create | api
+	// Config payload (Kind=context_config): JSON contextConfigRecord. Context
+	// config never affects recorded choices (replay reads final_choice only);
+	// the entry exists for audit and for restoring the switches on resume.
+	ConfigContext string `gorm:"type:text" json:"config_context,omitempty"`
 	// Audit.
 	Level      string    `gorm:"size:16" json:"level,omitempty"` // participation level in force
 	Model      string    `gorm:"size:160" json:"model,omitempty"`

@@ -35,6 +35,12 @@ type Advisor struct {
 	mode   Mode
 	level  Level
 
+	// Context level + independent switches: how much situation each referred
+	// decision point's prompt carries (orthogonal to level gating above).
+	ctxLevel    ContextLevel
+	ctxOpts     ContextOptions
+	ctxProvider ContextProvider
+
 	eventWindow int
 	timeout     time.Duration
 
@@ -152,6 +158,12 @@ type Config struct {
 	EventWindow int
 	// TimeoutMS bounds the synchronous mode=on call. Default DefaultTimeoutMS.
 	TimeoutMS int
+	// ContextLevel selects how much situation the prompt carries
+	// (minimal|standard|rich|world). Empty means DefaultContextLevel.
+	ContextLevel ContextLevel
+	// ContextOptions carries the independent context switches. nil means
+	// DefaultContextOptions().
+	ContextOptions *ContextOptions
 	// Prefetch enables background evaluation of predicted next-month decision
 	// points in mode=on (zero tick latency; misses fall back to the original
 	// weights). Warmup issues one cheap call at startup so the first gated
@@ -177,11 +189,20 @@ func NewAdvisor(cfg Config) (*Advisor, error) {
 	if cfg.TimeoutMS <= 0 {
 		cfg.TimeoutMS = DefaultTimeoutMS
 	}
+	if cfg.ContextLevel == "" {
+		cfg.ContextLevel = DefaultContextLevel
+	}
+	ctxOpts := DefaultContextOptions()
+	if cfg.ContextOptions != nil {
+		ctxOpts = *cfg.ContextOptions
+	}
 	a := &Advisor{
 		db:                cfg.DB,
 		client:            cfg.Client,
 		mode:              cfg.Mode,
 		level:             cfg.Level,
+		ctxLevel:          cfg.ContextLevel,
+		ctxOpts:           ctxOpts,
 		eventWindow:       cfg.EventWindow,
 		timeout:           time.Duration(cfg.TimeoutMS) * time.Millisecond,
 		lastOnceFireMonth: -1,
@@ -309,6 +330,79 @@ func (a *Advisor) SetLevel(level Level, source string) error {
 	return nil
 }
 
+// GetContextLevel/GetContextOptions expose the current context config
+// (audit/status endpoints).
+func (a *Advisor) GetContextLevel() ContextLevel {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.ctxLevel
+}
+
+func (a *Advisor) GetContextOptions() ContextOptions {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.ctxOpts
+}
+
+// SetContextProvider wires the service-layer supplier of the rich-context
+// sections (event summaries, clauses, world setting...). Follows the same
+// injection pattern as SetEventFilter; nil clears the provider.
+func (a *Advisor) SetContextProvider(p ContextProvider) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.ctxProvider = p
+}
+
+// SetContext switches the context level and/or independent switches mid-game.
+// The change is appended to the decision log (kind=context_config) for audit
+// and resume-time restoration; it never affects recorded choices, since
+// replay reads final_choice only and never re-consults the model.
+func (a *Advisor) SetContext(level ContextLevel, opts ContextOptions, source string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.err != nil {
+		return a.err
+	}
+	payload, err := marshalContextConfig(level, opts)
+	if err != nil {
+		return err
+	}
+	entry := &DecisionLog{
+		Kind:          KindContextConfig,
+		ConfigContext: payload,
+		ConfigSource:  source,
+		Model:         a.modelID(),
+	}
+	a.stampClock(entry, nil)
+	if err := AppendEntry(a.db, entry); err != nil {
+		return err
+	}
+	a.ctxLevel = level
+	a.ctxOpts = opts
+	return nil
+}
+
+// applyConfigEntry restores one config-kind log entry (participation level
+// or context config) into the advisor state. Caller holds mu. Unparsable
+// context payloads are skipped: the entry stays consumed, so replay order
+// never wedges on a malformed audit row.
+func (a *Advisor) applyConfigEntry(e *DecisionLog) {
+	switch e.Kind {
+	case KindConfig:
+		a.level = Level(e.ConfigLevel)
+	case KindContextConfig:
+		if lvl, opts, err := parseContextConfig(e.ConfigContext); err == nil {
+			a.ctxLevel = lvl
+			a.ctxOpts = opts
+		}
+	}
+}
+
+// isConfigEntry reports whether an entry is a config switch of any kind.
+func isConfigEntry(e *DecisionLog) bool {
+	return e.Kind == KindConfig || e.Kind == KindContextConfig
+}
+
 // ResumeFrom loads the existing log for replay. Call after the service
 // restores the game state; entries are consumed in order as play continues.
 // A gapped sequence is a sticky explicit error (R2: no silent divergence).
@@ -324,14 +418,14 @@ func (a *Advisor) ResumeFrom(entries []DecisionLog) {
 	a.replayEntries = entries
 	a.replayCursor = 0
 	a.pendingReplay = nil
-	// Apply config entries up to the current clock so the resumed level
-	// matches the last recorded switch.
+	// Apply config entries up to the current clock so the resumed level and
+	// context config match the last recorded switches.
 	for a.replayCursor < len(a.replayEntries) {
 		e := a.replayEntries[a.replayCursor]
-		if e.Kind != KindConfig {
+		if !isConfigEntry(&e) {
 			break
 		}
-		a.level = Level(e.ConfigLevel)
+		a.applyConfigEntry(&e)
 		a.replayCursor++
 	}
 }
@@ -395,10 +489,10 @@ func (a *Advisor) ObserveMonth(silo *model.Silo, agent *model.Agent, newLogs []m
 	// ordered through the log).
 	for a.replayCursor < len(a.replayEntries) {
 		e := a.replayEntries[a.replayCursor]
-		if e.Kind != KindConfig {
+		if !isConfigEntry(&e) {
 			break
 		}
-		a.level = Level(e.ConfigLevel)
+		a.applyConfigEntry(&e)
 		a.replayCursor++
 	}
 
@@ -562,8 +656,8 @@ func (a *Advisor) Advise(view *engine.ActorView, silo *model.Silo, candidates []
 	curOrder := actorOrder(string(view.Ref.Kind), actorID(view))
 	for a.replayCursor < len(a.replayEntries) {
 		e := a.replayEntries[a.replayCursor]
-		if e.Kind == KindConfig {
-			a.level = Level(e.ConfigLevel)
+		if isConfigEntry(&e) {
+			a.applyConfigEntry(&e)
 			a.replayCursor++
 			continue
 		}
@@ -764,6 +858,12 @@ func actorOrder(kind string, id uint) int {
 // the actor's own slice, public silo metrics, per-department public stats
 // and the candidate list. Base weights are included as the alignment anchor
 // (author directive after the first gate run; see BuildCandidateList).
+//
+// The payload is assembled per context level (minimal ⊂ standard ⊂ rich ⊂
+// world) plus the independent switches: lower levels genuinely omit sections
+// instead of marking them, so they cost fewer tokens. The peer-silo intel
+// switch is the single opt-in exception to the fog rule — it stays off by
+// default and only ever carries rumor-grade views, never exact values.
 func (a *Advisor) buildRequest(view *engine.ActorView, silo *model.Silo, candidates []engine.CandidateInfo) (string, string) {
 	system := "You are the decision advisor for NPC departments in the bunker " +
 		"simulation game Silo 40. You receive one NPC's situation and its " +
@@ -790,50 +890,101 @@ func (a *Advisor) buildRequest(view *engine.ActorView, silo *model.Silo, candida
 		"conduct_propaganda|incite_rebellion|publicize_faction|profession_action>," +
 		"\"factor\":<0.5-2>}]} covering every candidate exactly once. No prose."
 
-	depts := make([]map[string]any, 0, len(silo.Professions))
-	for i := range silo.Professions {
-		p := &silo.Professions[i]
-		depts = append(depts, map[string]any{
-			"name": p.Name, "class": p.ClassType, "panic": round2(p.PanicValue),
-			"productivity": round2(p.Productivity), "power": p.PowerLevel,
-		})
+	// 当前 NPC (every level): identity + economy. Personal memory (traits,
+	// fragments, relations) is an independent switch on top.
+	actor := map[string]any{
+		"profession":        view.Profession(),
+		"action_points":     round2(view.ActionPoints()),
+		"suspicion":         round2(view.SuspicionLevel()),
+		"prestige":          round2(view.PoliticalPrestige()),
+		"propaganda":        round2(view.PropagandaLevel()),
+		"is_representative": view.IsRepresentative(),
 	}
-	factions := make([]map[string]any, 0)
-	for i := range silo.Factions {
-		f := &silo.Factions[i]
-		// Fog filter: only public factions are visible to arbitrary NPC
-		// actors here; non-public faction internals never enter prompts.
-		if !f.IsPublic {
-			continue
+	if a.ctxOpts.PersonalMemory {
+		if traits := view.Traits(); len(traits) > 0 {
+			actor["traits"] = traits
 		}
-		factions = append(factions, map[string]any{
-			"name": f.Name, "members": f.MemberCount, "influence": round2(f.Influence),
-		})
-	}
-	resources := map[string]float64{}
-	for _, r := range silo.Resources {
-		resources[r.Type] = r.Amount
+		if frags := view.KnownFragments(); len(frags) > 0 {
+			actor["known_fragments"] = frags
+		}
+		if rels := view.Relations(); len(rels) > 0 {
+			actor["relations"] = rels
+		}
 	}
 	payload := map[string]any{
-		"actor": map[string]any{
-			"profession":        view.Profession(),
-			"action_points":     round2(view.ActionPoints()),
-			"suspicion":         round2(view.SuspicionLevel()),
-			"prestige":          round2(view.PoliticalPrestige()),
-			"propaganda":        round2(view.PropagandaLevel()),
-			"known_fragments":   view.KnownFragments(),
-			"is_representative": view.IsRepresentative(),
-		},
-		"silo": map[string]any{
+		"actor":      actor,
+		"candidates": ContextBuilder{}.BuildCandidateList(candidates),
+	}
+
+	// Service-side sections: only requested when some enabled section needs
+	// them, so minimal prompts never pay for the provider call.
+	var data ContextData
+	if a.ctxProvider != nil && (a.ctxLevel.AtLeast(ContextStandard) || a.ctxOpts.ProtocolClauses || a.ctxOpts.PeerSiloIntel) {
+		data = a.ctxProvider(silo.ID)
+	}
+
+	if a.ctxLevel.AtLeast(ContextStandard) {
+		depts := make([]map[string]any, 0, len(silo.Professions))
+		for i := range silo.Professions {
+			p := &silo.Professions[i]
+			depts = append(depts, map[string]any{
+				"name": p.Name, "class": p.ClassType, "panic": round2(p.PanicValue),
+				"productivity": round2(p.Productivity), "power": p.PowerLevel,
+			})
+		}
+		factions := make([]map[string]any, 0)
+		for i := range silo.Factions {
+			f := &silo.Factions[i]
+			// Fog filter: only public factions are visible to arbitrary NPC
+			// actors here; non-public faction internals never enter prompts.
+			if !f.IsPublic {
+				continue
+			}
+			factions = append(factions, map[string]any{
+				"name": f.Name, "members": f.MemberCount, "influence": round2(f.Influence),
+			})
+		}
+		resources := map[string]float64{}
+		for _, r := range silo.Resources {
+			resources[r.Type] = r.Amount
+		}
+		payload["silo"] = map[string]any{
 			"year": silo.CurrentYear, "month": silo.CurrentMonth,
 			"population": silo.TotalPopulation,
 			"legitimacy": round2(silo.MayorLegitimacy()), "cohesion": round2(silo.Cohesion),
 			"rebellion": round2(silo.Rebellion), "resources": resources,
-		},
-		"departments": depts,
-		"factions":    factions,
-		"candidates":  ContextBuilder{}.BuildCandidateList(candidates),
+		}
+		payload["departments"] = depts
+		payload["factions"] = factions
+		if limit := a.ctxOpts.EventSummaryLimit; limit > 0 && len(data.RecentEvents) > 0 {
+			events := data.RecentEvents
+			if len(events) > limit {
+				events = events[:limit]
+			}
+			payload["recent_events"] = events
+		}
 	}
+	if a.ctxLevel.AtLeast(ContextRich) && len(data.MainlineEvents) > 0 {
+		payload["mainline"] = data.MainlineEvents
+	}
+	if a.ctxLevel.AtLeast(ContextWorld) {
+		if data.WorldSetting != "" {
+			payload["world_setting"] = data.WorldSetting
+		}
+		if len(data.PeerSilos) > 0 {
+			payload["peer_silos"] = data.PeerSilos
+		}
+		if len(data.LongTermLines) > 0 {
+			payload["long_term_lines"] = data.LongTermLines
+		}
+	}
+	if a.ctxOpts.ProtocolClauses && len(data.ProtocolClauses) > 0 {
+		payload["protocol_clauses"] = data.ProtocolClauses
+	}
+	if a.ctxOpts.PeerSiloIntel && len(data.PeerIntel) > 0 {
+		payload["peer_intel"] = data.PeerIntel
+	}
+
 	user, _ := json.Marshal(payload)
 	return system, string(user)
 }
