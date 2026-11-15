@@ -672,26 +672,26 @@ type NegotiationLogEntry struct {
 //     但须叛乱方接受 (接受是带权决策，不是自动成立)。
 //   - 零值 = 无谈判 = 旧档语义；未开信道的运行不消耗任何新 RNG。
 type NegotiationState struct {
-	Initialized           bool   `json:"initialized"`
-	ChannelOpen           bool   `json:"channel_open"`
-	OpenedYear            int    `json:"opened_year,omitempty"`
-	OpenedMonth           int    `json:"opened_month,omitempty"`
-	MayorDisposition      string `json:"mayor_disposition,omitempty"` // 开信道时一次性抽取
-	Rounds                int    `json:"rounds"`                      // 已交换回合数
-	MayorPath             string `json:"mayor_path,omitempty"`        // 市长最近一次路径决策
-	MayorLean             float64 `json:"mayor_lean"`                 // 玩家可感知的市长倾向 (0-1)
-	RebelPosture          string `json:"rebel_posture,omitempty"`     // 叛乱方最近姿态
-	StalledRounds         int    `json:"stalled_rounds"`              // 连续谈判无进展回合 (谈判权重软衰减输入)
-	SuppressRounds        int    `json:"suppress_rounds"`             // 累计镇压回合 (叛乱方拒绝权重输入)
-	OfferOnTable          bool   `json:"offer_on_table"`
-	OfferedBy             string `json:"offered_by,omitempty"` // mayor | rebels
-	OfferTerms            string `json:"offer_terms,omitempty"`
-	CompromiseEstablished bool   `json:"compromise_established"`
-	CompromiseYear        int    `json:"compromise_year,omitempty"`
-	CompromiseMonth       int    `json:"compromise_month,omitempty"`
-	Takeover              string `json:"takeover,omitempty"` // ""(未选)/takeover/hands_off
-	Closed                bool   `json:"closed"`
-	CloseReason           string `json:"close_reason,omitempty"`
+	Initialized           bool                  `json:"initialized"`
+	ChannelOpen           bool                  `json:"channel_open"`
+	OpenedYear            int                   `json:"opened_year,omitempty"`
+	OpenedMonth           int                   `json:"opened_month,omitempty"`
+	MayorDisposition      string                `json:"mayor_disposition,omitempty"` // 开信道时一次性抽取
+	Rounds                int                   `json:"rounds"`                      // 已交换回合数
+	MayorPath             string                `json:"mayor_path,omitempty"`        // 市长最近一次路径决策
+	MayorLean             float64               `json:"mayor_lean"`                  // 玩家可感知的市长倾向 (0-1)
+	RebelPosture          string                `json:"rebel_posture,omitempty"`     // 叛乱方最近姿态
+	StalledRounds         int                   `json:"stalled_rounds"`              // 连续谈判无进展回合 (谈判权重软衰减输入)
+	SuppressRounds        int                   `json:"suppress_rounds"`             // 累计镇压回合 (叛乱方拒绝权重输入)
+	OfferOnTable          bool                  `json:"offer_on_table"`
+	OfferedBy             string                `json:"offered_by,omitempty"` // mayor | rebels
+	OfferTerms            string                `json:"offer_terms,omitempty"`
+	CompromiseEstablished bool                  `json:"compromise_established"`
+	CompromiseYear        int                   `json:"compromise_year,omitempty"`
+	CompromiseMonth       int                   `json:"compromise_month,omitempty"`
+	Takeover              string                `json:"takeover,omitempty"` // ""(未选)/takeover/hands_off
+	Closed                bool                  `json:"closed"`
+	CloseReason           string                `json:"close_reason,omitempty"`
 	Log                   []NegotiationLogEntry `json:"log,omitempty"` // 环形保留最近 24 条
 }
 
@@ -1434,11 +1434,11 @@ type InformationProgress struct {
 // 跨线共享的事实 (信念覆盖、登记簿、W、警察服从……) 不在线卡里重复，
 // 由呈现端从既有快照单点读取。
 const (
-	LineInformation  = "information"  // 《共证》
-	LineRebellion    = "rebellion"    // 《越岭》
-	LineRuleOfLaw    = "rule_of_law"  // 《公议》
+	LineInformation  = "information"   // 《共证》
+	LineRebellion    = "rebellion"     // 《越岭》
+	LineRuleOfLaw    = "rule_of_law"   // 《公议》
 	LinePersonalRule = "personal_rule" // 《人治》
-	LineTime         = "time"         // 《无人裁决》
+	LineTime         = "time"          // 《无人裁决》
 )
 
 // LineMilestone 单条线上的一个里程碑事实键的点亮状态。
