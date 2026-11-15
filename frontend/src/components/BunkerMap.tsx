@@ -94,10 +94,11 @@ export const BunkerMap = React.memo(function BunkerMap({ silo, agent }: BunkerMa
                                                     <HStack w="full" justify="space-between" mb={2}>
                                                         <Text fontWeight="black" fontSize="sm" color="gray.800">{dept.name}</Text>
                                                         {connVal > 0 && (
-                                                            <Badge colorPalette="blue" size="xs" variant="solid" borderRadius="sm">
+                                                            <Badge colorPalette="blue" size="xs" variant="solid" borderRadius="sm"
+                                                                title={`你与 ${dept.name} 的人脉：${(connVal * 100).toFixed(0)}%（越高，分享传输越强）`}>
                                                                 <HStack gap={0.5}>
                                                                     <Network size={10} />
-                                                                    <Text fontSize="9px">{(connVal * 100).toFixed(0)}%</Text>
+                                                                    <Text fontSize="9px">人脉 {(connVal * 100).toFixed(0)}%</Text>
                                                                 </HStack>
                                                             </Badge>
                                                         )}
@@ -105,7 +106,7 @@ export const BunkerMap = React.memo(function BunkerMap({ silo, agent }: BunkerMa
                                                     
                                                     <VStack align="start" gap={1} w="full">
                                                         <HStack justify="space-between" w="full">
-                                                            <Text fontSize="10px" color="gray.500">Population</Text>
+                                                            <Text fontSize="10px" color="gray.500">人口</Text>
                                                             <Text fontSize="10px" fontWeight="bold" color="blue.600">{dept.population}</Text>
                                                         </HStack>
                                                         <ProgressRoot value={dept.panic_value * 100} max={100} w="full" size="xs" colorPalette={dept.panic_value > 0.5 ? "red" : "blue"}>
@@ -234,8 +235,8 @@ export const BunkerMap = React.memo(function BunkerMap({ silo, agent }: BunkerMa
                             textAlign="center"
                         >
                             <VStack gap={2}>
-                                <Text color="gray.400" fontWeight="bold">NO DEPARTMENT SELECTED</Text>
-                                <Text fontSize="xs" color="gray.500">Click a department on the map to view detailed analytics and population metrics.</Text>
+                                <Text color="gray.400" fontWeight="bold">未选择部门</Text>
+                                <Text fontSize="xs" color="gray.500">点击地图上的部门，查看详细分析与人口指标。</Text>
                             </VStack>
                         </Box>
                     )}
