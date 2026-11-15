@@ -34,12 +34,6 @@ func (s *GameService) runSilo1StewardshipMonth(logs *[]string, stories *[]model.
 	s.stewardshipLifespanMonth(logs, stories)
 }
 
-// runSilo1BlackBoxRound 阶段 2b 黑箱回合 (22 黑箱学习系列 01 卷 §2.2)：
-// 观测到达 → 信念更新 → 摘要 → 零 RNG 决策 → 指派 r。格三 (黑箱回合) 实现。
-func (s *GameService) runSilo1BlackBoxRound(logs *[]string, stories *[]model.StoryEvent) {
-	// TODO(黑箱回合格): 按 22 黑箱学习系列 01 卷 §7.1 伪代码实现。
-}
-
 // initSilo1Stewardship 首次启用：写入指标一/二初始状态 (确定性常量，不消耗 RNG)。
 func (s *GameService) initSilo1Stewardship() {
 	st := &s.world.Silo1Stewardship

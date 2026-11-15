@@ -439,6 +439,9 @@ type Silo1BlackBoxState struct {
 	ObsSeq int `json:"obs_seq,omitempty"`
 	// ProbeCooldown 探索冷却计数 (01 卷 §6.4 接口预留)；零值 = 可用。
 	ProbeCooldown int `json:"probe_cooldown,omitempty"`
+	// ObediencePulse 通牒后表面服从脉冲剩余月 (22-02 §3.5 ΔE_show、缺口 G10)：
+	// 通牒签发时置 1–2 月，4.55 结算时对 E 叠加临时项；零值 = 无脉冲。
+	ObediencePulse int `json:"obedience_pulse,omitempty"`
 	// Log 决策审计日志，环形上限 24 (每堡独立)。
 	Log []BlackBoxLogEntry `json:"log,omitempty"`
 }

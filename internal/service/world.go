@@ -453,6 +453,10 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 		*logs = append(*logs, fmt.Sprintf("[Silo1] Ultimatum issued to silo %d", silo.ID))
 		s.stewardshipRegisterClearingObligation(silo.ID)
 		s.stewardshipChargeLifespan("ultimatum")
+		// G10 表面服从脉冲 (22-02 §3.5)：通牒后 1–2 月的表演性服从窗口。
+		if silo.BlackBox.Initialized {
+			silo.BlackBox.ObediencePulse = 2 // TODO(balance)
+		}
 		break
 	}
 }

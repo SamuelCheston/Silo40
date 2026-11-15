@@ -15,11 +15,3 @@ import "silo40/internal/model"
 func UpdateBlackBoxMonthly(silo *model.Silo) {
 	// TODO(物理层格): 按 01 卷 §3/§4 与 §9 参数总表实现。
 }
-
-// GenerateBlackBoxObservations RunLocalPhase 步骤 4.65 (22 黑箱学习系列 01 卷
-// §2.2)：反映结算后的 Θ，按信号类型升序产生观测 (每信号 1 次伪装判定 + 2 次
-// 噪声取样，engine.DrawFloat64)，按延迟入队 PendingObservations。
-// 唯一 RNG 消耗点：门控关闭或信号当月不产生时零消耗。
-func GenerateBlackBoxObservations(silo *model.Silo) {
-	// TODO(观测核心格): 按 01 卷 §5.2/§7.1 与 02 卷似然/伪装模型实现。
-}

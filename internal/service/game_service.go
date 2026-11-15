@@ -1296,6 +1296,15 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	// The station already occupies ActiveSiloID; no fourth silo and no Silo 40
 	// entity are added. Silo 18 remains isolated from direct player action.
 
+	// 22/23 系列：功能开关开启时逐堡启用黑箱与盲区状态 (确定性，不消耗 RNG)。
+	// 关闭时零值 = 未启用，4.55/4.62/4.65 与黑箱回合全部早退。
+	if req.Silo1BlackBox {
+		for _, sl := range silos {
+			sl.BlackBox.Initialized = true
+			sl.BlindSpot.Initialized = true
+		}
+	}
+
 	// 初始化引擎 (清空旧调度器状态)
 	s.engine = engine.NewGameEngine()
 	s.bindEngineRuntime()
