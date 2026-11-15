@@ -19,8 +19,20 @@ type actionCondition struct {
 	StageAtLeast   string            `json:"stage_at_least,omitempty"`
 	Metric         string            `json:"metric,omitempty"`
 	Relation       string            `json:"relation,omitempty"`
-	Min            *float64          `json:"min,omitempty"`
-	Max            *float64          `json:"max,omitempty"`
+	// Trait 门控型特质条件 (19 §4)：玩家特工持有该特质时成立。只扩大可达
+	// 集 (解锁专属动作)，不缩小任何既有路径。
+	Trait string   `json:"trait,omitempty"`
+	Min   *float64 `json:"min,omitempty"`
+	Max   *float64 `json:"max,omitempty"`
+}
+
+// knownAgentTraits 是门控条件可引用的特工特质封闭集 (与
+// engine.CreateInitialAgent 的特质分支一致)；配置里出现集合外的特质名直接
+// 校验失败，防止静默写错字让动作永不可解锁。
+var knownAgentTraits = map[string]bool{
+	"隐秘行事": true,
+	"地堡土著": true,
+	"魅力非凡": true,
 }
 
 type actionStage struct {
@@ -159,6 +171,9 @@ func validateActionCondition(condition actionCondition) error {
 	if condition.Metric != "" && !supportedActionMetric(condition.Metric) {
 		return fmt.Errorf("unsupported metric %q", condition.Metric)
 	}
+	if condition.Trait != "" && !knownAgentTraits[condition.Trait] {
+		return fmt.Errorf("unsupported trait %q", condition.Trait)
+	}
 	return nil
 }
 
@@ -255,6 +270,16 @@ func (s *GameService) evaluateActionCondition(condition actionCondition) bool {
 			return false
 		}
 	}
+	if condition.Trait != "" && !s.agentHasTrait(condition.Trait) {
+		return false
+	}
+	// 同阶层免引荐 (19 §4.3)：地堡土著玩家对同阶层目标部门的关系门视为已
+	// 满足——抹掉该关系条件与其数值界，其余条件 (阶段/事件/指标) 照常评估。
+	if condition.Relation != "" && s.relationGateWaived(condition.Relation) {
+		condition.Relation = ""
+		condition.Min = nil
+		condition.Max = nil
+	}
 	value, hasValue := s.actionConditionValue(condition)
 	if (condition.Metric != "" || condition.Relation != "") && !hasValue {
 		return false
@@ -266,6 +291,45 @@ func (s *GameService) evaluateActionCondition(condition actionCondition) bool {
 		return false
 	}
 	return true
+}
+
+// agentHasTrait 玩家特工是否持有指定特质 (中文名，与 CreateInitialAgent 的
+// 登记口径一致)。
+func (s *GameService) agentHasTrait(trait string) bool {
+	if s.agent == nil {
+		return false
+	}
+	for _, item := range s.agent.Traits {
+		if item == trait {
+			return true
+		}
+	}
+	return false
+}
+
+// relationGateWaived 实现「同阶层免引荐」(19 §4.3)：仅当玩家持有地堡土著特
+// 质、且关系门目标部门与玩家职业同阶层 (ClassType 相同) 时，该关系门视为
+// 已满足。只放宽关系门：阶段门 (first_signal/archive_awakened 等)、部门准
+// 入门与宣传门不受影响；口径二元 (视为满足)，无中间态。
+func (s *GameService) relationGateWaived(relation string) bool {
+	if relation == "" || s.agent == nil || s.silo == nil {
+		return false
+	}
+	if !s.agentHasTrait("地堡土著") {
+		return false
+	}
+	name := strings.TrimPrefix(relation, "relation:")
+	var targetClass, agentClass string
+	for i := range s.silo.Professions {
+		prof := &s.silo.Professions[i]
+		if prof.Name == name {
+			targetClass = prof.ClassType
+		}
+		if prof.Name == s.agent.Profession {
+			agentClass = prof.ClassType
+		}
+	}
+	return targetClass != "" && targetClass == agentClass
 }
 
 func (s *GameService) actionEventCompleted(eventKey string) bool {

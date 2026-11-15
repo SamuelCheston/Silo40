@@ -1522,7 +1522,8 @@ func (s *GameService) completePlayerAction(action model.AgentAction) {
 // tightens to "first valid local Observation produced by the hook" and the gate
 // itself stays on observation:first_local unchanged.
 func (s *GameService) recordFirstLocalObservation(action model.AgentAction) {
-	if action.Type != model.ActionProfession && action.Type != model.ActionGatherInfo {
+	// 无声探查与探查同效 (19 §4.2)：同样产出本地观察材料，计入首观察键。
+	if action.Type != model.ActionProfession && action.Type != model.ActionGatherInfo && action.Type != model.ActionSilentProbe {
 		return
 	}
 	states := s.statesMapFor(s.silo.ID)
@@ -2668,9 +2669,10 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 			return fmt.Errorf("unknown profession action %q", action.ProfessionAction)
 		}
 		action.Cost = def.APCost
-	case model.ActionGatherInfo:
+	case model.ActionGatherInfo, model.ActionSilentProbe:
 		// §8.1：AP 与怀疑独立。探查成本随目标部门规范冲突上浮
 		// (ceil(base·(1+0.5·mismatch)))，与检测/怀疑结算分离。
+		// 无声探查 (19 §4.2) = 同口径成本的 2 倍 (免怀疑的定价)。
 		base, ok := model.ACTION_COSTS[model.ActionGatherInfo]
 		if !ok {
 			return fmt.Errorf("unknown action type %q", action.Type)
@@ -2689,6 +2691,9 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 			mismatch = engine.Mismatch(cfg.GatherDeviation, engine.DeptNorm(target))
 		}
 		action.Cost = engine.APCostWithMismatch(cfg, base, mismatch)
+		if action.Type == model.ActionSilentProbe {
+			action.Cost *= 2
+		}
 	case model.ActionShareInfo, model.ActionBuildConnection:
 		// 20 分册流通摩擦，只贵不堵（效果、吸收、路径都不变）：
 		//   T2-3 交接收紧（Share）：戒备 ≥ 0.50 → ×2（3→6）

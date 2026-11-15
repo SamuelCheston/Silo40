@@ -1259,7 +1259,11 @@ type ContentEventState struct {
 type AgentActionType string
 
 const (
-	ActionGatherInfo        AgentActionType = "GATHER_INFO"
+	ActionGatherInfo AgentActionType = "GATHER_INFO"
+	// ActionSilentProbe 无声探查 (19-opening-variability §4.2)：隐秘行事特质
+	// 解锁的探查变体——效果同 GATHER_INFO，但检测分类强制 UNSAMPLED (不进
+	// 抽样、无怀疑增量)，AP 成本为普通探查的 2 倍。
+	ActionSilentProbe       AgentActionType = "SILENT_PROBE"
 	ActionShareInfo         AgentActionType = "SHARE_INFO"
 	ActionBuildConnection   AgentActionType = "BUILD_CONNECTION"
 	ActionInciteRebellion   AgentActionType = "INCITE_REBELLION"
@@ -1641,7 +1645,10 @@ var ALL_FRAGMENTS = []string{
 // 跑赢恒定淡忘。戏剧性动作 (煽动/宣传/公开化) 保持高成本不变。
 // TODO(balance): 全部为 sim 起点。
 var ACTION_COSTS = map[AgentActionType]float64{
-	ActionGatherInfo:        2, // TODO(balance): 10 → 2
+	ActionGatherInfo: 2, // TODO(balance): 10 → 2
+	// 无声探查基准 = 普通探查 ×2 (免怀疑的定价，19 §4.2，TODO(balance))；
+	// 服务端实际成本在 resolveActionCost 里按 2×(探查成本含规范冲突上浮) 结算。
+	ActionSilentProbe:       4,
 	ActionShareInfo:         3, // TODO(balance): 20 → 3
 	ActionBuildConnection:   4, // TODO(balance): 15 → 4
 	ActionInciteRebellion:   30,
@@ -1656,6 +1663,7 @@ var ACTION_COSTS = map[AgentActionType]float64{
 // ACTION_DURATIONS 通用动作耗时 (月)
 var ACTION_DURATIONS = map[AgentActionType]int{
 	ActionGatherInfo:        0,
+	ActionSilentProbe:       0,
 	ActionShareInfo:         0,
 	ActionBuildConnection:   1,
 	ActionInciteRebellion:   2,

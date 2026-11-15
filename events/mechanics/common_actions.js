@@ -11,94 +11,30 @@ defineMechanics([
     ap_cost: 2,
     duration_months: 0,
     apply(ctx) {
-      const target = ctx.action.target_dept;
-      if (!target) {
-        return { action_result: { executed: false, message: "目标部门无效。" } };
+      return applyGatherProbe(ctx, false);
+    },
+  },
+  {
+    // 无声探查 (19-opening-variability §4.2)：隐秘行事特质解锁的探查变体。
+    // 效果与 Gather Info 相同，但检测分类强制 UNSAMPLED——不进抽样、无怀疑
+    // 增量，AP 成本由服务端按普通探查的 2 倍结算 (resolveActionCost)。
+    // 边界：不豁免暴露水位 E，失败探查对目标部门的戒备抬升照旧——"你不被
+    // 怀疑，但你的动作仍然有痕迹"。
+    id: "action_silent_probe",
+    action_type: "SILENT_PROBE",
+    label: "Silent Probe",
+    description:
+      "隐秘行事者的无声探查：与普通探查同效，但不进入监控抽样、不产生怀疑增量——代价是 2 倍 AP。你不被怀疑，但动作仍有痕迹：失败仍会抬升目标戒备，暴露水位照旧累积。",
+    target_type: "DEPT",
+    // 基准 = 普通探查 ×2；服务端 resolveActionCost 按 2×(含规范冲突上浮) 权威结算。
+    ap_cost: 4,
+    duration_months: 0,
+    apply(ctx) {
+      // 动作门控已按特质解锁，这里是防绕过的纵深守卫 (服务端同样校验)。
+      if (((ctx.actor && ctx.actor.traits) || []).indexOf("隐秘行事") === -1) {
+        return { action_result: { executed: false, message: "无声探查需要特质：隐秘行事。" } };
       }
-      const profession = professionByName(ctx, target);
-      if (!profession) {
-        return { action_result: { executed: false, message: "找不到目标部门。" } };
-      }
-      const unknown = unknownFragmentsFrom(ctx, target);
-      // 复核路径 (修复6)：目标部门的新材料枯竭后，探查不再生效新碎片，但
-      // 反复核验已知材料仍能加深特工自己的确信 (23 节点设计 I-1"第三次趋近
-      // 确定但永不为 1")。没有这条路径，本部门域碎片不足的职业 (如 Supply/
-      // Mechanical 域只有 2 份) 无法把 B_player 抬到分享吸收有效的强度，
-      // 《共证》线对它们事实上不可赢。抽样结构与正常路径一致 (同一 RNG 流)。
-      let recheck = false;
-      let pool = unknown;
-      if (pool.length === 0) {
-        const knownSet = actorKnownSet(ctx);
-        pool = (profession.all_fragments || []).filter(function (fragment) {
-          return knownSet[fragment];
-        });
-        if (pool.length === 0) {
-          return { action_result: { executed: false, message: "关于 " + target + "，你的部门已经知道一切。" } };
-        }
-        recheck = true;
-      }
-      // 单次获取 (10-it-control-credibility §3.4)：先抽碎片再滚获取概率，
-      // 两次抽样都走单一 RNG 流。失败不产生确信，只结算 AP/检测/戒备。
-      const fragment = pool[randomInt(pool.length)];
-      const channel = gatherChannelFor(ctx, target);
-      const ownDept = ctx.actor.profession === target;
-      // 复核是定向核验已持有材料：偏离强度减半 (TODO(balance))。跨域复核仍比
-      // 本部门复核难——不抹平职业差异，只避免警戒度螺旋把弱关系职业的深化
-      // 通道彻底封死 (职业横评：Mechanical/Police 因此卡在第三份碎片)。
-      const deviation = ownDept ? 0 : INFO_CFG.gather_deviation * (recheck ? 0.5 : 1);
-      const mismatch = mismatchFor(ctx, target, deviation);
-      const alert = profession.alertness || 0;
-      const related = relatedF(ctx, fragment);
-      const fProf = fragmentDomain(fragment) === ctx.actor.profession ? INFO_CFG.f_prof_match : INFO_CFG.f_prof_mismatch;
-      const p = pGet(fProf, mismatch, alert, related, channel.access_c);
-      const detection = detectionClass(ctx, target, false);
-      const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
-      const sampled = detection === "SAMPLED";
-      if (randomFloat() >= p) {
-        // 复核失败的戒备抬升减半 (TODO(balance))：重读已见过的材料没有新痕迹。
-        mutations.push({ type: "profession_alertness_delta", profession: target, value: INFO_CFG.alert_on_failed_probe * (recheck ? 0.5 : 1) });
-        if (sampled) {
-          const fit = ownDept ? INFO_CFG.probe_fit_own : INFO_CFG.probe_fit_cross;
-          mutations.push({
-            type: "actor_metric_delta",
-            field: "suspicion_level",
-            value: sampledSuspicion(INFO_CFG.probe_base_suspicion, INFO_CFG.probe_visibility, fit, INFO_CFG.probe_witness, INFO_CFG.probe_record, mismatch),
-          });
-        }
-        return {
-          mutations,
-          action_result: { executed: true, message: "这次对 " + target + " 的探查一无所获（概率 " + Math.round(p * 100) + "%）。该部门戒备上升。" },
-        };
-      }
-      mutations.push({
-        type: "actor_belief_observe",
-        fragment,
-        // 复核的观察 ID 带年月后缀：ObserveFact 按 observation_id 去重，
-        // 固定 ID 会让重复核验被当成重放而静默无效。
-        observation: recheck
-          ? "gather:" + fragment + ":recheck:" + ctx.silo.current_year + "-" + ctx.silo.current_month
-          : "gather:" + fragment,
-        reliability: channel.reliability_c,
-        related_f: related,
-        independence: 1,
-      });
-      if (sampled) {
-        const fit = ownDept ? INFO_CFG.probe_fit_own : INFO_CFG.probe_fit_cross;
-        mutations.push({
-          type: "actor_metric_delta",
-          field: "suspicion_level",
-          value: sampledSuspicion(INFO_CFG.probe_base_suspicion, INFO_CFG.probe_visibility, fit, INFO_CFG.probe_witness, INFO_CFG.probe_record, mismatch),
-        });
-      }
-      return {
-        mutations,
-        action_result: {
-          executed: true,
-          message: recheck
-            ? "经 " + channel.id + " 把材料 " + fragment + " 对照 " + target + " 的记录复核了一遍。你的确信加深。"
-            : "经 " + channel.id + " 从 " + target + " 观察到新材料 " + fragment + "（概率 " + Math.round(p * 100) + "%）。",
-        },
-      };
+      return applyGatherProbe(ctx, true);
     },
   },
   {
@@ -317,6 +253,104 @@ defineMechanics([
     },
   },
 ]);
+
+// applyGatherProbe 是 GATHER_INFO 与 SILENT_PROBE 的共享结算体 (19 §4.2)：
+// silent=false 与普通探查逐位一致 (同一 RNG 流、同一抽样顺序)；silent=true
+// 只改检测分类——强制 UNSAMPLED，不产生怀疑增量，其余 (碎片抽样、获取概率、
+// 复核路径、失败戒备抬升、AP 结算) 全部照旧。"你不被怀疑，但动作仍有痕迹"。
+function applyGatherProbe(ctx, silent) {
+  const target = ctx.action.target_dept;
+  if (!target) {
+    return { action_result: { executed: false, message: "目标部门无效。" } };
+  }
+  const profession = professionByName(ctx, target);
+  if (!profession) {
+    return { action_result: { executed: false, message: "找不到目标部门。" } };
+  }
+  const unknown = unknownFragmentsFrom(ctx, target);
+  // 复核路径 (修复6)：目标部门的新材料枯竭后，探查不再生效新碎片，但
+  // 反复核验已知材料仍能加深特工自己的确信 (23 节点设计 I-1"第三次趋近
+  // 确定但永不为 1")。没有这条路径，本部门域碎片不足的职业 (如 Supply/
+  // Mechanical 域只有 2 份) 无法把 B_player 抬到分享吸收有效的强度，
+  // 《共证》线对它们事实上不可赢。抽样结构与正常路径一致 (同一 RNG 流)。
+  let recheck = false;
+  let pool = unknown;
+  if (pool.length === 0) {
+    const knownSet = actorKnownSet(ctx);
+    pool = (profession.all_fragments || []).filter(function (fragment) {
+      return knownSet[fragment];
+    });
+    if (pool.length === 0) {
+      return { action_result: { executed: false, message: "关于 " + target + "，你的部门已经知道一切。" } };
+    }
+    recheck = true;
+  }
+  // 单次获取 (10-it-control-credibility §3.4)：先抽碎片再滚获取概率，
+  // 两次抽样都走单一 RNG 流。失败不产生确信，只结算 AP/检测/戒备。
+  const fragment = pool[randomInt(pool.length)];
+  const channel = gatherChannelFor(ctx, target);
+  const ownDept = ctx.actor.profession === target;
+  // 复核是定向核验已持有材料：偏离强度减半 (TODO(balance))。跨域复核仍比
+  // 本部门复核难——不抹平职业差异，只避免警戒度螺旋把弱关系职业的深化
+  // 通道彻底封死 (职业横评：Mechanical/Police 因此卡在第三份碎片)。
+  const deviation = ownDept ? 0 : INFO_CFG.gather_deviation * (recheck ? 0.5 : 1);
+  const mismatch = mismatchFor(ctx, target, deviation);
+  const alert = profession.alertness || 0;
+  const related = relatedF(ctx, fragment);
+  const fProf = fragmentDomain(fragment) === ctx.actor.profession ? INFO_CFG.f_prof_match : INFO_CFG.f_prof_mismatch;
+  const p = pGet(fProf, mismatch, alert, related, channel.access_c);
+  // 无声探查强制 UNSAMPLED (19 §4.2)：不进入抽样、无怀疑增量。
+  const detection = silent ? "UNSAMPLED" : detectionClass(ctx, target, false);
+  const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
+  const sampled = detection === "SAMPLED";
+  const probeName = silent ? "无声探查" : "探查";
+  if (randomFloat() >= p) {
+    // 复核失败的戒备抬升减半 (TODO(balance))：重读已见过的材料没有新痕迹。
+    // 无声探查不豁免戒备：动作痕迹照旧 (19 §4.2 边界)。
+    mutations.push({ type: "profession_alertness_delta", profession: target, value: INFO_CFG.alert_on_failed_probe * (recheck ? 0.5 : 1) });
+    if (sampled) {
+      const fit = ownDept ? INFO_CFG.probe_fit_own : INFO_CFG.probe_fit_cross;
+      mutations.push({
+        type: "actor_metric_delta",
+        field: "suspicion_level",
+        value: sampledSuspicion(INFO_CFG.probe_base_suspicion, INFO_CFG.probe_visibility, fit, INFO_CFG.probe_witness, INFO_CFG.probe_record, mismatch) * archetypeDetectionFactor(ctx),
+      });
+    }
+    return {
+      mutations,
+      action_result: { executed: true, message: "这次对 " + target + " 的" + probeName + "一无所获（概率 " + Math.round(p * 100) + "%）。该部门戒备上升。" },
+    };
+  }
+  mutations.push({
+    type: "actor_belief_observe",
+    fragment,
+    // 复核的观察 ID 带年月后缀：ObserveFact 按 observation_id 去重，
+    // 固定 ID 会让重复核验被当成重放而静默无效。
+    observation: recheck
+      ? "gather:" + fragment + ":recheck:" + ctx.silo.current_year + "-" + ctx.silo.current_month
+      : "gather:" + fragment,
+    reliability: channel.reliability_c,
+    related_f: related,
+    independence: 1,
+  });
+  if (sampled) {
+    const fit = ownDept ? INFO_CFG.probe_fit_own : INFO_CFG.probe_fit_cross;
+    mutations.push({
+      type: "actor_metric_delta",
+      field: "suspicion_level",
+      value: sampledSuspicion(INFO_CFG.probe_base_suspicion, INFO_CFG.probe_visibility, fit, INFO_CFG.probe_witness, INFO_CFG.probe_record, mismatch) * archetypeDetectionFactor(ctx),
+    });
+  }
+  return {
+    mutations,
+    action_result: {
+      executed: true,
+      message: recheck
+        ? "经 " + channel.id + " 把材料 " + fragment + " 对照 " + target + " 的记录复核了一遍。你的确信加深。"
+        : "经 " + channel.id + " 从 " + target + " 观察到新材料 " + fragment + "（概率 " + Math.round(p * 100) + "%）。",
+    },
+  };
+}
 
 // suspicionDelta / detectionClass live in the mechanic prelude; detection is
 // structural (UNSAMPLED / SAMPLED / DIRECT_PROTOCOL), not a profession factor.
