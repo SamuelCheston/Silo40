@@ -101,10 +101,22 @@ var archetypeRegistry = map[string]ArchetypeConfig{
 		ID:          ArchetypeFamine,
 		DisplayName: "荒年",
 		Description: "资源匮乏：初始资源水位更低、短缺危机更早且更密——日历与 AP 被维生挤占，留给流通与组织的时间变少。",
-		// TODO(balance)：水位 ×0.6 与冷却 ×0.75 为 sim 起点；危机提前量以
-		// "首月可感知、不早于玩家首次行动窗口" 为界 (19 §8)。
+		// 方向不变 (19 §3.2)，量级按逐线可达性收敛 (19 §6.2/§6.3/§8，ADR-0011
+		// 塌缩即回炉)。荒年标定点在混沌刀刃上：邻档量级平移资源击穿时点、重排
+		// 危机/立场抽签序列，已按现值重调的策略 (越岭坍塌静默窗、寂堡能量地板)
+		// 在邻档上塌缩——与裂隙档波动放大的标定同构：
+		// - 水位 ×0.6：0.55 下《越岭》筹备窗被维生挤穿 (未及出发即《断层》)、
+		//   《寂堡》能量地板失守 (物理投送落地前《断层》)；0.65 下抽签序列漂移，
+		//   《越岭》虽出发但市长阻挠、群体覆灭于追缉，《寂堡》同塌。0.6 是
+		//   {0.55, 0.6, 0.65} 网格内唯一全线可达点。
+		// - 冷却 ×0.7：0.7 时危机更密 (食物/供水 9→6 月、筹备审计 6→4 月) 而全线
+		//   仍可达；0.8 时危机节奏漂移，《越岭》《寂堡》同塌《断层》。0.65 取整后
+		//   与 0.7 产生相同整数冷却，0.7 为该档的规范代表值。危机提前量满足
+		//   19 §8：同种子对照荒年首个能源危机 (energy_rolling_blackout) 第 5 月
+		//   触发，早于无原型基线第 8 月，且不早于第 1 月玩家行动窗口
+		//   (archetype_famine_test.go 定向锁定)。
 		ResourceFactor:       0.6,
-		CrisisCooldownFactor: 0.75,
+		CrisisCooldownFactor: 0.7,
 	},
 }
 
@@ -218,4 +230,21 @@ func CrisisCooldownScale(silo *model.Silo) float64 {
 		return arch.CrisisCooldownFactor
 	}
 	return 1
+}
+
+// OverrideArchetypeConfigForTest 临时以 cfg 覆盖 id 档的注册配置，返回恢复原
+// 配置的闭包。仅供测试构造"旋钮基线值"的同种子对照臂：如把荒年两钮同置
+// 1.0，ApplyArchetypeOpening 与 CrisisCooldownScale 全部走"不动"分支，行为与
+// 无原型 (19 §3.3 空原型零值) 逐位一致。生产路径不得调用。
+func OverrideArchetypeConfigForTest(id string, cfg ArchetypeConfig) func() {
+	cfg.ID = id
+	prev, existed := archetypeRegistry[id]
+	archetypeRegistry[id] = cfg
+	return func() {
+		if existed {
+			archetypeRegistry[id] = prev
+		} else {
+			delete(archetypeRegistry, id)
+		}
+	}
 }
