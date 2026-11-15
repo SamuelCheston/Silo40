@@ -103,20 +103,38 @@
     {
       "id": "CHARTER_CONTACT_ACCEPT",
       "unlock": { "event_completed": "player_actions:charter_contact_offer" },
-      "available": {},
-      "reason": "需要先完成程序派联系人接触"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:charter_contact_decline" },
+          { "event_completed": "player_actions:charter_contact_defer" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "CHARTER_CONTACT_DECLINE",
       "unlock": { "event_completed": "player_actions:charter_contact_offer" },
-      "available": {},
-      "reason": "需要先完成程序派联系人接触"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:charter_contact_accept" },
+          { "event_completed": "player_actions:charter_contact_defer" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "CHARTER_CONTACT_DEFER",
       "unlock": { "event_completed": "player_actions:charter_contact_offer" },
-      "available": {},
-      "reason": "需要先完成程序派联系人接触"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:charter_contact_accept" },
+          { "event_completed": "player_actions:charter_contact_decline" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "RESET_COUNTERMEASURE_OFFER",
@@ -137,44 +155,66 @@
     {
       "id": "MAYOR_ALLY_ACCEPT",
       "unlock": { "event_completed": "player_actions:legitimacy_survey" },
-      "available": {},
-      "reason": "需要先完成正统性调查接触"
+      "available": { "not": { "event_completed": "player_actions:mayor_ally_bypass" } },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "MAYOR_ALLY_BYPASS",
       "unlock": { "event_completed": "player_actions:legitimacy_survey" },
-      "available": {},
-      "reason": "需要先完成正统性调查接触"
+      "available": { "not": { "event_completed": "player_actions:mayor_ally_accept" } },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "SUCCESSION_PURE_RULE",
       "unlock": { "event_completed": "special:mayor_public_stand" },
-      "available": {},
-      "reason": "需要先有至少一次公开担当时刻"
+      "available": { "not": { "event_completed": "player_actions:succession_seed_procedure" } },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "SUCCESSION_SEED_PROCEDURE",
       "unlock": { "event_completed": "special:mayor_public_stand" },
-      "available": {},
-      "reason": "需要先有至少一次公开担当时刻"
+      "available": { "not": { "event_completed": "player_actions:succession_pure_rule" } },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "PRE_FALL_LOYALTY_MOBILIZATION",
       "unlock": { "event_completed": "special:pre_fall_choice" },
-      "available": {},
-      "reason": "需要覆灭前夕的抉择时刻到来"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:pre_fall_total_riot" },
+          { "event_completed": "player_actions:pre_fall_open_inquiry" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "PRE_FALL_TOTAL_RIOT",
       "unlock": { "event_completed": "special:pre_fall_choice" },
-      "available": {},
-      "reason": "需要覆灭前夕的抉择时刻到来"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:pre_fall_loyalty_mobilization" },
+          { "event_completed": "player_actions:pre_fall_open_inquiry" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "PRE_FALL_OPEN_INQUIRY",
       "unlock": { "event_completed": "special:pre_fall_choice" },
-      "available": {},
-      "reason": "需要覆灭前夕的抉择时刻到来"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:pre_fall_loyalty_mobilization" },
+          { "event_completed": "player_actions:pre_fall_total_riot" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "investigate_dispatch",
@@ -215,20 +255,38 @@
     {
       "id": "ROUTE_SURVEY_ACCEPT",
       "unlock": { "event_completed": "player_actions:route_survey_offer" },
-      "available": {},
-      "reason": "需要先完成路线勘察接触"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:route_survey_decline" },
+          { "event_completed": "player_actions:route_survey_defer" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "ROUTE_SURVEY_DECLINE",
       "unlock": { "event_completed": "player_actions:route_survey_offer" },
-      "available": {},
-      "reason": "需要先完成路线勘察接触"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:route_survey_accept" },
+          { "event_completed": "player_actions:route_survey_defer" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "ROUTE_SURVEY_DEFER",
       "unlock": { "event_completed": "player_actions:route_survey_offer" },
-      "available": {},
-      "reason": "需要先完成路线勘察接触"
+      "available": {
+        "not": { "any": [
+          { "event_completed": "player_actions:route_survey_accept" },
+          { "event_completed": "player_actions:route_survey_decline" }
+        ] }
+      },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "ADVANCE_PARTY_DISPATCH",
@@ -239,14 +297,16 @@
     {
       "id": "ESCAPE_WINDOW_ORDERLY",
       "unlock": { "event_completed": "special:escape_window_open" },
-      "available": {},
-      "reason": "需要撤离窗口打开"
+      "available": { "not": { "event_completed": "player_actions:escape_window_riot" } },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "ESCAPE_WINDOW_RIOT",
       "unlock": { "event_completed": "special:escape_window_open" },
-      "available": {},
-      "reason": "需要撤离窗口打开"
+      "available": { "not": { "event_completed": "player_actions:escape_window_orderly" } },
+      "hide_when_unavailable": true,
+      "reason": "同一组抉择已选定其他项"
     },
     {
       "id": "ESCAPE_NEGOTIATION_GUARANTEE",
