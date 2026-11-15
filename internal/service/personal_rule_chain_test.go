@@ -47,9 +47,12 @@ func TestPersonalRuleEndingNarrativeAndCoexistence(t *testing.T) {
 		}
 	}
 
-	// Variant B: a locked charter coexists with personal rule; the weighting
-	// (prestige favors personal rule here) settles the concurrence — no
-	// hard-exclusion fiction, and the tie-break rule is stated.
+	// Variant B: a locked charter coexists with personal rule in the pool.
+	// Under the calibrated weights the institutional fact outranks personal
+	// rule when the pact is locked (prestige parity 0.5/0.5 plus the pact
+	// bonus; the tie-break order also yields to RULE_OF_LAW), so the
+	// settlement is RULE_OF_LAW stating the coexistence — no hard-exclusion
+	// fiction on either side.
 	svc2, station2 := setup()
 	station2.Authority.Judicial.PactLocked = true
 	station2.Authority.Judicial.Regime = "PACT"
@@ -71,8 +74,8 @@ func TestPersonalRuleEndingNarrativeAndCoexistence(t *testing.T) {
 		t.Fatalf("charter lock and personal rule must coexist in the pool: pool=%v excluded=%v",
 			decision2.Pool, decision2.Excluded)
 	}
-	if decision2.Selected != endingPersonalRule {
-		t.Fatalf("expected the personal-rule weighting to win here, got %s (%v)",
+	if decision2.Selected != endingRuleOfLaw {
+		t.Fatalf("expected the locked charter to outrank personal rule here, got %s (%v)",
 			decision2.Selected, decision2.Scores)
 	}
 	if !strings.Contains(decision2.Reason, "公开约章与人治并存") {
