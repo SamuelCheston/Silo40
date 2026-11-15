@@ -47,6 +47,7 @@
 | [17-information-economy-design.md](./17-information-economy-design.md) | 《共证》线"玩家推不动"的量化与修复：恒定淡忘、INFORMATION 门重锚信念层、AP 经济与流通成本、恐慌漂移方向，含三策略前后实测对比 | 情报经济数值（淡忘系数/门槛深度/AP 恢复/流通成本）的推导与 TODO(balance) 汇总 |
 | [18-time-permeation-design.md](./18-time-permeation-design.md) | 时间渗透：事实需要时间才能变成可用的证据——部门层渗透成熟度、渗透月数推导、与 B/π 和淡忘的叠加、每个结局的最早成立月、验收与可玩路线测试的公平重调判据 | 解决"一局太短"（结算压缩、正典节点被跳过）；渗透参数标定与测试重调账 |
 | [19-opening-variability-design.md](./19-opening-variability-design.md) | 开局可变性：驻地三档原型（磐石/裂隙/荒年）、号数→原型确定性映射、门控型特质（隐秘行事/地堡土著）、混沌边界与可玩路线测试重调账 | 解决"重开没差异"；开局偏向立项前的测试账与可达性推导 |
+| [20-world-countermeasures-design.md](./20-world-countermeasures-design.md) | 世界的反制：权力方对情报流通与逃跑组织的反应——五主体动机谱系、发现口径对既有检测量的映射、三档成本型反制、日常小动作呈现纪律、数值锚点推导与测试账 | 反制批次（"反制藏进日常小动作"）实装前的设计依据与重调判据 |
 
 ## 同类机制对照
 
