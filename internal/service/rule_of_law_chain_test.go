@@ -327,18 +327,20 @@ func TestRuleOfLawGuardBranches(t *testing.T) {
 
 // TestRuleOfLawLinePlayableFromNewGame drives the line from a real new game
 // through the real gates: the breach ignites from circulation, the contact
-// card unlocks through the Judicial relation, the accept choice schedules the
-// guard, and the drafting heartbeat convenes the charter. Qualification supply
-// (Q and independent facts via the shared bailiff chain) must land through the
-// player-driven verify/publish route. Publishing the second qualifying fact is
-// itself the large-scale-evidence decisive shock, but the lock still needs the
-// shock to land on a W already ground down by everyday pressure — this line
-// runs no expose campaign, so the window is asserted only if it actually
-// opens during the run (27-spec §3).
+// card unlocks through the Judicial relation, and the drafting heartbeat
+// convenes the charter. Qualification supply lands through verify/publish.
+// Everyday pressure is established before the second publication; that
+// publication and a final exposure combine the large-scale-evidence decisive
+// shock with an ordinary negative shock in one monthly settlement. The route
+// also performs the real RESET countermeasure and must settle through weighted
+// arbitration as RULE_OF_LAW, after which further actions are rejected.
 func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "rule-of-law-playable.db"))
 	req := threeSiloRequest(2401)
-	req.Profession = "Judicial"
+	req.Profession = "Mines"
+	// Start before the fixed archive broadcast so real tunnel actions have time
+	// to build the resident support needed by weighted arbitration.
+	req.StartYear = 120
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
 	}
@@ -360,16 +362,15 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 		Type: model.ActionShareInfo, TargetDept: "Mayor",
 		FragmentIds: []string{svc.agent.KnownFragments[0]},
 	})
-
 	// Build the Judicial relation until the contact card unlocks (real gates).
 	var offer *model.PlayerActionMeta
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 36; i++ {
 		offer = actionByID(svc.availablePlayerActions(), "CHARTER_CONTACT_OFFER")
 		if offer != nil && offer.Enabled {
 			break
 		}
 		build := actionByID(svc.availablePlayerActions(), "action_build_connection")
-		if build != nil && build.Enabled {
+		if build != nil && build.Enabled && svc.agent.ActionPoints >= model.ACTION_COSTS[model.ActionBuildConnection] {
 			execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
 			continue
 		}
@@ -387,22 +388,13 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 	}
 	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "CHARTER_CONTACT_ACCEPT"})
 
-	// Sustained circulation drives the drafting heartbeat (and keeps the
-	// shared supply chain alive). Deterministic policy, no policy RNG.
-	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
 	windowOpenAt := 0
-	// Qualification supply lands through the player-driven publication route
-	// (the former auto-publish scaffold was replaced by the sabotage batch's
-	// verify/publish actions — the scaffold's own TODO anticipated this):
-	// investigate both dispatch chains, verify, then publish. Publishing the
-	// second qualifying fact is itself the large-scale-evidence decisive
-	// shock, so the W window below can now open in a real run.
-	beliefOf := func(factID string) float64 {
-		if belief := engine.BeliefFor(svc.agent, factID); belief != nil {
-			return belief.B
-		}
-		return 0
-	}
+	startAbs := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth
+	exposes, lastExposeMonth := 0, -3
+	shares := map[string]int{}
+	tunnels := 0
+	decisiveFired := false
+	decisivePublishW, decisiveImpactW := 0.0, 0.0
 	attempt := func(actionID string, cost float64) bool {
 		if svc.agent.ActionPoints < cost {
 			return false
@@ -410,82 +402,114 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 		outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: actionID})
 		return err == nil && outcome.Result.Executed
 	}
-	for month := 1; month <= 100 && !svc.gameOver(); month++ {
+	for month := 1; month <= 140 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance RULE_OF_LAW line at month %d: %v", month, err)
 		}
 		if svc.gameOver() {
 			break
 		}
+		progressResetCountermeasureForRoute(t, svc, execute)
+		if svc.gameOver() {
+			break
+		}
+		// Publication can put every currently held core fact above the receiving
+		// floor in every department, leaving the generic helper no "new" fact to
+		// choose. The countermeasure only requires a real second Share, so reuse
+		// any genuinely held fact rather than inventing a completion key.
+		if contentTriggered(svc, "crisis:reset_omen_requisition") &&
+			contentTriggered(svc, "player_action:RESET_COUNTERMEASURE_OFFER") &&
+			!contentTriggered(svc, "player_action:reset_countermeasure_done") &&
+			svc.agent.ActionPoints >= model.ACTION_COSTS[model.ActionShareInfo] {
+			for _, belief := range svc.agent.Beliefs {
+				if belief.B < 0.3 {
+					continue
+				}
+				execute(model.AgentAction{
+					Type: model.ActionShareInfo, TargetDept: "Mayor", FragmentIds: []string{belief.FactID},
+				})
+				break
+			}
+		}
+		// Establish social support through the real Mines profession action before
+		// concentrating AP on evidence; continue it after the pact locks as AP allows.
+		tunnelTarget := 8
+		if svc.silo.Authority.Judicial.PactLocked {
+			tunnelTarget = 14
+		}
+		if tunnels < tunnelTarget && svc.agent.ActionPoints >= 20 {
+			tunnel := actionByID(svc.availablePlayerActions(), "MINES_TUNNEL_NETWORK")
+			if tunnel != nil && tunnel.Enabled {
+				execute(model.AgentAction{Type: model.ActionProfession, ProfessionAction: "MINES_TUNNEL_NETWORK"})
+				tunnels++
+				continue
+			}
+		}
+		gameMonth := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth - startAbs
 		if windowOpenAt == 0 && svc.silo.Authority.W <= 18 &&
 			svc.silo.Authority.Judicial.PublicEvidenceQ >= 0.85 &&
 			svc.silo.Authority.Judicial.IndependentPublicFacts >= 2 {
 			windowOpenAt = month
 		}
 
-		// Reserve the AP for a pending chain step: circulation (share cost 3)
-		// otherwise drains the whole monthly income and the 20-AP publication
-		// never gets funded.
-		publishable, verifiable := false, false
+		// Verify the first chain and publish it before spending AP on the second.
+		// The second release waits for three real exposures plus enough AP for an
+		// immediate final exposure, never for a W value produced by its own shock.
+		secondPublishReady := exposes >= 3 && gameMonth-lastExposeMonth >= 3 &&
+			svc.agent.ActionPoints >= 40
+		if playerCoreBelief(svc, "Judicial_1") >= 0.85 && !factVerified(svc.silo, "Judicial_1") &&
+			svc.agent.ActionPoints >= 15 {
+			attempt("verify_evidence", 15)
+		}
+		if factPublished(svc.silo, "Judicial_1") && !factVerified(svc.silo, "Judicial_2") &&
+			playerCoreBelief(svc, "Judicial_2") >= 0.85 && svc.agent.ActionPoints >= 15 {
+			attempt("verify_evidence", 15)
+		}
 		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
-			if beliefOf(fact) >= 0.9 && factVerified(svc.silo, fact) && !factPublished(svc.silo, fact) {
-				publishable = true
+			if fact == "Judicial_2" && !secondPublishReady {
+				continue
 			}
-			if beliefOf(fact) >= 0.85 && !factVerified(svc.silo, fact) {
-				verifiable = true
-			}
-		}
-		reserve := 0.0
-		switch {
-		case publishable:
-			reserve = 20
-		case verifiable:
-			reserve = 15
-		}
-
-		if svc.silo.Rebellion < 0.7 {
-			if verifiable && svc.agent.ActionPoints >= 15 {
-				attempt("verify_evidence", 15)
-			}
-			if publishable && svc.agent.ActionPoints >= 20 {
-				attempt("publish_evidence", 20)
-			}
-			if (beliefOf("Judicial_1") < 0.9 || beliefOf("Judicial_2") < 0.9) &&
-				(beliefOf("Judicial_1") >= 0.6 || beliefOf("Judicial_2") >= 0.6) &&
-				svc.agent.ActionPoints >= 15+reserve {
-				attempt("investigate_dispatch", 15)
-			}
-		}
-
-		ap := svc.agent.ActionPoints
-		shareCost := model.ACTION_COSTS[model.ActionShareInfo]
-		gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
-		gatherFrom := rotation[month%len(rotation)]
-		switch {
-		case svc.silo.Rebellion >= 0.7:
-			// Lie low while rebellion runs hot.
-		case resourceAmount(svc.silo, "Supplies") < 2500 && ap >= 15:
-			if outcome, err := svc.ExecuteAction(model.AgentAction{
-				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Supplies",
-			}); err == nil && outcome.Result.Executed {
-				// keep the station alive
-			}
-		case ap-reserve >= shareCost:
-			dept := neediestDepartment(svc.silo)
-			fragment, ok := strongestShareableFactFor(svc.agent, departmentByAddress(svc.silo, dept))
-			if ok {
-				if outcome, err := svc.ExecuteAction(model.AgentAction{
-					Type: model.ActionShareInfo, TargetDept: dept, FragmentIds: []string{fragment},
-				}); err == nil && outcome.Result.Executed {
-					// circulation feeds the drafting heartbeat
-				} else if ap-reserve >= gatherCost {
-					svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
+			if playerCoreBelief(svc, fact) >= 0.9 && factVerified(svc.silo, fact) &&
+				!factPublished(svc.silo, fact) && svc.agent.ActionPoints >= 20 {
+				publishW := svc.silo.Authority.W
+				if attempt("publish_evidence", 20) && fact == "Judicial_2" {
+					decisiveFired = true
+					decisivePublishW = publishW
 				}
-			} else if ap-reserve >= gatherCost {
-				svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
+				break
 			}
-		case ap-reserve >= gatherCost:
-			svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
+		}
+		if svc.agent.ActionPoints >= 15 &&
+			(playerCoreBelief(svc, "Judicial_1") < 0.9 || playerCoreBelief(svc, "Judicial_2") < 0.9) &&
+			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
+			attempt("investigate_dispatch", 15)
+		}
+
+		exposeForPressure := !decisiveFired && exposes < 3 && svc.agent.ActionPoints >= 25
+		exposeForDecisive := decisiveFired && decisiveImpactW == 0 && svc.agent.ActionPoints >= 20
+		if (exposeForPressure || exposeForDecisive) && gameMonth-lastExposeMonth >= 3 &&
+			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
+			if attempt("expose_execution_failure", 20) {
+				exposes++
+				lastExposeMonth = gameMonth
+				if decisiveFired && decisiveImpactW == 0 {
+					decisiveImpactW = svc.silo.Authority.W
+				}
+			}
+		}
+		for _, dept := range []string{"Mechanical", "Supply"} {
+			for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 ||
+					shares[dept+":"+fact] >= 2 || (exposes >= 3 && !decisiveFired) {
+					continue
+				}
+				outcome, err := svc.ExecuteAction(model.AgentAction{
+					Type: model.ActionShareInfo, TargetDept: dept, FragmentIds: []string{fact},
+				})
+				if err == nil && outcome.Result.Executed {
+					shares[dept+":"+fact]++
+				}
+			}
 		}
 	}
 
@@ -495,6 +519,7 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 		"player_actions:charter_contact_accept",
 		"special:charter_draft_step",
 		"special:charter_draft_convened",
+		"special:charter_lock_day",
 	} {
 		if !contentTriggered(svc, key) {
 			t.Errorf("%s did not fire in the playable line (W=%v Q=%v facts=%v)", key,
@@ -526,22 +551,50 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 		t.Errorf("qualifying facts did not set PactQualified (facts=%v)",
 			svc.silo.Authority.Judicial.IndependentPublicFacts)
 	}
-	// The lock is asserted only if the window actually opened: before the W
-	// shock channel lands, reaching W <= 18 in a real run is not guaranteed.
-	if windowOpenAt > 0 && !contentTriggered(svc, "special:charter_lock_day") {
-		t.Errorf("lock window opened at month %d but charter_lock_day never fired", windowOpenAt)
-	}
-	if status := svc.silo.VictoryStatus; status != nil {
-		selected := ""
+	status := svc.silo.VictoryStatus
+	ending, selected := "", ""
+	var pool []string
+	var scores map[string]float64
+	if status != nil {
+		ending = status.Type
 		if status.Decision != nil {
 			selected = status.Decision.Selected
+			pool = status.Decision.Pool
+			scores = status.Decision.Scores
 		}
-		t.Logf("RULE_OF_LAW playable settled: ending=%s selected=%s W=%.2f Q=%.2f facts=%d pact_locked=%v window_open_month=%d",
-			status.Type, selected, svc.silo.Authority.W, svc.silo.Authority.Judicial.PublicEvidenceQ,
-			svc.silo.Authority.Judicial.IndependentPublicFacts, svc.silo.Authority.Judicial.PactLocked, windowOpenAt)
-	} else {
-		t.Logf("RULE_OF_LAW playable: no settlement within the window; W=%.2f Q=%.2f facts=%d pact_locked=%v window_open_month=%d",
-			svc.silo.Authority.W, svc.silo.Authority.Judicial.PublicEvidenceQ,
-			svc.silo.Authority.Judicial.IndependentPublicFacts, svc.silo.Authority.Judicial.PactLocked, windowOpenAt)
+	}
+	t.Logf("RULE_OF_LAW playable settled: ending=%s selected=%s date=%d-%02d W=%.2f Q=%.4f facts=%d pact_locked=%v rebellion=%.3f suspicion=%.3f window_open_month=%d exposes=%d tunnels=%d publishW=%.2f impactW=%.2f reset_countermeasure=%v reset_execution=%v shocks=%+v pool=%v scores=%v",
+		ending, selected, svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.Authority.W, svc.silo.Authority.Judicial.PublicEvidenceQ,
+		svc.silo.Authority.Judicial.IndependentPublicFacts, svc.silo.Authority.Judicial.PactLocked,
+		svc.silo.Rebellion, svc.agent.SuspicionLevel, windowOpenAt, exposes, tunnels, decisivePublishW, decisiveImpactW,
+		contentTriggered(svc, "player_action:reset_countermeasure_done"),
+		contentTriggered(svc, "crisis:reset_execution"), svc.silo.Authority.DecisiveShocks, pool, scores)
+	if !decisiveFired {
+		t.Fatal("the second qualifying fact was never published through the real action")
+	}
+	if windowOpenAt == 0 {
+		t.Fatal("the real decisive event never opened the covenant window")
+	}
+	if !contentTriggered(svc, "player_action:reset_countermeasure_done") {
+		t.Fatal("the route did not complete the RESET countermeasure through real actions")
+	}
+	if contentTriggered(svc, resetFactKey) {
+		t.Fatal("the completed RESET countermeasure still emitted reset_completed")
+	}
+	if !svc.silo.Authority.Judicial.PactLocked {
+		t.Fatal("the playable route ended without a locked pact")
+	}
+	if status == nil || status.Decision == nil {
+		t.Fatalf("playable route did not produce a real arbitration decision: status=%+v", status)
+	}
+	if status.Decision.Selected != endingRuleOfLaw {
+		for _, contribution := range status.Decision.Contributions {
+			t.Logf("contribution: kind=%s entity=%s name=%s scores=%v", contribution.Kind, contribution.EntityID, contribution.Name, contribution.Scores)
+		}
+		t.Fatalf("playable route selected %q instead of RULE_OF_LAW: pool=%v scores=%v excluded=%v",
+			status.Decision.Selected, status.Decision.Pool, status.Decision.Scores, status.Decision.Excluded)
+	}
+	if outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"}); err == nil {
+		t.Fatalf("terminal RULE_OF_LAW state accepted another action: %+v", outcome.Result)
 	}
 }

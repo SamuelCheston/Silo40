@@ -443,6 +443,17 @@ defineMechanics([
         }
       }
 
+      if (silo.pact_locked) {
+        return {
+          mutations: [{
+            type: "victory_status_set",
+            field: "RULE_OF_LAW",
+            bool_value: true,
+            text: "终局评估请求：公开约章已经锁定。是否成立《公议》须经统一资格与加权仲裁。",
+          }],
+        };
+      }
+
       if (silo.silo1_destroyed) {
         return {
           mutations: [{
