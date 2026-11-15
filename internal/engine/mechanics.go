@@ -619,16 +619,20 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 					allFragments = append(allFragments, fragment)
 				}
 			}
-			// 部门信念层 (§3.3)：只暴露 B>0 的事实，切片顺序即持久化顺序
-			// (确定性)。victory_check 的 INFORMATION 结构桥读这一层。
+			// 部门信念层 (§3.3)：暴露 B>0 或已成熟的事实，切片顺序即持久化
+			// 顺序 (确定性)。victory_check 的 INFORMATION 结构桥读这一层的
+			// 成熟计数 (18-time-permeation §3.1)：成熟粘性，B 可以淡忘到 0，
+			// 已成熟事实必须继续可见。
 			beliefs := make([]map[string]interface{}, 0, len(prof.Beliefs))
 			for _, belief := range prof.Beliefs {
-				if belief.B <= 0 {
+				if belief.B <= 0 && !belief.Matured {
 					continue
 				}
 				beliefs = append(beliefs, map[string]interface{}{
-					"fact_id": belief.FactID,
-					"b":       belief.B,
+					"fact_id":            belief.FactID,
+					"b":                  belief.B,
+					"permeation_counter": belief.PermeationCounter,
+					"matured":            belief.Matured,
 				})
 			}
 			professions = append(professions, map[string]interface{}{
@@ -1263,6 +1267,7 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 	if err == nil {
 		silo, _ := event.Data["silo"].(*model.Silo)
 		agent, _ := event.Data["agent"].(*model.Agent)
+		e.runMonthlyBeliefDispatch(eventType, event, silo)
 		e.applyWeightedEnding(eventType, silo, agent)
 		if len(result.Logs) > 0 {
 			for _, entry := range result.Logs {
@@ -1282,15 +1287,39 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 		e.updateResources(silo, deltaYears)
 	case EVENT_METRICS_UPDATE:
 		e.updateSiloMetrics(silo, deltaYears)
-		// 恒定淡忘：部门信念层每月按系数衰减，流通 (分享吸收) 抵住淡忘。
-		// 与月度指标更新同一 dispatch 点，保证每月恰好一次 (确定性)。
-		ApplyBeliefForgetting(silo, DefaultInformationConfig())
 	case EVENT_IDEOLOGY_UPDATE:
 		e.updateIdeology(silo, deltaYears)
 	case EVENT_VICTORY_CHECK:
 		e.checkVictoryConditions(silo, agent)
 	}
+	e.runMonthlyBeliefDispatch(eventType, event, silo)
 	e.applyWeightedEnding(eventType, silo, agent)
+}
+
+// runMonthlyBeliefDispatch 月度信念层结算：时间渗透 (18-time-permeation §3.1)，
+// 每月恰好一次 (确定性)。渗透只读 B 与日历，不改 B/π、不耗 RNG。
+//
+// 挂钩点修正：旧实现把信念层结算放在 runEventMechanic 的 Go 兜底分支里，但
+// JS metrics_update 机制总会先成功处理 METRICS_UPDATE，兜底分支不可达——挂在
+// 那里的逻辑从未在真实月度流程里执行。渗透没有 JS 对应物，无论 JS 机制是否
+// 处理该事件都必须在这里执行；deltaYears <= 0 的零月路径不结算 (与 JS 侧守卫
+// 一致)。
+//
+// 关于恒定淡忘 (ApplyBeliefForgetting)：设计文档 (17/18 分册) 把它当作生效中
+// 的【现状】，但实测它同样只存在于上述不可达的兜底分支，真实流程里 B 从不
+// 衰减。启用它会改变所有依赖部门信念长期保持高位的结局线 (《公议》的合格
+// 事实读 Judicial 实时 B≥0.85，启用淡忘后既有验收全部掉出)，属于超出本任务
+// 边界的全局行为变更，故此处不启用、保持既有行为逐位不变，仅落地渗透时间
+// 门。该差异已作为发现项上报，是否补淡忘由后续单独评审决定。
+func (e *GameEngine) runMonthlyBeliefDispatch(eventType string, event *GameEvent, silo *model.Silo) {
+	if eventType != EVENT_METRICS_UPDATE || silo == nil {
+		return
+	}
+	deltaYears, _ := event.Data["deltaYears"].(float64)
+	if deltaYears <= 0 {
+		return
+	}
+	ApplyPermeation(silo, DefaultInformationConfig())
 }
 
 // applyWeightedEnding lets the service arbitrate the terminal evaluation

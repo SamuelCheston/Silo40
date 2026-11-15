@@ -13,9 +13,16 @@ interface ChainNode {
     count?: number;
 }
 
+interface PermeationProgress {
+    fact_id: string;
+    months_left: number;
+}
+
 interface DepartmentCoverage {
     name: string;
     above_floor: number;
+    matured: number;
+    permeating?: PermeationProgress[];
 }
 
 interface InformationProgress {
@@ -23,6 +30,7 @@ interface InformationProgress {
     departments: DepartmentCoverage[];
     gate_fact_count: number;
     belief_floor: number;
+    permeation_months: number;
 }
 
 interface Props {
@@ -53,7 +61,7 @@ export const InformationProgressPanel = memo(function InformationProgressPanel({
         <Box w="full" p={3} bg="blue.50" border="1px solid" borderColor="blue.200" borderRadius="md">
             <Heading size="xs" color="blue.800" mb={2}>《共证》进度</Heading>
             <Text fontSize="xs" color="gray.600" mb={3}>
-                结局门槛：每个部门持有 {need} 份浓度 ≥ {progress.belief_floor.toFixed(2)} 的事实；情报会淡忘，流通跑赢淡忘才守得住。
+                结局门槛：每个部门有 {need} 份事实「渗透成熟」——浓度 ≥ {progress.belief_floor.toFixed(2)} 并连续保持 {progress.permeation_months} 个月才算数。刚分享的事实还没成熟，看下方「还差几月」。
             </Text>
 
             {freshStart && (
@@ -89,15 +97,17 @@ export const InformationProgressPanel = memo(function InformationProgressPanel({
             )}
             {!nextNode && <Box mb={3} />}
 
-            <Text fontSize="xs" fontWeight="bold" color="blue.700" mb={1}>部门事实覆盖（达标事实数）</Text>
+            <Text fontSize="xs" fontWeight="bold" color="blue.700" mb={1}>部门渗透进度（成熟事实数 / 门槛 {need}）</Text>
             {absorbedTotal === 0 && (
                 <Text fontSize="xs" color="gray.600" mb={1}>
-                    还没有任何部门开始持有事实——第一次「Share Info」被吸收后，这里出现第一个计数。
+                    还没有任何部门开始持有事实——第一次「Share Info」被吸收后，这里出现第一个计数；再连续保持 {progress.permeation_months} 个月才成熟。
                 </Text>
             )}
             <SimpleGrid columns={3} gap={2} mb={3}>
                 {progress.departments.map(dept => {
-                    const done = dept.above_floor >= need;
+                    const matured = dept.matured || 0;
+                    const done = matured >= need;
+                    const permeating = (dept.permeating || []);
                     return (
                         <Box key={dept.name} p={1.5} bg="white" borderRadius="sm" border="1px solid"
                             borderColor={done ? "green.300" : "gray.200"}>
@@ -105,8 +115,19 @@ export const InformationProgressPanel = memo(function InformationProgressPanel({
                                 {dept.name}
                             </Text>
                             <Text fontSize="xs" color={done ? "green.600" : "gray.500"}>
-                                {Math.min(dept.above_floor, need)}/{need}{dept.above_floor > need ? ` (+${dept.above_floor - need})` : ""}
+                                成熟 {Math.min(matured, need)}/{need}{matured > need ? ` (+${matured - need})` : ""}
                             </Text>
+                            {!done && permeating.length > 0 && (
+                                <Text fontSize="2xs" color="blue.600" mt={0.5}>
+                                    渗透中：{permeating.slice(0, 3).map(p => `${p.fact_id} 差${p.months_left}月`).join("、")}
+                                    {permeating.length > 3 ? ` 等${permeating.length}项` : ""}
+                                </Text>
+                            )}
+                            {!done && permeating.length === 0 && dept.above_floor > 0 && (
+                                <Text fontSize="2xs" color="orange.600" mt={0.5}>
+                                    有 {dept.above_floor} 份过地板，但渗透刚起步（差约 {progress.permeation_months} 月）
+                                </Text>
+                            )}
                         </Box>
                     );
                 })}

@@ -290,35 +290,31 @@ func clampUnitIdeology(v float64) float64 {
 }
 
 // informationGateFactCount is the re-anchored structural bridge depth: every
-// department must hold at least this many facts at or above the sharing floor
-// in its belief layer. TODO(balance): 5 → 3. Derivation (17-information-economy
-// §5): one share absorbs B_player·transmit·receptivity ≈ 0.22–0.34, so a fact
-// needs ~2 shares to cross the 0.30 floor and stay there against forgetting;
-// 3 facts × 9 departments × ~2 shares ≈ 54 shares ≈ 162 AP, reachable inside
-// the ~410 AP lifetime income while 5 facts (≈270 AP + upkeep) is not.
+// department must hold at least this many MATURED facts in its belief layer.
+// TODO(balance): 5 → 3. Derivation (17-information-economy §5): one share
+// absorbs B_player·transmit·receptivity ≈ 0.22–0.34, so a fact needs ~2 shares
+// to cross the 0.30 floor and stay there against forgetting; 3 facts ×
+// 9 departments × ~2 shares ≈ 54 shares ≈ 162 AP, reachable inside the ~410 AP
+// lifetime income while 5 facts (≈270 AP + upkeep) is not. Permeation adds the
+// time dimension on top without changing this depth (18-time-permeation §2).
 const informationGateFactCount = 3
 
 // allDepartmentsHoldFragments is the local public-fact structural bridge,
-// re-anchored to the belief layer after the belief rework: the legacy
-// KnownFragments layer is no longer fed by Share Info (which now absorbs into
-// Profession.Beliefs), so the gate reads the live layer — every department
-// must hold at least informationGateFactCount facts with belief at or above
-// the sharing floor. Department beliefs decay at the constant forgetting rate
-// (engine.ApplyBeliefForgetting), so the gate only stays true while
-// circulation outpaces forgetting (25-information-economy §修复A/B).
+// reading permeation maturity after the time-permeation rework
+// (18-time-permeation §3.1): every department must hold at least
+// informationGateFactCount facts whose belief B stayed at or above the sharing
+// floor for the full permeation window (engine.ApplyPermeation marks them
+// Matured). Maturity is sticky — once a department has held a fact long
+// enough it counts as usable evidence even if B later decays — so the gate is
+// a planning target (permeate all 27 slots ahead of settlement), not a
+// real-time juggling act (§3.4). The depth (3 facts) and the floor (QualRumor)
+// are unchanged; only the time dimension is added.
 func allDepartmentsHoldFragments(station *model.Silo) bool {
 	if len(station.Professions) == 0 {
 		return false
 	}
-	qualRumor := engine.DefaultInformationConfig().QualRumor
 	for _, prof := range station.Professions {
-		count := 0
-		for _, belief := range prof.Beliefs {
-			if belief.B >= qualRumor {
-				count++
-			}
-		}
-		if count < informationGateFactCount {
+		if engine.MaturedFactCount(&prof) < informationGateFactCount {
 			return false
 		}
 	}
@@ -479,7 +475,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if allDepartmentsHoldFragments(station) {
 		pool[endingInformation] = true
 	} else {
-		decision.Excluded[endingInformation] = "跨部门公共事实未成立（部门碎片覆盖不足）"
+		decision.Excluded[endingInformation] = "跨部门公共事实未成立（部门成熟证据不足）"
 	}
 	if escapeAlive {
 		pool[endingRebellion] = true

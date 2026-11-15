@@ -17,12 +17,14 @@ func TestInformationEndingNarrativeReplacesFormula(t *testing.T) {
 	svc, station, _ := weightedEndingFixture("INFORMATION")
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
-		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		// Gate reads permeation maturity: seed strong beliefs, then let the
+		// real monthly dispatch (forgetting + permeation) mature them.
 		prof.Beliefs = []model.FactBelief{
-			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+			{FactID: "a", B: permeationSeedB}, {FactID: "b", B: permeationSeedB}, {FactID: "c", B: permeationSeedB},
 		}
 		station.Professions = append(station.Professions, prof)
 	}
+	matureStationBeliefsThroughRealMonths(station)
 	// Two outbound signals reaching one other silo.
 	svc.world.OutboundSignals = []model.OutboundSignal{
 		{Seq: 1, SourceSilo: 1, TargetSilo: 2, EventID: "x", Year: 128, Month: 1},
@@ -50,12 +52,14 @@ func TestInformationEndingNarrativeZeroSpillover(t *testing.T) {
 	svc, station, _ := weightedEndingFixture("INFORMATION")
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
-		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		// Gate reads permeation maturity: seed strong beliefs, then let the
+		// real monthly dispatch (forgetting + permeation) mature them.
 		prof.Beliefs = []model.FactBelief{
-			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+			{FactID: "a", B: permeationSeedB}, {FactID: "b", B: permeationSeedB}, {FactID: "c", B: permeationSeedB},
 		}
 		station.Professions = append(station.Professions, prof)
 	}
+	matureStationBeliefsThroughRealMonths(station)
 
 	decision := svc.resolveWeightedEnding(station, svc.agent)
 	if decision == nil || decision.Selected != endingInformation {
@@ -131,12 +135,15 @@ func vigilFixtureService(t *testing.T) *GameService {
 func TestInformationVigilForeshadowsNearGate(t *testing.T) {
 	svc := vigilFixtureService(t)
 	// One department complete, one missing two facts: within the 3-fact gap.
+	// The gate reads maturity, so the fixture matures the seeded beliefs
+	// through the real monthly dispatch (forgetting + permeation).
 	svc.silo.Professions = []model.Profession{
 		{Name: "IT", Beliefs: []model.FactBelief{
-			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+			{FactID: "a", B: permeationSeedB}, {FactID: "b", B: permeationSeedB}, {FactID: "c", B: permeationSeedB},
 		}},
-		{Name: "Judicial", Beliefs: []model.FactBelief{{FactID: "d", B: 0.5}}},
+		{Name: "Judicial", Beliefs: []model.FactBelief{{FactID: "d", B: permeationSeedB}}},
 	}
+	matureStationBeliefsThroughRealMonths(svc.silo)
 	if svc.queueSystemContentEvents("TEST") == 0 {
 		t.Fatal("vigil did not foreshadow while coverage was within one department of the gate")
 	}
@@ -283,17 +290,23 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	}
 
 	// Publication is a player decision (sub-item 6 replaced the automatic
-	// scaffold): verify then publish until Judicial_2 is registered, letting
-	// the next natural monthly authority update compute Q from the evidence.
+	// scaffold): verify then publish until BOTH core facts are registered,
+	// letting the next natural monthly authority update compute Q from the
+	// evidence. Permeation retune (18-time-permeation §7): a publication is the
+	// only absorption strong enough to seed every department at once, so both
+	// publishable core facts go out before the circulation window — this is a
+	// re-ordering of actions the route already uses, not a new action.
 	verifyReportFloor := engine.DefaultInformationConfig().QualReport
-	for i := 0; i < 6; i++ {
-		published := false
+	publishedFacts := func() map[string]bool {
+		out := map[string]bool{}
 		for _, record := range svc.silo.PublicEvidence {
-			if record.FactID == "Judicial_2" {
-				published = true
-			}
+			out[record.FactID] = true
 		}
-		if published {
+		return out
+	}
+	for i := 0; i < 14; i++ {
+		published := publishedFacts()
+		if published["Judicial_1"] && published["Judicial_2"] {
 			break
 		}
 		verifiable, publishable := false, false
@@ -303,21 +316,15 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 				continue
 			}
 			verified := false
-			isPublished := false
 			for _, v := range svc.silo.VerifiedEvidence {
 				if v == fact {
 					verified = true
 				}
 			}
-			for _, record := range svc.silo.PublicEvidence {
-				if record.FactID == fact {
-					isPublished = true
-				}
-			}
 			if belief.B >= verifyReportFloor && !verified {
 				verifiable = true
 			}
-			if belief.B >= publishFloor && verified && !isPublished {
+			if belief.B >= publishFloor && verified && !published[fact] {
 				publishable = true
 			}
 		}
@@ -330,6 +337,10 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance publication at step %d: %v", i, err)
 		}
+		// The longer publication window can outlast the reset chain's fuse on
+		// its own; answer the termination-chain omen here exactly as the
+		// circulation loop does (same helper, no new action).
+		progressResetCountermeasureForRoute(t, svc, execute)
 	}
 	if !contentTriggered(svc, "player_action:publish_evidence") {
 		t.Fatalf("player publication never completed (belief=%+v, verified=%v, evidence=%+v)", judicialBelief, svc.silo.VerifiedEvidence, svc.silo.PublicEvidence)
@@ -338,6 +349,10 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		t.Fatalf("natural authority updates did not produce Q from bailiff evidence: Q=%v, evidence=%+v", svc.silo.Authority.Judicial.PublicEvidenceQ, svc.silo.PublicEvidence)
 	}
 
+	if svc.gameOver() {
+		t.Fatalf("game ended early at %d-%02d during publication: %+v reason=%q",
+			svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.VictoryStatus.Type, decisionReasonOf(svc.silo.VictoryStatus))
+	}
 	var receiver *model.PlayerActionMeta
 	for i := 0; i < 8; i++ {
 		receiver = actionByID(svc.availablePlayerActions(), "RECEIVER_VERIFY_ACCOMPANY")
@@ -358,15 +373,18 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	}
 	// 修复1 回归：真实内容下执行回执必须复述事件故事，不能退回系统黑话。
 	outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY"})
-	if err != nil || !outcome.Result.Executed {
-		t.Fatalf("receiver verification failed: %+v (%v)", outcome.Result, err)
+	if err != nil {
+		t.Fatalf("receiver verification errored at %d-%02d: %v (AP=%v)", svc.silo.CurrentYear, svc.silo.CurrentMonth, err, svc.agent.ActionPoints)
+	}
+	if !outcome.Result.Executed {
+		t.Fatalf("receiver verification failed: %+v", outcome.Result)
 	}
 	if !strings.Contains(outcome.Result.Message, "陪同回查") {
 		t.Fatalf("receiver verification receipt lost its story: %q", outcome.Result.Message)
 	}
 
 	circulationActions := 0
-	attemptCirculation := func(action model.AgentAction) {
+	attemptCirculation := func(action model.AgentAction) bool {
 		t.Helper()
 		outcome, err := svc.ExecuteAction(action)
 		if err != nil {
@@ -375,12 +393,17 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		if outcome.Result.Executed {
 			circulationActions++
 		}
+		return outcome.Result.Executed
 	}
 	// Per-pair share cap (same anti-deadlock as the §7.4 calibration): a fact
 	// that does not absorb past the floor for one department (repeat-penalty
 	// stall) must not be re-shared forever while other departments wait for a
 	// third fact — the loop gathers instead and grows the portfolio.
 	shareAttempts := map[string]int{}
+	// Permeation upkeep cap: a running streak only needs re-circulation when
+	// forgetting threatens to break it before maturity (18-time-permeation
+	// §3.3/§5). The cap stays an anti-deadlock bound, never a play target.
+	upkeepAttempts := map[string]int{}
 	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
@@ -391,53 +414,116 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		}
 		progressResetCountermeasureForRoute(t, svc, execute)
 
-		// INFORMATION now requires circulation to outrun belief forgetting.
-		// Keep sharing the strongest missing fact with the neediest department,
-		// gathering across departments when no useful fact can be shared.
-		ap := svc.agent.ActionPoints
+		// Permeation-aware circulation (18-time-permeation §7 fair retune):
+		// the gate now reads matured facts, so the strategy front-loads the
+		// opening AP into circulation (every share needs a full permeation
+		// window before it counts) and spends upkeep shares to keep running
+		// streaks alive against forgetting until they mature. No new actions,
+		// no cost changes, loop cap unchanged (criterion 3/4).
 		shareCost := model.ACTION_COSTS[model.ActionShareInfo]
 		gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
 		buildCost := model.ACTION_COSTS[model.ActionBuildConnection]
 		gatherFrom := rotation[month%len(rotation)]
-		switch {
-		case svc.silo.Rebellion >= 0.7:
+		if svc.silo.Rebellion >= 0.7 {
 			// Lie low while rebellion runs hot.
-		case ap >= shareCost && month >= 4 && month%2 == 0:
-			// Neediest-first over ALL departments, skipping capped pairs: a fact
-			// that stalls below the floor for one department (repeat penalty)
-			// must neither be re-shared forever nor block the portfolio's other
-			// facts from reaching that department.
+			continue
+		}
+		circulated := false
+		for svc.agent.ActionPoints >= shareCost {
+			// Neediness reads the gate: fewest matured first, then fewest
+			// healthy slots (a department mid-permeation is needier than one
+			// that already holds three running streaks).
 			order := append([]model.Profession(nil), svc.silo.Professions...)
 			sort.SliceStable(order, func(i, j int) bool {
-				return informationHeldFacts(&order[i]) < informationHeldFacts(&order[j])
+				mi, mj := informationMaturedFacts(&order[i]), informationMaturedFacts(&order[j])
+				if mi != mj {
+					return mi < mj
+				}
+				return informationActiveSlots(&order[i]) < informationActiveSlots(&order[j])
 			})
 			shared := false
 			for i := range order {
 				dept := &order[i]
-				fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
-					return shareAttempts[dept.Name+":"+fact] >= 2
-				})
-				if !ok {
+				if informationMaturedFacts(dept) >= informationGateFactCount {
 					continue
 				}
-				shareAttempts[dept.Name+":"+fragment]++
-				attemptCirculation(model.AgentAction{
-					Type: model.ActionShareInfo, TargetDept: dept.Name,
-					FragmentIds: []string{fragment},
-				})
-				shared = true
+				// Upkeep FIRST: a running streak about to break is months of
+				// invested calendar — protecting it outranks planting a new
+				// slot (18-time-permeation §3.3 第 2 条: 淡忘是渗透的天敌).
+				if fragment, ok := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts); ok {
+					upkeepAttempts[dept.Name+":"+fragment]++
+					if attemptCirculation(model.AgentAction{
+						Type: model.ActionShareInfo, TargetDept: dept.Name,
+						FragmentIds: []string{fragment},
+					}) {
+						shared = true
+						break
+					}
+				}
+				// Three healthy slots (matured or mid-permeation): stop
+				// investing here — extra facts would only dilute the AP the
+				// needier departments still need for their first seeds.
+				if informationActiveSlots(dept) >= informationGateFactCount {
+					continue
+				}
+				// Build the pipe before seeding: a zero-connection share
+				// absorbs ≈ the floor itself and dies within months, so trust
+				// is invested first while the seeding window is still open
+				// (the share action's own contract: 没有信任的部门接不住事实).
+				if month <= 30 && svc.pendingOperation == nil &&
+					agentConnectionTo(svc, dept) < 0.3 && svc.agent.ActionPoints >= buildCost {
+					if attemptCirculation(model.AgentAction{
+						Type: model.ActionBuildConnection, TargetDept: dept.Name,
+					}) {
+						shared = true
+						break
+					}
+				}
+				// New coverage: the strongest fact the department does not yet
+				// hold above the floor, skipping capped pairs. The cap stays an
+				// anti-deadlock bound (raised so a broken streak can be
+				// re-seeded once), never a play target.
+				if fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
+					return shareAttempts[dept.Name+":"+fact] >= 4
+				}); ok {
+					// A seed only takes if the agent's own conviction is strong
+					// enough to absorb past the floor at this connection —
+					// otherwise gather the source department first to deepen it
+					// (a sub-floor seed just dies and wastes the slot).
+					if agentBelief := engine.BeliefFor(svc.agent, fragment); agentBelief != nil && agentBelief.B < 0.80 &&
+						svc.agent.ActionPoints >= gatherCost {
+						if attemptCirculation(model.AgentAction{
+							Type: model.ActionGatherInfo, TargetDept: fragmentDepartment(fragment),
+						}) {
+							shared = true
+							break
+						}
+					}
+					shareAttempts[dept.Name+":"+fragment]++
+					if attemptCirculation(model.AgentAction{
+						Type: model.ActionShareInfo, TargetDept: dept.Name,
+						FragmentIds: []string{fragment},
+					}) {
+						shared = true
+						break
+					}
+				}
+			}
+			if !shared {
 				break
 			}
-			if !shared && ap >= gatherCost {
-				attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
-			}
-		case ap >= buildCost && month < 12:
+			circulated = true
+		}
+		if circulated {
+			continue
+		}
+		switch {
+		case svc.agent.ActionPoints >= buildCost && month < 12:
 			attemptCirculation(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
-		case ap >= gatherCost:
-			// Odd months (and any month with nothing shareable) gather: the
-			// portfolio must keep growing — a strong fourth fact is what the
-			// hardest department (zero-population Mayor) needs for its third
-			// above-floor belief.
+		case svc.agent.ActionPoints >= gatherCost:
+			// Nothing shareable: gather — the portfolio must keep growing, a
+			// stronger fourth fact is what the hardest department (zero-
+			// population Mayor) needs for its third matured belief.
 			attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 		}
 	}
@@ -489,11 +575,95 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 }
 
 // informationHeldFacts counts a department's facts at or above the sharing
-// floor (QualRumor) — the neediness ordering key for the circulation loop.
+// floor (QualRumor) — the secondary neediness key for the circulation loop.
 func informationHeldFacts(prof *model.Profession) int {
 	count := 0
 	for _, belief := range prof.Beliefs {
 		if belief.B >= engine.DefaultInformationConfig().QualRumor {
+			count++
+		}
+	}
+	return count
+}
+
+// informationMaturedFacts counts a department's matured facts — the quantity
+// the permeation gate reads, and the primary neediness ordering key.
+func informationMaturedFacts(prof *model.Profession) int {
+	return engine.MaturedFactCount(prof)
+}
+
+// endangeredStreakCandidate picks the department's running streak that is
+// about to break: B within the danger margin above the floor (≈6 months of
+// forgetting left). Among endangered streaks the highest counter wins — the
+// most invested calendar is protected first (18-time-permeation §3.3 第 2 条).
+// Only facts with a running counter qualify; a reset streak restarts through a
+// fresh share instead. The attempts map caps re-shares per pair.
+func endangeredStreakCandidate(agent *model.Agent, dept *model.Profession, attempts map[string]int) (string, bool) {
+	cfg := engine.DefaultInformationConfig()
+	// Re-circulation carries the same-source repeat penalty (independence 0.25),
+	// so one upkeep share only lifts B ≈0.05 — upkeep must start while the
+	// streak still has a real buffer, and the cap must cover a full window.
+	const maxUpkeepPerPair = 12
+	dangerFloor := cfg.QualRumor + 0.12
+	best := ""
+	bestCounter := -1
+	bestB := 0.0
+	for _, belief := range dept.Beliefs {
+		if belief.Matured || belief.PermeationCounter <= 0 || belief.B < cfg.QualRumor || belief.B >= dangerFloor {
+			continue
+		}
+		if attempts[dept.Name+":"+belief.FactID] >= maxUpkeepPerPair {
+			continue
+		}
+		agentBelief := engine.BeliefFor(agent, belief.FactID)
+		if agentBelief == nil || agentBelief.B < cfg.QualRumor {
+			continue
+		}
+		if best == "" || belief.PermeationCounter > bestCounter ||
+			(belief.PermeationCounter == bestCounter && belief.B < bestB) {
+			best, bestCounter, bestB = belief.FactID, belief.PermeationCounter, belief.B
+		}
+	}
+	return best, best != ""
+}
+
+// decisionReasonOf extracts the arbitration reason from a victory status for
+// diagnostics (empty when no decision was recorded).
+func decisionReasonOf(status *model.VictoryStatus) string {
+	if status == nil || status.Decision == nil {
+		return ""
+	}
+	return status.Decision.Reason
+}
+
+// fragmentDepartment derives the owning department from a fragment ID
+// ("Mayor_1" -> "Mayor"), matching the catalog prefix convention.
+func fragmentDepartment(fragment string) string {
+	if idx := strings.Index(fragment, "_"); idx > 0 {
+		return fragment[:idx]
+	}
+	return fragment
+}
+
+// agentConnectionTo reads the agent's connection value for a department —
+// the transmit side of share absorption.
+func agentConnectionTo(svc *GameService, dept *model.Profession) float64 {
+	for _, connection := range svc.agent.Connections {
+		if connection.ProfessionID == dept.ID {
+			return connection.Value
+		}
+	}
+	return 0
+}
+
+// informationActiveSlots counts a department's healthy gate slots: matured
+// facts plus running streaks still above the floor. Three healthy slots mean
+// the department needs protection, not more seeds.
+func informationActiveSlots(dept *model.Profession) int {
+	cfg := engine.DefaultInformationConfig()
+	count := 0
+	for _, belief := range dept.Beliefs {
+		if belief.Matured || (belief.PermeationCounter > 0 && belief.B >= cfg.QualRumor) {
 			count++
 		}
 	}

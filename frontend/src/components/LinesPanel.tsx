@@ -335,10 +335,11 @@ function SharedFacts({ silo, world, progress }: { silo: any; world: any; progres
     const departments = progress?.departments || [];
     const gate = progress?.gate_fact_count || 0;
     const beliefFacts = departments.reduce((sum: number, d: any) => sum + (d.above_floor || 0), 0);
-    const heldDepts = departments.filter((d: any) => (d.above_floor || 0) >= gate).length;
+    // 门槛读「成熟」计数（渗透时间门）：过地板 ≠ 达标，得连续保持渗透月数。
+    const heldDepts = departments.filter((d: any) => (d.matured || 0) >= gate).length;
     const items: { label: string; value: string; tone?: string }[] = [
         { label: "信念覆盖", value: `${beliefFacts} 份（地板 ${fmt(progress?.belief_floor)}）` },
-        { label: "达标部门", value: `${heldDepts}/${departments.length}` },
+        { label: "成熟达标部门", value: `${heldDepts}/${departments.length}` },
         { label: "登记簿", value: `${(silo?.public_evidence || []).length} 件` },
         { label: "Q", value: fmt(judicial.public_evidence_q) },
         { label: "W", value: fmt(authority.w, 1) },

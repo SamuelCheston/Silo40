@@ -3366,9 +3366,11 @@ func (s *GameService) informationProgress() *model.InformationProgress {
 	if s.silo == nil {
 		return nil
 	}
+	infoCfg := engine.DefaultInformationConfig()
 	progress := &model.InformationProgress{
-		GateFactCount: informationGateFactCount,
-		BeliefFloor:   engine.DefaultInformationConfig().QualRumor,
+		GateFactCount:    informationGateFactCount,
+		BeliefFloor:      infoCfg.QualRumor,
+		PermeationMonths: infoCfg.PermeationMonths,
 	}
 	states := s.contentStates[s.silo.ID]
 	for _, key := range informationChainKeys {
@@ -3389,14 +3391,31 @@ func (s *GameService) informationProgress() *model.InformationProgress {
 	}
 	for _, profession := range s.silo.Professions {
 		above := 0
+		permeating := []model.PermeationProgress{}
 		for _, belief := range profession.Beliefs {
 			if belief.B >= progress.BeliefFloor {
 				above++
 			}
+			// 渗透进度只报正在渗透的事实 (已过地板、尚未成熟)；跌破地板
+			// 的计数已清零，与"断了就要重新渗透"的口径一致。
+			if !belief.Matured && belief.PermeationCounter > 0 {
+				permeating = append(permeating, model.PermeationProgress{
+					FactID:     belief.FactID,
+					MonthsLeft: engine.PermeationMonthsLeft(belief, infoCfg),
+				})
+			}
 		}
+		sort.SliceStable(permeating, func(i, j int) bool {
+			if permeating[i].MonthsLeft != permeating[j].MonthsLeft {
+				return permeating[i].MonthsLeft < permeating[j].MonthsLeft
+			}
+			return permeating[i].FactID < permeating[j].FactID
+		})
 		progress.Departments = append(progress.Departments, model.DepartmentFactCoverage{
 			Name:       profession.Name,
 			AboveFloor: above,
+			Matured:    engine.MaturedFactCount(&profession),
+			Permeating: permeating,
 		})
 	}
 	// 终止链读数：先兆 (crisis:reset_omen_requisition) 与反制成立

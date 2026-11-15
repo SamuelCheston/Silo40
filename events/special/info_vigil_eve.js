@@ -24,9 +24,10 @@ defineEvent({
         return true;
       }
       // Foreshadow window: the INFORMATION gate needs every department to
-      // hold 3 facts at b >= 0.30 (must stay in sync with
-      // informationGateFactCount / QualRumor). Light the vigil once coverage
-      // is within one department of the gate. TODO(balance): gap = 3 facts.
+      // hold 3 MATURED facts (b >= 0.30 held for the full permeation window;
+      // must stay in sync with informationGateFactCount / QualRumor /
+      // PermeationMonths). Light the vigil once matured coverage is within
+      // one department of the gate. TODO(balance): gap = 3 facts.
       var need = 3;
       var gap = 3;
       var missing = 0;
@@ -35,15 +36,15 @@ defineEvent({
         return false;
       }
       for (var i = 0; i < professions.length; i++) {
-        var above = 0;
+        var matured = 0;
         var beliefs = professions[i].beliefs || [];
         for (var j = 0; j < beliefs.length; j++) {
-          if ((beliefs[j].b || 0) >= 0.30) {
-            above++;
+          if (beliefs[j].matured) {
+            matured++;
           }
         }
-        if (above < need) {
-          missing += need - above;
+        if (matured < need) {
+          missing += need - matured;
         }
       }
       return missing <= gap;

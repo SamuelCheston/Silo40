@@ -68,6 +68,15 @@ type InformationConfig struct {
 	// TODO(balance): sim 起点，见 17 号经济设计文档的推导。
 	ForgetRateMonthly float64
 
+	// 时间渗透月数 (18-time-permeation §4)：(部门, 事实) 的 B 连续不低于
+	// 分享地板 (QualRumor) 满该月数后，该事实对该部门成熟，成为结局资格门
+	// 读取的"可用证据"。成熟粘性不回退；渗透只读 B 与日历，不改 B/π、不耗
+	// RNG。仅部门层渗透：特工层保住开局第一次分享的手感，具名层同淡忘口径
+	// 暂不渗透 (§3.2)。
+	// TODO(balance): 推荐起点 30，区间 [24, 36]；判据为重调后保守结算 ≤ 94
+	// 的最大值 (18 号设计 §4 夹逼与 §7 公平重调)。
+	PermeationMonths int
+
 	// §8.1 AP 与怀疑独立：AP_cost = ceil(base·(1+0.5·mismatch))。
 	APMismatchSlope float64
 
@@ -153,6 +162,14 @@ func DefaultInformationConfig() InformationConfig {
 		// 30 个月跌回分享地板，9 部门×5 事实的维持需求约 1.5 次分享/月，
 		// 与 AP 经济修复后的月收入 3/月、分享成本 3 相匹配 (17 号文档 §4)。
 		ForgetRateMonthly: 0.01,
+
+		// TODO(balance): 渗透月数 sim 起点 (18-time-permeation §4)，推荐起点 30、
+		// 区间 [24, 36]，判据为"重调后保守结算 ≤ 94 的最大值"。当前真实流程里
+		// 恒定淡忘未生效 (见 runMonthlyBeliefDispatch 的发现项注记)，B 过地板后
+		// 不再回落，渗透退化为纯时间门：最早结算月 S_min = T_prep + 30 ≈ 42，
+		// 把压缩打法从实测 ~12 月后移 30 月，正典中段节点有日历空间点亮。若后续
+		// 评审启用淡忘，需按 §4/§7.2 判据 4 在本区间内重新标定 (补流通压力上升)。
+		PermeationMonths: 30,
 
 		APMismatchSlope: 0.5,
 
@@ -473,6 +490,68 @@ func ApplyBeliefForgetting(silo *model.Silo, cfg InformationConfig) {
 			}
 		}
 	}
+}
+
+// ApplyPermeation 部门信念层时间渗透 (18-time-permeation §3)。事实变成"可用
+// 证据"需要日历时间：当月淡忘结算后 B 仍不低于分享地板 (QualRumor) 则计数
+// +1，否则计数清零 (清零而非暂停——"断了就要重新渗透")；计数达到
+// PermeationMonths 当月置 Matured = true。成熟是粘性的：一旦成熟不回退，
+// 即使 B 此后跌破地板、淡忘到 0。
+//
+// 只读派生状态：只读 B 与日历，不改写 B/π，不引入随机源；部门切片与信念
+// 切片均按既有持久化顺序遍历 (确定性)。挂钩点与 ApplyBeliefForgetting 同一
+// 月度 dispatch (EVENT_METRICS_UPDATE)，顺序固定为先淡忘、再计数、再判成熟。
+// 仅部门层渗透：特工层与具名人物层不写入 (§3.2)。PermeationMonths <= 0 或
+// 空堡为无操作。
+func ApplyPermeation(silo *model.Silo, cfg InformationConfig) {
+	if silo == nil || cfg.PermeationMonths <= 0 {
+		return
+	}
+	for i := range silo.Professions {
+		for j := range silo.Professions[i].Beliefs {
+			belief := &silo.Professions[i].Beliefs[j]
+			if belief.Matured {
+				continue
+			}
+			if belief.B >= cfg.QualRumor {
+				belief.PermeationCounter++
+			} else {
+				belief.PermeationCounter = 0
+			}
+			if belief.PermeationCounter >= cfg.PermeationMonths {
+				belief.Matured = true
+			}
+		}
+	}
+}
+
+// MaturedFactCount 一个部门已完成渗透 (成熟) 的事实数——《共证》资格门
+// 改读的量 (18-time-permeation §3.1)。
+func MaturedFactCount(prof *model.Profession) int {
+	if prof == nil {
+		return 0
+	}
+	count := 0
+	for _, belief := range prof.Beliefs {
+		if belief.Matured {
+			count++
+		}
+	}
+	return count
+}
+
+// PermeationMonthsLeft 一条部门信念距成熟还差几个月 (18-time-permeation §7.2
+// 反馈面)：已成熟返回 0；未成熟返回 PermeationMonths - 当前计数 (下限 1)。
+// 计数为 0 (尚未过地板或刚被清零) 时即完整一个渗透期。
+func PermeationMonthsLeft(belief model.FactBelief, cfg InformationConfig) int {
+	if belief.Matured || cfg.PermeationMonths <= 0 {
+		return 0
+	}
+	left := cfg.PermeationMonths - belief.PermeationCounter
+	if left < 1 {
+		left = 1
+	}
+	return left
 }
 
 // RegisterPublicEvidence §3.7：登记/更新一份公开证据。同一事实只登记一次，
