@@ -6,7 +6,7 @@
 > 本轮边界：确定反制的主体谱系与动机差异、发现口径对现有检测机制的映射、三档反制的效果形态、呈现通道纪律、数值锚点推导与受影响测试账。凡需 sim 校准的数值一律标 `TODO(balance)`，不给平衡数值。
 > **修订口径（ADR-0014）**：筹备审计没收（原 T2-1/T2-1b）已整体移除——它造成反向梯度（准备越重、暴露越高、被没收越多，重准备反而更吃亏）。逃跑筹备层的反制改由**组织怀疑度驱动的 IT 响应**承担：怀疑度只由组织行为（动员范围、通信频次与规模）驱动，囤积不驱动；怀疑度到门槛后 IT 做**带权随机三选一**（镇压／蒙住 1 号／不作为），权重可归因、决策日志留痕；不镇压又蒙不住时 safeguard 风险上升，后果落在"日后更贵、更窄"（出发追踪加重），不是当场判负。**任何机制都不把玩家困死**：反制只抬成本与风险，囤积账本永不被扣减。
 > 上游约束：[ADR-0009 情报会淡忘](../../knowledge/adr/0009-intel-fading.md)、[ADR-0010 玩家是干涉者不是指挥者](../../knowledge/adr/0010-player-as-intervener.md)、[ADR-0011 开局偏向必须与可玩路线测试重调同时落地](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)、[ADR-0014 反制只抬成本与风险、怀疑度只由组织行为驱动](../../knowledge/adr/0014-countermeasures-cost-suspicion-org-only.md)、[16 准备度→成果换算](./16-preparation-outcome-design.md)、[17 《共证》线经济设计](./17-information-economy-design.md)、[18 时间渗透设计](./18-time-permeation-design.md)、[10 IT 控制可信度](./10-it-control-credibility.md) §3/§5/§8、[20 《除名》事件链](../story/endings/20-chain-agent-compromised.md)、[29 五个失败结局](../story/endings/29-failure-endings.md)、[37 《越岭》事件规格](../story/endings/37-rebellion-event-spec.md)。
-> 本册是 [roadmap](../roadmap.md)「逃出群体与《越岭》逃离模型」剩余项"追踪的反制入口（'反制藏进日常小动作'批次）"与 [29 §5](../story/endings/29-failure-endings.md) `silo1_purge_exposed` 反制绑定 TODO 的设计交付。
+> 本册是 [roadmap](../roadmap.md)「逃出群体与《越岭》逃离模型」剩余项"追踪的反制入口（'反制藏进日常小动作'批次）"与 [29 §5](../story/endings/29-failure-endings.md) `silo1_purge_exposed` 反制绑定的设计交付；该绑定已由 `PURGE_PLOT_LEAK` 落地。
 
 ## 0. 标注口径
 
@@ -25,7 +25,7 @@
 
 1. **反制的输入必须是权力方真的能知道的东西**。IT 主任看不到玩家心里的确信（`B`），它看得到的是访问日志、流量形状、部门戒备与"有人在传某件事"的风声（部门信念层对泄漏事实的 `B`）。用公开事实做输入，反制才既有世界观合法性（10 §3.3：外界通常不知道 IT，IT 的归因也要经证据链），又有玩家可反推的因果——能被反推的反制才是策略要素，看不见的惩罚只是噪音。
 2. **反制的输出必须是成本而不是判决**。结局资格全部由事实经仲裁判定（12 §2.2）；反制若直接写资格或直接判负，等于在仲裁之外新增一个投票主体，与"玩家是干涉者不是指挥者"直接冲突。正确形态是：反制让后面的路**变贵**（AP/月份）、**变窄**（信道/目标/窗口），走不走、怎么绕仍是玩家的决策。唯一通向失败结局的路径是既有的怀疑度封顶硬护栏（`victory_check`，【现状】），反制只能按既有公式贡献增量，不能设置封顶。
-3. **反制的呈现必须藏在日常小动作里**。已裁决的反制形态是"有对象、地点、时机、材料与痕迹的情境化动作"（[silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js) 的 TODO(Countermeasure binding) 注释）；呈现走月度故事、行动回执与门控灰置这些既有通道，玩家看到的是"住处被例行检查""熟悉的联系人调去了夜班""该部门近期严查内外往来"，而不是"你被发现了"。
+3. **反制的呈现必须藏在日常小动作里**。已裁决的反制形态是"有对象、地点、时机、材料与痕迹的情境化动作"（已落地示例：[purge_plot_leak.js](../../events/player_actions/purge_plot_leak.js) 绑定 [silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js)，以及 [silo1_purge_countermeasure.js](../../events/player_actions/silo1_purge_countermeasure.js)）；呈现走月度故事、行动回执与门控灰置这些既有通道，玩家看到的是"住处被例行检查""熟悉的联系人调去了夜班""该部门近期严查内外往来"，而不是"你被发现了"。
 
 **明确不做**：不新造"隐蔽值"这类单一不可见总计量；不新增结局类型；不改动任何初始思潮值（门控耦合旋钮，[ADR-0011](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)）；不改动既有资格口径与仲裁逻辑；宣传不是反制、不得充当反制（[silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js) 既有裁决）。随机源纪律（修订）：反制判定主体仍是确定性状态反应，**唯一例外**是筹备层 IT 响应决策——按 [ADR-0014](../../knowledge/adr/0014-countermeasures-cost-suspicion-org-only.md) 走带权随机裁量，取样经引擎单一 RNG 流（ADR-0007/0013 同构）：未产生组织怀疑度的运行不进入任何取样，RNG 消耗逐位不变。
 
@@ -118,7 +118,7 @@
 | 编号 | 反制 | 触发输入 | 效果形态 | 现状 |
 | --- | --- | --- | --- | --- |
 | T3-1 | 玩家身份线（四级递进） | 秘密行动完成键计数（`identity_trace_accumulates` cd2）与怀疑度 | 第 3 次 = 本地执法复核来历；第 5 次 = IT 档案复查；怀疑度 ≥0.7 = 抹除演出；≥1.0 = 封顶硬护栏 | **既有**（[20 分册](../story/endings/20-chain-agent-compromised.md)四节点全部落地） |
-| T3-1b | 身份线的"日常小动作"绑定 | 同上（各级节点的既有触发不变） | 每级节点附带一个情境化小动作后果：复核期 = 一处地点类动作次月灰置（"例行核查期间不便前往"）；复查期 = 一项职务动作当月灰置（"职务暂时交接"）；抹除准备期 = 秘密行动类动作灰置（`available: suspicion < 0.7`），逼玩家选择收手或最后一搏 | 【项目外推】——这正是 [silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js) TODO 等待的绑定；灰置机制既有 |
+| T3-1b | 身份线的"日常小动作"绑定 | 同上（各级节点的既有触发不变） | 每级节点附带一个情境化小动作后果：复核期 = 一处地点类动作次月灰置（"例行核查期间不便前往"）；复查期 = 一项职务动作当月灰置（"职务暂时交接"）；抹除准备期 = 秘密行动类动作灰置（`available: suspicion < 0.7`），逼玩家选择收手或最后一搏 | 【项目外推】——注意：`silo1_purge_exposed` 的日常动作绑定（`PURGE_PLOT_LEAK`）已落地，但它属于整肃链，不是 T3-1b 的身份线；T3-1b 仍需自己的三级绑定；灰置机制既有 |
 | T3-2 | 联系人被盯上 | 某部门对泄漏事实 `B ≥` 高门槛（起点 0.60，【推导】，同构 `QualInvestigate` 口径）——部门知道了"有人在传"，IT 就有了排查方向 | 该部门联系人被调离/问话：关系 −δ（起点 0.10，【推导】）、接触类动作 N 月不可用（起点 3 月，cd 保护）；月度故事"你熟悉的那个人调去了夜班" | 【项目外推】 |
 | T3-3 | 1 号反应链（谱系极端） | `order_pressure ≥ 0.45` 且宣传 `≥ 2`（通牒门）；通牒后压力不回落 | 整肃/终止/投送三链，时点阶梯 U+4/+10/+16 | **既有**；本册只定位，不新增 |
 
@@ -269,4 +269,4 @@
 - AP 经济与淡忘：[17-information-economy-design.md](./17-information-economy-design.md)。
 - 渗透月数与公平重调判据：[18-time-permeation-design.md](./18-time-permeation-design.md) §3.3/§4/§7。
 - 测试账纪律与旋钮分类：[ADR-0011](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)、[19-opening-variability-design.md](./19-opening-variability-design.md)。
-- 反制绑定的既有 TODO：[silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js)、[roadmap](../roadmap.md)（"追踪的反制入口"）。
+- 反制绑定现状：[silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js) 的信息侧已由 [purge_plot_leak.js](../../events/player_actions/purge_plot_leak.js) 绑定；其余 T3-1b/T2-2/T2-4 仍见 [roadmap](../roadmap.md)（"追踪的反制入口"）。

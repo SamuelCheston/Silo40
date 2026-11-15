@@ -7,9 +7,11 @@ defineEvent({
   // Scheduled-only settlement hook: fired via schedule_event from
   // silo1_purge_omen.
   //
-  // 整肃的后果按名册是否被动过分流 (33/34 分册)：重档削人口与记录，轻档保住
-  // 一部分人。后果只落人口、历史包袱、凝聚与恐慌——整肃不直接致死，削弱的
-  // 宿主更容易死于其他来路。数值一律 TODO(balance)。
+  // 整肃的后果按反制分档 (33/34 分册)：名册被动过（轻档）削得最少；图谋被
+  // 公开（中档）失去突然性，少带走一些人；两者都没有（重档）最重。两档同时
+  // 成立时按轻档——纸面上的改动比风声更能救人。后果只落人口、历史包袱、凝聚
+  // 与恐慌——整肃不直接致死，削弱的宿主更容易死于其他来路。数值一律
+  // TODO(balance)。
   script: {
     canTrigger: function(ctx) {
       return false;
@@ -19,14 +21,32 @@ defineEvent({
       if (ctx.states && ctx.states["special:silo1_purge_softened"]) {
         softened = !!ctx.states["special:silo1_purge_softened"].triggered;
       }
+      var exposed = false;
+      if (ctx.states && ctx.states["special:silo1_purge_exposed"]) {
+        exposed = !!ctx.states["special:silo1_purge_exposed"].triggered;
+      }
       var population = ctx.total_population || 0;
-      var share = softened ? 0.03 : 0.08;
+      var share = 0.08;
+      var burden = 0.08;
+      var cohesion = -0.05;
+      var panic = 0.06;
+      if (softened) {
+        share = 0.03;
+        burden = 0.04;
+        cohesion = -0.02;
+        panic = 0.03;
+      } else if (exposed) {
+        share = 0.05;
+        burden = 0.06;
+        cohesion = -0.03;
+        panic = 0.04;
+      }
       return {
         effects: [
           siloPopulationDelta(-Math.round(population * share)),
-          siloMetricDelta("history_burden", softened ? 0.04 : 0.08),
-          siloMetricDelta("cohesion", softened ? -0.02 : -0.05),
-          professionMetricDeltaAll("panic_value", softened ? 0.03 : 0.06),
+          siloMetricDelta("history_burden", burden),
+          siloMetricDelta("cohesion", cohesion),
+          professionMetricDeltaAll("panic_value", panic),
         ],
       };
     },
