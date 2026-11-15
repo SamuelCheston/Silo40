@@ -60,6 +60,110 @@ const trackingLabel: Record<string, string> = {
     hunting: "正在追捕",
 };
 
+// 谈判层口径 (21 设计卷)：三方带权决策，只改变谁在阻碍谁，不发放胜利。
+const negotiationDispositionLabel: Record<string, string> = {
+    hardliner: "强硬派",
+    pragmatist: "务实派",
+    survivor: "求生派",
+};
+
+const negotiationPostureLabel: Record<string, string> = {
+    press: "施压",
+    probe: "试探",
+    offer: "递条款",
+};
+
+const negotiationDeciderLabel: Record<string, string> = {
+    mayor: "市长",
+    rebels: "叛乱方",
+    it: "IT",
+    channel: "信道",
+};
+
+// 决策日志权重档位标签：三方各自的档位合并成一张表。
+const negotiationWeightLabel: Record<string, string> = {
+    suppress: "镇压",
+    talk: "谈判",
+    concede: "妥协",
+    accept: "接受",
+    reject: "拒绝",
+    press: "施压",
+    probe: "试探",
+    offer: "递条款",
+    stand_aside: "不干涉",
+    undermine: "破坏",
+    watch: "观望",
+};
+
+function negotiationLeanLabel(lean: number): string {
+    if (lean < 0.3) return "强硬";
+    if (lean < 0.5) return "动摇";
+    if (lean < 0.7) return "倾向妥协";
+    return "准备妥协";
+}
+
+// 谈判块：信道状态、市长倾向、桌上提案、最近决策日志 (含权重，供复盘)。
+function NegotiationDetail({ silo }: { silo: any }) {
+    const negotiation = silo?.negotiation || {};
+    if (!negotiation.initialized) {
+        return (
+            <Text fontSize="xs" color="gray.500">
+                谈判：信道未建立——叛乱成形后，市长面对的是三条路：镇压、谈判、妥协。
+            </Text>
+        );
+    }
+    if (negotiation.closed) {
+        const reason = negotiation.close_reason === "it_exposure" ? "被 IT 曝光" : "被镇压打断";
+        return (
+            <Text fontSize="xs" color="red.700">
+                谈判：信道已崩塌（{reason}）· 已交换 {negotiation.rounds || 0} 回合。这一轮谈判到此为止。
+            </Text>
+        );
+    }
+    const log = (negotiation.log || []).slice(-4).reverse();
+    return (
+        <VStack align="stretch" gap={1}>
+            <Text fontSize="xs" color="gray.700">
+                谈判：信道畅通 · 已交换 {negotiation.rounds || 0} 回合 ·
+                市长性情 {negotiationDispositionLabel[negotiation.mayor_disposition] || "未知"} ·
+                市长此刻倾向 {negotiationLeanLabel(negotiation.mayor_lean || 0)}
+                {negotiation.rebel_posture ? ` · 叛乱方姿态 ${negotiationPostureLabel[negotiation.rebel_posture] || negotiation.rebel_posture}` : ""}
+            </Text>
+            {negotiation.offer_on_table && (
+                <Text fontSize="xs" color="gray.700">
+                    桌上提案：{negotiation.offered_by === "mayor" ? "市长开出" : "叛乱方递出"} · {negotiation.offer_terms}
+                </Text>
+            )}
+            {negotiation.compromise_established && (
+                <Text fontSize="xs" color="green.700">
+                    妥协已成立{negotiation.takeover === "takeover" ? " · 叛乱方已接管市长职位"
+                        : negotiation.takeover === "hands_off" ? " · 叛乱方不接管，带组织离开"
+                            : " · 接管与否尚未抉择"}
+                </Text>
+            )}
+            {log.length > 0 && (
+                <VStack align="stretch" gap={0.5}>
+                    {log.map((entry: any, idx: number) => {
+                        const weights = entry.weights
+                            ? Object.entries(entry.weights).map(([key, value]) =>
+                                `${negotiationWeightLabel[key] || key} ${Math.round((value as number) * 100)}%`).join(" · ")
+                            : "";
+                        return (
+                            <Text key={idx} fontSize="xs" color="gray.600">
+                                Y{entry.year} M{entry.month} · {negotiationDeciderLabel[entry.decider] || entry.decider}
+                                {entry.decision && entry.weights ? ` · ${weights}` : ""} · {entry.outcome}
+                            </Text>
+                        );
+                    })}
+                </VStack>
+            )}
+            <Text fontSize="xs" color="gray.400">
+                谈判只改变谁在阻碍谁：拖延与失败都是合法结果，胜负仍只看逃出去多少人。
+            </Text>
+        </VStack>
+    );
+}
+
 function fmt(value: number | undefined, digits = 2): string {
     return typeof value === "number" ? value.toFixed(digits) : "—";
 }
@@ -119,6 +223,7 @@ function RebellionDetail({ silo }: { silo: any }) {
                     ? `市长 ${stanceLabel[stance.mayor] || "阻挠"} · IT ${stanceLabel[stance.it] || "阻挠"}`
                     : "尚未成形——磋商是持续过程，立场随状态漂移，最后一刻妥协也算"}
             </Text>
+            <NegotiationDetail silo={silo} />
             {group.initialized && (
                 <Text fontSize="xs" color="gray.700">
                     逃出群体：{group.departed || 0} 人出发 · 存续 {group.population || 0} 人

@@ -801,6 +801,80 @@ func upgradeV11ToLineShifts(tx *gorm.DB) error {
 	return nil
 }
 
+const negotiationSaveVersion = 13
+
+// UpgradeV12ToNegotiationSave adds the mayor–rebel negotiation layer
+// (21 设计卷): Silo.Negotiation (channel, rounds, mayor path/disposition,
+// offer on table, compromise fact, post-compromise choice, decision log).
+// Nothing could write negotiation state before v13, so upgraded saves keep
+// their exact pre-upgrade behaviour: zero state = no channel, and runs that
+// never open a channel consume no new RNG. Same safety contract as v11→v12:
+// backup + one transaction + readback verification.
+func UpgradeV12ToNegotiationSave(db *gorm.DB, dbPath string) (bool, error) {
+	var meta model.SaveMeta
+	err := db.First(&meta, "`key` = ?", saveMetaKey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("v13 negotiation upgrade: read save meta: %w", err)
+	}
+	if meta.SaveVersion != 12 {
+		return false, nil
+	}
+	backupPath := fmt.Sprintf("%s.bak-%s-v13negotiation", dbPath, time.Now().Format("20060102-150405"))
+	if err := backupSaveFile(db, backupPath); err != nil {
+		return false, fmt.Errorf("v13 negotiation upgrade: backup to %s failed: %w（数据库未改动）", backupPath, err)
+	}
+	if err := db.Transaction(upgradeV12ToNegotiation); err != nil {
+		return false, fmt.Errorf("v13 negotiation upgrade: %w（数据库未改动，备份保留在 %s，可用它还原）", err, backupPath)
+	}
+	log.Printf("v12 save upgraded to v13 negotiation model (backup: %s)——谈判状态空起步 (无信道)，不回填推测状态", backupPath)
+	return true, nil
+}
+
+func upgradeV12ToNegotiation(tx *gorm.DB) error {
+	var silos []model.Silo
+	if err := tx.Order("id ASC").Find(&silos).Error; err != nil {
+		return fmt.Errorf("load silos: %w", err)
+	}
+	for i := range silos {
+		silo := &silos[i]
+		// Re-save so the new serialized field exists explicitly; the zero
+		// NegotiationState is the documented v12 semantics (no channel).
+		if err := tx.Save(silo).Error; err != nil {
+			return fmt.Errorf("resave silo %d: %w", silo.ID, err)
+		}
+	}
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: negotiationSaveVersion}).Error; err != nil {
+		return fmt.Errorf("bump save meta: %w", err)
+	}
+
+	var checkSilos []model.Silo
+	if err := tx.Order("id ASC").Find(&checkSilos).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload silos: %w", err)
+	}
+	if len(checkSilos) != len(silos) {
+		return fmt.Errorf("post-write verification failed: silo count changed")
+	}
+	for i := range checkSilos {
+		negotiation := checkSilos[i].Negotiation
+		if negotiation.Initialized || negotiation.ChannelOpen || negotiation.Rounds != 0 ||
+			negotiation.MayorDisposition != "" || negotiation.CompromiseEstablished ||
+			negotiation.Closed || len(negotiation.Log) != 0 {
+			return fmt.Errorf("post-write verification failed: silo %d gained negotiation state during migration", checkSilos[i].ID)
+		}
+	}
+	var checkMeta model.SaveMeta
+	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
+	}
+	if checkMeta.SaveVersion != negotiationSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, negotiationSaveVersion)
+	}
+	return nil
+}
+
 // legacyUnaffiliatedSignature 与 engine.unaffiliatedSignature 一致 (跨包不导出，
 // 升级器按字面值对齐)。
 const legacyUnaffiliatedSignature = "special:unaffiliated"

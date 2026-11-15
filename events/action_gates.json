@@ -431,6 +431,36 @@
       "unlock": { "event_completed": "special:departure_willingness" },
       "available": {},
       "reason": "需要离开意愿"
+    },
+    {
+      "id": "NEGOTIATION_OPEN_CHANNEL",
+      "unlock": { "metric": "rebellion", "min": 0.3 },
+      "available": { "metric": "negotiation_channel", "max": 0 },
+      "reason": "需要叛乱达到 0.30（谈判是市长面对叛乱的三条路之一，初始校准值 TODO(balance)）"
+    },
+    {
+      "id": "NEGOTIATION_PROBE",
+      "unlock": { "metric": "negotiation_channel", "min": 1 },
+      "available": {},
+      "reason": "需要先建立谈判信道"
+    },
+    {
+      "id": "NEGOTIATION_OFFER_TERMS",
+      "unlock": { "metric": "negotiation_channel", "min": 1 },
+      "available": {},
+      "reason": "需要先建立谈判信道"
+    },
+    {
+      "id": "NEGOTIATION_TAKEOVER",
+      "unlock": { "metric": "negotiation_compromise", "min": 1 },
+      "available": { "metric": "negotiation_takeover_decided", "max": 0 },
+      "reason": "需要妥协成立；与『不接管』互斥"
+    },
+    {
+      "id": "NEGOTIATION_HANDS_OFF",
+      "unlock": { "metric": "negotiation_compromise", "min": 1 },
+      "available": { "metric": "negotiation_takeover_decided", "max": 0 },
+      "reason": "需要妥协成立；与『接管』互斥"
     }
   ]
 }

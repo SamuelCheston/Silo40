@@ -34,7 +34,7 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 		t.Fatalf("meta version = %d, want %d", meta.SaveVersion, authoritySaveVersion)
 	}
 
-	// The startup chain continues v8 → v9 → v10 → v11 before Resume accepts the save.
+	// The startup chain continues v8 → v9 → v10 → v11 → v12 → v13 before Resume accepts the save.
 	upgradedV9, err := UpgradeV8ToEndingsSave(svc.db, dbPath)
 	if err != nil || !upgradedV9 {
 		t.Fatalf("v8 endings upgrade failed: upgraded=%v err=%v", upgradedV9, err)
@@ -58,6 +58,10 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 	upgradedV12, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || !upgradedV12 {
 		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
+	}
+	upgradedV13, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
+	if err != nil || !upgradedV13 {
+		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
 	}
 
 	fresh := newVersionTestService(t, dbPath)

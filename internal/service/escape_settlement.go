@@ -54,6 +54,8 @@ const (
 	escapeBlockPursuitFactor   = 0.20 // 市长阻挠：追缉对路上幸存的损耗
 	// 动员：愿意离开的人口比例。
 	escapeWillingBase = 0.4 // TODO(balance)
+	// 谈判层 (18 §3.7)：叛乱方不接管市长职位、带组织转向离开时的组织动员加成。
+	escapeNegotiationHandsOffOrgBonus = 0.15 // TODO(balance)
 )
 
 // escapeSettlement 一次出发结算的审计结果 (呈现与测试用)。
@@ -115,6 +117,12 @@ func (s *GameService) settleEscapeDeparture(silo *model.Silo, event *engine.Game
 		settle.Notes = append(settle.Notes, "市长配合：正式调拨与公开动员")
 	}
 	orgFactor := 0.4 + 0.3*prep.PlanCompleteness + 0.3*prep.DrillLevel // TODO(balance)
+	// 谈判层 (18 §3.7)：妥协成立且叛乱方不接管 → 组织完整转向离开，
+	// 动员获得组织加成。谈判只改变"谁在阻碍谁"，不改变结算的读取对象。
+	if silo.Negotiation.CompromiseEstablished && silo.Negotiation.Takeover == model.NegotiationHandsOff {
+		orgFactor += escapeNegotiationHandsOffOrgBonus // TODO(balance)
+		settle.Notes = append(settle.Notes, "叛乱方不接管：组织完整保留，动员获得加成")
+	}
 	orgCap := float64(willing) * orgFactor
 
 	capacity := int(math.Min(math.Min(routeCap, orgCap), suitCap))

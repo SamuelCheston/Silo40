@@ -658,7 +658,7 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v10 → v11 → v12，Resume 才接受存档。
+	// 启动链继续 v10 → v11 → v12 → v13，Resume 才接受存档。
 	upgradedV11, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || !upgradedV11 {
 		t.Fatalf("v10 outside upgrade failed: upgraded=%v err=%v", upgradedV11, err)
@@ -667,15 +667,19 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 	if err != nil || !upgradedV12 {
 		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
 	}
+	upgradedV13, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
+	if err != nil || !upgradedV13 {
+		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v12 save: %v", err)
+		t.Fatalf("resume migrated v13 save: %v", err)
 	}
 
 	again, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v12 save must skip v9 migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v13 save must skip v9 migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -711,20 +715,24 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v11 → v12，Resume 才接受存档。
+	// 启动链继续 v11 → v12 → v13，Resume 才接受存档。
 	upgradedV12, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || !upgradedV12 {
 		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
 	}
+	upgradedV13, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
+	if err != nil || !upgradedV13 {
+		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v12 save: %v", err)
+		t.Fatalf("resume migrated v13 save: %v", err)
 	}
 
 	again, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v12 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v13 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -758,13 +766,68 @@ func TestUpgradeV11ToLineShiftsSave(t *testing.T) {
 		}
 	}
 
+	// 启动链继续 v12 → v13，Resume 才接受存档。
+	upgradedV13, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
+	if err != nil || !upgradedV13 {
+		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
+	}
+
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v12 save: %v", err)
+		t.Fatalf("resume migrated v13 save: %v", err)
 	}
 
 	again, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v12 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v13 save must skip migration: upgraded=%v err=%v", again, err)
+	}
+}
+
+// v12 → v13：谈判/妥协层空起步。新字段在 v12 时代没有任何写入方，
+// 升级不回填推测状态；回读校验谈判状态为零 (无信道)，升级后行为逐位不变
+// (未开信道的运行不消耗任何新 RNG)。
+func TestUpgradeV12ToNegotiationSave(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "v13negotiation.db")
+	svc := newVersionTestService(t, dbPath)
+	createVersionTestGame(t, svc)
+	// 模拟 v12 存档：只回退版本标记 (新字段零值即 v12 语义)。
+	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 12}).Error; err != nil {
+		t.Fatalf("downgrade meta: %v", err)
+	}
+
+	upgraded, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
+	if err != nil || !upgraded {
+		t.Fatalf("v13 negotiation upgrade failed: upgraded=%v err=%v", upgraded, err)
+	}
+	backups, _ := filepath.Glob(dbPath + ".bak-*-v13negotiation")
+	if len(backups) != 1 {
+		t.Fatalf("expected one negotiation backup, got %v", backups)
+	}
+
+	var silos []model.Silo
+	if err := svc.db.Order("id ASC").Find(&silos).Error; err != nil {
+		t.Fatalf("reload silos: %v", err)
+	}
+	for i := range silos {
+		negotiation := silos[i].Negotiation
+		if negotiation.Initialized || negotiation.ChannelOpen || negotiation.Rounds != 0 ||
+			negotiation.MayorDisposition != "" || negotiation.MayorPath != "" ||
+			negotiation.OfferOnTable || negotiation.CompromiseEstablished ||
+			negotiation.Takeover != "" || negotiation.Closed || len(negotiation.Log) != 0 {
+			t.Fatalf("silo %d gained negotiation state during migration: %+v", silos[i].ID, negotiation)
+		}
+		if negotiation.NegotiationActive() {
+			t.Fatalf("silo %d negotiation zero value must be inactive", silos[i].ID)
+		}
+	}
+
+	fresh := newVersionTestService(t, dbPath)
+	if err := fresh.Resume(); err != nil {
+		t.Fatalf("resume migrated v13 save: %v", err)
+	}
+
+	again, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
+	if err != nil || again {
+		t.Fatalf("v13 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }

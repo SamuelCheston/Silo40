@@ -107,6 +107,11 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV11ToLineShiftsSave(a.db, dbFileName); err != nil {
 		log.Fatalf("v11 line-shift upgrade failed: %v", err)
 	}
+	// v12 line-shift saves gain the mayor–rebel negotiation layer
+	// (18 设计卷); zero state = no channel = behaviour unchanged.
+	if _, err := service.UpgradeV12ToNegotiationSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v12 negotiation upgrade failed: %v", err)
+	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)

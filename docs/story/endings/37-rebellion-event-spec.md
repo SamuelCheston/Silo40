@@ -17,7 +17,13 @@
   - 效果 `escape_departure_settle`：出发结算点请求，服务层在全部效果施加后执行；
   - 触发器 `preparation_gte`（metric=账本字段，value=阈值）：供下游门控。
   - JS helper：`topStanceReeval/topStanceGuarantee/preparationDelta/preparationSetBool/preparationStage/preparationPlanRole/preparationTransfer/spilloverChannelAdd/preparationGte/escapeDepartureSettle`。
-- **ctx 可读**：`top_stance`（mayor/it/guarantee，归一后）、`escape_prep`（账本全字段只读视图）、`spillover_prep`（信道列表与包裹质量）、既有 `silo_metrics/authority/resources/states` 等。立场与账本只供内容塑形动作可得性与结算输入，**永不作交互选项、永不进仲裁**。
+- **谈判层批新增的封闭集扩展**（21 设计卷，随谈判机制落地）：
+  - 效果 `negotiation_open`：开信道请求，服务层在全部效果施加后执行（性情抽取＋叙事）；
+  - 效果 `negotiation_round`（flag=probe|terms）：高强度回合请求，服务层执行（递条款先置叛乱方条款在桌）；
+  - 效果 `negotiation_resolve`（flag=takeover|hands_off）：妥协后二选一请求，服务层执行；
+  - JS helper：`negotiationOpen/negotiationRound/negotiationResolve`。
+  - 门控指标：`negotiation_channel`／`negotiation_compromise`／`negotiation_takeover_decided`（0/1）。
+- **ctx 可读**：`top_stance`（mayor/it/guarantee，归一后）、`negotiation`（信道/回合/市长路径与倾向/桌上提案/妥协/二选一/崩塌，只读视图）、`escape_prep`（账本全字段只读视图）、`spillover_prep`（信道列表与包裹质量）、既有 `silo_metrics/authority/resources/states` 等。立场、谈判与账本只供内容塑形动作可得性与结算输入，**永不作交互选项、永不进仲裁**。
 - **存档**：v9 → v10（`UpgradeV9ToPreparationSave`，备份＋单事务＋回读校验）；新字段零值即旧档语义（无准备、立场零值＝阻挠）。
 
 ## 1. 节点规格
@@ -113,7 +119,7 @@
 | 效果 | `topStanceGuarantee(+0.3)`（`TODO(balance)`）→ `topStanceReeval("both")` |
 | 完成键 | `player_actions:escape_negotiation_guarantee` |
 | 门控 | `event_completed special:escape_window_open` |
-| 依赖 | 完整谈判机制（市长三条路之"谈判"）**本期留空占位**，只落最小保障动作 |
+| 依赖 | 无。完整谈判机制（市长三条路之"谈判"）已由谈判层落地（21 设计卷），本动作保留为最小保障动作，与谈判层并存 |
 
 ### 准备层动作（Layer 1 生产者）
 
@@ -149,7 +155,8 @@
 | W-2 路线六节点 | `route_survey_{offer,accept,decline,defer}.js`、`route_survey_step.js`、`route_confirmed.js`、`advance_party_dispatch.js`、`advance_party_report.js` | 本批 `preparation_delta`（stage） |
 | W-3 开窗＋R-D | `escape_window_open.js`、`escape_window_{orderly,riot}.js` | 本批 `top_stance_reeval` |
 | W-4 出发 | `escape_departure_launch.js` | 本批 `escape_departure_settle`（服务层结算） |
-| 立场生产者 | `escape_negotiation_guarantee.js` | 谈判占位 |
+| 立场生产者 | `escape_negotiation_guarantee.js` | 最小保障动作 |
+| 谈判层五动作 | `negotiation_open_channel.js`、`negotiation_probe.js`、`negotiation_offer_terms.js`、`negotiation_takeover.js`、`negotiation_hands_off.js` | 本批 `negotiation_*` 效果全家 |
 | 准备层十五动作＋审计反制 | 见 §1 准备层表 | 本批 `preparation_*` 全家 |
 | 门控条目 | `events/action_gates.json` 追加 26 条 | — |
 
@@ -162,7 +169,7 @@
 | ~~仲裁读群体质量~~ | **已落地（Layer 2）**：`PlayerEscapeGroupQuality` 玩家贡献项读组合事实（老人/伤者/工匠/领头人），只对合格候选计分；资格仍只读群体存续 | — |
 | 信道投递与独立接收 | Layer 3（外溢模型主体） | 信道只登记（建立侧），`PlayerPerSpilloverSilo` 口径收紧待 Layer 3 |
 | 回退规则（窗口关闭 → 外溢） | "撤离窗口关闭"事实的生产 | 口径已登记（Witness 回退规则），事实生产属后话 |
-| 完整谈判机制（市长三条路之"谈判"） | 另行设计 | 只落最小保障动作（占位） |
+| ~~完整谈判机制（市长三条路之"谈判"）~~ | **已落地（谈判层）**：21 设计卷＋ADR-0013；三方带权决策、月度通气、妥协后二选一 | — |
 | 散逃者尾声（小规模强行出发） | 16 §3.2【待裁决】3 | 阻挠下强行出发自然结算为人数 0/极小，不构成逃出群体 |
 | 立场的非叛乱生产路径 | 16 §3.2【待裁决】4 | 本批只按裁决基线由叛乱链供给立场事实 |
 | 三选一／二选一兄弟选择隐藏 | 门控否定谓词 | 各线共用缺口，下游只读各键事实 |

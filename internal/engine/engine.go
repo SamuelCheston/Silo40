@@ -1076,6 +1076,10 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 		silo.Rebellion = 0
 	}
 
+	// 叛乱侵蚀现任市长个人正统性 (ADR-0007 后果条、18 §4)：接既有
+	// MayorLegitimacy，不新造状态；纯算术不消耗 RNG，叛乱为 0 时逐位不变。
+	ApplyRebellionLegitimacyErosion(silo, deltaYears)
+
 	// DeptTension must not depend on Go map iteration or DB preload order.
 	// Sort a copy by persistent profession ID, then sort each Relations map by key.
 	professions := append([]model.Profession(nil), silo.Professions...)

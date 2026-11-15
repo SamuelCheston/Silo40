@@ -2084,6 +2084,14 @@ func (s *GameService) runOneMonthSingle(source string) ([]string, []model.StoryE
 		st := outsideStories[i]
 		stories = append(stories, &st)
 	}
+	// 21 设计卷：谈判层月度低强度通气。仅当信道畅通时执行回合并消耗 RNG；
+	// 未开信道的运行逐位不变。位置在本地结算后、时钟推进前。
+	negotiationLogs, negotiationStories := s.runNegotiationMonth(s.silo)
+	logs = append(logs, negotiationLogs...)
+	for i := range negotiationStories {
+		st := negotiationStories[i]
+		stories = append(stories, &st)
+	}
 	// 世界时钟镜像玩家堡时钟。权威时钟仍在堡内流水线；多堡阶段 (P0.5+) 会把
 	// 时钟推进上移到世界 tick 编排，此处改为世界时钟下发到各堡。
 	if s.world != nil {
@@ -2976,6 +2984,9 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	decisiveShocks := []engine.DecisiveShockRequest{}
 	allianceDeltas := []engine.AllianceLoyaltyDelta{}
 	escapeSettleRequested := false
+	negotiationOpenRequested := false
+	negotiationRoundRequested := ""
+	negotiationResolveRequested := ""
 	scopeCtx := s.scopeContextFor(simSilo)
 	scopeCtx.CompletionKeys = &completionKeys
 	scopeCtx.BeliefObservations = &beliefRequests
@@ -2985,6 +2996,9 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scopeCtx.DecisiveShocks = &decisiveShocks
 	scopeCtx.AllianceDeltas = &allianceDeltas
 	scopeCtx.EscapeDepartureSettle = &escapeSettleRequested
+	scopeCtx.NegotiationOpenRequested = &negotiationOpenRequested
+	scopeCtx.NegotiationRoundKind = &negotiationRoundRequested
+	scopeCtx.NegotiationResolveKind = &negotiationResolveRequested
 	story, scheduled := engine.ApplyContentEventScoped(def, scopeCtx)
 	s.flushScopeResults(scopeCtx, event)
 	// 硬伤 #4：结构化效果里的 player_action_complete 在此落地 (写完成键并发
@@ -3038,6 +3052,10 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		escapeSettleRequested = false
 	}
 
+	// 21 设计卷：谈判层请求 (开信道/高强度回合/妥协后二选一) 在全部结构化
+	// 效果施加后由服务层执行，叙事并入当前事件的故事汇点。
+	s.applyNegotiationRequests(simSilo, event, negotiationOpenRequested, negotiationRoundRequested, negotiationResolveRequested)
+
 	if !def.ScriptHooks.Apply {
 		return
 	}
@@ -3069,6 +3087,9 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptDecisiveShocks := []engine.DecisiveShockRequest{}
 	scriptAllianceDeltas := []engine.AllianceLoyaltyDelta{}
 	scriptEscapeSettle := false
+	scriptNegotiationOpen := false
+	scriptNegotiationRound := ""
+	scriptNegotiationResolve := ""
 	scriptScopeCtx := s.scopeContextFor(simSilo)
 	scriptScopeCtx.CompletionKeys = &scriptCompletionKeys
 	scriptScopeCtx.BeliefObservations = &scriptBeliefRequests
@@ -3078,6 +3099,9 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptScopeCtx.DecisiveShocks = &scriptDecisiveShocks
 	scriptScopeCtx.AllianceDeltas = &scriptAllianceDeltas
 	scriptScopeCtx.EscapeDepartureSettle = &scriptEscapeSettle
+	scriptScopeCtx.NegotiationOpenRequested = &scriptNegotiationOpen
+	scriptScopeCtx.NegotiationRoundKind = &scriptNegotiationRound
+	scriptScopeCtx.NegotiationResolveKind = &scriptNegotiationResolve
 	scheduledFromScript := engine.ApplyContentEffectsScoped(scriptResult.Effects, scriptScopeCtx)
 	s.flushScopeResults(scriptScopeCtx, event)
 	s.writeCompletionKeysFromEffects(siloID, scriptCompletionKeys)
@@ -3100,6 +3124,52 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	// (出发事件用结构化或脚本之一声明结算，只执行一次)。
 	if escapeSettleRequested || scriptEscapeSettle {
 		s.settleEscapeDeparture(simSilo, event)
+	}
+
+	// 21 设计卷：脚本效果请求的谈判层动作 (与结构化路径同一口径)。
+	s.applyNegotiationRequests(simSilo, event, scriptNegotiationOpen, scriptNegotiationRound, scriptNegotiationResolve)
+}
+
+// applyNegotiationRequests 执行内容效果收集的谈判层请求 (21 设计卷)：
+// 开信道、高强度回合 (试探/递条款)、妥协后二选一。全部随机决策经引擎
+// 单一 RNG 流；执行结果以中文叙事并入当前事件的故事汇点与持久记录。
+// 未开信道的运行不会收到任何请求，不消耗 RNG。
+func (s *GameService) applyNegotiationRequests(silo *model.Silo, event *engine.GameEvent, open bool, roundKind, resolveKind string) {
+	if silo == nil || (!open && roundKind == "" && resolveKind == "") {
+		return
+	}
+	stories := []model.StoryEvent{}
+	if open {
+		stories = append(stories, s.applyNegotiationOpen(silo)...)
+	}
+	if roundKind != "" {
+		if roundKind == engine.NegotiationKindTerms {
+			engine.PlaceRebelTerms(silo)
+		}
+		result := engine.NegotiationRound(silo, s.world, roundKind)
+		if result != nil {
+			stories = append(stories, s.negotiationRoundStories(silo, result)...)
+		}
+	}
+	if resolveKind != "" {
+		stories = append(stories, s.applyNegotiationResolve(silo, resolveKind)...)
+	}
+	if len(stories) == 0 {
+		return
+	}
+	if sink, ok := event.Data["story_sink"].(*[]model.StoryEvent); ok && sink != nil {
+		*sink = append(*sink, stories...)
+	}
+	if sink, ok := event.Data["step_story_sink"].(*[]model.StoryEvent); ok && sink != nil {
+		*sink = append(*sink, stories...)
+	}
+	if source, _ := event.Data["content_source"].(string); source != "" {
+		pointers := make([]*model.StoryEvent, 0, len(stories))
+		for i := range stories {
+			storyCopy := stories[i]
+			pointers = append(pointers, &storyCopy)
+		}
+		s.recordStories(pointers, source)
 	}
 }
 
