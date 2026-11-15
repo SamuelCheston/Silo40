@@ -686,10 +686,12 @@ func (s *GameService) finishArbitration(decision *model.EndingDecision) *model.E
 }
 
 // rebellionSettlementLine reports the departure facts as settled: how many
-// left, how many survived the road, whether the group is fragile, and what
-// remains behind. It reads only EscapedGroup and station population — the
-// same facts arbitration reads (ADR-0008: stances and ledgers never reach
-// the settlement screen).
+// left, how many survived the road, whether the group is fragile, and that
+// nothing is left behind — canon: the origin silo is already destroyed at
+// the moment of escape, so there is no one to report back to and no ongoing
+// relationship with the station. It reads only EscapedGroup — the same
+// facts arbitration reads (ADR-0008: stances and ledgers never reach the
+// settlement screen).
 func rebellionSettlementLine(station *model.Silo) string {
 	g := station.EscapedGroup
 	if !g.Initialized || g.Population <= 0 {
@@ -715,7 +717,7 @@ func rebellionSettlementLine(station *model.Silo) string {
 		line += fmt.Sprintf("这支队伍不是一个人：%d 名领头人、%d 名工匠、%d 名伤者、%d 名老人——走出去的是群体，不是人群。",
 			out.Leaders, out.Artisans, out.Wounded, out.Elders)
 	}
-	line += fmt.Sprintf("驻地仍有居民 %d 人——离开没有掏空驻地，只是让社会关系的延续在堡外成了事实。", station.TotalPopulation)
+	line += "逃出发生时原堡已被摧毁——没有人可以回传消息，也没有所谓后续关系；社会关系的延续只在堡外成了事实。"
 	return line
 }
 

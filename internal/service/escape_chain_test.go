@@ -447,8 +447,10 @@ func TestEscapeLedgerNotReadByArbitration(t *testing.T) {
 
 // TestRebellionEndingNarrative locks the REBELLION settlement presentation:
 // the ending screen tells the second-roll-call story with the departure
-// facts (departed/survived/fragile/what remains), and the pyrrhic branch
-// keeps the same settlement line when the origin station falls afterwards.
+// facts (departed/survived/fragile), closes on the destroyed-origin canon
+// (nothing is left behind — no residents remain, no ongoing relationship),
+// and the pyrrhic branch keeps the same settlement line when the origin
+// station falls afterwards.
 func TestRebellionEndingNarrative(t *testing.T) {
 	newGroupStation := func() (*GameService, *model.Silo) {
 		svc, station, _ := weightedEndingFixture("REBELLION")
@@ -473,11 +475,15 @@ func TestRebellionEndingNarrative(t *testing.T) {
 		"表上没有你的名字",
 		"本局共有 150 人出发，120 人幸存落地，路上损耗 30 人",
 		"他们于 126 年 3 月离开",
-		"驻地仍有居民 5000 人",
+		"逃出发生时原堡已被摧毁",
 	} {
 		if !strings.Contains(decision.Reason, want) {
 			t.Fatalf("narrative missing %q: %q", want, decision.Reason)
 		}
+	}
+	// 口径锁：逃出型结局的结算行不得再声称原堡仍有居民或后续关系。
+	if strings.Contains(decision.Reason, "仍有居民") {
+		t.Fatalf("escape settlement must not claim residents remain in the origin station: %q", decision.Reason)
 	}
 
 	// 脆弱群体：结算行标注脆弱。
