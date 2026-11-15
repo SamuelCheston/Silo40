@@ -128,3 +128,8 @@ v7 轨迹运行在「无结局链/失败结局/逃出/谈判/时间渗透/反制
 
 重建命令（绝对路径）：
 `SILO40_PARITY_DUMP=<绝对路径> go test ./internal/service -run '^TestParityHarnessDump$' -v`。
+
+**基线口径（[ADR-0017](../knowledge/adr/0017-no-backward-compat-before-release.md)）**：
+正式上线前 parity/轨迹基线不承担兼容义务——机制变化时旧基线可直接作废，
+重建是求当前正确的手段而非义务；「不保留两份都宣称有效的基准」与台账失效
+记录的纪律保留。
