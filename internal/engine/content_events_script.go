@@ -45,6 +45,10 @@ function worldFlagTrue(flag) {
 function worldFlagFalse(flag) {
   return { type: "world_flag_false", flag: flag };
 }
+function worldFlagNotSet(flag) {
+  // 守卫条件：世界事实未成立即通过 (无世界上下文时也算未成立)。
+  return { type: "world_flag_not_set", flag: flag };
+}
 function signalReceived(eventId) {
   return { type: "signal_received", event_id: eventId };
 }

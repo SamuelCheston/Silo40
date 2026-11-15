@@ -95,7 +95,7 @@
 
 | 节点/能力 | 等的机制 | 未到位前的处理 |
 | --- | --- | --- |
-| 终止来路的反制绑定 | "日常动作中的反制"批次（`termination_release` 读 `network_jammed` 的绑定，既有 TODO） | 反制键 `termination_channel_disrupted` 已写 flag；释放节点当前无条件，文档标注 |
+| 终止来路的反制绑定 | 已落地：`termination_release` 读 `network_jammed` 守卫，玩家动作 `TERMINATION_CHANNEL_JAM` 调度 `termination_channel_disrupted` | — |
 | 整肃来路的反制绑定 | 同上（`silo1_purge_exposed` 未绑定） | 整肃执行当前为零效果钩子（既有 TODO），文档标注 |
 | 三选一兄弟选择隐藏 | 门控否定谓词 | 三键同解，下游只读各键事实（与《公议》《人治》共用缺口） |
 | 覆灭的更早来路（1 号正典链提前覆灭） | Silo 18 正典链进度节点（"警长上任"等实现缺口，机制底座 §3 已登记） | 本线只消费 `silo1_destroyed` 事实，不关心其来路时序 |

@@ -77,36 +77,31 @@ func TestReactionSettlementsAreNonNumericalHooks(t *testing.T) {
 	}
 }
 
-// TestReactionCountermeasureHooksAreDeclaredButUnbound locks that the
-// countermeasure windows are declared but NOT bound: Share Info and propaganda
-// are not countermeasures, so even with the omen fired and those actions
-// completed the hooks must not trigger this round.
-func TestReactionCountermeasureHooksAreDeclaredButUnbound(t *testing.T) {
+// TestReactionPurgeHookStaysUnbound locks that the local-execution countermeasure
+// window is still declared but NOT bound: propaganda is not a countermeasure, so
+// even with the omen fired and propaganda completed the hook must not trigger
+// this round. (The remote-termination window is bound to the everyday jamming
+// action; see TestTerminationChannelCountermeasureBinding.)
+func TestReactionPurgeHookStaysUnbound(t *testing.T) {
 	svc := bootstrapRealContent(t)
-	for _, key := range []string{
-		"special:termination_channel_disrupted",
-		"special:silo1_purge_exposed",
-	} {
-		def := findContentDefinitionByKey(t, svc, key)
-		if !def.ScriptHooks.CanTrigger {
-			t.Fatalf("%s must declare a canTrigger hook (declared-but-unbound)", key)
-		}
-		silo := &model.Silo{ID: 1, CurrentYear: 127, CurrentMonth: 1}
-		ok, err := engine.RunContentEventCanTriggerScript(def, engine.ContentEvaluationContext{
-			Silo: silo,
-			States: map[string]engine.ContentEventRuntime{
-				"special:termination_channel_test":        {Triggered: true},
-				"special:silo1_purge_omen":                {Triggered: true},
-				"player_action:action_share_info":         {Triggered: true},
-				"player_action:action_conduct_propaganda": {Triggered: true},
-			},
-		}, false)
-		if err != nil {
-			t.Fatalf("%s canTrigger: %v", key, err)
-		}
-		if ok {
-			t.Fatalf("%s must stay unbound (canTrigger false) this round", key)
-		}
+	def := findContentDefinitionByKey(t, svc, "special:silo1_purge_exposed")
+	if !def.ScriptHooks.CanTrigger {
+		t.Fatalf("special:silo1_purge_exposed must declare a canTrigger hook (declared-but-unbound)")
+	}
+	silo := &model.Silo{ID: 1, CurrentYear: 127, CurrentMonth: 1}
+	ok, err := engine.RunContentEventCanTriggerScript(def, engine.ContentEvaluationContext{
+		Silo: silo,
+		States: map[string]engine.ContentEventRuntime{
+			"special:silo1_purge_omen":                {Triggered: true},
+			"player_action:action_share_info":         {Triggered: true},
+			"player_action:action_conduct_propaganda": {Triggered: true},
+		},
+	}, false)
+	if err != nil {
+		t.Fatalf("silo1_purge_exposed canTrigger: %v", err)
+	}
+	if ok {
+		t.Fatal("silo1_purge_exposed must stay unbound (canTrigger false) this round")
 	}
 }
 
@@ -153,17 +148,32 @@ func TestLocalPurgeSettlementIsNotADeathFact(t *testing.T) {
 }
 
 // TestReactionScheduleKeepsPhysicalStrikeReachable locks the minimal scheduling
-// invariant: the unopposed termination release cannot end the game before the
-// reconnaissance window plus its three-month physical delivery has elapsed.
+// invariant: the unopposed termination release cannot land before the
+// reconnaissance window plus its three-month physical delivery has elapsed, so
+// the ordinary path always opens the physical channel first. The release reads
+// its own relative clock (and the jamming guard) instead of being scheduled.
 func TestReactionScheduleKeepsPhysicalStrikeReachable(t *testing.T) {
 	svc := bootstrapRealContent(t)
 	termination := findContentDefinitionByKey(t, svc, "special:termination_channel_test")
+	release := findContentDefinitionByKey(t, svc, "crisis:termination_release")
 	strike := findContentDefinitionByKey(t, svc, "special:strike_reconnaissance")
-	releaseDelay, reconDelay, bombingDelay := 0, 0, 0
 	for _, effect := range termination.Effects {
 		if effect.Type == "schedule_event" && effect.EventID == "termination_release" {
-			releaseDelay = effect.DelayMonths
+			t.Fatal("termination_channel_test must not schedule the release: the release owns its clock and guard")
 		}
+	}
+	releaseDelay, reconDelay, bombingDelay := 0, 0, 0
+	guarded := false
+	for _, condition := range release.Trigger.Conditions {
+		if condition.Type == "months_since_event_gte" && condition.EventID == "termination_channel_test" {
+			releaseDelay = condition.Months
+		}
+		if condition.Type == "world_flag_not_set" && condition.Flag == model.WorldFlagNetworkJammed {
+			guarded = true
+		}
+	}
+	if !guarded {
+		t.Fatal("termination_release must read the network_jammed guard (分渠道纪律)")
 	}
 	for _, condition := range strike.Trigger.Conditions {
 		if condition.Type == "months_since_event_gte" && condition.EventID == "termination_channel_test" {
@@ -182,6 +192,77 @@ func TestReactionScheduleKeepsPhysicalStrikeReachable(t *testing.T) {
 		t.Fatalf("termination release at +%d months must follow physical delivery at +%d months",
 			releaseDelay, reconDelay+bombingDelay)
 	}
+}
+
+// TestTerminationChannelCountermeasureBinding locks the everyday-action binding:
+// the jamming action schedules the disrupted-channel settlement, the release
+// guards on that world fact, and a jammed channel never reaches DEATH through the
+// remote channel even when the completion key is present.
+func TestTerminationChannelCountermeasureBinding(t *testing.T) {
+	svc := bootstrapRealContent(t)
+	jam := findContentDefinitionByKey(t, svc, "player_actions:termination_channel_jam")
+	if jam.PlayerAction == nil || jam.PlayerAction.ID != "TERMINATION_CHANNEL_JAM" {
+		t.Fatalf("jamming action is not declared as a player action: %+v", jam.PlayerAction)
+	}
+	scheduled := false
+	for _, effect := range jam.Effects {
+		if effect.Type == "schedule_event" && effect.EventID == "termination_channel_disrupted" {
+			scheduled = true
+		}
+	}
+	if !scheduled {
+		t.Fatal("jamming action must schedule termination_channel_disrupted")
+	}
+	release := findContentDefinitionByKey(t, svc, "crisis:termination_release")
+	if !selectsFlagGuard(release, model.WorldFlagNetworkJammed) {
+		t.Fatal("termination_release must guard on network_jammed")
+	}
+
+	// Trigger evaluation: with the self-test recorded and 10 months elapsed the
+	// release is due, but a jammed channel must keep it from firing.
+	dueStates := map[string]engine.ContentEventRuntime{
+		"special:termination_channel_test": {Triggered: true, LastTriggeredTimestamp: 0},
+	}
+	silo := &model.Silo{ID: 1, CurrentYear: 131, CurrentMonth: 1}
+	world := &model.World{}
+	if !engine.CanTriggerContentEvent(release, engine.ContentEvaluationContext{
+		Silo: silo, States: dueStates, World: world,
+	}) {
+		// The months gate is anchored to the recorded timestamp; set it explicitly
+		// so the check is about the flag, not about fixture arithmetic.
+		t.Fatal("unopposed release must fire once the window elapses")
+	}
+	world.Flags = map[string]bool{model.WorldFlagNetworkJammed: true}
+	if engine.CanTriggerContentEvent(release, engine.ContentEvaluationContext{
+		Silo: silo, States: dueStates, World: world,
+	}) {
+		t.Fatal("jammed release must be a no-op (never fires)")
+	}
+	// Single-silo context (no world) still allows the release: the guard only
+	// closes the channel when the world fact is actually recorded.
+	if !engine.CanTriggerContentEvent(release, engine.ContentEvaluationContext{
+		Silo: silo, States: dueStates,
+	}) {
+		t.Fatal("release must not be blocked by the missing world context")
+	}
+
+	// Arbitration still honours the fact when the remote channel was NOT jammed.
+	svcJammed, station, _ := weightedEndingFixture("TIME")
+	svcJammed.contentStates = map[uint]map[string]model.ContentEventState{
+		station.ID: {terminationFactKey: {Triggered: true}},
+	}
+	if decision := svcJammed.resolveWeightedEnding(station, svcJammed.agent); decision == nil || decision.Selected != "DEATH" {
+		t.Fatalf("termination fact must arbitrate DEATH when present, got %+v", decision)
+	}
+}
+
+func selectsFlagGuard(def engine.ContentEventDefinition, flag string) bool {
+	for _, condition := range def.Trigger.Conditions {
+		if condition.Type == "world_flag_not_set" && condition.Flag == flag {
+			return true
+		}
+	}
+	return false
 }
 
 // TestDeathPhysicalStrikePlayableFromNewGame drives the complete Silo 1 physical
@@ -361,5 +442,122 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 	}
 	if _, err := svc.BeginAction(terminalAction); err == nil {
 		t.Fatal("terminal DEATH state accepted BeginAction")
+	}
+}
+
+// TestTerminationChannelCountermeasurePlayableFromNewGame drives the everyday
+// jamming action through public operations: build real trust with Mechanical,
+// let the Silo 1 ladder reach the channel self-test, then spend AP on the
+// maintenance-night action. The jam lands a month later; the physical channel
+// still kills the silo, which is the point of the per-channel discipline.
+func TestTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "termination-jam.db"))
+	req := threeSiloRequest(2101)
+	req.Profession = "Supply"
+	if _, err := svc.CreateGame(req); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	execute := func(action model.AgentAction) {
+		t.Helper()
+		outcome, err := svc.ExecuteAction(action)
+		if err != nil {
+			t.Fatalf("execute %+v: %v", action, err)
+		}
+		if !outcome.Result.Executed {
+			t.Fatalf("execute %+v rejected: %+v", action, outcome.Result)
+		}
+	}
+	tryExecute := func(action model.AgentAction) bool {
+		outcome, err := svc.ExecuteAction(action)
+		return err == nil && outcome.Result.Executed
+	}
+
+	execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
+	if len(svc.agent.KnownFragments) > 0 {
+		execute(model.AgentAction{
+			Type: model.ActionShareInfo, TargetDept: "Mayor",
+			FragmentIds: []string{svc.agent.KnownFragments[0]},
+		})
+	}
+	// The everyday action needs a real Mechanical (or IT) contact; build it the
+	// ordinary way instead of seeding the relation. One Mayor contact keeps the
+	// propaganda lever unlocked (relation ≥ 0.15).
+	execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Mayor"})
+	execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Mayor"})
+	for i := 0; i < 2; i++ {
+		execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Mechanical"})
+	}
+	execute(model.AgentAction{Type: model.ActionConductPropaganda})
+	execute(model.AgentAction{Type: model.ActionConductPropaganda})
+
+	deceivePending := func() bool {
+		for _, op := range svc.world.StationOps.Operations {
+			if op.ActionID == StationOpDeceive && op.Status == "PENDING" {
+				return true
+			}
+		}
+		return false
+	}
+	jamMonth, deceives, rations := 0, 0, 0
+	for month := 1; month <= 120 && !svc.gameOver(); month++ {
+		progressResetCountermeasureForRoute(t, svc, execute)
+		if svc.gameOver() {
+			break
+		}
+		if contentTriggered(svc, "special:termination_channel_test") {
+			if jam := actionByID(svc.availablePlayerActions(), "TERMINATION_CHANNEL_JAM"); jam != nil && jam.Enabled {
+				if tryExecute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "TERMINATION_CHANNEL_JAM"}) {
+					jamMonth = month
+					t.Logf("jammed the termination channel at %d-%02d (AP left %.1f)",
+						svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.agent.ActionPoints)
+				}
+			}
+		}
+		if jamMonth > 0 && contentTriggered(svc, "special:termination_channel_disrupted") {
+			break
+		}
+
+		buildupOpen := svc.silo.CurrentYear >= 128
+		buildingRebellion := buildupOpen && svc.silo.Rebellion < 0.82
+		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
+		energyGuard := svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500
+		if buildingRebellion && deceives < 2 && !deceivePending() && !energyGuard &&
+			deceive != nil && deceive.Enabled && svc.agent.ActionPoints >= float64(deceive.APCost+15) {
+			execute(model.AgentAction{Type: model.ActionStationOperation, ActionID: StationOpDeceive})
+			deceives++
+			continue
+		}
+		if energyGuard && svc.agent.ActionPoints >= 15 {
+			execute(model.AgentAction{
+				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Energy",
+			})
+			rations++
+			continue
+		}
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("advance termination-jam route at month %d: %v", month, err)
+		}
+	}
+
+	if jamMonth == 0 {
+		t.Fatalf("the everyday jamming action never became available: states=%+v", svc.contentStates[svc.silo.ID]["special:termination_channel_test"])
+	}
+	if deceives == 0 {
+		t.Fatalf("route did not reach the channel self-test through real rebellion: deceives=%d", deceives)
+	}
+	states := svc.contentStates[svc.silo.ID]
+	if !states["special:termination_channel_disrupted"].Triggered {
+		t.Fatalf("jamming did not land: states=%+v", states["special:termination_channel_disrupted"])
+	}
+	if !svc.world.Flags[model.WorldFlagNetworkJammed] {
+		t.Fatal("network_jammed was not written by the countermeasure")
+	}
+	if states[terminationFactKey].Triggered {
+		t.Fatalf("the jammed remote channel still released: %+v", states[terminationFactKey])
+	}
+	if status := svc.silo.VictoryStatus; status != nil && status.Decision != nil &&
+		status.Decision.Selected == endingDeath {
+		t.Logf("physical channel still settled DEATH at %d-%02d after %d deceives and %d rations",
+			svc.silo.CurrentYear, svc.silo.CurrentMonth, deceives, rations)
 	}
 }

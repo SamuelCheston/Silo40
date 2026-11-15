@@ -476,7 +476,7 @@ func validateTrigger(trigger ContentTrigger) error {
 			return fmt.Errorf("%s requires flag", trigger.Type)
 		}
 		return nil
-	case "world_flag_true", "world_flag_false":
+	case "world_flag_true", "world_flag_false", "world_flag_not_set":
 		if trigger.Flag == "" {
 			return fmt.Errorf("%s requires flag", trigger.Type)
 		}
@@ -852,6 +852,12 @@ func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext
 	case "world_flag_false":
 		value, ok := readWorldFlag(ctx.World, trigger.Flag)
 		return ok && !value
+	case "world_flag_not_set":
+		// 守卫型条件：世界事实未成立即通过。与 world_flag_false 的区别是
+		// 没有世界上下文 (单堡模式) 时按"未设立"处理，而不是一律不成立——
+		// 反制守卫不能因为运行模式把渠道永久封死。
+		value, ok := readWorldFlag(ctx.World, trigger.Flag)
+		return !ok || !value
 	case "signal_received":
 		if len(ctx.SignalsReceived) == 0 {
 			return false

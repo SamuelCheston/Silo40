@@ -7,8 +7,8 @@ defineEvent({
   // Remote-termination channel omen (《寂堡》链 21)：整肃前兆之后压力仍不回落，
   // 上层控制方点亮终止信道做投放前自检。确定性触发，无随机。阶梯串联在整肃
   // 前兆之后 (＋6 月，TODO(balance))：终止投放 = U+20，物理投送 = U+19。
-  // 反制尚未绑定期间，终止投放必须留到物理链之后；原来的 +4 月会在 +6 月
-  // 侦察之前终局，使物理链永远不可达。+10 月是保留该结算窗口的最小延迟。
+  // 终止投放不再由本节点调度：`termination_release` 自己按月读"自检已过 10 月
+  // 且信道未被干扰"，被干扰则永不点火 (空转，见 21 §5)。
   // 远程信道只对"仍在运转"的驻地开启 (Energy ≥ 1)：维生已经崩塌的堡留给
   // 《断层》自己的结算，两条失败路径按脚本状态读数分流，不做智能判断。
   trigger: all(
@@ -21,6 +21,5 @@ defineEvent({
   effects: [
     professionMetricDeltaAll("panic_value", 0.05),
     siloMetricDelta("rebellion", 0.03),
-    scheduleEvent("termination_release", 10),
   ],
 });

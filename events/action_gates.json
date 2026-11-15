@@ -521,6 +521,20 @@
       "unlock": { "metric": "negotiation_compromise", "min": 1 },
       "available": { "metric": "negotiation_takeover_decided", "max": 0 },
       "reason": "需要妥协成立；与『接管』互斥"
+    },
+    {
+      "id": "TERMINATION_CHANNEL_JAM",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:termination_channel_test" },
+          { "any": [
+            { "relation": "Mechanical", "min": 0.2 },
+            { "relation": "IT", "min": 0.2 }
+          ] }
+        ]
+      },
+      "available": {},
+      "reason": "需要终止信道自检已点亮，并与机械或 IT 侧有最低信任（初始校准值）"
     }
   ]
 }
