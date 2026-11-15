@@ -479,6 +479,21 @@ func (s *GameService) flushScopeResults(sc *engine.ScopeContext, event *engine.G
 
 // ============ 迷雾视图 (RumorView) ============
 
+// rumorStatus 谣言档状态判定：迷雾视图与 LLM 世界观上下文共用同一口径。
+func rumorStatus(silo *model.Silo) string {
+	if siloEnded(silo) {
+		// 结局类型大小写不敏感：JS mechanic 主路径落小写，Go 降级路径落大写。
+		if silo.VictoryStatus != nil && strings.EqualFold(silo.VictoryStatus.Type, "death") {
+			return "destroyed"
+		}
+		return "silent"
+	}
+	if silo.Rebellion >= 0.5 {
+		return "unrest"
+	}
+	return "normal"
+}
+
 // buildRumorViews 生成玩家对非玩家堡的模糊认知 (只给量化档，不给精确值)。
 // 玩家堡自身真实值照常下发 (不在本视图内)。
 func (s *GameService) buildRumorViews() []model.RumorView {
@@ -490,17 +505,6 @@ func (s *GameService) buildRumorViews() []model.RumorView {
 		if silo.ID == s.world.PlayerSiloID {
 			continue
 		}
-		status := "normal"
-		if siloEnded(silo) {
-			// 结局类型大小写不敏感：JS mechanic 主路径落小写，Go 降级路径落大写。
-			if silo.VictoryStatus != nil && strings.EqualFold(silo.VictoryStatus.Type, "death") {
-				status = "destroyed"
-			} else {
-				status = "silent"
-			}
-		} else if silo.Rebellion >= 0.5 {
-			status = "unrest"
-		}
 		source := "rumor"
 		if s.agent != nil && s.agent.Profession == "IT" {
 			source = "it_line"
@@ -508,7 +512,7 @@ func (s *GameService) buildRumorViews() []model.RumorView {
 		view := model.RumorView{
 			SiloID:        silo.ID,
 			Name:          silo.Name,
-			Status:        status,
+			Status:        rumorStatus(silo),
 			LastConfirmed: gameTimestamp(s.world.CurrentYear, s.world.CurrentMonth),
 			SignalSource:  source,
 		}

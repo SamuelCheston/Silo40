@@ -159,33 +159,41 @@ func (s *GameService) setupLlmAdvisor() {
 	if cfg.LevelParseErr != nil {
 		log.Printf("LLM participation defaulted to off: %v", cfg.LevelParseErr)
 	}
+	if cfg.ContextParseErr != nil {
+		log.Printf("LLM context level defaulted to %s: %v", llm.DefaultContextLevel, cfg.ContextParseErr)
+	}
 	if cfg.Mode == llm.ModeOff {
 		return
 	}
 	var client llm.Client
 	if cfg.APIKey != "" || cfg.BaseURL != "" {
 		client = llm.NewHTTPClient(cfg.BaseURL, cfg.APIKey, cfg.Model, cfg.ReasoningEffort)
-		log.Printf("LLM advisor: mode=%s level=%s endpoint=%s model=%s reasoning_effort=%q",
-			cfg.Mode, cfg.Level, cfg.BaseURL, cfg.Model, cfg.ReasoningEffort)
+		log.Printf("LLM advisor: mode=%s level=%s context=%s endpoint=%s model=%s reasoning_effort=%q",
+			cfg.Mode, cfg.Level, cfg.Context, cfg.BaseURL, cfg.Model, cfg.ReasoningEffort)
 	} else {
 		client = &llm.FakeClient{Name: "offline-default"}
-		log.Printf("LLM advisor: mode=%s level=%s using deterministic fake client "+
-			"(no SILO40_LLM_API_KEY / SILO40_LLM_BASE_URL set)", cfg.Mode, cfg.Level)
+		log.Printf("LLM advisor: mode=%s level=%s context=%s using deterministic fake client "+
+			"(no SILO40_LLM_API_KEY / SILO40_LLM_BASE_URL set)", cfg.Mode, cfg.Level, cfg.Context)
 	}
 	advisor, err := llm.NewAdvisor(llm.Config{
-		DB:          s.db,
-		Client:      client,
-		Mode:        cfg.Mode,
-		Level:       cfg.Level,
-		EventWindow: cfg.EventWindow,
-		TimeoutMS:   cfg.TimeoutMS,
-		Prefetch:    cfg.Prefetch,
-		Warmup:      cfg.Warmup,
+		DB:             s.db,
+		Client:         client,
+		Mode:           cfg.Mode,
+		Level:          cfg.Level,
+		EventWindow:    cfg.EventWindow,
+		TimeoutMS:      cfg.TimeoutMS,
+		ContextLevel:   cfg.Context,
+		ContextOptions: &cfg.ContextOptions,
+		Prefetch:       cfg.Prefetch,
+		Warmup:         cfg.Warmup,
 	})
 	if err != nil {
 		log.Printf("LLM advisor disabled: %v", err)
 		return
 	}
+	// Rich-context sections are read from service state at prompt build time
+	// (game thread, s.mu held): the closure captures s and stays current.
+	advisor.SetContextProvider(s.llmContextData)
 	s.llmAdvisor = advisor
 }
 
@@ -219,25 +227,27 @@ func (s *GameService) SetLlmParticipation(level string) (string, error) {
 
 // LlmStatus is the author-visible LLM configuration snapshot.
 type LlmStatus struct {
-	Enabled    bool   `json:"enabled"`
-	Mode       string `json:"mode"`
-	Level      string `json:"level"`
-	Model      string `json:"model,omitempty"`
-	LogEntries int64  `json:"log_entries"`
-	AdvisorErr string `json:"advisor_error,omitempty"`
+	Enabled    bool             `json:"enabled"`
+	Mode       string           `json:"mode"`
+	Level      string           `json:"level"`
+	Context    LlmContextConfig `json:"context"`
+	Model      string           `json:"model,omitempty"`
+	LogEntries int64            `json:"log_entries"`
+	AdvisorErr string           `json:"advisor_error,omitempty"`
 }
 
-// GetLlmStatus reports mode/level/log size for the debug endpoint.
+// GetLlmStatus reports mode/level/context/log size for the debug endpoint.
 func (s *GameService) GetLlmStatus() LlmStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.llmAdvisor == nil {
-		return LlmStatus{Enabled: false, Mode: "off"}
+		return LlmStatus{Enabled: false, Mode: "off", Context: LlmContextConfig{Level: string(llm.DefaultContextLevel)}}
 	}
 	st := LlmStatus{
 		Enabled: true,
 		Mode:    string(s.llmAdvisor.GetMode()),
 		Level:   string(s.llmAdvisor.GetLevel()),
+		Context: s.llmContextConfigLocked(),
 	}
 	if entries, err := llm.LoadEntries(s.db); err == nil {
 		st.LogEntries = int64(len(entries))
@@ -1314,13 +1324,16 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	s.seedProtocolStates()
 
 	// LLM advisor: fresh timeline — wipe the previous game's log, record the
-	// initial participation level, arm gating for month 1.
+	// initial participation level and context config, arm gating for month 1.
 	if s.llmAdvisor != nil {
 		if err := s.llmAdvisor.ResetForNewGame(); err != nil {
 			return nil, err
 		}
 		if err := s.llmAdvisor.SetLevel(s.llmAdvisor.GetLevel(), "create"); err != nil {
 			return nil, fmt.Errorf("record initial LLM participation: %w", err)
+		}
+		if err := s.llmAdvisor.SetContext(s.llmAdvisor.GetContextLevel(), s.llmAdvisor.GetContextOptions(), "create"); err != nil {
+			return nil, fmt.Errorf("record initial LLM context config: %w", err)
 		}
 		s.llmAdvisor.ObserveMonth(silo, agent, nil)
 	}
