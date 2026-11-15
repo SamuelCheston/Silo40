@@ -32,8 +32,8 @@
 
 ## 参考
 
-- [06 事件计划 · 时间窗 → 游戏历映射](../research/06-silo40-event-plan/01-time-window-and-game-calendar.md)
-- [10 结局链基础 · 可玩窗口](../story/endings/10-chain-foundation.md)
-- [18 时间渗透设计](../research/18-time-permeation-design.md)
+- [06 事件计划 · 游戏历与固定锚点](../../docs/research/06-silo40-event-plan/01-time-window-and-game-calendar.md)
+- [10 结局链基础 · 可玩窗口](../../docs/story/endings/10-chain-foundation.md)
+- [18 时间渗透设计](../../docs/research/18-time-permeation-design.md)
 - [世界观评审记录（96 月窗口与原著年表的冲突）](../../outputs/review-worldview.md)
 - [ADR-0017 · 正式上线前不承担向后兼容义务](0017-no-backward-compat-before-release.md)
