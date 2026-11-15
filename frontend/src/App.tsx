@@ -124,7 +124,10 @@ function App() {
         if (action.action_type !== actionType) return false;
         if (action.action_type === 'PROFESSION_ACTION') return action.id === professionActionId;
         if (action.action_type === 'PLAYER_EVENT' || action.action_type === 'SILO1_OPERATION' || action.action_type === 'STATION_OPERATION') return action.id === playerActionId;
-        return action.id === actionType;
+        // 内置通用动作的 id 是 "action_gather_info" 这类定义 ID，与 action_type
+        // 不同名；类型本身唯一，按类型匹配即可 (按 id===actionType 永远匹配不上，
+        // 会导致选中通用动作后 Execute 恒禁用)。
+        return true;
     }), [availableActions, actionType, professionActionId, playerActionId]);
     const showDeptSelector = selectedActionMeta?.target_type === 'DEPT';
     const showResourceSelector = selectedActionMeta?.target_type === 'RESOURCE';
@@ -163,7 +166,7 @@ function App() {
             if (action.action_type !== actionType) return false;
             if (actionType === 'PROFESSION_ACTION') return action.id === professionActionId;
             if (actionType === 'PLAYER_EVENT' || actionType === 'SILO1_OPERATION' || actionType === 'STATION_OPERATION') return action.id === playerActionId;
-            return action.id === actionType;
+            return true; // 内置通用动作按类型匹配（类型唯一），见 selectedActionMeta 注释
         })) {
             const fallback = availableActions.find(action => action.enabled) || availableActions[0];
             if (!fallback) return;
