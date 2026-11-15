@@ -163,11 +163,12 @@ func DefaultInformationConfig() InformationConfig {
 		// 与 AP 经济修复后的月收入 3/月、分享成本 3 相匹配 (17 号文档 §4)。
 		ForgetRateMonthly: 0.01,
 
-		// TODO(balance): 渗透月数 sim 起点。推导 (18-time-permeation §4)：
-		// min(反压缩需求 36, 重调后可行窗上沿) = 30，对应最早结算月
-		// S_min = T_prep + 30 ≈ 42；区间 [24, 36] 由 sim 按"重调后保守
-		// 结算 ≤ 94 的最大值"标定。30 已越过单次分享自然寿命 (25–30 月)
-		// 上沿：渗透期间必须再流通补 B，这是设计要的玩法形态。
+		// TODO(balance): 渗透月数 sim 起点 (18-time-permeation §4)，推荐起点 30、
+		// 区间 [24, 36]，判据为"重调后保守结算 ≤ 94 的最大值"。当前真实流程里
+		// 恒定淡忘未生效 (见 runMonthlyBeliefDispatch 的发现项注记)，B 过地板后
+		// 不再回落，渗透退化为纯时间门：最早结算月 S_min = T_prep + 30 ≈ 42，
+		// 把压缩打法从实测 ~12 月后移 30 月，正典中段节点有日历空间点亮。若后续
+		// 评审启用淡忘，需按 §4/§7.2 判据 4 在本区间内重新标定 (补流通压力上升)。
 		PermeationMonths: 30,
 
 		APMismatchSlope: 0.5,
