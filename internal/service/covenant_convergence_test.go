@@ -184,6 +184,16 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 	decisiveFired := false
 	minW := station.Authority.W
 	decisivePublishW, decisiveImpactW := 0.0, 0.0
+	judicialBelief := func(factID string) float64 {
+		for i := range station.Professions {
+			if station.Professions[i].Name == "Judicial" {
+				if belief := engine.BeliefIn(&station.Professions[i].Beliefs, factID); belief != nil {
+					return belief.B
+				}
+			}
+		}
+		return 0
+	}
 
 	// Establish daily pressure first, then combine the second publication with
 	// one final exposure so the ordinary and decisive shocks settle together.
@@ -204,7 +214,26 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 		// Establish everyday pressure first, then publish the second core fact as
 		// the decisive blow. The release gate is the pressure campaign itself, not
 		// a W trough that only the second publication's own shock can produce.
-		secondPublishReady := exposes >= 3 && svc.agent.ActionPoints >= 40 && gameMonth-lastExposeMonth >= 3
+		beliefFloor := engine.DefaultInformationConfig().PactFactBelief
+		// Circulate before evaluating the release gate. Otherwise a share at the
+		// end of the month merely crosses 0.85, next month's forgetting pulls it
+		// back below the floor, and the reserved publication AP is never spent.
+		if exposes >= 3 && !decisiveFired && factVerified(station, "Judicial_2") {
+			for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+				shareCost := model.ACTION_COSTS[model.ActionShareInfo]
+				if judicialBelief(fact) >= beliefFloor || svc.agent.ActionPoints < 40+shareCost || shares["Judicial:"+fact] >= 12 {
+					continue
+				}
+				outcome, err := svc.ExecuteAction(model.AgentAction{
+					Type: model.ActionShareInfo, TargetDept: "Judicial", FragmentIds: []string{fact},
+				})
+				if err == nil && outcome.Result.Executed {
+					shares["Judicial:"+fact]++
+				}
+			}
+		}
+		secondPublishReady := exposes >= 3 && svc.agent.ActionPoints >= 40 && gameMonth-lastExposeMonth >= 3 &&
+			judicialBelief("Judicial_1") >= beliefFloor && judicialBelief("Judicial_2") >= beliefFloor
 
 		if playerCoreBelief(svc, "Judicial_1") >= 0.85 && !factVerified(station, "Judicial_1") &&
 			svc.agent.ActionPoints >= 15 {
@@ -243,10 +272,20 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 			exposes++
 			lastExposeMonth = gameMonth
 		}
-		for _, dept := range []string{"Mechanical", "Supply"} {
+		// Keep Judicial's live beliefs above the covenant evidence floor as well
+		// as spreading to the large departments; publication alone now decays.
+		for _, dept := range []string{"Judicial", "Mechanical", "Supply"} {
 			for _, fact := range []string{"Judicial_1", "Judicial_2", "Judicial_3"} {
-				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 || shares[dept+":"+fact] >= 2 ||
-					(exposes >= 3 && !decisiveFired) {
+				shareCost := model.ACTION_COSTS[model.ActionShareInfo]
+				maintainJudicial := dept == "Judicial" && fact != "Judicial_3" && exposes >= 3
+				shareCap := 2
+				if maintainJudicial {
+					shareCap = 12
+				}
+				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < shareCost || shares[dept+":"+fact] >= shareCap {
+					continue
+				}
+				if exposes >= 3 && !decisiveFired && (!maintainJudicial || svc.agent.ActionPoints < 40+shareCost) {
 					continue
 				}
 				outcome, err := svc.ExecuteAction(model.AgentAction{

@@ -101,7 +101,7 @@ func TestSkilledStrategyReachesFirstTierAndCovenant(t *testing.T) {
 	// AP rate (84/yr). The merged AP economy is the information line's 36/yr,
 	// so the same operation budget stretches over ~twice the calendar
 	// (TODO(balance): re-measure the §7.4 calendar targets at 36/yr).
-	for gameMonth := 0; gameMonth <= 32; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
+	for gameMonth := 0; gameMonth <= 32 && !svc.gameOver(); gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
 		// Keep unrest and inter-department tension alive (skilled play schedules
 		// the evidence chains without spending actions on them).
 		if station.Rebellion < 0.2 {
@@ -173,10 +173,15 @@ func TestSkilledStrategyReachesFirstTierAndCovenant(t *testing.T) {
 			lastExposeMonth = gameMonth
 		}
 
-		// Priority 4: spread facts to the largest departments only with spare AP.
-		for _, dept := range []string{"Mechanical", "Supply"} {
-			for _, fact := range []string{"Judicial_1", "Judicial_2", "Judicial_3"} {
-				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 || shares[dept+":"+fact] >= 2 {
+		// Priority 4: establish the first visible pressure check before maintaining
+		// the two Judicial beliefs that covenant Q and qualifying facts read. After
+		// that check, low-cost re-circulation may use the remaining AP; extra
+		// departments/facts would starve the publication chain.
+		for _, dept := range []string{"Judicial"} {
+			for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+				shareCount := shares[dept+":"+fact]
+				if exposes == 0 || playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < model.ACTION_COSTS[model.ActionShareInfo] ||
+					shareCount >= 2 {
 					continue
 				}
 				outcome, err := svc.ExecuteAction(model.AgentAction{

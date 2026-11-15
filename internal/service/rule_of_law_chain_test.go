@@ -497,7 +497,9 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 				}
 			}
 		}
-		for _, dept := range []string{"Mechanical", "Supply"} {
+		// Judicial is the covenant evidence reader: re-circulate there too so
+		// monthly forgetting cannot erase the two published qualifying facts.
+		for _, dept := range []string{"Judicial", "Mechanical", "Supply"} {
 			for _, fact := range []string{"Judicial_1", "Judicial_2"} {
 				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 ||
 					shares[dept+":"+fact] >= 2 || (exposes >= 3 && !decisiveFired) {
