@@ -8,10 +8,26 @@ import (
 	"strings"
 	"testing"
 
+	"silo40/internal/engine"
 	"silo40/internal/model"
 
 	"gorm.io/gorm"
 )
+
+// downgradeSaveMeta 模拟低版本存档：回退版本标记，并清空该版本之后才出现
+// 的写入 (v15 的原型字段)——用当前代码建档的夹具游戏会带原型，模拟旧档必
+// 须把它清掉，否则等于给旧档注入了新时代写入方。
+func downgradeSaveMeta(t *testing.T, svc *GameService, version int) {
+	t.Helper()
+	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: version}).Error; err != nil {
+		t.Fatalf("downgrade meta: %v", err)
+	}
+	if version < 15 {
+		if err := svc.db.Model(&model.Silo{}).Where("1 = 1").Update("archetype", "").Error; err != nil {
+			t.Fatalf("strip archetype for pre-v15 save: %v", err)
+		}
+	}
+}
 
 // setupLegacyDB 造一份"旧档"：完整游戏数据 + 无版本标记 + 无世界层
 // (v1 之前的单堡形态)。
@@ -259,9 +275,7 @@ func TestUpgradeV1ToWorldSave(t *testing.T) {
 	if err := svc.db.Model(&model.Silo{}).Where("id = ?", ActiveSiloID).Update("world_id", 0).Error; err != nil {
 		t.Fatalf("strip silo world link: %v", err)
 	}
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 1}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, 1)
 
 	upgraded, err := UpgradeV1ToWorldSave(svc.db, dbPath)
 	if err != nil {
@@ -367,9 +381,7 @@ func TestUpgradeV2ToTwoSiloSave(t *testing.T) {
 	createVersionTestGame(t, svc)
 
 	// 把 v3 存档降级回 v2 形态：版本标记回 2、清特工堡归属。
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: worldModelSaveVersion}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, worldModelSaveVersion)
 	if err := svc.db.Model(&model.Agent{}).Where("id = ?", ActiveAgentID).Update("silo_id", 0).Error; err != nil {
 		t.Fatalf("strip agent silo link: %v", err)
 	}
@@ -452,9 +464,7 @@ func TestUpgradeV3ToFactionIdentitySave(t *testing.T) {
 	}
 
 	// 降级回 v3 形态：版本标记回 3，清空派系身份字段 (模拟旧档无这些列值)。
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: twoSiloSaveVersion}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, twoSiloSaveVersion)
 	if err := svc.db.Model(&model.Faction{}).Where("1 = 1").
 		Updates(map[string]interface{}{"stance": "", "memory": nil, "demands": nil}).Error; err != nil {
 		t.Fatalf("strip faction identity fields: %v", err)
@@ -525,9 +535,7 @@ func TestUpgradeV4ToPlayableWorldSave(t *testing.T) {
 	if err := svc.db.Save(&world).Error; err != nil {
 		t.Fatalf("strip playable fields: %v", err)
 	}
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: factionIdentitySaveVersion}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, factionIdentitySaveVersion)
 
 	upgraded, err := UpgradeV4ToPlayableWorldSave(svc.db, dbPath)
 	if err != nil || !upgraded {
@@ -578,9 +586,7 @@ func TestUpgradeV4ToPlayableWorldTransactionRollsBack(t *testing.T) {
 	if err := svc.db.Save(&world).Error; err != nil {
 		t.Fatalf("strip playable fields: %v", err)
 	}
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: factionIdentitySaveVersion}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, factionIdentitySaveVersion)
 	if err := backupSaveFile(svc.db, dbPath+".bak-test"); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -624,9 +630,7 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 	svc := newVersionTestService(t, dbPath)
 	createVersionTestGame(t, svc)
 	// 模拟 v9 存档：只回退版本标记 (新字段零值即 v9 语义)。
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: endingsSaveVersion}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, endingsSaveVersion)
 
 	upgraded, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
 	if err != nil || !upgraded {
@@ -658,7 +662,7 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v10 → v11 → v12 → v13 → v14，Resume 才接受存档。
+	// 启动链继续 v10 → v11 → v12 → v13 → v14 → v15，Resume 才接受存档。
 	upgradedV11, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || !upgradedV11 {
 		t.Fatalf("v10 outside upgrade failed: upgraded=%v err=%v", upgradedV11, err)
@@ -675,15 +679,19 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 	if err != nil || !upgradedV14 {
 		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
 	}
+	upgradedV15, err := UpgradeV14ToArchetypeSave(svc.db, dbPath)
+	if err != nil || !upgradedV15 {
+		t.Fatalf("v14 archetype upgrade failed: upgraded=%v err=%v", upgradedV15, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v14 save: %v", err)
+		t.Fatalf("resume migrated v15 save: %v", err)
 	}
 
 	again, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v14 save must skip v9 migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v15 save must skip v9 migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -694,9 +702,7 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 	svc := newVersionTestService(t, dbPath)
 	createVersionTestGame(t, svc)
 	// 模拟 v10 存档：只回退版本标记 (新字段零值即 v10 语义)。
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 10}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, 10)
 
 	upgraded, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || !upgraded {
@@ -719,7 +725,7 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v11 → v12 → v13 → v14，Resume 才接受存档。
+	// 启动链继续 v11 → v12 → v13 → v14 → v15，Resume 才接受存档。
 	upgradedV12, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || !upgradedV12 {
 		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
@@ -732,15 +738,19 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 	if err != nil || !upgradedV14 {
 		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
 	}
+	upgradedV15, err := UpgradeV14ToArchetypeSave(svc.db, dbPath)
+	if err != nil || !upgradedV15 {
+		t.Fatalf("v14 archetype upgrade failed: upgraded=%v err=%v", upgradedV15, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v14 save: %v", err)
+		t.Fatalf("resume migrated v15 save: %v", err)
 	}
 
 	again, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v14 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v15 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -751,9 +761,7 @@ func TestUpgradeV11ToLineShiftsSave(t *testing.T) {
 	svc := newVersionTestService(t, dbPath)
 	createVersionTestGame(t, svc)
 	// 模拟 v11 存档：只回退版本标记 (新字段零值即 v11 语义)。
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 11}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, 11)
 
 	upgraded, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || !upgraded {
@@ -774,7 +782,7 @@ func TestUpgradeV11ToLineShiftsSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v12 → v13 → v14，Resume 才接受存档。
+	// 启动链继续 v12 → v13 → v14 → v15，Resume 才接受存档。
 	upgradedV13, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
 	if err != nil || !upgradedV13 {
 		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
@@ -783,15 +791,19 @@ func TestUpgradeV11ToLineShiftsSave(t *testing.T) {
 	if err != nil || !upgradedV14 {
 		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
 	}
+	upgradedV15, err := UpgradeV14ToArchetypeSave(svc.db, dbPath)
+	if err != nil || !upgradedV15 {
+		t.Fatalf("v14 archetype upgrade failed: upgraded=%v err=%v", upgradedV15, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v14 save: %v", err)
+		t.Fatalf("resume migrated v15 save: %v", err)
 	}
 
 	again, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v14 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v15 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -803,9 +815,7 @@ func TestUpgradeV12ToNegotiationSave(t *testing.T) {
 	svc := newVersionTestService(t, dbPath)
 	createVersionTestGame(t, svc)
 	// 模拟 v12 存档：只回退版本标记 (新字段零值即 v12 语义)。
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 12}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, 12)
 
 	upgraded, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
 	if err != nil || !upgraded {
@@ -833,20 +843,24 @@ func TestUpgradeV12ToNegotiationSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v13 → v14，Resume 才接受存档。
+	// 启动链继续 v13 → v14 → v15，Resume 才接受存档。
 	upgradedV14, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
 	if err != nil || !upgradedV14 {
 		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
 	}
+	upgradedV15, err := UpgradeV14ToArchetypeSave(svc.db, dbPath)
+	if err != nil || !upgradedV15 {
+		t.Fatalf("v14 archetype upgrade failed: upgraded=%v err=%v", upgradedV15, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v14 save: %v", err)
+		t.Fatalf("resume migrated v15 save: %v", err)
 	}
 
 	again, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v14 save must skip v12 migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v15 save must skip v12 migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -864,9 +878,7 @@ func TestUpgradeV13ToPermeationSave(t *testing.T) {
 		t.Fatalf("seed department belief: %v", err)
 	}
 	// 模拟 v13 存档：只回退版本标记 (新字段零值即 v13 语义)。
-	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 13}).Error; err != nil {
-		t.Fatalf("downgrade meta: %v", err)
-	}
+	downgradeSaveMeta(t, svc, 13)
 
 	upgraded, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
 	if err != nil || !upgraded {
@@ -900,13 +912,63 @@ func TestUpgradeV13ToPermeationSave(t *testing.T) {
 		t.Fatalf("seeded belief lost during migration: found %d", seeded)
 	}
 
+	// 启动链继续 v14 → v15，Resume 才接受存档。
+	upgradedV15, err := UpgradeV14ToArchetypeSave(svc.db, dbPath)
+	if err != nil || !upgradedV15 {
+		t.Fatalf("v14 archetype upgrade failed: upgraded=%v err=%v", upgradedV15, err)
+	}
+
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v14 save: %v", err)
+		t.Fatalf("resume migrated v15 save: %v", err)
 	}
 
 	again, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v14 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v15 save must skip migration: upgraded=%v err=%v", again, err)
+	}
+}
+
+// v14 → v15：驻地原型标识空起步 (19-opening-variability §3.3)。原型是建档时
+// 写入的既成事实，v14 时代没有任何写入方，升级不回填推测档位——零值 = 无原
+// 型 = 旧档行为逐位不变；回读校验所有堡原型字段为空、堡数不变。
+func TestUpgradeV14ToArchetypeSave(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "v15archetype.db")
+	svc := newVersionTestService(t, dbPath)
+	createVersionTestGame(t, svc)
+	// 模拟 v14 存档：只回退版本标记 (新字段零值即 v14 语义)。
+	downgradeSaveMeta(t, svc, 14)
+
+	upgraded, err := UpgradeV14ToArchetypeSave(svc.db, dbPath)
+	if err != nil || !upgraded {
+		t.Fatalf("v15 archetype upgrade failed: upgraded=%v err=%v", upgraded, err)
+	}
+	backups, _ := filepath.Glob(dbPath + ".bak-*-v15archetype")
+	if len(backups) != 1 {
+		t.Fatalf("expected one archetype backup, got %v", backups)
+	}
+
+	var silos []model.Silo
+	if err := svc.db.Order("id ASC").Find(&silos).Error; err != nil {
+		t.Fatalf("reload silos: %v", err)
+	}
+	for i := range silos {
+		if silos[i].Archetype != "" {
+			t.Fatalf("silo %d gained archetype %q during migration", silos[i].ID, silos[i].Archetype)
+		}
+	}
+
+	fresh := newVersionTestService(t, dbPath)
+	if err := fresh.Resume(); err != nil {
+		t.Fatalf("resume migrated v15 save: %v", err)
+	}
+	// 零值原型 = 无原型：读档后月度权威推进读默认配置，行为逐位不变。
+	if got := engine.AuthorityConfigFor(fresh.silo); got != engine.DefaultAuthorityConfig() {
+		t.Fatalf("zero archetype must read default authority config, got %+v", got)
+	}
+
+	again, err := UpgradeV14ToArchetypeSave(svc.db, dbPath)
+	if err != nil || again {
+		t.Fatalf("v15 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }

@@ -117,6 +117,11 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV13ToPermeationSave(a.db, dbFileName); err != nil {
 		log.Fatalf("v13 permeation upgrade failed: %v", err)
 	}
+	// v14 permeation saves gain the station-archetype fact
+	// (19-opening-variability); zero = no archetype = behaviour unchanged.
+	if _, err := service.UpgradeV14ToArchetypeSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v14 archetype upgrade failed: %v", err)
+	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)

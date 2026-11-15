@@ -953,6 +953,78 @@ func upgradeV13ToPermeation(tx *gorm.DB) error {
 	return nil
 }
 
+const archetypeSaveVersion = 15
+
+// UpgradeV14ToArchetypeSave adds the station-archetype fact on the silo
+// (19-opening-variability §3.3): the archetype is written once at game
+// creation (deterministic station-number lookup or request override) and never
+// re-derived monthly. Zero value = no archetype = the old save's behaviour
+// stays bit-identical, so the upgrade backfills no guessed tier. Chains on top
+// of the v14 permeation upgrade. Same safety contract as v13→v14: backup +
+// one transaction + readback verification.
+func UpgradeV14ToArchetypeSave(db *gorm.DB, dbPath string) (bool, error) {
+	var meta model.SaveMeta
+	err := db.First(&meta, "`key` = ?", saveMetaKey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("v15 archetype upgrade: read save meta: %w", err)
+	}
+	if meta.SaveVersion != 14 {
+		return false, nil
+	}
+	backupPath := fmt.Sprintf("%s.bak-%s-v15archetype", dbPath, time.Now().Format("20060102-150405"))
+	if err := backupSaveFile(db, backupPath); err != nil {
+		return false, fmt.Errorf("v15 archetype upgrade: backup to %s failed: %w（数据库未改动）", backupPath, err)
+	}
+	if err := db.Transaction(upgradeV14ToArchetype); err != nil {
+		return false, fmt.Errorf("v15 archetype upgrade: %w（数据库未改动，备份保留在 %s，可用它还原）", err, backupPath)
+	}
+	log.Printf("v14 save upgraded to v15 archetype model (backup: %s)——原型字段零值起步 (无原型)，不回填推测档位", backupPath)
+	return true, nil
+}
+
+func upgradeV14ToArchetype(tx *gorm.DB) error {
+	var silos []model.Silo
+	if err := tx.Order("id ASC").Find(&silos).Error; err != nil {
+		return fmt.Errorf("load silos: %w", err)
+	}
+	for i := range silos {
+		// Re-save so the new archetype column round-trips explicitly; the zero
+		// value is the documented v14 semantics (no archetype), so no guessed
+		// tier is injected.
+		if err := tx.Save(&silos[i]).Error; err != nil {
+			return fmt.Errorf("resave silo %d: %w", silos[i].ID, err)
+		}
+	}
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: archetypeSaveVersion}).Error; err != nil {
+		return fmt.Errorf("bump save meta: %w", err)
+	}
+
+	var checkSilos []model.Silo
+	if err := tx.Order("id ASC").Find(&checkSilos).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload silos: %w", err)
+	}
+	if len(checkSilos) != len(silos) {
+		return fmt.Errorf("post-write verification failed: silo count changed")
+	}
+	for i := range checkSilos {
+		if checkSilos[i].Archetype != "" {
+			return fmt.Errorf("post-write verification failed: silo %d gained archetype %q during migration",
+				checkSilos[i].ID, checkSilos[i].Archetype)
+		}
+	}
+	var checkMeta model.SaveMeta
+	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
+	}
+	if checkMeta.SaveVersion != archetypeSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, archetypeSaveVersion)
+	}
+	return nil
+}
+
 // legacyUnaffiliatedSignature 与 engine.unaffiliatedSignature 一致 (跨包不导出，
 // 升级器按字面值对齐)。
 const legacyUnaffiliatedSignature = "special:unaffiliated"

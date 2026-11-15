@@ -789,6 +789,11 @@ func canTriggerContentEvent(def ContentEventDefinition, ctx ContentEvaluationCon
 	now := contentGameTimestamp(ctx.Silo.CurrentYear, ctx.Silo.CurrentMonth)
 	if def.FireMode == ContentFireModeRepeatable && def.CooldownMonths > 0 && ctx.Runtime.TriggerCount > 0 {
 		cooldown := def.CooldownMonths * contentDaysPerMonth
+		// 荒年档危机提前且加密 (19 §3.2)：仅 crisis 组冷却乘档内倍率，其余
+		// 事件与空原型逐位不变。
+		if def.SourceGroup == "crisis" {
+			cooldown = int(math.Round(float64(cooldown) * CrisisCooldownScale(ctx.Silo)))
+		}
 		if now-ctx.Runtime.LastTriggeredTimestamp < cooldown {
 			return false
 		}
@@ -1439,11 +1444,11 @@ func applyContentEffect(effect ContentEffect, silo *model.Silo) {
 		applySiloPopulationDelta(silo, effect.Value)
 	case "profession_metric_delta_all":
 		for i := range silo.Professions {
-			applyProfessionMetricDelta(&silo.Professions[i], effect.Metric, effect.Value)
+			applyProfessionMetricDelta(silo, &silo.Professions[i], effect.Metric, effect.Value)
 		}
 	case "profession_metric_delta":
 		if prof := findDept(silo, effect.Profession); prof != nil {
-			applyProfessionMetricDelta(prof, effect.Metric, effect.Value)
+			applyProfessionMetricDelta(silo, prof, effect.Metric, effect.Value)
 		}
 	case "profession_ideology_delta_all":
 		for i := range silo.Professions {
@@ -1660,7 +1665,8 @@ func applySiloMetricDelta(silo *model.Silo, metric string, delta float64) {
 	case "cohesion":
 		silo.Cohesion = clampUnit(silo.Cohesion + delta)
 	case "rebellion":
-		silo.Rebellion = clampUnit(silo.Rebellion + delta)
+		// 裂隙档放大叛乱累积的正向增量 (19 §3.2)；空原型恒等。
+		silo.Rebellion = clampUnit(silo.Rebellion + AmplifyOrderDelta(silo, metric, delta))
 	case "dept_tension":
 		silo.DeptTension = clampUnit(silo.DeptTension + delta)
 	case "class_fragmentation":
@@ -1679,10 +1685,11 @@ func applySiloMetricDelta(silo *model.Silo, metric string, delta float64) {
 	}
 }
 
-func applyProfessionMetricDelta(profession *model.Profession, metric string, delta float64) {
+func applyProfessionMetricDelta(silo *model.Silo, profession *model.Profession, metric string, delta float64) {
 	switch metric {
 	case "panic_value":
-		profession.PanicValue = clampUnit(profession.PanicValue + delta)
+		// 裂隙档放大恐慌抬升的正向增量 (19 §3.2)；回落与空原型恒等。
+		profession.PanicValue = clampUnit(profession.PanicValue + AmplifyOrderDelta(silo, metric, delta))
 	case "productivity":
 		profession.Productivity = clampUnit(profession.Productivity + delta)
 	}

@@ -1223,6 +1223,17 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	silo.RNGSeed = seed
 	silo.WorldID = ActiveWorldID
 	silo.ID = ActiveSiloID
+	// 驻地原型 (19 §3.3)：请求覆写 > 号数确定性查表派生。派生复用号数的
+	// 独立确定性流，不消耗游戏内 RNG；原型是建档时写入存档的既成事实。
+	archetype := strings.TrimSpace(req.Archetype)
+	if archetype == "" {
+		archetype = engine.ArchetypeForStation(assignedStationNumber(seed))
+	}
+	if _, ok := engine.ArchetypeByID(archetype); !ok {
+		return nil, fmt.Errorf("unknown archetype %q", archetype)
+	}
+	silo.Archetype = archetype
+	engine.ApplyArchetypeOpening(silo)
 	// 遗物实例化：仅注入玩家被分配堡（一号/十八号受保护堡不注入），在
 	// 特工初始化之前按清单声明顺序消费单一 RNG 流，保证同种子可复现。
 	s.seedStationRelics(silo, startYear)

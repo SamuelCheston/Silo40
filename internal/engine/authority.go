@@ -181,8 +181,9 @@ func AdvanceAuthorityMonthly(silo *model.Silo) {
 }
 
 // AdvanceAuthority applies the deterministic formulas without consuming RNG.
+// 原型覆写 (19 §3.2)：空原型读到的是逐位不变的默认配置。
 func AdvanceAuthority(silo *model.Silo, inputs AuthorityInputs) {
-	cfg := DefaultAuthorityConfig()
+	cfg := AuthorityConfigFor(silo)
 	AdvanceAuthorityWithConfig(silo, inputs, cfg)
 }
 

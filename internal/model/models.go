@@ -62,7 +62,11 @@ const (
 //     地板满渗透月数后事实成熟，《共证》资格门改读成熟计数。零值 = 未渗透
 //     = 旧档"信念门未达成"的状态一致，不回填任何推测进度；v13 存档经
 //     备份+单事务+回读校验升级 (v12 旧档先经 v13 谈判层升级接力)。
-const CurrentSaveVersion = 14
+//   - v15: 开局可变性 (19-opening-variability)。Silo 携带驻地原型标识
+//     (Archetype)：建档时按号数确定性查表派生 (或请求覆写) 写入的既成事实，
+//     不是每月重算的派生量。零值 = 无原型 = 旧档行为逐位不变，不回填任何
+//     推测档位；v14 存档经备份+单事务+回读校验升级。
+const CurrentSaveVersion = 15
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -491,11 +495,15 @@ type ShadowAuthority struct {
 
 // Silo 地堡核心模型
 type Silo struct {
-	ID              uint                    `gorm:"primarykey" json:"id"`
-	WorldID         uint                    `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
-	Name            string                  `gorm:"size:100" json:"name"`
-	Traits          []string                `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
-	SafeguardRisk   float64                 `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
+	ID      uint     `gorm:"primarykey" json:"id"`
+	WorldID uint     `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
+	Name    string   `gorm:"size:100" json:"name"`
+	Traits  []string `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
+	// Archetype 驻地原型 (19-opening-variability §3)：建档时写入的既成事实
+	// (号数确定性查表派生或请求覆写)，月度结算据此读档间旋钮。零值 = 无
+	// 原型 = 旧档/空配置行为逐位不变。
+	Archetype       string                  `gorm:"size:20" json:"archetype,omitempty"`
+	SafeguardRisk   float64                 `gorm:"default:0.0" json:"safeguard_risk"` // IT 专属风险系数
 	TotalPopulation int                     `gorm:"default:10000" json:"total_population"`
 	Legitimacy      float64                 `gorm:"default:1.0" json:"legitimacy"`                      // Compatibility mirror of Mayor.Legitimacy.
 	Mayor           MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`             // 现任 Mayor 个人正统性
@@ -1304,6 +1312,7 @@ type CreateGameRequest struct {
 	AgentName    string              `json:"agent_name"`
 	Profession   string              `json:"profession"`
 	Seed         int64               `json:"seed,omitempty"`          // 可选：显式指定本局 RNG 种子 (0 = 按 SILO40_SEED/随机决议)
+	Archetype    string              `json:"archetype,omitempty"`     // 可选：驻地原型覆写 (19 §3.3，同 Seed/Pacing 口径)；缺省 = 按号数确定性查表派生
 	Pacing       *WorldPacing        `json:"pacing,omitempty"`        // 可选：节奏定制 (缺省 = 全 1.0，行为与历史逐位一致)
 	Neighbor     *NeighborSiloConfig `json:"neighbor,omitempty"`      // Optional Silo 18; nil preserves the legacy path.
 	IncludeSilo1 bool                `json:"include_silo1,omitempty"` // Opt in to a fully simulated peer Silo 1.
