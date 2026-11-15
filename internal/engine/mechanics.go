@@ -619,16 +619,20 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 					allFragments = append(allFragments, fragment)
 				}
 			}
-			// 部门信念层 (§3.3)：只暴露 B>0 的事实，切片顺序即持久化顺序
-			// (确定性)。victory_check 的 INFORMATION 结构桥读这一层。
+			// 部门信念层 (§3.3)：暴露 B>0 或已成熟的事实，切片顺序即持久化
+			// 顺序 (确定性)。victory_check 的 INFORMATION 结构桥读这一层的
+			// 成熟计数 (18-time-permeation §3.1)：成熟粘性，B 可以淡忘到 0，
+			// 已成熟事实必须继续可见。
 			beliefs := make([]map[string]interface{}, 0, len(prof.Beliefs))
 			for _, belief := range prof.Beliefs {
-				if belief.B <= 0 {
+				if belief.B <= 0 && !belief.Matured {
 					continue
 				}
 				beliefs = append(beliefs, map[string]interface{}{
-					"fact_id": belief.FactID,
-					"b":       belief.B,
+					"fact_id":            belief.FactID,
+					"b":                  belief.B,
+					"permeation_counter": belief.PermeationCounter,
+					"matured":            belief.Matured,
 				})
 			}
 			professions = append(professions, map[string]interface{}{
@@ -1285,6 +1289,9 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 		// 恒定淡忘：部门信念层每月按系数衰减，流通 (分享吸收) 抵住淡忘。
 		// 与月度指标更新同一 dispatch 点，保证每月恰好一次 (确定性)。
 		ApplyBeliefForgetting(silo, DefaultInformationConfig())
+		// 时间渗透：顺序固定为先淡忘、再计数、再判成熟 (18-time-permeation
+		// §3.1)。只读派生状态，不改 B/π、不耗 RNG。
+		ApplyPermeation(silo, DefaultInformationConfig())
 	case EVENT_IDEOLOGY_UPDATE:
 		e.updateIdeology(silo, deltaYears)
 	case EVENT_VICTORY_CHECK:

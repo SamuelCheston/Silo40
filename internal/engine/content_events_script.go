@@ -500,16 +500,20 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 				ideologies[ideology] = value
 			}
 			// 部门信念层可读 (24-spec §3 的 department-belief readability)：
-			// 只读快照，形状与 mechanic ctx 一致 (fact_id + b)。终局铺垫一类
-			// canTrigger 需要读"覆盖离门槛还差多少"。
+			// 只读快照，形状与 mechanic ctx 一致 (fact_id + b + 渗透状态)。
+			// 终局铺垫一类 canTrigger 需要读"覆盖离门槛还差多少"；门槛改读
+			// 成熟计数后 (18-time-permeation §3.1)，已成熟事实即使 B 淡忘到 0
+			// 也必须继续可见。
 			beliefs := make([]map[string]interface{}, 0, len(profession.Beliefs))
 			for _, belief := range profession.Beliefs {
-				if belief.B <= 0 {
+				if belief.B <= 0 && !belief.Matured {
 					continue
 				}
 				beliefs = append(beliefs, map[string]interface{}{
-					"fact_id": belief.FactID,
-					"b":       belief.B,
+					"fact_id":            belief.FactID,
+					"b":                  belief.B,
+					"permeation_counter": belief.PermeationCounter,
+					"matured":            belief.Matured,
 				})
 			}
 			professions = append(professions, map[string]interface{}{

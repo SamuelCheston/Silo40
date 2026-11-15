@@ -108,12 +108,19 @@ type Agent struct {
 // FactBelief 单个观察者对单个事实的分层信念 (10-it-control-credibility §3.3)。
 // B 是事实成立的确信度；Versions 是事实成立时各解释版本的条件概率 π (和为 1)；
 // Observations 按 observation_id 去重，同一观察不重放收益；ObsCount 是有效观察数 n。
+//
+// 时间渗透 (18-time-permeation §3.1)：PermeationCounter/Matured 是部门信念层
+// 之上的只读派生状态——B 连续不低于分享地板满 InformationConfig.PermeationMonths
+// 个月后 Matured 置真 (粘性，不回退)。仅部门层写入 (月度结算钩点)；特工层
+// 与具名人物层不渗透 (§3.2)，这两层的条目恒为零值。零值 = 未渗透 = 旧档语义。
 type FactBelief struct {
-	FactID       string             `json:"fact_id"`
-	B            float64            `json:"b"`
-	Versions     map[string]float64 `json:"versions,omitempty"`
-	Observations []string           `json:"observations,omitempty"`
-	ObsCount     int                `json:"obs_count"`
+	FactID            string             `json:"fact_id"`
+	B                 float64            `json:"b"`
+	Versions          map[string]float64 `json:"versions,omitempty"`
+	Observations      []string           `json:"observations,omitempty"`
+	ObsCount          int                `json:"obs_count"`
+	PermeationCounter int                `json:"permeation_counter,omitempty"`
+	Matured           bool               `json:"matured,omitempty"`
 }
 
 // PublicEvidenceRecord 一份已公开证据的登记 (§3.7)：provenance 为来源等级
