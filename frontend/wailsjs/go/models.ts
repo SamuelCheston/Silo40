@@ -1307,6 +1307,7 @@ export namespace model {
 	    world_id: number;
 	    name: string;
 	    traits: string[];
+	    archetype?: string;
 	    safeguard_risk: number;
 	    total_population: number;
 	    legitimacy: number;
@@ -1347,6 +1348,7 @@ export namespace model {
 	        this.world_id = source["world_id"];
 	        this.name = source["name"];
 	        this.traits = source["traits"];
+	        this.archetype = source["archetype"];
 	        this.safeguard_risk = source["safeguard_risk"];
 	        this.total_population = source["total_population"];
 	        this.legitimacy = source["legitimacy"];
