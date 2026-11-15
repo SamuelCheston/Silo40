@@ -36,4 +36,6 @@ export function ProcessNextEvent():Promise<model.EventStepResult>;
 
 export function SaveGame():Promise<void>;
 
+export function SetLlmContext(arg1:service.LlmContextConfig):Promise<service.LlmContextConfig>;
+
 export function SetLlmParticipation(arg1:string):Promise<string>;

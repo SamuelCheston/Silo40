@@ -66,6 +66,10 @@ export function SaveGame() {
   return window['go']['main']['App']['SaveGame']();
 }
 
+export function SetLlmContext(arg1) {
+  return window['go']['main']['App']['SetLlmContext'](arg1);
+}
+
 export function SetLlmParticipation(arg1) {
   return window['go']['main']['App']['SetLlmParticipation'](arg1);
 }

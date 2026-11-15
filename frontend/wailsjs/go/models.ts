@@ -1872,10 +1872,31 @@ export namespace model {
 
 export namespace service {
 
+	export class LlmContextConfig {
+	    level: string;
+	    personal_memory: boolean;
+	    protocol_clauses: boolean;
+	    peer_silo_intel: boolean;
+	    event_summary_limit: number;
+
+	    static createFrom(source: any = {}) {
+	        return new LlmContextConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.level = source["level"];
+	        this.personal_memory = source["personal_memory"];
+	        this.protocol_clauses = source["protocol_clauses"];
+	        this.peer_silo_intel = source["peer_silo_intel"];
+	        this.event_summary_limit = source["event_summary_limit"];
+	    }
+	}
 	export class LlmStatus {
 	    enabled: boolean;
 	    mode: string;
 	    level: string;
+	    context?: LlmContextConfig;
 	    model?: string;
 	    log_entries: number;
 	    advisor_error?: string;
@@ -1889,6 +1910,7 @@ export namespace service {
 	        this.enabled = source["enabled"];
 	        this.mode = source["mode"];
 	        this.level = source["level"];
+	        this.context = source["context"] ? LlmContextConfig.createFrom(source["context"]) : undefined;
 	        this.model = source["model"];
 	        this.log_entries = source["log_entries"];
 	        this.advisor_error = source["advisor_error"];
