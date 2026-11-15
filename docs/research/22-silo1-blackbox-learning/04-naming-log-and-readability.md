@@ -165,7 +165,7 @@
 - 候选衔接（资格判定，具体阈值 `TODO(balance)`，由实现卷落地）：
   - 后验跨过「叫板」档 → 《寂堡》线既有征兆（`strike_reconnaissance` / `termination_channel_test`）获得点亮资格；
   - 后验长期停留「拖延」档且 `r` 高 → 《遗忘》线既有征兆（`silo1_purge_omen` / `archive_purge_order`）获得点亮资格；
-  - `r` 跨入高档（对应既有 `safeguard_protocol_warming` 的 `safeguard_risk` 阈值口径）→ 保障机制升温征兆维持既有触发，不重复呈现。
+  - `r` 跨入高档（对应既有 `last_interlock_warming` 的 `safeguard_risk` 阈值口径）→ 保障机制升温征兆维持既有触发，不重复呈现。
 - **呈现纪律**：只展示已发生的具体征兆事实（「稽查组进驻」「专线静默了三天」），不点名结局、不给概率——提示的分寸止于「事实已被看见」（既有口径）。
 
 ### 3.d 明确禁止项

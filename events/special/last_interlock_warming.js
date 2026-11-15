@@ -1,5 +1,5 @@
 defineEvent({
-  id: "safeguard_protocol_warming",
+  id: "last_interlock_warming",
   title: "保障机制升温",
   description: "底层核心逻辑的自检频率变了。IT 的干预动作越来越多、越来越重，而每一次干预都在唤醒那套比所有人都老的保障装置——它不站队，只等阈值。有人开始明白：旧秩序在自己的地基里埋了最后一道装置，它保护驻地的方式，可能是杀死它。",
   type: "INTERNAL",

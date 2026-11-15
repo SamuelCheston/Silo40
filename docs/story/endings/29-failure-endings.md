@@ -38,7 +38,7 @@ P0 四条的 `Reason` 原为审计短句，本批替换为完整叙事＋失败�
 
 ### 2.5 《寂堡》：既有节点＋补一个缺口
 - 终止链：`silo1_ultimatum` → `termination_channel_test`（已实现）；物理链：`strike_reconnaissance` → `bombing_terminal`（已实现）。
-- `safeguard_protocol_warming`（本批落地）：`safeguard_risk ≥ 0.6`（`TODO(balance)`）——保障机制升温；该子路径此前无任何征兆。
+- `last_interlock_warming`（本批落地）：`safeguard_risk ≥ 0.6`（`TODO(balance)`）——保障机制升温；该子路径此前无任何征兆。
 
 ## 3. 叙事与"在哪一步做错了"
 
