@@ -3,14 +3,17 @@ import { Box, HStack, Text, VStack, Badge } from "@chakra-ui/react";
 import { Agent, AgentStats, Silo } from "../logic/models";
 import { Zap, Eye, Star, Megaphone, Users, Clock, Shield, Flame } from 'lucide-react';
 import { Tooltip } from "./ui/tooltip";
+import { ResourcePanel } from "./ResourcePanel";
 
 interface HeaderStatsProps {
     agent: Agent | null;
     silo: Silo | null;
     agentStats: AgentStats | null;
+    // 最近一次结算的死因归因行（后端月度日志），挂在人口读数上。
+    deathNote?: string | null;
 }
 
-export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }: HeaderStatsProps) {
+export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats, deathNote }: HeaderStatsProps) {
     if (!agent || !silo || !agentStats) return null;
 
     return (
@@ -57,14 +60,28 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }
                         </HStack>
                     </Tooltip>
 
-                    <Tooltip content="地堡总人口。">
+                    <Tooltip
+                        content={
+                            deathNote ? (
+                                <VStack align="start" gap={1} p={1}>
+                                    <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>地堡总人口</Text>
+                                    <Text color="red.300">{deathNote}</Text>
+                                    <Text fontSize="10px" color="gray.400">死因按死亡率构成逐项拆分；库存耗尽、结构失稳与高叛乱都会抬升死亡。</Text>
+                                </VStack>
+                            ) : (
+                                "地堡总人口。"
+                            )
+                        }
+                    >
                         <HStack gap={1} cursor="help">
-                            <Users size={16} color="#38a169" />
-                            <Text fontSize="sm" fontWeight="bold" color="green.600">
+                            <Users size={16} color={deathNote ? "#e53e3e" : "#38a169"} />
+                            <Text fontSize="sm" fontWeight="bold" color={deathNote ? "red.600" : "green.600"}>
                                 {silo.total_population}
                             </Text>
                         </HStack>
                     </Tooltip>
+
+                    <ResourcePanel silo={silo} />
                 </HStack>
 
                 {/* Agent Stats */}

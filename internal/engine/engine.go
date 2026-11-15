@@ -47,6 +47,10 @@ type GameEngine struct {
 	tickStories  []*model.StoryEvent
 	actionResult *model.ActionResult
 	logs         []string
+	// pendingDeathParts 本批 mutation 的死因拆分快照：JS 突变流可能先覆写
+	// rebellion 再投递 apply_population_deaths，归因必须按批前状态读取才与
+	// metrics_update 的死亡率口径一致 (见 deathRateBreakdown)。
+	pendingDeathParts []deathCausePart
 
 	// 配置常量
 	perCapitaConsumption map[string]float64
