@@ -26,6 +26,10 @@ defineEvent({
         exposed = !!ctx.states["special:silo1_purge_exposed"].triggered;
       }
       var population = ctx.total_population || 0;
+      // E 次消费点 (22-00 裁决 1)：反应链触发后的烈度调制——整肃的实际落实
+      // 力度按本堡执行强度折算 (execution_intensity 由内容上下文暴露；功能
+      // 未启用时为 1.0，行为逐位不变)。触发判定不读 E，只调制触发后烈度。
+      var intensity = typeof ctx.execution_intensity === "number" ? ctx.execution_intensity : 1.0;
       var share = 0.08;
       var burden = 0.08;
       var cohesion = -0.05;
@@ -41,6 +45,7 @@ defineEvent({
         cohesion = -0.03;
         panic = 0.04;
       }
+      share *= intensity;
       return {
         effects: [
           siloPopulationDelta(-Math.round(population * share)),

@@ -402,6 +402,13 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 		result["year"] = ctx.Silo.CurrentYear
 		result["month"] = ctx.Silo.CurrentMonth
 		result["total_population"] = ctx.Silo.TotalPopulation
+		// E 次消费点读数 (22-00 裁决 1)：反应链触发后的执行烈度调制。
+		// 未启用时按 1.0 (全力落实) 暴露，旧行为逐位不变；触发判定不读此值。
+		executionIntensity := 1.0
+		if ctx.Silo.BlackBox.Initialized {
+			executionIntensity = ctx.Silo.BlackBox.CurrentExecution
+		}
+		result["execution_intensity"] = executionIntensity
 		result["silo_metrics"] = map[string]float64{
 			"legitimacy":          ctx.Silo.MayorLegitimacy(),
 			"cohesion":            ctx.Silo.Cohesion,

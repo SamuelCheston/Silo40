@@ -218,6 +218,13 @@ func (e *GameEngine) RunITAuthorityMonthly(silo *model.Silo, agent *model.Agent)
 	}
 
 	// 3. 候选评估：utility>0 最高分，同分按 action ID (升序稳定)。
+	// E 主消费点 (22-00 裁决 1)：Order 意图方向的执行候选 (声明效果降低风险度，
+	// public 效用 > 0) 的效用乘本堡当月执行强度 E (4.55 写入生效槽)。未启用时
+	// 按 1.0 处理，行为逐位不变；反应链触发判定不读 E。
+	execution := 1.0
+	if silo.BlackBox.Initialized {
+		execution = silo.BlackBox.CurrentExecution
+	}
 	catalog := ItActionCatalog()
 	type scoredAction struct {
 		action ItAction
@@ -235,6 +242,9 @@ func (e *GameEngine) RunITAuthorityMonthly(silo *model.Silo, agent *model.Agent)
 			continue
 		}
 		score := itUtility(action, silo, cost)
+		if action.RSDelta < 0 {
+			score *= execution
+		}
 		if score <= 0 {
 			continue
 		}

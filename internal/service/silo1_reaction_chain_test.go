@@ -635,6 +635,65 @@ func TestPurgeExecutionGradesOnCountermeasure(t *testing.T) {
 	}
 }
 
+// TestPurgeExecutionIntensityModulatesShare locks E 次消费点 (22-00 裁决 1)：
+// 反应链触发判定不读 E，但触发后的落实烈度按本堡执行强度折算——整肃 share 乘
+// execution_intensity；功能未启用时为 1.0，结算逐位不变。
+func TestPurgeExecutionIntensityModulatesShare(t *testing.T) {
+	svc := bootstrapRealContent(t)
+	def := findContentDefinitionByKey(t, svc, "crisis:silo1_purge_execution")
+	grade := func(initialized bool, execution float64) engine.ContentScriptApplyResult {
+		t.Helper()
+		silo := &model.Silo{ID: 1, TotalPopulation: 8000, CurrentYear: 128, CurrentMonth: 1}
+		if initialized {
+			silo.BlackBox.Initialized = true
+			silo.BlackBox.CurrentExecution = execution
+		}
+		result, err := engine.RunContentEventApplyScript(def, engine.ContentEvaluationContext{
+			Silo: silo, States: map[string]engine.ContentEventRuntime{},
+		})
+		if err != nil {
+			t.Fatalf("purge apply: %v", err)
+		}
+		return result
+	}
+	popDelta := func(result engine.ContentScriptApplyResult) float64 {
+		for _, effect := range result.Effects {
+			if effect.Type == "silo_population_delta" {
+				return effect.Value
+			}
+		}
+		return 0
+	}
+	burden := func(result engine.ContentScriptApplyResult) float64 {
+		for _, effect := range result.Effects {
+			if effect.Type == "silo_metric_delta" && effect.Metric == "history_burden" {
+				return effect.Value
+			}
+		}
+		return 0
+	}
+
+	baseline := grade(false, 0)
+	if got := popDelta(baseline); got != -640 { // 8000 × 0.08 × 1.0
+		t.Fatalf("uninitialized purge must settle at the full toll: %v", got)
+	}
+
+	half := grade(true, 0.5)
+	if got := popDelta(half); got != -320 { // share 乘执行强度 0.5
+		t.Fatalf("execution intensity 0.5 must halve the purge share: %v", got)
+	}
+	// 烈度只调制 share：负担与恐慌等其他档位后果不随 E 缩放。
+	if burden(half) != burden(baseline) {
+		t.Fatalf("intensity must only scale the share: burden %v vs %v",
+			burden(half), burden(baseline))
+	}
+
+	// E=0：整肃名义上触发，实际落实力度为零。
+	if got := popDelta(grade(true, 0)); got != 0 {
+		t.Fatalf("execution intensity 0 must zero the purge share: %v", got)
+	}
+}
+
 // TestPurgeCountermeasurePlayableFromNewGame drives the roster tampering through
 // public operations: build IT trust, land the purge omen, spend AP on the
 // rebinding night, and verify the softened fact lands on the scheduled path.
