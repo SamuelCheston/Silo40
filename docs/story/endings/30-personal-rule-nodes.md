@@ -65,7 +65,7 @@
 | --- | --- |
 | 触发条件 | `player_action:mayor_ally_accept` 与 `player_action:action_share_info` 两完成键均已触发；`REPEATABLE`，冷却 3 月（sim 校准起点） |
 | 心跳语义 | 与《公议》`charter_draft_step`、《共证》`replication_progress` 同型：完成键持久存在，月度持续评估使喂证按冷却节奏推进；不拦截、不替代 Share Info 本身的职务结算（放 `special/` 组，不放 `player_actions/`） |
-| 效果 | `siloMetricDelta("legitimacy", +0.02)`（sim 校准起点）：责任链材料垫高市长声望。**机制化身**：正统性 delta 活不过下一 tick 的派生重设，但会在被覆盖前被次月权威推进读取——警察服从按引擎响应率向正统性移动一次。喂证因此是"服从被逐月拉过去"的第一股力（§5） |
+| 效果 | `siloMetricDelta("legitimacy", +0.02)`（sim 校准起点）：责任链材料垫高市长声望。**机制化身**：正统性是持久状态，delta 跨月累积，并被次月权威推进读取——警察服从按引擎响应率向正统性移动一次。喂证因此是"服从被逐月拉过去"的第一股力（§5） |
 | 产出完成键 | `special:mayor_evidence_step`（计数键） |
 | 分岔 | 抉择 P-B 的机制投影：本节点只走"交给 Mayor"一支；"留作筹码"一支不设机制——不喂证则本线停在接触步骤，局面滑向《深闭》（下落见 §7） |
 
@@ -112,9 +112,9 @@
 
 ## 5. 警察服从与市长正统性：机制化身
 
-- **正统性的真源**：`metrics_update` 每 tick 把 `legitimacy` 重设为派系加权凝聚力；内容 delta 活不过下一 tick（作者手册 §4 派生表）。但权威推进在重设**之前**读取正统性：警察服从按 `PoliceObedienceResponseRate`（引擎 0.35，TODO(balance)）每月向正统性收敛一次。
-- **拉过去**：F-1 每次 +0.02、S-2 每次 +0.05 的正统性 delta，各换来次月一次服从响应。担当可重复（cd9），服从因此被一连串担当**逐月**拉向资格线——这就是"戏肉在警察"的机制表达。
-- **丢回来**：派系凝聚力崩塌时，派生正统性回落，服从跟着回落；Mayor 更替时引擎 `resetJudicialForNewMayor` 丢弃离任者影响力（继承空洞的机制对应物）；W 回升使 Regime 回摆 IT，资格失效（服从数值仍在，秩序已不归它）。
+- **正统性的真源**：`legitimacy` 是持久状态：离散写入（本线喂证/担当、跨堡行动、谈判层、18 号链）累积，月度叛乱侵蚀（引擎 `runMonthlyPoliticalDispatch`，年率 0.10×叛乱，TODO(balance)）是唯一连续下行项。曾有的"每 tick 重设为派系加权凝聚力"是缺陷，已修复。权威推进每月读取正统性：警察服从按 `PoliceObedienceResponseRate`（引擎 0.35，TODO(balance)）向正统性收敛一次。
+- **拉过去**：F-1 每次 +0.02、S-2 每次 +0.05 的正统性 delta 持久累积，各换来次月一次服从响应。担当可重复（cd9），服从因此被一连串担当**逐月**拉向资格线——这就是"戏肉在警察"的机制表达。
+- **丢回来**：叛乱高企时月度侵蚀持续削正统性，服从跟着回落；Mayor 更替时引擎 `resetJudicialForNewMayor` 丢弃离任者影响力（继承空洞的机制对应物）；W 回升使 Regime 回摆 IT，资格失效（服从数值仍在，秩序已不归它）。
 - **内容不写资格**：资格完全由引擎读事实（`personalRuleEligible`：现任具名 Mayor、W ≤ 30、正统性 ≥ 0.35、服从 ≥ 0.60、Regime ≠ IT）。节点只改变速率与可达性（ADR-0010）。
 
 ## 6. 与《公议》的软互斥：分岔、改道与代价

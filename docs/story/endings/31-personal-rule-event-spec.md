@@ -8,7 +8,7 @@
 - **目录与命名**：条件/里程碑节点入 `events/special/`，接触卡与选择入 `events/player_actions/`。文件名＝事件 `id`，snake_case，本线前缀 `legitimacy_*`／`mayor_*`／`police_*`／`succession_*`。
 - **完成键**：事件节点为 `special:<id>`；玩家动作为 `player_actions:<事件 id>`（内容完成键按 `组:事件 ID` 命名；门控 `event_completed` 引用须带组前缀）。一个键只记事实。
 - **布线事实**（与 27 号规格相同）：完成键写入即发总线事件；带 `event_triggered` 的定义参与月度持续评估；订阅既有动作（Share Info）的节点必须放 `special/`，不得放 `player_actions/`（否则宿主动作结算被吞）。
-- **机制事实（本线特有）**：`legitimacy` 是派生指标——`metrics_update` 每 tick 重设为派系加权凝聚力，内容 delta 活不过下一 tick；但权威推进在重设前读取正统性，警察服从按引擎响应率（0.35，TODO(balance)）每月向其收敛一次。因此本线的正统性 delta 是**服从响应的月度杠杆**，不是持久写入。资格读取（`personalRuleEligible`：现任 Mayor、W ≤ 30、正统性 ≥ 0.35、服从 ≥ 0.60、Regime ≠ IT）全在引擎侧，内容不写。
+- **机制事实（本线特有）**：`legitimacy` 是持久状态——由离散写入（内容效果、跨堡行动、谈判层、18 号链）与月度叛乱侵蚀（引擎 `runMonthlyPoliticalDispatch`，侵蚀量 = 0.10×叛乱×Δ年，TODO(balance)）维护；`metrics_update` 不再覆写它（曾每 tick 重设为派系加权凝聚力、内容 delta 活不过下一 tick，该缺陷已修复）。权威推进每月读取正统性，警察服从按引擎响应率（0.35，TODO(balance)）向其收敛一次。因此本线的正统性 delta 既是持久写入，也是**服从响应的月度杠杆**。资格读取（`personalRuleEligible`：现任 Mayor、W ≤ 30、正统性 ≥ 0.35、服从 ≥ 0.60、Regime ≠ IT）全在引擎侧，内容不写。
 - **ctx 可读**：`authority`（`w / police_obedience / regime / pact_locked`）、`silo_metrics.legitimacy`（即 `MayorLegitimacy()`）、`states`、silo 指标。
 - **门控**：条件节点支持 `event_completed / stage_at_least / metric / relation` 与 `all/any` 递归；无否定谓词（见 M-2 缺口）。
 
@@ -46,7 +46,7 @@
 | --- | --- |
 | 事件文件 | `events/special/mayor_evidence_step.js`（**必须放 special/**：订阅完成键、不拦截 Share Info 结算） |
 | 触发条件 | `all(eventTriggered("player_action","mayor_ally_accept"), eventTriggered("player_action","action_share_info"))`；`fire_mode: "REPEATABLE"`，`cooldown_months: 3`（`TODO(balance)`） |
-| 效果 | `siloMetricDelta("legitimacy", +0.02)`（`TODO(balance)`）：派生指标，次月权威推进折算为一次服从响应（§0 机制事实） |
+| 效果 | `siloMetricDelta("legitimacy", +0.02)`（`TODO(balance)`）：持久写入，逐月累积；次月权威推进读取它并折算为一次服从响应（§0 机制事实） |
 | 完成键 | `special:mayor_evidence_step`（计数键） |
 | DSL 能力 | 全部现有 |
 | 依赖 | 无。心跳语义与 `charter_draft_step` 同型 |
@@ -133,4 +133,4 @@
 
 1. W 离散负冲击通道（并行轨在做）：落地前 W ≤ 30 靠 E 自然累积，达成不保。
 2. 门控否定谓词：接触卡二选一的互斥呈现（与《公议》共用缺口）。
-3. 派生指标的内容写入语义：正统性 delta 只活一个 tick 的现状是既有机制（派生表），本线按"服从响应月度杠杆"使用；若要持久正统性写入，需机制批次提供非派生载体。
+3. ~~派生指标的内容写入语义~~（已关闭）：正统性不再是派生指标——`metrics_update` 停止覆写，内容 delta 跨月留存，叛乱侵蚀接到真实月度路径（引擎 `runMonthlyPoliticalDispatch`）。本线的正统性 delta 同时是持久写入与服从响应月度杠杆。
