@@ -2,7 +2,7 @@
 
 | 状态 | 日期 | 依据 |
 | --- | --- | --- |
-| 已接受 | 2026-11-15 | [22-04 命名、决策日志与玩家可读性](../../docs/research/22-silo1-blackbox-learning/04-naming-log-and-readability.md) |
+| 已接受 | 2026-11-15 | [22 Silo 1 黑箱学习设计系列](../../docs/research/22-silo1-blackbox-learning/00-index.md)（命名裁决见 [22-04](../../docs/research/22-silo1-blackbox-learning/04-naming-log-and-readability.md)） |
 
 ## 背景与问题
 
