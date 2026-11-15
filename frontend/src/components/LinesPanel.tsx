@@ -215,6 +215,10 @@ function MissionBriefing({ world, agent, progress }: { world: any; agent: any; p
                 <Text fontSize="xs" fontWeight="bold" color="gray.700">判据三 · 驻地不再受单方终止链支配</Text>
                 <Text fontSize="xs" color="gray.600">{chainLine}</Text>
             </Box>
+            <Text fontSize="xs" color="gray.500">
+                三判据是《见证》教义的总账；每条路按自己的里程碑结算——《共证》看部门事实门槛，《无人裁决》看覆灭前夕的思潮快照。
+                但终止链若先完成，驻地会被重置（《遗忘》），所有路线都失去结算资格：判据三是任何结局的前提。
+            </Text>
         </VStack>
     );
 }
@@ -262,6 +266,9 @@ function SharedFacts({ silo, world, progress }: { silo: any; world: any; progres
                     ))}
                 </VStack>
             )}
+            <Text fontSize="xs" color="gray.400" mt={1}>
+                W = 思潮开放度（0 封闭 → 100 开放，人口加权）；Q = 公共证据对司法侧的可读性（&gt;0 才可被引用）。
+            </Text>
         </Box>
     );
 }
@@ -303,7 +310,7 @@ export const LinesPanel = memo(function LinesPanel({ lines, progress, silo, worl
                     {main.line === "information" && (
                         <>
                             <MissionBriefing world={world} agent={agent} progress={progress} />
-                            <InformationProgressPanel progress={progress} />
+                            <InformationProgressPanel progress={progress} finished={!!silo?.victory_status} />
                         </>
                     )}
                     {main.line !== "information" && <MilestoneRow line={main} />}

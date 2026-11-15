@@ -27,6 +27,8 @@ interface InformationProgress {
 
 interface Props {
     progress: InformationProgress | null;
+    // 结局已定：进度定格，不再给"下一步"指引。
+    finished?: boolean;
 }
 
 // 链节点的点亮条件说明：空状态与"下一步"都靠它，避免面板只剩裸 0/3。
@@ -39,7 +41,7 @@ const nodeHint: Record<string, string> = {
     "special:info_vigil_eve": "点亮条件：结局临近——剩下的事是守住宿主活到结算。",
 };
 
-export const InformationProgressPanel = memo(function InformationProgressPanel({ progress }: Props) {
+export const InformationProgressPanel = memo(function InformationProgressPanel({ progress, finished }: Props) {
     if (!progress) return null;
     const need = progress.gate_fact_count;
     const nothingLit = progress.nodes.every(node => !node.lit);
@@ -75,7 +77,12 @@ export const InformationProgressPanel = memo(function InformationProgressPanel({
                     </Badge>
                 ))}
             </HStack>
-            {nextNode && (
+            {finished && (
+                <Text fontSize="xs" color="gray.600" mb={3}>
+                    本局已结算——链的状态在此定格，不再有下一步。
+                </Text>
+            )}
+            {!finished && nextNode && (
                 <Text fontSize="xs" color="gray.600" mb={3}>
                     下一步 ·「{nextNode.title}」：{nodeHint[nextNode.key] || "继续推进《共证》线。"}
                 </Text>
