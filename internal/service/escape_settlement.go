@@ -208,7 +208,7 @@ func (s *GameService) settleEscapeDeparture(silo *model.Silo, event *engine.Game
 		if s.world != nil {
 			attention = s.world.Silo1.Attention[silo.ID]
 		}
-		initOutsideState(silo, prep, suitCoverage, departed, survivors, attention)
+		initOutsideState(silo, prep, suitCoverage, departed, survivors, attention, itStance)
 	}
 	silo.TotalPopulation -= departed
 	group := &silo.EscapedGroup

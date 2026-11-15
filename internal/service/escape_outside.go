@@ -100,7 +100,7 @@ func (s *GameService) outsideTrackingHeat(station *model.Silo, g *model.EscapeGr
 // 补给余量 = 封存账本；防护服完整性 = 出发时的覆盖率；路线安全按接应档位；
 // 追踪基数由筹备暴露与出发清点定档 (并读 1 号注意力现值)；群体组合由准备
 // 事实派生。
-func initOutsideState(silo *model.Silo, prep model.EscapePreparation, suitCoverage float64, departed, survivors int, attention float64) {
+func initOutsideState(silo *model.Silo, prep model.EscapePreparation, suitCoverage float64, departed, survivors int, attention float64, itStance string) {
 	g := &silo.EscapedGroup
 	out := &g.Outside
 	out.Active = true
@@ -121,7 +121,13 @@ func initOutsideState(silo *model.Silo, prep model.EscapePreparation, suitCovera
 	if departed > 0 {
 		departedShare = float64(departed) / float64(silo.TotalPopulation+departed)
 	}
-	out.TrackingBase = outsideTrackingWeightExposure*prep.PrepExposure +
+	// IT 配合时本地监控被压 (16 §3.2)：追踪基数乘以配合系数，只剩 Silo 1
+	// 侧注意力；不阻挠不打折 (本地追踪仍在)。
+	trackingExposure := prep.PrepExposure
+	if itStance == model.TopStanceCooperate {
+		trackingExposure *= escapeCooperateTrackingFactor
+	}
+	out.TrackingBase = outsideTrackingWeightExposure*trackingExposure +
 		outsideTrackingWeightDeparted*departedShare // TODO(balance)
 	out.Tracking = outsideTrackingTier(out.TrackingBase + outsideTrackingWeightAttention*attention)
 	// 群体组合：领头人来自预案组织，工匠来自演练与材料，伤者来自路上损耗，
