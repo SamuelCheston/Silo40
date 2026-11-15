@@ -48,6 +48,9 @@
 | [18-time-permeation-design.md](./18-time-permeation-design.md) | 时间渗透：事实需要时间才能变成可用的证据——部门层渗透成熟度、渗透月数推导、与 B/π 和淡忘的叠加、每个结局的最早成立月、验收与可玩路线测试的公平重调判据 | 解决"一局太短"（结算压缩、正典节点被跳过）；渗透参数标定与测试重调账 |
 | [19-opening-variability-design.md](./19-opening-variability-design.md) | 开局可变性：驻地三档原型（磐石/裂隙/荒年）、号数→原型确定性映射、门控型特质（隐秘行事/地堡土著）、混沌边界与可玩路线测试重调账 | 解决"重开没差异"；开局偏向立项前的测试账与可达性推导 |
 | [20-world-countermeasures-design.md](./20-world-countermeasures-design.md) | 世界的反制：权力方对情报流通与逃跑组织的反应——五主体动机谱系、发现口径对既有检测量的映射、三档成本型反制、日常小动作呈现纪律、数值锚点推导与测试账 | 反制批次（"反制藏进日常小动作"）实装前的设计依据与重调判据 |
+| [21-negotiation-compromise-design.md](./21-negotiation-compromise-design.md) | 谈判与妥协：市长/叛乱方/IT 三方带权重随机立场、磋商重估与最后一刻妥协（已拆分为同名子目录，本文件为索引） | 谈判层机制、立场权重与妥协窗口设计 |
+| [22-silo1-blackbox-learning/00-index.md](./22-silo1-blackbox-learning/00-index.md) | Silo 1 黑箱学习：风险度驱动隐藏量自保、执行强度单峰、1 号分箱后验信念、观测噪声与伪装、探索代价、命名与决策日志（五卷系列） | 1 号侧黑箱估计与风险度指派的设计依据（裁决 13：反应快暴露慢，主防线押观测伪装） |
+| [23-it-blindspot-cultivation/00-index.md](./23-it-blindspot-cultivation/00-index.md) | 底下 IT 盲区经营：手段谱系（监控设备/报表回执六通道）、带权重随机决策模型与日志、盲区厚度与被经营偏置的累积、慢累积拆穿、偏置注入 22 观测管线的接口规格（六卷系列） | 底下 IT 主动经营 1 号观测盲区的设计依据（22 裁决 13 主防线的组织化机制，ADR-0016） |
 
 ## 同类机制对照
 
