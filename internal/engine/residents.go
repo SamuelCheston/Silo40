@@ -1003,7 +1003,7 @@ func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCoho
 
 // opennessLoyaltyErosion 亲外对忠诚天花板的侵蚀系数。推导见
 // updatePopulationCohorts 内的 TODO(balance) 注释。
-const opennessLoyaltyErosion = 0.5
+const opennessLoyaltyErosion = 0.7
 
 // NudgeAllCohortIdeology 给全体存活 cohort 的某一思潮轴叠加固定增量 (夹到
 // [0,1])。公开事实登记用：事实成为公共真相的时刻，对全堡思潮做一次方向性
@@ -1042,10 +1042,11 @@ func updatePopulationCohorts(silo *model.Silo, deltaYears float64) {
 			// (cohort 亲外越高)，对旧叙事与指挥链的无条件服从就越被溶解。侵蚀项
 			// 只随玩家持续投入积累的亲外上升——不投入则亲外停在 ~0.26，忠诚
 			// 天花板几乎不受影响，封闭照旧。
-			// TODO(balance): 0.5 的推导——覆灭前夕快照门槛为 亲外 ≥ 忠诚。无侵蚀时
-			// 忠诚稳在 ~0.9，而流通杠杆现实上限约 0.6–0.75，门槛不可达；取 0.5 时
-			// 交叉点出现在 亲外 ≈ 0.58–0.62（忠诚目标 = 正统性 − 恐慌项 − 0.5·亲外），
-			// 恰在持续流通可达区间的上沿：认真玩刚好够得到，不玩够不到。
+			// TODO(balance): 0.7 的推导——覆灭前夕快照门槛为 亲外 ≥ 忠诚。无侵蚀时
+			// 忠诚稳在 ~0.9，而流通杠杆现实上限约 0.6，门槛不可达；侵蚀系数取 0.7 时
+			// 交叉点出现在 亲外 ≈ (正统性−恐慌项)/(1+0.7) ≈ 0.53–0.59（正统性 0.9–1.0），
+			// 持续流通局亲外到 ~0.65 稳定越线；不玩局亲外 ~0.26、忠诚天花板仍 ~0.8+，
+			// 差距 ~0.55 远未越线——侵蚀只奖励真实投入。
 			loyaltyTarget := clamp01(silo.MayorLegitimacy() - prof.PanicValue*0.35*cohort.PanicSensitivity + classBias(prof.ClassType, 0.08) - opennessLoyaltyErosion*cohort.Ideologies[model.IdeologyProForeign])
 			// 威望目标由权力等级、阶层偏见以及影响力（作为修正项）共同决定
 			prestigeTarget := (float64(prof.PowerLevel)*1.8 + classBias(prof.ClassType, 2.5) + cohort.Influence*5.0)
