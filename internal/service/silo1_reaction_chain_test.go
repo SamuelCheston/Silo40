@@ -555,9 +555,142 @@ func TestTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T) {
 	if states[terminationFactKey].Triggered {
 		t.Fatalf("the jammed remote channel still released: %+v", states[terminationFactKey])
 	}
-	if status := svc.silo.VictoryStatus; status != nil && status.Decision != nil &&
-		status.Decision.Selected == endingDeath {
-		t.Logf("physical channel still settled DEATH at %d-%02d after %d deceives and %d rations",
-			svc.silo.CurrentYear, svc.silo.CurrentMonth, deceives, rations)
+}
+
+// TestPurgeExecutionGradesOnCountermeasure locks the purge settlement: the same
+// execution node hits harder when nobody touched the roster, and records the
+// grades in population/history/cohesion/panic rather than a single constant.
+func TestPurgeExecutionGradesOnCountermeasure(t *testing.T) {
+	svc := bootstrapRealContent(t)
+	def := findContentDefinitionByKey(t, svc, "crisis:silo1_purge_execution")
+	silo := &model.Silo{ID: 1, TotalPopulation: 8000, CurrentYear: 128, CurrentMonth: 1}
+	grade := func(states map[string]engine.ContentEventRuntime) engine.ContentScriptApplyResult {
+		t.Helper()
+		result, err := engine.RunContentEventApplyScript(def, engine.ContentEvaluationContext{
+			Silo: silo, States: states,
+		})
+		if err != nil {
+			t.Fatalf("purge apply: %v", err)
+		}
+		return result
+	}
+	effectValue := func(result engine.ContentScriptApplyResult, effectType, metric string) float64 {
+		for _, effect := range result.Effects {
+			if effect.Type == effectType && (metric == "" || effect.Metric == metric) {
+				return effect.Value
+			}
+		}
+		return 0
+	}
+
+	heavy := grade(map[string]engine.ContentEventRuntime{})
+	soft := grade(map[string]engine.ContentEventRuntime{
+		"special:silo1_purge_softened": {Triggered: true},
+	})
+	heavyPop := effectValue(heavy, "silo_population_delta", "")
+	softPop := effectValue(soft, "silo_population_delta", "")
+	if !(heavyPop < softPop && softPop < 0) {
+		t.Fatalf("roster tampering must reduce the purge toll: heavy=%v soft=%v", heavyPop, softPop)
+	}
+	if heavyPop > -0.06*8000 {
+		t.Fatalf("heavy grade unexpectedly light: %v", heavyPop)
+	}
+	if softPop < -0.05*8000 {
+		t.Fatalf("soft grade unexpectedly heavy: %v", softPop)
+	}
+	if effectValue(heavy, "silo_metric_delta", "history_burden") <= effectValue(soft, "silo_metric_delta", "history_burden") {
+		t.Fatal("heavy purge must leave more history burden than the softened one")
+	}
+	if effectValue(heavy, "silo_metric_delta", "cohesion") >= effectValue(soft, "silo_metric_delta", "cohesion") {
+		t.Fatal("heavy purge must cost more cohesion than the softened one")
+	}
+}
+
+// TestPurgeCountermeasurePlayableFromNewGame drives the roster tampering through
+// public operations: build IT trust, land the purge omen, spend AP on the
+// rebinding night, and verify the softened fact lands on the scheduled path.
+// The execution's graded toll is locked separately in
+// TestPurgeExecutionGradesOnCountermeasure.
+func TestPurgeCountermeasurePlayableFromNewGame(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "purge-countermeasure.db"))
+	req := threeSiloRequest(2101)
+	req.Profession = "Supply"
+	if _, err := svc.CreateGame(req); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	execute := func(action model.AgentAction) {
+		t.Helper()
+		outcome, err := svc.ExecuteAction(action)
+		if err != nil {
+			t.Fatalf("execute %+v: %v", action, err)
+		}
+		if !outcome.Result.Executed {
+			t.Fatalf("execute %+v rejected: %+v", action, outcome.Result)
+		}
+	}
+	itRelation := func() float64 {
+		for _, profession := range svc.silo.Professions {
+			if profession.Name != "IT" {
+				continue
+			}
+			for _, connection := range svc.agent.Connections {
+				if connection.ProfessionID == profession.ID {
+					return connection.Value
+				}
+			}
+		}
+		return 0
+	}
+
+	execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
+	if len(svc.agent.KnownFragments) > 0 {
+		execute(model.AgentAction{
+			Type: model.ActionShareInfo, TargetDept: "Mayor",
+			FragmentIds: []string{svc.agent.KnownFragments[0]},
+		})
+	}
+	// Build the IT contact the ordinary way until the everyday action unlocks.
+	for month := 0; month < 6 && itRelation() < 0.2; month++ {
+		if build := actionByID(svc.availablePlayerActions(), "action_build_connection"); build != nil &&
+			build.Enabled && svc.agent.ActionPoints >= float64(build.APCost) {
+			execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "IT"})
+			continue
+		}
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("advance relation build: %v", err)
+		}
+	}
+	if itRelation() < 0.2 {
+		t.Fatalf("could not build the IT contact: relation=%.2f", itRelation())
+	}
+
+	// Seed the landed omen fact (its own trigger reachability is covered by the
+	// termination route and the monthly queue). From here the chain runs through
+	// public actions and the scheduled-event path only.
+	siloID := svc.silo.ID
+	states := svc.contentStates[siloID]
+	if states == nil {
+		states = map[string]model.ContentEventState{}
+		svc.contentStates[siloID] = states
+	}
+	states["special:silo1_purge_omen"] = model.ContentEventState{
+		SiloID: siloID, EventKey: "special:silo1_purge_omen", Triggered: true, TriggerCount: 1,
+		LastTriggeredTimestamp: gameTimestamp(svc.silo.CurrentYear, svc.silo.CurrentMonth),
+	}
+	tamper := actionByID(svc.availablePlayerActions(), "PURGE_ROSTER_TAMPER")
+	if tamper == nil || !tamper.Enabled {
+		t.Fatalf("roster tampering is not available after the omen: %+v (relation=%.2f)", tamper, itRelation())
+	}
+	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "PURGE_ROSTER_TAMPER"})
+	if !contentTriggered(svc, "player_action:PURGE_ROSTER_TAMPER") {
+		t.Fatal("roster tampering action was not recorded")
+	}
+	for month := 0; month < 3 && !contentTriggered(svc, "special:silo1_purge_softened"); month++ {
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("advance purge countermeasure: %v", err)
+		}
+	}
+	if !contentTriggered(svc, "special:silo1_purge_softened") {
+		t.Fatal("roster tampering did not record the softened fact")
 	}
 }

@@ -535,6 +535,20 @@
       },
       "available": {},
       "reason": "需要终止信道自检已点亮，并与机械或 IT 侧有最低信任（初始校准值）"
+    },
+    {
+      "id": "PURGE_ROSTER_TAMPER",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:silo1_purge_omen" },
+          { "any": [
+            { "relation": "IT", "min": 0.2 },
+            { "relation": "Medical", "min": 0.2 }
+          ] }
+        ]
+      },
+      "available": {},
+      "reason": "需要整肃征兆已出现，并与 IT 或医务侧有最低信任（初始校准值）"
     }
   ]
 }

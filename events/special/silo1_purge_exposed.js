@@ -12,17 +12,18 @@ defineEvent({
   // intentionally unbound: canTrigger returns false, so it never fires yet.
   //
   // TODO(Countermeasure binding): wire canTrigger to the future everyday-action
-  // countermeasure, and give this node a real consequence once the
-  // countermeasure-and-consequence modeling batch lands.
+  // countermeasure for the information side (the roster-tampering action already
+  // binds the material side; see silo1_purge_countermeasure), and give this node
+  // a real consequence once the countermeasure-and-consequence modeling lands.
   trigger: eventTriggered("special", "silo1_purge_omen"),
   script: {
     canTrigger: function(ctx) {
-      // Unbound: no countermeasure action is wired this round.
+      // Unbound: no information-side countermeasure action is wired this round.
       return false;
     },
     apply: function(ctx) {
-      // No consequence yet; the local purge it would counter is itself a
-      // no-op hook this round (see silo1_purge_execution).
+      // No consequence yet; the material countermeasure is graded by
+      // silo1_purge_execution (see its apply script).
       return {};
     },
   },

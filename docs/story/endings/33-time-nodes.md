@@ -45,7 +45,7 @@
 | **结算时钟** | `silo1_destroyed_signal`（相对 Y8M1 窗口走完，既有 histories） | 唯一通向《无人裁决》的来路：1 号自己的衰亡在结算时刻落地 | 维持到那一天：存续、开放、不被除名 | —（这就是"熬到头"） |
 | **终止（远程）** | `termination_channel_test`（Y5 起）→ `termination_release`（DEATH 事实，读 `network_jammed` 守卫） | 1 号在死前可能先关掉你：偏离招来处置 | 渠道反制：值夜检修动作 `TERMINATION_CHANNEL_JAM` → `termination_channel_disrupted` 写 `network_jammed`（只免疫这一条渠道）；压低可见偏离 | 《寂堡》（P0.1）；反制只挡远程，物理渠道照旧 |
 | **物理（投送）** | `strike_reconnaissance`（Y6 起、rebellion ≥ 0.8）→ `bombing_terminal`（+3 月，DEATH 事实） | 高叛乱喂大侦察，侦察引来投送——物理渠道基本无解 | 把叛乱压在 0.8 下（时点纪律与《共证》隐匿簇同口径）；不借镇压点火 | 《寂堡》（P0.1） |
-| **整肃（本地执行）** | `silo1_purge_omen`（通牒后、rebellion ≥ 0.8）→ `silo1_purge_execution`（现为零效果钩子） | 1 号命令堡内 IT/医务执行投药、清档、减口——驻地活着，但记忆与人口被削 | 反制接触（未绑定）；分发托管、保住接收者；压叛乱断其触发 | 当前不直接致死；削弱的宿主更易死于其他来路，公共事实与开放思潮被削则快照失格 |
+| **整肃（本地执行）** | `silo1_purge_omen`（通牒后、rebellion ≥ 0.8）→ `silo1_purge_execution`（按名册是否被动过分档：人口 −8%/−3%、历史包袱 +0.08/+0.04） | 1 号命令堡内 IT/医务执行投药、清档、减口——驻地活着，但记忆与人口被削 | 反制接触：复核夜调换名册动作 `PURGE_ROSTER_TAMPER` → `silo1_purge_softened`（轻档）；分发托管、保住接收者；压叛乱断其触发 | 当前不直接致死；削弱的宿主更易死于其他来路，公共事实与开放思潮被削则快照失格 |
 | **引擎内爆** | safeguard_risk ≥ 1.0 或人口 ≤ 0（`victory_check`） | 过度干预或维生耗尽 | 控制干预强度、维持供给与楼层 | 《寂堡》（P0.1） |
 
 **熬成《深闭》**：熬到了覆灭，但快照是纯种地堡思潮（忠诚动员或长期封闭硬化）→ TIME 失格；覆灭使 `exclusionistEligible` 成立（死后复制），按加权落《深闭》——"以后只能靠自己严守旧规"。

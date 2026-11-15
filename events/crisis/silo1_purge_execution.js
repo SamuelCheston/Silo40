@@ -7,20 +7,28 @@ defineEvent({
   // Scheduled-only settlement hook: fired via schedule_event from
   // silo1_purge_omen.
   //
-  // TODO(Countermeasure & consequence modeling): the local purge (投药/清档)
-  // deliberately produces NO numerical consequence this round. Its outcome must
-  // depend on who mounted which countermeasure and how the crackdown lands —
-  // a single constant cannot stand in for that. Backfill the settlement only
-  // after the countermeasure-and-consequence modeling batch lands; until then
-  // this node is a declared hook that records the fact the purge happened.
+  // 整肃的后果按名册是否被动过分流 (33/34 分册)：重档削人口与记录，轻档保住
+  // 一部分人。后果只落人口、历史包袱、凝聚与恐慌——整肃不直接致死，削弱的
+  // 宿主更容易死于其他来路。数值一律 TODO(balance)。
   script: {
     canTrigger: function(ctx) {
       return false;
     },
     apply: function(ctx) {
-      // No numerical consequence yet (see TODO above). The completion key
-      // records that the local purge was carried out.
-      return {};
+      var softened = false;
+      if (ctx.states && ctx.states["special:silo1_purge_softened"]) {
+        softened = !!ctx.states["special:silo1_purge_softened"].triggered;
+      }
+      var population = ctx.total_population || 0;
+      var share = softened ? 0.03 : 0.08;
+      return {
+        effects: [
+          siloPopulationDelta(-Math.round(population * share)),
+          siloMetricDelta("history_burden", softened ? 0.04 : 0.08),
+          siloMetricDelta("cohesion", softened ? -0.02 : -0.05),
+          professionMetricDeltaAll("panic_value", softened ? 0.03 : 0.06),
+        ],
+      };
     },
   },
 });
