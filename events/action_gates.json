@@ -549,6 +549,20 @@
       },
       "available": {},
       "reason": "需要整肃征兆已出现，并与 IT 或医务侧有最低信任（初始校准值）"
+    },
+    {
+      "id": "PURGE_PLOT_LEAK",
+      "unlock": {
+        "all": [
+          { "event_completed": "special:silo1_purge_omen" },
+          { "any": [
+            { "relation": "Judicial", "min": 0.2 },
+            { "relation": "Mayor", "min": 0.2 }
+          ] }
+        ]
+      },
+      "available": {},
+      "reason": "需要整肃征兆已出现，并与司法或市长侧有最低信任（初始校准值）"
     }
   ]
 }

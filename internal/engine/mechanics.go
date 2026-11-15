@@ -1055,6 +1055,9 @@ func (e *GameEngine) applyProfessionMetricDelta(prof *model.Profession, field st
 		prof.Productivity = clampUnit(prof.Productivity + delta)
 	case "action_points":
 		prof.ActionPoints = math.Max(0, prof.ActionPoints+delta)
+	case "alertness":
+		// 内容可留下"被看见"的痕迹；月度冷却 (DecayProfessionAlertness) 负责回落。
+		prof.Alertness = clampUnit(prof.Alertness + delta)
 	}
 }
 

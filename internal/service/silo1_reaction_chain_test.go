@@ -77,31 +77,43 @@ func TestReactionSettlementsAreNonNumericalHooks(t *testing.T) {
 	}
 }
 
-// TestReactionPurgeHookStaysUnbound locks that the local-execution countermeasure
-// window is still declared but NOT bound: propaganda is not a countermeasure, so
-// even with the omen fired and propaganda completed the hook must not trigger
-// this round. (The remote-termination window is bound to the everyday jamming
-// action; see TestTerminationChannelCountermeasureBinding.)
-func TestReactionPurgeHookStaysUnbound(t *testing.T) {
+// TestReactionPurgeHookBindsInformationCountermeasure locks the information-side
+// binding: PURGE_PLOT_LEAK (the everyday "spread the count times" action) schedules
+// silo1_purge_exposed, and the node stays schedule-only so it never fires from the
+// monthly scan. Propaganda is still NOT a countermeasure (old ruling unchanged).
+func TestReactionPurgeHookBindsInformationCountermeasure(t *testing.T) {
 	svc := bootstrapRealContent(t)
 	def := findContentDefinitionByKey(t, svc, "special:silo1_purge_exposed")
 	if !def.ScriptHooks.CanTrigger {
-		t.Fatalf("special:silo1_purge_exposed must declare a canTrigger hook (declared-but-unbound)")
+		t.Fatalf("special:silo1_purge_exposed must declare a canTrigger hook (schedule-only guard)")
 	}
 	silo := &model.Silo{ID: 1, CurrentYear: 127, CurrentMonth: 1}
 	ok, err := engine.RunContentEventCanTriggerScript(def, engine.ContentEvaluationContext{
 		Silo: silo,
 		States: map[string]engine.ContentEventRuntime{
-			"special:silo1_purge_omen":                {Triggered: true},
-			"player_action:action_share_info":         {Triggered: true},
-			"player_action:action_conduct_propaganda": {Triggered: true},
+			"special:silo1_purge_omen":        {Triggered: true},
+			"player_action:action_share_info": {Triggered: true},
 		},
 	}, false)
 	if err != nil {
 		t.Fatalf("silo1_purge_exposed canTrigger: %v", err)
 	}
 	if ok {
-		t.Fatal("silo1_purge_exposed must stay unbound (canTrigger false) this round")
+		t.Fatal("silo1_purge_exposed must stay schedule-only (canTrigger false)")
+	}
+
+	leak := findContentDefinitionByKey(t, svc, "player_actions:silo1_purge_plot_leak")
+	if leak.PlayerAction == nil || leak.PlayerAction.ID != "PURGE_PLOT_LEAK" {
+		t.Fatalf("plot leak is not declared as a player action: %+v", leak.PlayerAction)
+	}
+	scheduled := false
+	for _, effect := range leak.Effects {
+		if effect.Type == "schedule_event" && effect.EventID == "silo1_purge_exposed" {
+			scheduled = true
+		}
+	}
+	if !scheduled {
+		t.Fatal("PURGE_PLOT_LEAK must schedule silo1_purge_exposed")
 	}
 }
 
@@ -587,10 +599,27 @@ func TestPurgeExecutionGradesOnCountermeasure(t *testing.T) {
 	soft := grade(map[string]engine.ContentEventRuntime{
 		"special:silo1_purge_softened": {Triggered: true},
 	})
+	exposed := grade(map[string]engine.ContentEventRuntime{
+		"special:silo1_purge_exposed": {Triggered: true},
+	})
+	both := grade(map[string]engine.ContentEventRuntime{
+		"special:silo1_purge_softened": {Triggered: true},
+		"special:silo1_purge_exposed":  {Triggered: true},
+	})
 	heavyPop := effectValue(heavy, "silo_population_delta", "")
 	softPop := effectValue(soft, "silo_population_delta", "")
-	if !(heavyPop < softPop && softPop < 0) {
-		t.Fatalf("roster tampering must reduce the purge toll: heavy=%v soft=%v", heavyPop, softPop)
+	exposedPop := effectValue(exposed, "silo_population_delta", "")
+	if !(heavyPop < exposedPop && exposedPop < softPop && softPop < 0) {
+		t.Fatalf("countermeasures must grade the purge toll: heavy=%v exposed=%v soft=%v", heavyPop, exposedPop, softPop)
+	}
+	if got := effectValue(both, "silo_population_delta", ""); got != softPop {
+		t.Fatalf("both countermeasures must settle at the soft grade: got=%v want=%v", got, softPop)
+	}
+	if effectValue(exposed, "silo_metric_delta", "history_burden") >= effectValue(heavy, "silo_metric_delta", "history_burden") {
+		t.Fatal("exposed purge must leave less history burden than the heavy one")
+	}
+	if !(effectValue(exposed, "silo_metric_delta", "cohesion") > effectValue(heavy, "silo_metric_delta", "cohesion")) {
+		t.Fatal("exposed purge must cost less cohesion than the heavy one")
 	}
 	if heavyPop > -0.06*8000 {
 		t.Fatalf("heavy grade unexpectedly light: %v", heavyPop)
@@ -692,5 +721,89 @@ func TestPurgeCountermeasurePlayableFromNewGame(t *testing.T) {
 	}
 	if !contentTriggered(svc, "special:silo1_purge_softened") {
 		t.Fatal("roster tampering did not record the softened fact")
+	}
+}
+
+// The information-side countermeasure must be playable through public actions:
+// build the Judicial contact the ordinary way, then use the everyday "spread the
+// count times" action after the omen. It records silo1_purge_exposed, which grades
+// the execution at the middle tier (see TestPurgeExecutionGradesOnCountermeasure).
+func TestPurgePlotLeakPlayableFromNewGame(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "purge-plot-leak.db"))
+	req := threeSiloRequest(2103)
+	req.Profession = "Supply"
+	if _, err := svc.CreateGame(req); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	execute := func(action model.AgentAction) {
+		t.Helper()
+		outcome, err := svc.ExecuteAction(action)
+		if err != nil {
+			t.Fatalf("execute %+v: %v", action, err)
+		}
+		if !outcome.Result.Executed {
+			t.Fatalf("execute %+v rejected: %+v", action, outcome.Result)
+		}
+	}
+	judicialRelation := func() float64 {
+		for _, profession := range svc.silo.Professions {
+			if profession.Name != "Judicial" {
+				continue
+			}
+			for _, connection := range svc.agent.Connections {
+				if connection.ProfessionID == profession.ID {
+					return connection.Value
+				}
+			}
+		}
+		return 0
+	}
+
+	execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
+	for month := 0; month < 10 && judicialRelation() < 0.2; month++ {
+		build := actionByID(svc.availablePlayerActions(), "action_build_connection")
+		if build != nil && build.Enabled && svc.agent.ActionPoints >= float64(build.APCost) {
+			execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
+			continue
+		}
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("advance relation build: %v", err)
+		}
+	}
+	if judicialRelation() < 0.2 {
+		t.Fatalf("could not build the Judicial contact: relation=%.2f", judicialRelation())
+	}
+
+	// Seed the landed omen fact; the binding under test starts from here.
+	siloID := svc.silo.ID
+	states := svc.contentStates[siloID]
+	if states == nil {
+		states = map[string]model.ContentEventState{}
+		svc.contentStates[siloID] = states
+	}
+	states["special:silo1_purge_omen"] = model.ContentEventState{
+		SiloID: siloID, EventKey: "special:silo1_purge_omen", Triggered: true, TriggerCount: 1,
+		LastTriggeredTimestamp: gameTimestamp(svc.silo.CurrentYear, svc.silo.CurrentMonth),
+	}
+	for svc.agent.ActionPoints < 2 {
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("advance to afford the leak: %v", err)
+		}
+	}
+	leak := actionByID(svc.availablePlayerActions(), "PURGE_PLOT_LEAK")
+	if leak == nil || !leak.Enabled {
+		t.Fatalf("plot leak is not available after the omen: %+v (relation=%.2f)", leak, judicialRelation())
+	}
+	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "PURGE_PLOT_LEAK"})
+	if !contentTriggered(svc, "player_action:PURGE_PLOT_LEAK") {
+		t.Fatal("plot leak action was not recorded")
+	}
+	for month := 0; month < 3 && !contentTriggered(svc, "special:silo1_purge_exposed"); month++ {
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("advance purge exposure: %v", err)
+		}
+	}
+	if !contentTriggered(svc, "special:silo1_purge_exposed") {
+		t.Fatal("plot leak did not record the exposed fact")
 	}
 }
