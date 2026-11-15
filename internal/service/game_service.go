@@ -3370,7 +3370,7 @@ func (s *GameService) publicWorldView() *model.WorldView {
 			{ID: s.silo.ID, Name: s.silo.Name, IsPlayer: s.silo.ID == s.world.PlayerSiloID},
 		}
 	}
-	return &model.WorldView{
+	view := &model.WorldView{
 		ID:                       s.world.ID,
 		Seed:                     s.world.Seed,
 		CurrentYear:              s.world.CurrentYear,
@@ -3393,6 +3393,8 @@ func (s *GameService) publicWorldView() *model.WorldView {
 		Silos:                    siloRefs,
 		Neighbors:                s.buildRumorViews(),
 	}
+	s.populateStewardshipView(view)
+	return view
 }
 
 func (s *GameService) pendingOperationName() string {
