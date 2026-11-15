@@ -97,6 +97,11 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV9ToPreparationSave(a.db, dbFileName); err != nil {
 		log.Fatalf("v9 preparation upgrade failed: %v", err)
 	}
+	// v10 preparation saves gain the out-of-silo sustenance state
+	// (16 Layer 2); zero OutsideState = inactive = behaviour unchanged.
+	if _, err := service.UpgradeV10ToOutsideSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v10 outside upgrade failed: %v", err)
+	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)

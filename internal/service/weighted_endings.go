@@ -58,24 +58,27 @@ type endingOutcomeWeights struct {
 }
 
 type endingWeightConfig struct {
-	Version                 int
-	MinimumScore            float64
-	PrestigeScale           float64
-	PlayerBase              endingOutcomeWeights
-	PlayerPerPrestige       endingOutcomeWeights
-	PlayerPerFragment       endingOutcomeWeights
-	PlayerPerPropaganda     endingOutcomeWeights
-	PlayerPerSpilloverSilo  endingOutcomeWeights
-	FactionPerInfluence     endingOutcomeWeights
-	FactionPerOpenInfluence endingOutcomeWeights
-	FactionPerLowCohesion   endingOutcomeWeights
-	ResidentPerInfluence    endingOutcomeWeights
-	ResidentPerOpenIdeology endingOutcomeWeights
-	ResidentPerAmbition     endingOutcomeWeights
-	Silo1AliveBase          endingOutcomeWeights
-	Silo1DestroyedBase      endingOutcomeWeights
-	Silo1PerRebellion       endingOutcomeWeights
-	Silo1PerCohesion        endingOutcomeWeights
+	Version                int
+	MinimumScore           float64
+	PrestigeScale          float64
+	PlayerBase             endingOutcomeWeights
+	PlayerPerPrestige      endingOutcomeWeights
+	PlayerPerFragment      endingOutcomeWeights
+	PlayerPerPropaganda    endingOutcomeWeights
+	PlayerPerSpilloverSilo endingOutcomeWeights
+	// PlayerEscapeGroupQuality (16 Layer 2)：逃出群体质量作为玩家贡献项。
+	// 只对合格候选计分 (pool 过滤)——资格仍只读群体存续，质量不是第二道资格门。
+	PlayerEscapeGroupQuality endingOutcomeWeights
+	FactionPerInfluence      endingOutcomeWeights
+	FactionPerOpenInfluence  endingOutcomeWeights
+	FactionPerLowCohesion    endingOutcomeWeights
+	ResidentPerInfluence     endingOutcomeWeights
+	ResidentPerOpenIdeology  endingOutcomeWeights
+	ResidentPerAmbition      endingOutcomeWeights
+	Silo1AliveBase           endingOutcomeWeights
+	Silo1DestroyedBase       endingOutcomeWeights
+	Silo1PerRebellion        endingOutcomeWeights
+	Silo1PerCohesion         endingOutcomeWeights
 }
 
 // TODO(balance): all values below are placeholders for future measured tuning
@@ -91,9 +94,10 @@ var defaultEndingWeightConfig = endingWeightConfig{
 	PlayerPerPrestige: endingOutcomeWeights{
 		Information: 0.5, Time: 0.2, Rebellion: 0.8, RuleOfLaw: 0.2, PersonalRule: 0.3, Exclusionist: 0.1,
 	},
-	PlayerPerFragment:      endingOutcomeWeights{Information: 0.05},
-	PlayerPerPropaganda:    endingOutcomeWeights{Rebellion: 0.4},
-	PlayerPerSpilloverSilo: endingOutcomeWeights{Information: 0.5}, // G7: each distinct silo reached by station-originated signals.
+	PlayerPerFragment:        endingOutcomeWeights{Information: 0.05},
+	PlayerPerPropaganda:      endingOutcomeWeights{Rebellion: 0.4},
+	PlayerPerSpilloverSilo:   endingOutcomeWeights{Information: 0.5}, // G7: each distinct silo reached by station-originated signals.
+	PlayerEscapeGroupQuality: endingOutcomeWeights{Rebellion: 2.0},   // TODO(balance): 群体质量 (组合事实 0-1) 的 REBELLION 加权。
 	FactionPerInfluence: endingOutcomeWeights{
 		Information: 0.2, Time: 0.1, Rebellion: 0.2, RuleOfLaw: 0.15, PersonalRule: 0.15, Exclusionist: 0.2,
 	},
@@ -519,6 +523,10 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	accumulator.add("player", playerID, agent.Name, config.PlayerPerFragment, float64(beliefCoverageFactCount(station)))
 	accumulator.add("player", playerID, agent.Name, config.PlayerPerPropaganda, agent.PropagandaLevel)
 	accumulator.add("player", playerID, agent.Name, config.PlayerPerSpilloverSilo, float64(s.spilloverSiloCount(station.ID)))
+	// 16 Layer 2：群体质量 (老人/伤者/工匠/领头人的组合事实) 作为玩家贡献项。
+	// add() 只对 pool 内候选计分——无存续群体时 REBELLION 不在 pool，质量
+	// 不产生任何分数；资格判定本身不读质量。
+	accumulator.add("player", playerID, agent.Name, config.PlayerEscapeGroupQuality, outsideGroupQuality(&station.EscapedGroup))
 
 	factions := append([]model.Faction(nil), station.Factions...)
 	sort.SliceStable(factions, func(i, j int) bool { return factions[i].ID < factions[j].ID })
@@ -663,6 +671,15 @@ func rebellionSettlementLine(station *model.Silo) string {
 	if g.DepartedYear > 0 {
 		line += fmt.Sprintf("他们于 %d 年 %d 月离开。", g.DepartedYear, g.DepartedMonth)
 	}
+	// Layer 2 堡外事实：存续月数、追踪档位与群体组合 (结算只读事实)。
+	out := g.Outside
+	if out.MonthsOut > 0 {
+		line += fmt.Sprintf("他们已在堡外存续 %d 个月，追踪档位：%s。", out.MonthsOut, trackingTierName(out.Tracking))
+	}
+	if out.Leaders > 0 || out.Artisans > 0 || out.Wounded > 0 || out.Elders > 0 {
+		line += fmt.Sprintf("这支队伍不是一个人：%d 名领头人、%d 名工匠、%d 名伤者、%d 名老人——走出去的是群体，不是人群。",
+			out.Leaders, out.Artisans, out.Wounded, out.Elders)
+	}
 	line += fmt.Sprintf("驻地仍有居民 %d 人——离开没有掏空驻地，只是让社会关系的延续在堡外成了事实。", station.TotalPopulation)
 	return line
 }
@@ -774,7 +791,11 @@ func deathNarrative(s *GameService, station *model.Silo, trigger string, termina
 		cause = "没有战争。最后一班没有人接——人口在叛乱、流失与沉寂里耗尽，驻地再也凑不齐下一轮轮值。"
 	}
 	narrative := cause + endingDescriptions[endingDeath]
-	if g := station.EscapedGroup; g.Initialized && g.Population > 0 && !g.Surviving {
+	if g := station.EscapedGroup; g.Initialized && !g.Surviving && g.Outside.DemiseCause != "" {
+		// Layer 2：堡外覆灭的群体——写明是哪种死法 (冻死/耗尽/被困/追捕)。
+		narrative += fmt.Sprintf("曾有 %d 人离开，堡外存续 %d 个月后覆没：%s。",
+			g.Departed, g.Outside.MonthsOut, demiseNarrative(g.Outside.DemiseCause))
+	} else if g := station.EscapedGroup; g.Initialized && g.Population > 0 && !g.Surviving {
 		narrative += fmt.Sprintf("曾有 %d 人离开，但他们没能存续到最后——逃离成了残酷的注脚。", g.Population)
 	}
 	if s.world != nil && !s.world.Silo1.Alive {

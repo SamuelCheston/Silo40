@@ -79,14 +79,19 @@ func TestWeightedEndingRecordsAllEntityKinds(t *testing.T) {
 func TestWeightedEndingFactionsAndNamedResidentsCanOverridePlayer(t *testing.T) {
 	// REBELLION qualification needs a surviving escape group (G5); with it,
 	// faction and resident weights can still override the player's direction.
+	// Layer 2 注：存续群体带来群体质量贡献项 (REBELLION +2.0×0.4)，基线侧
+	// 用 11×2 项信念覆盖 (+0.05×22) 把 INFORMATION 重新抬到基线之上。
 	svc, station, _ := weightedEndingFixture("INFORMATION")
 	station.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 200, Surviving: true}
+	beliefFacts := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
-		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
+		prof.KnownFragments = beliefFacts
 		// Re-anchored gate (belief layer): seed facts above the sharing floor.
-		prof.Beliefs = []model.FactBelief{
-			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		beliefs := make([]model.FactBelief, 0, len(beliefFacts))
+		for _, fact := range beliefFacts {
+			beliefs = append(beliefs, model.FactBelief{FactID: fact, B: 0.5})
 		}
+		prof.Beliefs = beliefs
 		station.Professions = append(station.Professions, prof)
 	}
 	baseline := svc.resolveWeightedEnding(station, svc.agent)
@@ -145,16 +150,20 @@ func TestWeightedEndingTieBreaksInFixedOrder(t *testing.T) {
 	// INFORMATION and REBELLION receive identical player base and faction
 	// influence weights; with a surviving escape group and public facts both
 	// qualify and tie, so the fixed order must pick INFORMATION. 修复7 后玩家
-	// 碎片贡献读信念覆盖 (2 部门 × 3 事实 = +0.3)，用一个具名居民的野心项
-	// (0.8 × 0.75 × 0.5 = +0.3) 给 REBELLION 补回同分。
+	// 碎片贡献读信念覆盖，用一个具名居民的野心项 (0.8 × 0.75 × 0.5 = +0.3)
+	// 给 REBELLION 补回同分；Layer 2 的群体质量项 (2.0 × 0.4 = +0.8) 再用
+	// 16 项信念覆盖 (0.05 × 16) 给 INFORMATION 补回同分。
 	svc, station, _ := weightedEndingFixture("REBELLION")
 	station.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 150, Surviving: true}
+	beliefFacts := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
-		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
+		prof.KnownFragments = beliefFacts
 		// Re-anchored gate (belief layer): seed facts above the sharing floor.
-		prof.Beliefs = []model.FactBelief{
-			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+		beliefs := make([]model.FactBelief, 0, len(beliefFacts))
+		for _, fact := range beliefFacts {
+			beliefs = append(beliefs, model.FactBelief{FactID: fact, B: 0.5})
 		}
+		prof.Beliefs = beliefs
 		station.Professions = append(station.Professions, prof)
 	}
 	station.Factions = []model.Faction{{ID: 7, Name: "Charter Circle", Influence: 20, Cohesion: 1}}

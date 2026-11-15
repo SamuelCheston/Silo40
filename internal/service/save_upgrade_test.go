@@ -658,13 +658,62 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 		}
 	}
 
+	// 启动链继续 v10 → v11，Resume 才接受存档。
+	upgradedV11, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
+	if err != nil || !upgradedV11 {
+		t.Fatalf("v10 outside upgrade failed: upgraded=%v err=%v", upgradedV11, err)
+	}
+
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v10 save: %v", err)
+		t.Fatalf("resume migrated v11 save: %v", err)
 	}
 
 	again, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v10 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v11 save must skip v9 migration: upgraded=%v err=%v", again, err)
+	}
+}
+
+// v10 → v11：堡外维持状态空起步。新字段在 v10 时代没有任何写入方，
+// 升级不回填推测状态；回读校验 OutsideState 未激活，升级后行为逐位不变。
+func TestUpgradeV10ToOutsideSave(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "v11outside.db")
+	svc := newVersionTestService(t, dbPath)
+	createVersionTestGame(t, svc)
+	// 模拟 v10 存档：只回退版本标记 (新字段零值即 v10 语义)。
+	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 10}).Error; err != nil {
+		t.Fatalf("downgrade meta: %v", err)
+	}
+
+	upgraded, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
+	if err != nil || !upgraded {
+		t.Fatalf("v11 outside upgrade failed: upgraded=%v err=%v", upgraded, err)
+	}
+	backups, _ := filepath.Glob(dbPath + ".bak-*-v11outside")
+	if len(backups) != 1 {
+		t.Fatalf("expected one outside backup, got %v", backups)
+	}
+
+	var silos []model.Silo
+	if err := svc.db.Order("id ASC").Find(&silos).Error; err != nil {
+		t.Fatalf("reload silos: %v", err)
+	}
+	for i := range silos {
+		outside := silos[i].EscapedGroup.Outside
+		if outside.Active || outside.MonthsOut != 0 || outside.SuppliesLeft != 0 ||
+			outside.Tracking != "" || outside.DemiseCause != "" {
+			t.Fatalf("silo %d gained outside sustenance state during migration: %+v", silos[i].ID, outside)
+		}
+	}
+
+	fresh := newVersionTestService(t, dbPath)
+	if err := fresh.Resume(); err != nil {
+		t.Fatalf("resume migrated v11 save: %v", err)
+	}
+
+	again, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
+	if err != nil || again {
+		t.Fatalf("v11 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }

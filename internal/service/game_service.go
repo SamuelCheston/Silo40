@@ -2048,7 +2048,17 @@ func (s *GameService) runOneMonthSingle(source string) ([]string, []model.StoryE
 	staged := s.checkDelayedEventsStaged()
 	s.publishStagedDelayedEvents(staged, ActiveSiloID)
 	logCursor := len(s.eventLogs)
+	// 堡外维持先于本地结算：用当月日历 (时钟尚未推进)，与世界路径阶段 2c
+	// 的语义位置一致。零值状态 (未出发/旧档) 逐位不变。
+	outsideLogs := []string{}
+	outsideStories := []model.StoryEvent{}
+	s.runOutsideSustenance(&outsideLogs, &outsideStories)
 	logs, stories := s.engine.UpdateSiloState(s.silo, 1.0/12.0, s.agent, source)
+	logs = append(outsideLogs, logs...)
+	for i := range outsideStories {
+		st := outsideStories[i]
+		stories = append(stories, &st)
+	}
 	// 世界时钟镜像玩家堡时钟。权威时钟仍在堡内流水线；多堡阶段 (P0.5+) 会把
 	// 时钟推进上移到世界 tick 编排，此处改为世界时钟下发到各堡。
 	if s.world != nil {

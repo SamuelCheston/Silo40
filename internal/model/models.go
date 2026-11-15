@@ -44,7 +44,11 @@ const (
 //     逃出群体审计字段 (Departed/Fragile)。新字段零值即旧档语义 (无准备、
 //     立场零值=阻挠)，账本在出发结算落地前不被任何结局读取；v9 存档经
 //     备份+单事务+回读校验升级，不回填任何推测状态。
-const CurrentSaveVersion = 10
+//   - v11: 堡外维持 (16 分册 Layer 2)。EscapeGroup 携带 OutsideState：
+//     补给余量/防护服完整性/路线安全/追踪四档/群体组合与覆没原因。
+//     零值 = 未激活 = 旧档行为逐位不变 (月度结算只作用于 Active 群体)；
+//     v10 存档经备份+单事务+回读校验升级，不回填任何推测状态。
+const CurrentSaveVersion = 11
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -528,11 +532,11 @@ const (
 // 立场可反复重估 (随状态漂移)，包括回摆到阻挠 (玉石俱焚)；最后一刻妥协也算。
 // 读现任市长那一刻的立场 (裁决 E)，不读职位归属。
 type TopStanceState struct {
-	Initialized bool    `json:"initialized"`
-	Mayor       string  `json:"mayor"`       // ∈ ""(=block)/block/nonblock/cooperate
-	IT          string  `json:"it"`          // 同上
-	Guarantee   float64 `json:"guarantee"`   // 叛乱方保障可信度 (0-1)：赦免谈判、职能保留等承诺
-	Reevaluations int   `json:"reevaluations"` // 审计：带权重随机重估累计次数
+	Initialized   bool    `json:"initialized"`
+	Mayor         string  `json:"mayor"`         // ∈ ""(=block)/block/nonblock/cooperate
+	IT            string  `json:"it"`            // 同上
+	Guarantee     float64 `json:"guarantee"`     // 叛乱方保障可信度 (0-1)：赦免谈判、职能保留等承诺
+	Reevaluations int     `json:"reevaluations"` // 审计：带权重随机重估累计次数
 }
 
 // MayorStance / ITStance 读那一刻的立场，零值归一为阻挠。
@@ -560,12 +564,12 @@ const (
 // 预案功能位 (16 §2.2，剧情台阶 R-2 清单)：预案完备度 = 功能位覆盖率。
 // 每个功能位由对应的准备动作/事件写入，权重 TODO(balance) (当前等权)。
 const (
-	PlanRoleMechanical   = "mechanical"    // 出口与设备可重复使用
-	PlanRoleMines        = "mines"         // 通行限制与结构影响
-	PlanRoleSupply       = "supply"        // 多批次物资换算
-	PlanRoleMedical      = "medical"       // 暴露风险与照护
-	PlanRoleAgricultural = "agricultural"  // 可携带食物与生产起点
-	PlanRoleOrder        = "order"         // Mayor/Police 公开秩序 (可争取非必须)
+	PlanRoleMechanical   = "mechanical"   // 出口与设备可重复使用
+	PlanRoleMines        = "mines"        // 通行限制与结构影响
+	PlanRoleSupply       = "supply"       // 多批次物资换算
+	PlanRoleMedical      = "medical"      // 暴露风险与照护
+	PlanRoleAgricultural = "agricultural" // 可携带食物与生产起点
+	PlanRoleOrder        = "order"        // Mayor/Police 公开秩序 (可争取非必须)
 )
 
 // PlanRoleCount 功能位总数 (派生完备度的分母)。
@@ -582,11 +586,11 @@ type EscapePreparation struct {
 	SuppliesPacked  float64 `json:"supplies_packed"`  // 已划拨封存的便携补给 (人·月单位)
 	MaterialsPacked float64 `json:"materials_packed"` // 已划拨的装备材料 (含生产起点载体)
 	// 程度事实
-	PlanCompleteness float64  `json:"plan_completeness"`      // 预案完备度 = 功能位覆盖率 (0-1)，由 PlanRoles 派生
-	PlanRoles        []string `json:"plan_roles,omitempty"`   // 已完成实质对接的功能位 (升序去重)
-	DrillLevel       float64  `json:"drill_level"`            // 演练水平 (0-1，按次累积)
-	CareReady        float64  `json:"care_ready"`             // 照护能力 (0-1)
-	ProductionStart  bool     `json:"production_start"`       // 生产起点 ("明天") 已备
+	PlanCompleteness float64  `json:"plan_completeness"`         // 预案完备度 = 功能位覆盖率 (0-1)，由 PlanRoles 派生
+	PlanRoles        []string `json:"plan_roles,omitempty"`      // 已完成实质对接的功能位 (升序去重)
+	DrillLevel       float64  `json:"drill_level"`               // 演练水平 (0-1，按次累积)
+	CareReady        float64  `json:"care_ready"`                // 照护能力 (0-1)
+	ProductionStart  bool     `json:"production_start"`          // 生产起点 ("明天") 已备
 	ReceptionStage   string   `json:"reception_stage,omitempty"` // 接应档位：none/surveyed/confirmed/stocked
 	// 暴露记账
 	PrepExposure float64 `json:"prep_exposure"` // 筹备活动暴露累计 (修服/划拨/演练可见性)
@@ -614,8 +618,8 @@ func (p *EscapePreparation) RecomputePlanCompleteness() {
 
 // 外溢受限信道三种 (16 §2.3，与《共证》I-6 台阶一致)。
 const (
-	SpilloverChannelITLine         = "it_line"          // IT 专线类：可靠度最高、暴露成本最高
-	SpilloverChannelCrossSignal    = "cross_signal"     // 跨堡信号类：受邻接约束
+	SpilloverChannelITLine          = "it_line"          // IT 专线类：可靠度最高、暴露成本最高
+	SpilloverChannelCrossSignal     = "cross_signal"     // 跨堡信号类：受邻接约束
 	SpilloverChannelPhysicalHandoff = "physical_handoff" // 实体交接类：与逃跑耦合
 )
 
@@ -624,7 +628,7 @@ const (
 type SpilloverChannel struct {
 	Kind         string  `json:"kind"`
 	TargetSilo   uint    `json:"target_silo"`
-	Reliability  float64 `json:"reliability"`  // TODO(balance)
+	Reliability  float64 `json:"reliability"`   // TODO(balance)
 	ExposureCost float64 `json:"exposure_cost"` // TODO(balance)
 	Year         int     `json:"year"`
 	Month        int     `json:"month"`
@@ -637,17 +641,64 @@ type SpilloverPreparation struct {
 	PackageQuality float64            `json:"package_quality"` // 五种能力完备度 (0-1)
 }
 
+// 追踪四档 (16 §3.3 追踪 T 的 Layer 2 形态)：从"没人注意"到"正在追捕"。
+// 档位由筹备暴露、出发清点与 1 号注意力决定；追踪不是必然失败，而是改变
+// 后续的选择空间——被追着跑的人带不走东西，也走不快。
+const (
+	TrackingNone     = "none"     // 没人注意
+	TrackingAware    = "aware"    // 已被察觉 (清点发现缺口)
+	TrackingTrailing = "trailing" // 咬住痕迹 (带不走重物，弃置补给)
+	TrackingPursuit  = "pursuit"  // 正在追捕 (走不快、不能觅食、逐月损耗)
+)
+
+// 群体覆没原因 (堡外维持的三种死法＋追踪歼灭)：结算写事实，叙事读事实。
+const (
+	DemiseFreeze  = "freeze"  // 冻死：防护服完整性挡不住当季严寒
+	DemiseExhaust = "exhaust" // 耗尽：封存补给吃完且觅食不足
+	DemiseTrap    = "trap"    // 被地形困住：路线安全坍塌，走不出去也觅不了食
+	DemisePursuit = "pursuit" // 追捕歼灭：追踪档位的逐月损耗耗尽人口
+)
+
+// OutsideState 堡外维持状态 (16 §6.4，Layer 2)：出发结算初始化，其后每月
+// 结算一次。全部字段是事实，不是系数：补给余量、防护服完整性、路线安全、
+// 追踪档位与群体组合各自记录、各自出结果。零值 = 未激活 = 旧档行为不变。
+type OutsideState struct {
+	Active bool `json:"active"` // 堡外月度结算是否激活 (群体覆灭后置假)
+	// 维持事实 (三个侧面各自结算)
+	SuppliesLeft  float64 `json:"supplies_left"`  // 剩余封存补给 (人·月)
+	SuitIntegrity float64 `json:"suit_integrity"` // 防护服完整性 (0-1)，随天气磨损
+	RouteSafety   float64 `json:"route_safety"`   // 路线安全 (0-1)，随天气与地形退化
+	TrappedMonths int     `json:"trapped_months"` // 连续被地形困住的月数
+	// 追踪事实
+	Tracking     string  `json:"tracking"`      // 追踪档位 (四档)
+	TrackingBase float64 `json:"tracking_base"` // 出发时定档基数 (筹备暴露 + 出发清点)
+	// 群体组合事实 (质量)：群体不是一个人
+	Elders   int `json:"elders"`   // 老人
+	Wounded  int `json:"wounded"`  // 伤者
+	Artisans int `json:"artisans"` // 工匠
+	Leaders  int `json:"leaders"`  // 领头人
+	// 结算
+	MonthsOut   int    `json:"months_out"`             // 堡外已存续月数
+	DemiseCause string `json:"demise_cause,omitempty"` // 覆没原因 (仅覆灭时写)
+	// 累计损耗审计 (覆没归因读主导项，并列按固定序)
+	AttritionFreeze  int `json:"attrition_freeze,omitempty"`
+	AttritionStarve  int `json:"attrition_starve,omitempty"`
+	AttritionTrap    int `json:"attrition_trap,omitempty"`
+	AttritionPursuit int `json:"attrition_pursuit,omitempty"`
+}
+
 // EscapeGroup 逃出群体模型 (G5)：已经离开驻地、在堡外可能存续的人口。
 // 存续的逃出群体是《越岭》的资格事实，也是《寂堡》《遗忘》《断层》的例外：
 // 原驻地毁灭/重置/崩坏时不再追溯判死该群体。
 type EscapeGroup struct {
-	Initialized   bool `json:"initialized"`
-	Population    int  `json:"population"`
-	Departed      int  `json:"departed,omitempty"` // 出发人数 (审计：路上损耗 = Departed - Population)
-	DepartedYear  int  `json:"departed_year,omitempty"`
-	DepartedMonth int  `json:"departed_month,omitempty"`
-	Surviving     bool `json:"surviving"`
-	Fragile       bool `json:"fragile,omitempty"` // 脆弱存续标记 (维存缺口或追踪压力，供堡外月度检查)
+	Initialized   bool         `json:"initialized"`
+	Population    int          `json:"population"`
+	Departed      int          `json:"departed,omitempty"` // 出发人数 (审计：路上损耗 = Departed - Population)
+	DepartedYear  int          `json:"departed_year,omitempty"`
+	DepartedMonth int          `json:"departed_month,omitempty"`
+	Surviving     bool         `json:"surviving"`
+	Fragile       bool         `json:"fragile,omitempty"` // 脆弱存续标记 (维存缺口或追踪压力，供堡外月度检查)
+	Outside       OutsideState `json:"outside"`           // 堡外维持状态 (Layer 2)
 }
 
 // SurvivingEscapeGroup 报告是否存在真实可读的存续逃出群体 (结局体系 12 §6：
@@ -921,17 +972,17 @@ type StoryEventLog struct {
 
 // ContentEventDefinition 文件驱动的事件定义（来自 events/ 下的各个分组目录）
 type ContentEventDefinition struct {
-	ID               uint      `gorm:"primarykey" json:"id"`
-	Key              string    `gorm:"uniqueIndex;size:180" json:"key"`
-	SourceGroup      string    `gorm:"index;size:32" json:"source_group"` // histories / special / crisis / player_actions / legacy events
-	SourceFile       string    `gorm:"size:255" json:"source_file"`
-	SourceFormat     string    `gorm:"size:24" json:"source_format"`
-	EventID          string    `gorm:"index;size:100" json:"event_id"`
-	Title            string    `gorm:"size:120" json:"title"`
-	Description      string    `gorm:"type:text" json:"description"`
-	Type             string    `gorm:"size:32" json:"type"`
-	FireMode         string    `gorm:"size:32" json:"fire_mode"` // ONCE / REPEATABLE
-	CooldownMonths   int       `gorm:"default:0" json:"cooldown_months"`
+	ID             uint   `gorm:"primarykey" json:"id"`
+	Key            string `gorm:"uniqueIndex;size:180" json:"key"`
+	SourceGroup    string `gorm:"index;size:32" json:"source_group"` // histories / special / crisis / player_actions / legacy events
+	SourceFile     string `gorm:"size:255" json:"source_file"`
+	SourceFormat   string `gorm:"size:24" json:"source_format"`
+	EventID        string `gorm:"index;size:100" json:"event_id"`
+	Title          string `gorm:"size:120" json:"title"`
+	Description    string `gorm:"type:text" json:"description"`
+	Type           string `gorm:"size:32" json:"type"`
+	FireMode       string `gorm:"size:32" json:"fire_mode"` // ONCE / REPEATABLE
+	CooldownMonths int    `gorm:"default:0" json:"cooldown_months"`
 	// DeadlineYear / DeadlineMonth mirror the engine definition's force-raise
 	// fallback (硬伤 #3): an untriggered event past its deadline fires once.
 	DeadlineYear     int       `gorm:"default:0" json:"deadline_year"`
@@ -1174,15 +1225,15 @@ type ActionOutcome struct {
 
 // EventQueueState 当前事件队列与完整游戏快照。
 type EventQueueState struct {
-	Silo                Silo               `json:"silo"`
-	Agent               Agent              `json:"agent"`
-	AgentStats          AgentStats         `json:"agent_stats"`
-	AvailableActions    []PlayerActionMeta `json:"available_actions,omitempty"`
-	World               *WorldView         `json:"world,omitempty"`
-	GameOver            bool               `json:"game_over"`
-	EndingNarrative     string             `json:"ending_narrative,omitempty"`
-	PendingEvents       int                `json:"pending_events"`
-	PendingOperation    string             `json:"pending_operation,omitempty"`
+	Silo                Silo                 `json:"silo"`
+	Agent               Agent                `json:"agent"`
+	AgentStats          AgentStats           `json:"agent_stats"`
+	AvailableActions    []PlayerActionMeta   `json:"available_actions,omitempty"`
+	World               *WorldView           `json:"world,omitempty"`
+	GameOver            bool                 `json:"game_over"`
+	EndingNarrative     string               `json:"ending_narrative,omitempty"`
+	PendingEvents       int                  `json:"pending_events"`
+	PendingOperation    string               `json:"pending_operation,omitempty"`
 	InformationProgress *InformationProgress `json:"information_progress,omitempty"`
 }
 
