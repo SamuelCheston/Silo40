@@ -3,6 +3,7 @@ import { Box, HStack, Text, VStack, Badge } from "@chakra-ui/react";
 import { Agent, AgentStats, Silo } from "../logic/models";
 import { Zap, Eye, Star, Megaphone, Users, Clock, Shield, Flame } from 'lucide-react';
 import { Tooltip } from "./ui/tooltip";
+import { ResourcePanel } from "./ResourcePanel";
 
 interface HeaderStatsProps {
     agent: Agent | null;
@@ -65,6 +66,8 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }
                             </Text>
                         </HStack>
                     </Tooltip>
+
+                    <ResourcePanel silo={silo} />
                 </HStack>
 
                 {/* Agent Stats */}
