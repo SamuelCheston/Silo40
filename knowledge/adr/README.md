@@ -30,6 +30,7 @@
 | [0011](0011-opening-bias-needs-test-retuning.md) | 开局偏向必须与可玩路线测试重调同时落地 | 已接受 | 2026-11-15 |
 | [0012](0012-world-countermeasures-read-public-facts-only.md) | 世界的反制只读公开事实、只产成本、藏在日常小动作里 | 已接受 | 2026-11-15 |
 | [0013](0013-negotiation-changes-blocking-not-victory.md) | 谈判/妥协只改变谁在阻碍谁，不产生胜利 | 已接受 | 2026-11-15 |
+| [0014](0014-countermeasures-cost-suspicion-org-only.md) | 反制只抬成本与风险、不困死玩家；怀疑度只由组织行为驱动，不由囤积驱动 | 已接受 | 2026-11-15 |
 
 ## 维护约定
 
