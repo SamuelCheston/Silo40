@@ -237,10 +237,13 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 			}
 			observed[key] = true
 			observedAt[key] = gameTimestamp(svc.silo.CurrentYear, svc.silo.CurrentMonth)
-			t.Logf("%s fired at %d-%02d: rebellion=%.3f energy=%.0f supplies=%.0f population=%d suspicion=%.3f",
+			if key == "crisis:bombing_terminal" && svc.gameOver() {
+				t.Fatalf("bombing was first observed after game over: status=%+v", svc.silo.VictoryStatus)
+			}
+			t.Logf("%s fired at %d-%02d: rebellion=%.3f energy=%.0f supplies=%.0f population=%d suspicion=%.3f game_over=%t",
 				key, svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.Rebellion,
 				resourceAmount(svc.silo, "Energy"), resourceAmount(svc.silo, "Supplies"),
-				svc.silo.TotalPopulation, svc.agent.SuspicionLevel)
+				svc.silo.TotalPopulation, svc.agent.SuspicionLevel, svc.gameOver())
 		}
 	}
 
@@ -332,9 +335,13 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 	if contentTriggered(svc, fractureFactKey) {
 		t.Fatal("FRACTURE settled before the physical strike could land")
 	}
-	if termination := states[terminationFactKey]; termination.Triggered &&
-		termination.LastTriggeredTimestamp <= bombing.LastTriggeredTimestamp {
-		t.Fatalf("remote termination did not land after the physical strike: bombing=%+v termination=%+v", bombing, termination)
+	if termination := states[terminationFactKey]; termination.Triggered {
+		if termination.LastTriggeredTimestamp <= bombing.LastTriggeredTimestamp {
+			t.Fatalf("remote termination did not land after the physical strike: bombing=%+v termination=%+v", bombing, termination)
+		}
+		if !observed[terminationFactKey] || observedAt[terminationFactKey] <= observedAt["crisis:bombing_terminal"] {
+			t.Fatalf("publicly observed release must strictly follow bombing: observed_at=%v", observedAt)
+		}
 	}
 	if svc.silo.EscapedGroup.SurvivingEscapeGroup() {
 		t.Fatalf("route unexpectedly produced a surviving escape group: %+v", svc.silo.EscapedGroup)
