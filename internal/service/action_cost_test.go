@@ -126,8 +126,10 @@ func TestBeginActionStoresServerCost(t *testing.T) {
 	}
 }
 
-// 20 分册 T1-2 流通摩擦：目标部门戒备 ≥ 0.30 时 Share/Build 的 AP 成本按
-// ceil(base·(1+0.5·0.5)) 上浮（Share 3→4，Build 4→5）；门槛以下与无目标不变。
+// 20 分册流通摩擦（两条反制各绑一种动作，不叠加）：
+//   T1-2 建联：戒备 ≥ 0.30 → Build 4→5
+//   T2-3 交接：戒备 ≥ 0.50 → Share 3→6
+// 门槛以下与无目标不变。
 func TestResolveActionCostAddsAlertFriction(t *testing.T) {
 	svc := newActionCostTestService(t, "Mechanical")
 	mayor := findProfessionByName(svc.silo, "Mayor")
@@ -139,7 +141,7 @@ func TestResolveActionCostAddsAlertFriction(t *testing.T) {
 		actionType model.AgentActionType
 		want       float64
 	}{
-		{model.ActionShareInfo, 4},
+		{model.ActionShareInfo, 3},
 		{model.ActionBuildConnection, 5},
 	} {
 		action := model.AgentAction{Type: tc.actionType, TargetDept: "Mayor"}
@@ -169,6 +171,13 @@ func TestResolveActionCostAddsAlertFriction(t *testing.T) {
 	}
 	if want := model.ACTION_COSTS[model.ActionShareInfo]; action.Cost != want {
 		t.Errorf("targetless share = %v, want base %v", action.Cost, want)
+	}
+	targeted := model.AgentAction{Type: model.ActionShareInfo, TargetDept: "Mayor"}
+	if err := svc.resolveActionCost(&targeted); err != nil {
+		t.Fatalf("resolveActionCost(share at 0.9): %v", err)
+	}
+	if want := 2 * model.ACTION_COSTS[model.ActionShareInfo]; targeted.Cost != want {
+		t.Errorf("share at alertness 0.90 = %v, want doubled %v", targeted.Cost, want)
 	}
 }
 

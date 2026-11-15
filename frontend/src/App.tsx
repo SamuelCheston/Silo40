@@ -198,11 +198,22 @@ function App() {
     }), [availableActions, actionType, professionActionId, playerActionId]);
     const showDeptSelector = selectedActionMeta?.target_type === 'DEPT';
     const showResourceSelector = selectedActionMeta?.target_type === 'RESOURCE';
-    // 20 分册 T1-2 流通摩擦：目标部门戒备 ≥ 0.30 时 Share/Build 多花 1 AP。
+    // 20 分册流通摩擦，两条反制各绑一种动作，不叠加（AP 只有 10/年）：
+    //   T2-3 交接（SHARE_INFO）：目标戒备 ≥0.50 → AP 翻倍
+    //   T1-2 建联（BUILD_CONNECTION）：目标戒备 ≥0.30 → AP 上浮 25%
     // 服务端按同一门槛计费；这里只负责把差价显示在选定目标之后。
-    const alertFrictionApplies = !!targetDept &&
-        (selectedActionMeta?.action_type === 'SHARE_INFO' || selectedActionMeta?.action_type === 'BUILD_CONNECTION') &&
-        (silo?.professions?.find(p => p.name === targetDept)?.alertness ?? 0) >= 0.30;
+    const targetAlertness = silo?.professions?.find(p => p.name === targetDept)?.alertness ?? 0;
+    const isShareAction = selectedActionMeta?.action_type === 'SHARE_INFO';
+    const isBuildAction = selectedActionMeta?.action_type === 'BUILD_CONNECTION';
+    const alertFrictionTier = !targetDept
+        ? 0
+        : (isShareAction && targetAlertness >= 0.50 ? 2
+            : (isBuildAction && targetAlertness >= 0.30 ? 1 : 0));
+    const alertFrictionCost = selectedActionMeta
+        ? (alertFrictionTier === 2
+            ? Math.ceil(selectedActionMeta.ap_cost * 2)
+            : (alertFrictionTier === 1 ? Math.ceil(selectedActionMeta.ap_cost * 1.25) : selectedActionMeta.ap_cost))
+        : 0;
 
     // 应用后端返回的游戏状态快照
     const applyGameState = useCallback((state: any) => {
@@ -669,9 +680,9 @@ function App() {
                                                 <Box p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
                                                     <Text fontSize="sm" color="gray.600">{selectedActionMeta.description}</Text>
                                                     <Text fontSize="xs" color="gray.500" mt={1}>AP {selectedActionMeta.ap_cost} · 本地耗时 {selectedActionMeta.duration_months} 月</Text>
-                                                    {alertFrictionApplies && (
+                                                    {alertFrictionTier > 0 && (
                                                         <Text fontSize="xs" color="orange.600" mt={1}>
-                                                            目标部门戒备 ≥ 0.30：本次消耗 {selectedActionMeta.ap_cost + 1} AP（流通摩擦）
+                                                            目标部门{alertFrictionTier === 2 ? '严查（戒备 ≥ 0.50），交接 AP 翻倍' : '戒备（≥ 0.30），建联 AP 上浮'}：本次消耗 {alertFrictionCost} AP
                                                         </Text>
                                                     )}
                                                 </Box>
@@ -685,7 +696,9 @@ function App() {
                                                             <option value="" disabled>选择部门…</option>
                                                             {silo?.professions?.map(p => (
                                                                 <option key={p.id} value={p.name}>
-                                                                    {p.name}{(p.alertness ?? 0) >= 0.30 ? '（戒备：+1 AP）' : ''}
+                                                                    {p.name}{isShareAction && (p.alertness ?? 0) >= 0.50
+                                                                        ? '（严查：交接 AP 翻倍）'
+                                                                        : (isBuildAction && (p.alertness ?? 0) >= 0.30 ? '（戒备：建联 AP 上浮）' : '')}
                                                                 </option>
                                                             ))}
                                                         </NativeSelect.Field>

@@ -122,6 +122,10 @@ defineMechanics([
       if (!profession) {
         return { action_result: { executed: false, message: "找不到目标部门。" } };
       }
+      // 20 分册 T2-3 分享目标收紧：不再是"拒绝"，而是"更贵"——戒备 ≥ 0.50
+      // 的部门交接成本翻倍（服务端 resolveActionCost 计费），效果不变。
+      // 项目硬约束：任何反制只抬成本，不永久锁死路径 (escape_response.go
+      // 文件头纪律)；戒备由月度冷却回落 (DecayProfessionAlertness)。
       for (const fragment of fragmentIds) {
         // §3.6 行动资格：B < 0.30 的材料只是私人笔记，不能作为事实分享。
         if (beliefB(ctx, fragment) < INFO_CFG.qual_rumor) {

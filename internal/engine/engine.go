@@ -346,6 +346,10 @@ func (e *GameEngine) RunLocalPhase(silo *model.Silo, agent *model.Agent, deltaYe
 	// 4.6 IT 权威回合：二元联盟维护与隐蔽动作 (§5)。
 	e.RunITAuthorityMonthly(silo, agent)
 
+	// 4.7 部门戒备月度冷却：严查会过去 (20 分册 §4.4)，T2-3/T1-2 的
+	// 拒绝与摩擦随回落自动解除。
+	DecayProfessionAlertness(silo)
+
 	// 5. NPC 自主行为
 	e.RunNpcTurn(silo, agent, deltaYears, e.logf)
 
@@ -359,6 +363,31 @@ func (e *GameEngine) RunLocalPhase(silo *model.Silo, agent *model.Agent, deltaYe
 		e.Bus.Publish(CreateEvent("game_over#"+e.nextID(), EVENT_GAME_OVER, map[string]interface{}{
 			"silo": silo,
 		}))
+	}
+}
+
+// ============ 部门戒备月度冷却 ============
+//
+// professionAlertnessDecay 是月度回落量，取设计口径 0.015/月
+// (20 分册 §6：0.30 的戒备约 20 个月自然消散)。TODO(balance)
+//
+// 20 分册 §4.4 的应对口径："第一档靠等（戒备衰减）与换目标"。反制制造的
+// 严查必须是一阵子的，不是永久封锁：T2-3 的交接涨价与 T1-2 的建联摩擦
+// 都随戒备回落自动解除。没有这条冷却，任何一次把 IT/Judicial 推到
+// 1.0 的内容链（整肃/终止/反制）都会把《共证》需要的跨部门成熟证据永久
+// 挡在门外。
+const professionAlertnessDecay = 0.015
+
+// DecayProfessionAlertness 每月把各部门戒备向 0 回落一格 (夹到 [0,1])。
+func DecayProfessionAlertness(silo *model.Silo) {
+	if silo == nil {
+		return
+	}
+	for i := range silo.Professions {
+		prof := &silo.Professions[i]
+		if prof.Alertness > 0 {
+			prof.Alertness = clampUnit(prof.Alertness - professionAlertnessDecay)
+		}
 	}
 }
 

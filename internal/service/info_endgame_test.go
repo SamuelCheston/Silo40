@@ -388,6 +388,11 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		t.Helper()
 		outcome, err := svc.ExecuteAction(action)
 		if err != nil {
+			// 流通摩擦 (T1-2) 会让目标部门更贵；AP 不够时让路线等到下个月
+			// 的自然回复，而不是当作路线断裂。
+			if strings.Contains(err.Error(), "Action Points") {
+				return false
+			}
 			t.Fatalf("circulate with %+v: %v", action, err)
 		}
 		if outcome.Result.Executed {
@@ -422,7 +427,22 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		// no cost changes, loop cap unchanged (criterion 3/4).
 		shareCost := model.ACTION_COSTS[model.ActionShareInfo]
 		gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
-		buildCost := model.ACTION_COSTS[model.ActionBuildConnection]
+		// 流通摩擦 (T1-2) 让戒备 ≥ 0.30 的部门更贵；路线按服务端权威成本决定
+		// 此刻付不付得起，避免把一整个月浪费在必被拒的尝试上。
+		shareCostFor := func(dept string) float64 {
+			action := model.AgentAction{Type: model.ActionShareInfo, TargetDept: dept, FragmentIds: []string{"probe"}}
+			if err := svc.resolveActionCost(&action); err != nil {
+				t.Fatalf("resolve share cost: %v", err)
+			}
+			return action.Cost
+		}
+		buildCostFor := func(dept string) float64 {
+			action := model.AgentAction{Type: model.ActionBuildConnection, TargetDept: dept}
+			if err := svc.resolveActionCost(&action); err != nil {
+				t.Fatalf("resolve build cost: %v", err)
+			}
+			return action.Cost
+		}
 		gatherFrom := rotation[month%len(rotation)]
 		if svc.silo.Rebellion >= 0.7 {
 			// Lie low while rebellion runs hot.
@@ -450,7 +470,8 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 				// Upkeep FIRST: a running streak about to break is months of
 				// invested calendar — protecting it outranks planting a new
 				// slot (18-time-permeation §3.3 第 2 条: 淡忘是渗透的天敌).
-				if fragment, ok := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts); ok {
+				if fragment, ok := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts); ok &&
+					svc.agent.ActionPoints >= shareCostFor(dept.Name) {
 					upkeepAttempts[dept.Name+":"+fragment]++
 					if attemptCirculation(model.AgentAction{
 						Type: model.ActionShareInfo, TargetDept: dept.Name,
@@ -471,7 +492,7 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 				// is invested first while the seeding window is still open
 				// (the share action's own contract: 没有信任的部门接不住事实).
 				if month <= 30 && svc.pendingOperation == nil &&
-					agentConnectionTo(svc, dept) < 0.3 && svc.agent.ActionPoints >= buildCost {
+					agentConnectionTo(svc, dept) < 0.3 && svc.agent.ActionPoints >= buildCostFor(dept.Name) {
 					if attemptCirculation(model.AgentAction{
 						Type: model.ActionBuildConnection, TargetDept: dept.Name,
 					}) {
@@ -499,11 +520,20 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 							break
 						}
 					}
-					shareAttempts[dept.Name+":"+fragment]++
-					if attemptCirculation(model.AgentAction{
+					shareAction := model.AgentAction{
 						Type: model.ActionShareInfo, TargetDept: dept.Name,
 						FragmentIds: []string{fragment},
-					}) {
+					}
+					if err := svc.resolveActionCost(&shareAction); err != nil {
+						t.Fatalf("resolve share cost: %v", err)
+					}
+					if svc.agent.ActionPoints < shareAction.Cost {
+						// 戒备上浮后暂时付不起这一格：换下一个部门试，
+						// 别把整个月的剩余 AP 一起放弃。
+						continue
+					}
+					shareAttempts[dept.Name+":"+fragment]++
+					if attemptCirculation(shareAction) {
 						shared = true
 						break
 					}
@@ -518,7 +548,7 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 			continue
 		}
 		switch {
-		case svc.agent.ActionPoints >= buildCost && month < 12:
+		case svc.agent.ActionPoints >= buildCostFor("Judicial") && month < 12:
 			attemptCirculation(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
 		case svc.agent.ActionPoints >= gatherCost:
 			// Nothing shareable: gather — the portfolio must keep growing, a

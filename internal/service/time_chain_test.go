@@ -344,19 +344,29 @@ func TestTimeLinePlayableFromNewGame(t *testing.T) {
 			execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
 			continue
 		}
-		if svc.agent.ActionPoints < model.ACTION_COSTS[model.ActionShareInfo] {
-			continue
-		}
 		target := ""
 		leastOpen := 2.0
 		for _, profession := range svc.silo.Professions {
+			// T2-3：戒备 ≥ 0.50 的部门交接 AP 翻倍；时间线 AP 紧张，
+			// 优先找便宜的目标。
+			if profession.Alertness >= 0.50 {
+				continue
+			}
 			if openness := professionProForeign(svc.silo, profession.Name); openness >= 0 && openness < leastOpen {
 				target, leastOpen = profession.Name, openness
 			}
 		}
-		if target != "" && execute(model.AgentAction{
-			Type: model.ActionShareInfo, TargetDept: target, FragmentIds: []string{fact},
-		}) {
+		if target == "" {
+			continue
+		}
+		share := model.AgentAction{Type: model.ActionShareInfo, TargetDept: target, FragmentIds: []string{fact}}
+		if err := svc.resolveActionCost(&share); err != nil {
+			t.Fatalf("resolve share cost for %s: %v", target, err)
+		}
+		if svc.agent.ActionPoints < share.Cost {
+			continue
+		}
+		if execute(share) {
 			shares++
 		}
 	}

@@ -2606,6 +2606,10 @@ func (s *GameService) triggerSystemContentEvents(source string) ([]string, []mod
 const (
 	alertFrictionThreshold = 0.30
 	alertFrictionMismatch  = 0.5
+	// T2-3 分享目标收紧：戒备 ≥ 0.50 的部门交接成本翻倍（×2），效果不变。
+	// 只贵不堵：戒备由月度冷却回落，路径永远不会被永久锁死。
+	alertLockdownThreshold = 0.50
+	alertLockdownMismatch  = 2.0
 )
 
 // resolveActionCost overwrites action.Cost with the server-authoritative AP
@@ -2662,10 +2666,13 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 		}
 		action.Cost = engine.APCostWithMismatch(cfg, base, mismatch)
 	case model.ActionShareInfo, model.ActionBuildConnection:
-		// 20 分册 T1-2 流通摩擦：目标部门戒备 ≥ 0.30 时，Share/Build 的 AP
-		// 成本按既有 mismatch 公式上浮 ceil(base·(1+0.5·mismatch_alert))，
-		// mismatch_alert 起点 0.5（Share 3→4，Build 4→5）。只贵不堵，吸收
-		// 效果不变。数值为校准起点，TODO(balance)。
+		// 20 分册流通摩擦，只贵不堵（效果、吸收、路径都不变）：
+		//   T2-3 交接收紧（Share）：戒备 ≥ 0.50 → ×2（3→6）
+		//   T1-2 建联摩擦（Build）：戒备 ≥ 0.30 → ceil(base·1.25)（4→5）
+		// 两条反制各绑定一种动作，避免叠加把 AP 榨干：AP 恢复只有 10/年
+		// (0.83/月)，Share 是信息线的唯一长杆，双重收费会让《共证》永久
+		// 赶不上 Silo1 坠落。戒备由月度冷却回落，收费因此自动解除。
+		// 数值为校准起点，TODO(balance)。
 		base, ok := model.ACTION_COSTS[action.Type]
 		if !ok {
 			return fmt.Errorf("unknown action type %q", action.Type)
@@ -2673,11 +2680,22 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 		action.Cost = base
 		if silo := s.playerActionSilo(); silo != nil && action.TargetDept != "" {
 			for i := range silo.Professions {
-				if silo.Professions[i].Name == action.TargetDept &&
-					silo.Professions[i].Alertness >= alertFrictionThreshold {
-					action.Cost = math.Ceil(base * (1 + 0.5*alertFrictionMismatch))
-					break
+				if silo.Professions[i].Name != action.TargetDept {
+					continue
 				}
+				switch action.Type {
+				case model.ActionShareInfo:
+					// T2-3：严查部门交接翻倍。
+					if silo.Professions[i].Alertness >= alertLockdownThreshold {
+						action.Cost = math.Ceil(base * (1 + 0.5*alertLockdownMismatch))
+					}
+				case model.ActionBuildConnection:
+					// T1-2：戒备部门建联上浮 25%（4→5）。
+					if silo.Professions[i].Alertness >= alertFrictionThreshold {
+						action.Cost = math.Ceil(base * (1 + 0.5*alertFrictionMismatch))
+					}
+				}
+				break
 			}
 		}
 	default:
