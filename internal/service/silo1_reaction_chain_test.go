@@ -360,7 +360,17 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 		buildingRebellion := buildupOpen && svc.silo.Rebellion < 0.82
 		pending := deceivePending()
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
-		energyGuard := svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500
+		// Famine retune (19 §6.3 荒年局多配给): the physical channel only opens
+		// to a station that is still running (Energy ≥ 1), and reconnaissance
+		// must land within one month of its first eligible slot or the physical
+		// delivery overshoots the scheduled remote termination. Famine drains
+		// energy to zero earlier and more often, so once the channel test is
+		// lit the energy floor is defended regardless of rebellion — the old
+		// rebellion-gated guard alone woke up too late on the famine draw.
+		strikeChannelLive := contentTriggered(svc, "special:termination_channel_test") &&
+			!contentTriggered(svc, "special:strike_reconnaissance")
+		energyGuard := (svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500) ||
+			(strikeChannelLive && resourceAmount(svc.silo, "Energy") < 500)
 		if buildingRebellion && deceives < 2 && !pending && !energyGuard && deceive != nil && deceive.Enabled &&
 			svc.agent.ActionPoints >= float64(deceive.APCost+15) {
 			execute(model.AgentAction{Type: model.ActionStationOperation, ActionID: StationOpDeceive})
