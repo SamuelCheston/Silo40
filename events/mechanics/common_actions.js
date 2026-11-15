@@ -212,21 +212,48 @@ defineMechanics([
     duration_months: 2,
     apply(ctx) {
       const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
-      for (const profession of ctx.silo.professions || []) {
-        if (profession.class_type !== "COMMONER") {
-          continue;
-        }
+      const commoners = (ctx.silo.professions || []).filter(function (p) {
+        return p.class_type === "COMMONER";
+      });
+      const baseEffect = 0.05 + (ctx.actor.political_prestige || 0) * 0.002;
+      const propagandaMultiplier = 1 + (ctx.actor.propaganda_level || 0) * 0.2;
+      // 效应量落地：煽动对叛乱有可观测、可复现的即时增量 (round 到千分位)，
+      // 宣传等级以乘数作用于该增量。此前只加恐慌/思潮、叛乱不动而文案照报
+      // 成功——欺骗性反馈不允许存在：没起作用就说没起作用。
+      const rebellionShare = 1.0; // TODO(balance) 煽动转化为叛乱的份额
+      const wanted = Math.round(baseEffect * propagandaMultiplier * rebellionShare * 1000) / 1000;
+      const currentRebellion = (ctx.silo.metrics || {}).rebellion || 0;
+      const headroom = Math.round((1.0 - currentRebellion) * 1000) / 1000;
+      // 叛乱增量只归属玩家 (代表) 的煽动：反应链衡量的是玩家对秩序的推动；
+      // NPC 的煽动只保留恐慌效应 (他们的 incite 是局部动荡 = panic)，否则任何
+      // 高恐慌玩法都会被 NPC 月度煽动泵起全局叛乱，链就失去归因意义。
+      const applied = commoners.length > 0 && ctx.actor.kind === "PLAYER"
+        ? Math.min(wanted, headroom) : 0;
+      if (applied > 0) {
+        mutations.push({ type: "silo_metric_delta", metric: "rebellion", value: applied });
+      }
+      for (const profession of commoners) {
         const connectionValue = actorConnectionTo(ctx, profession.name);
-        const baseEffect = 0.05 + (ctx.actor.political_prestige || 0) * 0.002;
-        const propagandaMultiplier = 1 + (ctx.actor.propaganda_level || 0) * 0.2;
         const finalEffect = baseEffect * (1 + connectionValue) * propagandaMultiplier;
         mutations.push({ type: "profession_metric_delta", profession: profession.name, field: "panic_value", value: finalEffect });
         mutations.push({ type: "profession_ideology_delta", profession: profession.name, ideology: "pro_foreign", value: finalEffect * 0.5 });
       }
       mutations.push(suspicionDelta(ctx, 0.05));
+      let message;
+      if (ctx.actor.kind !== "PLAYER") {
+        // NPC 的煽动只作用于恐慌/思潮 (局部动荡)，全局叛乱增量只归属玩家。
+        message = "Incited unrest among all commoner departments.";
+      } else if (applied <= 0) {
+        message = commoners.length === 0
+          ? "这一点没有起作用：驻地没有可被煽动的平民部门。"
+          : "这一点没有起作用：叛乱已经顶到上限，煽动只留下痕迹。";
+      } else {
+        message = "Incited unrest among all commoner departments. Rebellion +" +
+          applied.toFixed(3) + " (propaganda multiplier x" + propagandaMultiplier.toFixed(1) + ").";
+      }
       return {
         mutations,
-        action_result: { executed: true, message: "Incited unrest among all commoner departments." },
+        action_result: { executed: true, message },
       };
     },
   },

@@ -61,9 +61,10 @@ func TestCovenantConvergenceDailyPressureAloneFails(t *testing.T) {
 	// 32 months at the merged 36/yr AP economy (same stretch as the §7.4
 	// calibration window).
 	for gameMonth := 0; gameMonth <= 32; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
-		if station.Rebellion < 0.2 {
-			station.Rebellion = 0.2
-		}
+		// 叛乱通道硬钉在 0.2：本测试度量的是约章/W 动力学。煽动效应量落地后
+		// NPC 月度煽动会真实推高叛乱并反噬 W 与信念接收，把外部通道钉住才能
+		// 让断言继续只测它要测的东西 (判据未变：第二份发布仍须真实发生)。
+		station.Rebellion = 0.2
 		if station.DeptTension < 0.3 {
 			station.DeptTension = 0.3
 		}
@@ -173,13 +174,15 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 	decisiveFired := false
 
 	// Phase 1 (daily pressure) runs until W reaches the trough band; phase 2
-	// then publishes the second core fact as the decisive event. 96 个月上限：
+	// then publishes the second core fact as the decisive event. 132 个月上限：
 	// 邻堡资源曲线分化后 (每堡自己的节奏)，单一 RNG 流的交织改变，脚本化
-	// 策略到达谷底带与第二份发布的时点整体后移，收敛变慢但路径不变。
-	for gameMonth := 0; gameMonth <= 96 && !station.Authority.Judicial.PactLocked; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
-		if station.Rebellion < 0.2 {
-			station.Rebellion = 0.2
-		}
+	// 策略到达谷底带与第二份发布的时点整体后移；煽动效应量落地 (叛乱即时
+	// 增量) 后 NPC 月度轨迹再次整体后移——收敛变慢但路径不变。
+	for gameMonth := 0; gameMonth <= 132 && !station.Authority.Judicial.PactLocked; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
+		// 叛乱通道硬钉在 0.2：本测试度量的是约章/W 动力学。煽动效应量落地后
+		// NPC 月度煽动会真实推高叛乱并反噬 W 与信念接收，把外部通道钉住才能
+		// 让断言继续只测它要测的东西 (判据未变：第二份发布仍须真实发生)。
+		station.Rebellion = 0.2
 		if station.DeptTension < 0.3 {
 			station.DeptTension = 0.3
 		}

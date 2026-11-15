@@ -73,13 +73,27 @@ func TestFullSilo1RunsAsPeerAndEmitsSignals(t *testing.T) {
 		t.Fatal("Silo 1 does not have its distinct Archives department")
 	}
 
-	// The legacy omniscient ultimatum script must not run for the peer model.
+	// 错线修复后：peer 模式下带压力条件的通牒必须签发 (反应链读的就是它)，
+	// 而压力回落时不签发——阈值脚本两侧都验。旧口径"peer 模式不跑通牒脚本"
+	// 正是被修复的错线 (通牒无人签发、反应链永远读不到)。
 	svc.silo.Rebellion = 0.95
+	svc.agent.PropagandaLevel = 3 // 有组织煽动条件满足
 	var logs []string
 	var stories []model.StoryEvent
 	svc.runSilo1StateMachine(&logs, &stories)
-	if len(svc.world.CrossQueue) != 0 || svc.world.Silo1.OrderPhase != "LOCAL_SIM" {
-		t.Fatalf("legacy Silo 1 privilege script fired in peer mode: queue=%d phase=%s", len(svc.world.CrossQueue), svc.world.Silo1.OrderPhase)
+	if len(svc.world.CrossQueue) != 1 || svc.world.CrossQueue[0].EventID != "silo1_ultimatum_cross" ||
+		svc.world.Silo1.OrderPhase != "ULTIMATUM" {
+		t.Fatalf("conditional ultimatum must fire in peer mode under pressure: queue=%+v phase=%s",
+			svc.world.CrossQueue, svc.world.Silo1.OrderPhase)
+	}
+	svcLow, _, _ := weightedEndingFixture("TIME")
+	svcLow.silo.Rebellion = 0.1
+	svcLow.world.Silo1.OrderPhase = "LOCAL_SIM"
+	logsLow, storiesLow := []string{}, []model.StoryEvent{}
+	svcLow.runSilo1StateMachine(&logsLow, &storiesLow)
+	if len(svcLow.world.CrossQueue) != 0 || svcLow.world.Silo1.OrderPhase != "LOCAL_SIM" {
+		t.Fatalf("low pressure must not issue an ultimatum in peer mode: queue=%+v phase=%s",
+			svcLow.world.CrossQueue, svcLow.world.Silo1.OrderPhase)
 	}
 
 	if _, err := svc.PassTime(1); err != nil {

@@ -384,7 +384,8 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 	if s.fullSilo1() != nil {
 		s.syncSilo1Peer()
 		s.captureSilo1Signals(logs, stories)
-		return
+		// 全模拟模式下继续走通牒判定：反应链读的是这份带压力条件的通牒
+		// (special:silo1_ultimatum_cross)，早退会让它永远无人签发 (错线修复)。
 	}
 	w := s.world
 	if w == nil || !w.Silo1.Alive {
@@ -397,8 +398,12 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 	for _, silo := range s.silos {
 		w.Silo1.Attention[silo.ID] = silo.Rebellion
 	}
-	// 一次性通牒：首个叛乱越线 (>=0.8) 的堡 (按 SiloID 升序)。仅在观察相位触发。
-	if w.Silo1.OrderPhase != "WATCHING" {
+	// 一次性通牒：首个秩序压力越线的堡 (按 SiloID 升序)。仅在观察相位触发
+	// (WATCHING = 遗留脚本模式；LOCAL_SIM = 全模拟模式——两种模式下反应链都
+	// 读这份带压力条件的通牒)。
+	// 压力 = 叛乱与平均恐慌的复合 (engine.OrderPressure)——单读叛乱 ≥0.8 在
+	// 现有模型下不可达 (实测玩家上限 ~0.45)，复合判据由 sim 校准。
+	if w.Silo1.OrderPhase != "WATCHING" && w.Silo1.OrderPhase != "LOCAL_SIM" {
 		return
 	}
 	// G11: network_jammed 是终止信号信道被干扰的世界事实 (21 分册
@@ -409,7 +414,11 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 		return
 	}
 	for _, silo := range s.silos {
-		if siloEnded(silo) || silo.Rebellion < 0.8 {
+		// 复合压力 + 有组织煽动 (宣传等级) 双条件：背景漂移推起的街头热度
+		// 不足以招致通牒，玩家把不满组织化才算"对秩序的推动"。
+		agent := s.agents[silo.ID]
+		if siloEnded(silo) || engine.OrderPressure(silo) < engine.Silo1UltimatumPressure ||
+			agent == nil || agent.PropagandaLevel < engine.Silo1AgitationPropaganda {
 			continue
 		}
 		w.Silo1.OrderPhase = "ULTIMATUM"

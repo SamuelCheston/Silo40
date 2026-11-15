@@ -51,6 +51,14 @@ function signalReceived(eventId) {
 function eventTriggered(category, eventId) {
   return { type: "event_triggered", category: category, event_id: eventId };
 }
+function monthsSinceEventGte(category, eventId, months) {
+  // 相对时间门：距事件点亮至少 months 月 (锚定事件而非绝对日历)。
+  return { type: "months_since_event_gte", category: category, event_id: eventId, months: months };
+}
+function actorMetricGte(metric, value) {
+  // 操作者指标门 (宣传等级/怀疑度/威望)：反应链用它识别"有组织的煽动"。
+  return { type: "actor_metric_gte", metric: metric, value: value };
+}
 function playerActionIs(action) {
   return { type: "player_action_is", action: action };
 }

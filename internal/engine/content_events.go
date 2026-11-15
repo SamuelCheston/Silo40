@@ -69,7 +69,39 @@ type ContentTrigger struct {
 	Year       int              `json:"year,omitempty"`
 	Month      int              `json:"month,omitempty"`
 	Timestamp  int              `json:"timestamp,omitempty"`
+	Months     int              `json:"months,omitempty"` // months_since_event_gte：距事件点亮的月数下限
 	Conditions []ContentTrigger `json:"conditions,omitempty"`
+}
+
+// 秩序压力复合度量 (order_pressure)：单读叛乱在现有模型下不可达 (实测玩家
+// 上限 ~0.45)，1 号反应链改读叛乱与部门恐慌的加权和。权重 TODO(balance)，
+// 由 sim 校准：判据是"专门推叛乱的局能触发、其他玩法不触发"。
+const (
+	OrderPressureRebellionWeight = 0.6 // TODO(balance)
+	OrderPressurePanicWeight     = 0.4 // TODO(balance)
+	// Silo1UltimatumPressure 是 1 号签发通牒与三条反应链前兆共用的复合门槛
+	// (TODO(balance))：sim 判据 = 专门推叛乱的局能在结算前触发至少一条链，
+	// 信息路/撤离路/躺平局不触发。
+	Silo1UltimatumPressure = 0.45 // TODO(balance)
+	// Silo1AgitationPropaganda 是"有组织煽动"的宣传等级门槛 (TODO(balance))：
+	// 复合压力只衡量街头热度，背景漂移也能把它推过线；宣传机器是玩家把
+	// 不满组织化的可归属事实，反应链只对"压力＋组织化"回应，避免把信息路/
+	// 撤离路的背景恐慌误读成对秩序的推动。
+	Silo1AgitationPropaganda = 2.0 // TODO(balance)
+)
+
+// OrderPressure 叛乱与平均部门恐慌的加权和。恐慌取全部部门 PanicValue 均值
+// (部门升序累加，确定性)；无部门时恐慌项为 0。
+func OrderPressure(silo *model.Silo) float64 {
+	panicMean := 0.0
+	if len(silo.Professions) > 0 {
+		total := 0.0
+		for _, profession := range silo.Professions {
+			total += profession.PanicValue
+		}
+		panicMean = total / float64(len(silo.Professions))
+	}
+	return OrderPressureRebellionWeight*silo.Rebellion + OrderPressurePanicWeight*panicMean
 }
 
 // ContentEffect 结构化事件效果。
@@ -455,6 +487,23 @@ func validateTrigger(trigger ContentTrigger) error {
 	case "signal_received":
 		// 本堡在本月收到了跨堡信号；event_id 可选 (限定具体信号)。
 		return nil
+	case "months_since_event_gte":
+		// 相对时间门：距某事件点亮至少 N 月。反应链用它替代绝对年份门，
+		// 使升级阶梯锚定通牒而非日历。
+		if trigger.EventID == "" || trigger.Category == "" {
+			return fmt.Errorf("months_since_event_gte requires category and event_id")
+		}
+		if trigger.Months < 0 {
+			return fmt.Errorf("months_since_event_gte requires non-negative months")
+		}
+		return nil
+	case "actor_metric_gte":
+		switch trigger.Metric {
+		case "propaganda_level", "suspicion_level", "political_prestige":
+			return nil
+		default:
+			return fmt.Errorf("actor_metric_gte metric %q is not readable", trigger.Metric)
+		}
 	case "event_triggered":
 		if trigger.EventID == "" {
 			return fmt.Errorf("event_triggered requires event_id")
@@ -804,6 +853,30 @@ func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext
 			}
 		}
 		return false
+	case "months_since_event_gte":
+		// 相对时间门：锚定事件点亮月而非绝对日历。未点亮则不成立。
+		state, ok := ctx.States[trigger.Category+":"+trigger.EventID]
+		if !ok || !state.Triggered {
+			return false
+		}
+		elapsed := contentGameTimestamp(ctx.Silo.CurrentYear, ctx.Silo.CurrentMonth) - state.LastTriggeredTimestamp
+		return elapsed/contentDaysPerMonth >= trigger.Months
+	case "actor_metric_gte":
+		if ctx.Agent == nil {
+			return false
+		}
+		var value float64
+		switch trigger.Metric {
+		case "propaganda_level":
+			value = ctx.Agent.PropagandaLevel
+		case "suspicion_level":
+			value = ctx.Agent.SuspicionLevel
+		case "political_prestige":
+			value = ctx.Agent.PoliticalPrestige
+		default:
+			return false
+		}
+		return value >= trigger.Value
 	case "player_action_is":
 		if ignoreActionMatch {
 			return true
@@ -1560,6 +1633,8 @@ func readSiloMetric(silo *model.Silo, metric string) (float64, bool) {
 		return silo.Countdown, true
 	case "safeguard_risk":
 		return silo.SafeguardRisk, true
+	case "order_pressure":
+		return OrderPressure(silo), true
 	default:
 		return 0, false
 	}
