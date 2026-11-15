@@ -261,8 +261,7 @@ defineMechanics([
       }
       return {
         mutations,
-        action_result: { executed: true, message: "已在所有平民部门煽动起不安。" },
-
+        action_result: { executed: true, message },
       };
     },
   },
