@@ -325,3 +325,32 @@ func TestQuietDisappearanceConflictsWithProtocol(t *testing.T) {
 		t.Fatalf("contested Judicial must make disappearance utility-positive: %v", score)
 	}
 }
+
+// TestSuppressSignalRegistersEquipmentUse locks G-01 监控设备最小承载 (23-01 §6)：
+// suppress_signal 执行即为 equipment 通道登记世界侧簿记
+// SafeguardIncidents["equipment_use"]，逐次累加、不依赖 BlindSpot 是否启用。
+func TestSuppressSignalRegistersEquipmentUse(t *testing.T) {
+	prev := rng
+	SetRNG(rand.New(rand.NewSource(2308)))
+	defer SetRNG(prev)
+
+	e := NewGameEngine()
+	silo := &model.Silo{}
+	action := ItAction{}
+	for _, a := range ItActionCatalog() {
+		if a.ID == "suppress_signal" {
+			action = a
+		}
+	}
+	if action.ID == "" {
+		t.Fatal("catalog missing suppress_signal")
+	}
+	e.executeItAction(silo, nil, action)
+	if got := silo.SafeguardIncidents[BlindSpotEquipmentUseKey]; got != 1 {
+		t.Fatalf("equipment_use bookkeeping = %d, want 1", got)
+	}
+	e.executeItAction(silo, nil, action)
+	if got := silo.SafeguardIncidents[BlindSpotEquipmentUseKey]; got != 2 {
+		t.Fatalf("equipment_use bookkeeping = %d, want 2", got)
+	}
+}
