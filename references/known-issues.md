@@ -72,3 +72,59 @@ agent-operator 一路 a660429 → 46ccae4。
 
 暂停原因：两个会话曾在同一工作树并行改码，发生过 stash 裹挟对方未提交
 改动的事故；且 KI-1/KI-2 未落定前产出的样本与基准都会被作废。
+
+---
+
+## KI-3：v7 parity 基准失效，已重建为 v8
+
+`references/parity-v7-three-silo.json`（ec88062 代码树生成，SHA-256
+`9f37dfa409a7efcf863819d6231de66042c6f8af3a4d9f742f8fa3e9196b7f84`）已**失效**：
+ec88062 之后主线合入大量机制线，结局判定、行动集合、RNG 消费路径与存档结构
+均已改变，旧轨迹与当前代码不再可比。机制线清单（`git log --first-parent
+--oneline ec88062..origin/main` 归纳）：
+
+- **结局线**：结局链机制基础 G1–G11（dc6be5e，存档 v9）、G12 裁定与事件链
+  修复（269e01f）、可玩结局链（db72c01）、**失败结局**（87a964e）、
+  reset/fracture/information/exclusionist/agent-compromised/death 各可玩链修复
+  （e0340fc、b3bbce1、2bab376、446ad27、ffd3e6e、9bc906b）、1 号反应链可达性
+  与主线平局固定序（a379952、05850de，存档 v12）、移除 Silo 1 渗透情报
+  operation（c9049d7）。
+- **逃出/逃亡线**：escape line（a51f9d4）、REBELLION 逃亡接纳（50d6f49）、
+  可玩性修复（e559f49）、正典对齐（d02b866）、怀疑度只由组织行为驱动
+  （bc9a785）。
+- **谈判**：市长与叛乱方谈判/妥协层，三方带权决策、信道回合（139d63c）。
+- **渗透**：时间渗透状态机，部门信念层渗透成熟态，存档 v13→v14（8ce5ef2）。
+- **反制**：死亡线远程终止渠道绑定值夜检修（332a12f）、本地整肃后果与名册
+  反制（5086a97）、流通摩擦改为按动作分流（T1-2 建联 / T2-3 交接）并补部门
+  戒备月度冷却（c87a34e）。
+- **其他可玩性/世界机制**：rule-of-law 线（4295916）、个人规则线（2783fea）、
+  职业 crossplay（78c8309）、时间线（5fd5c78）、IT 秩序司法附着（55f2d74）、
+  前十分钟（19898d6）、堡语音（de37c4d）、外部给养（3ce5521）、遗物目录
+  （fb7081f）、剧情抉择兄弟动作互斥（03efc2c）。
+
+**行为差异**：旧基线 6 种子以 INFORMATION×4 / REBELLION×2 胜利（42–81 月）；
+新转储 6 种子全部于 37–38 月以 RESET 失败结局终结。parity harness 的固定策略
+只做 GatherInfo 与 BuildConnection，不做 reset 反制也不分享情报，因此 RESET
+是当前行为的确定性事实，**不是**结局分布验收。因早于第 100 月结局，harness
+的第 100 月 persist/Resume 分支本次轨迹未到达（该分支代码仍保留）。
+
+**新基线生成条件**：
+
+- 构建版本：`c87a34e`（转储即在该提交上生成；其后只有引用面文档提交，行为中性）。
+- 种子 7–12；三堡场景 = 种子派生随机驻地（2–17）+ Silo 1 + Silo 18，
+  全 service 路径、真实内容、脚本动作；按单测惯例不加载生产 action gate
+  （旧机制 fixture）。
+- harness 版本：含 `gameOver` 守卫（结局后拒绝脚本动作并退出循环）、200 月上限、
+  独立 policy RNG（`seed ^ 0x5110`，不消耗游戏流）、第 100 月 persist/Resume
+  分支（当前轨迹未到达，见上）。
+- 双跑逐字节一致：`cmp` 通过。
+- SHA-256：`c63e0a57b9e374611f5b74ae267a8e3b24f18bfd5c6dd0c8b096d3df5de09cfe`
+  （两份转储 13588 字节）。
+
+**旧基线废弃理由**：上述机制线改变了结局判定、行动集合与 RNG 消费顺序，
+v7 轨迹运行在「无结局链/失败结局/逃出/谈判/时间渗透/反制」的世界定义里，
+对当前代码不可比；按纪律不保留两份都宣称有效的基准。`parity-v7-three-silo.json`
+已删除，当前唯一有效基准为 `parity-v8-three-silo.json`。
+
+重建命令（绝对路径）：
+`SILO40_PARITY_DUMP=<绝对路径> go test ./internal/service -run '^TestParityHarnessDump$' -v`。

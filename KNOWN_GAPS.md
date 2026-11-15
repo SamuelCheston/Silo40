@@ -18,7 +18,7 @@
 - v8 权威骨架已落地，但 W 的 K/D/E 暂时来自现有忠诚、Judicial 恐慌和 SafeguardRisk 可观测代理；P/X 为 0，OrderDeviation 只留接口。pact 的资格供给（Q/独立事实/资格位）已有内容写入入口，但尚无内容事件实际供给，也未接法治结局演出。
 - v9 结局链机制底座已落地（G1–G11）：新增 RULE_OF_LAW/PERSONAL_RULE/RESET/FRACTURE 候选，资格先于加权的 P0/P1/P2/P3 统一仲裁，覆灭前夕思潮快照与 TIME 思潮闸，逃出群体模型与硬失败例外，内容→safeguard_risk/约章资格/cohort 思潮直写通路，跨堡出站投递日志，network_jammed 消费，first_signal 来源迁移到 observation:first_local。十条结局链的具体内容事件（节点群）尚未编写，仲裁只消费其完成键/事实键。
 - 结局加权的全部系数仍是 TODO(balance) 占位（结局体系 12 §9 留待 sim），本轮只证明资格与仲裁结构，不做结局分布验收。
-- 旧 6 种子三堡 parity 基线自 v8 起失效：个人正统性、Police/Judicial 关系、W 与结局仲裁已进入月度轨迹。按既定决定不单独重建；待后续行为批次全部落地后一次性重建，再做平衡分布验收。
+- 旧 6 种子三堡 parity 基线曾自 v8 起失效：个人正统性、Police/Judicial 关系、W 与结局仲裁已进入月度轨迹。现已按受控基线重建为 `parity-v8`（见 references/known-issues.md KI-3；6 种子在当前被动 harness 下全部 RESET，属确定性事实），再做平衡分布验收。
 
 ## 存档与兼容性
 

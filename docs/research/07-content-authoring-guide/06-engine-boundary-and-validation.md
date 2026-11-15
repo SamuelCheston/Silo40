@@ -36,7 +36,7 @@ go run ./cmd/sim -addr http://127.0.0.1:18080 -games 20 -seed 7 -months 200
 - **种子复现**：`-seed S` 时第 i 局种子 = `S+i`，行动策略也由 S 派生；同参数双跑必须逐局
   一致（不一致即引入了未受控随机源）。存档种子随 `Silo.RNGSeed` 持久化。
 - **基线对照**：改动前后以同种子、同门控配置跑 sim 或 parity，比较结局分布与关键指标。
-  当前确定性基线为 `references/parity-v7-three-silo.json`；旧版本结局分布不能直接套到
+  当前确定性基线为 `references/parity-v8-three-silo.json`；旧版本结局分布不能直接套到
   当前三堡与门控实现，也不能把 ungated parity 当成生产平衡验收。
 - **逐事件时序验证**：临时探针模板——`bootstrapRealContent(t)`（见
   `internal/service/rules_loading_test.go`）+ `CreateGame{Seed: 固定}` + 逐月 `PassTime`，

@@ -48,23 +48,32 @@ Silo 18 正典节点、action gate 求值和情报观察不消耗 RNG。Agent �
 
 修复前的 sim、v6 parity、LLM 对照和分析导出都不能当作当前分布依据；玩家行动不受该缺陷影响。
 
-## 5. KI-2：v6 基线作废，v7 已重建
+## 5. KI-2/KI-3：v6、v7 基线作废，v8 已重建
 
-旧 `parity-v6-three-silo.json` 同时受 KI-1 和 v7 门控/结局变化影响，已删除，不再保留为有效基准。
+旧 `parity-v6-three-silo.json` 受 KI-1 与 v7 门控/结局变化影响，已删除。
+`parity-v7-three-silo.json` 受 ec88062 后合入的机制线（结局链/失败结局/逃出/
+谈判/时间渗透/反制等，详见 references/known-issues.md KI-3）影响，轨迹与当前
+代码不可比，已删除；不保留两份都宣称有效的基准。
 
-当前基准为 `references/parity-v7-three-silo.json`：
+当前基准为 `references/parity-v8-three-silo.json`：
 
-- 种子 7–12，随机驻地 + Silo 1 + Silo 18。
-- 包含 KI-1 修复、加权结局和第 100 月存读档。
+- 种子 7–12，随机驻地（2–17）+ Silo 1 + Silo 18，全 service 路径；按旧机制
+  fixture 不加载生产 action gate。
+- 构建版本 `c87a34e`（其后仅引用面文档提交，行为中性）；harness 含 gameOver 守卫、200 月上限、独立 policy RNG；
+  第 100 月存读档分支保留，但当前 6 种子均于 37–38 月以 RESET 失败结局终结，
+  该分支未被到达。
 - 双跑逐字节一致。
-- SHA-256：`9f37dfa409a7efcf863819d6231de66042c6f8af3a4d9f742f8fa3e9196b7f84`（仅将绿地事件 ID 更新为 reconnaissance）。
+- SHA-256：`c63e0a57b9e374611f5b74ae267a8e3b24f18bfd5c6dd0c8b096d3df5de09cfe`。
 
-注意：parity 按旧机制 fixture 不加载生产 action gate。它证明当前服务路径的确定性，不证明生产行动树或结局分布已平衡。
+注意：parity 按旧机制 fixture 不加载生产 action gate。它证明当前服务路径的
+确定性，不证明生产行动树或结局分布已平衡。harness 固定策略不做 reset 反制，
+新基线 6 种子全部 RESET 失败是当前行为的确定性事实，不是分布验收；分布问题
+由结局平衡工作另行处理。
 
 重建命令使用绝对输出路径：
 
 ```bash
-SILO40_PARITY_DUMP=/absolute/path/parity-v7-three-silo.json \
+SILO40_PARITY_DUMP=/absolute/path/parity-v8-three-silo.json \
   go test ./internal/service -run '^TestParityHarnessDump$' -v
 ```
 

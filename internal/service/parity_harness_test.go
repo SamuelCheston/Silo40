@@ -2,8 +2,8 @@ package service
 
 // Parity harness: plays deterministic seeded three-silo games through the full
 // service stack (real content, real DB, save/resume round-trip, scripted actions)
-// and dumps records as JSON. The v6 baseline replaces the invalidated v5
-// identity-model records; later refactors must diff against the new baseline.
+// and dumps records as JSON. The v8 baseline (references/parity-v8-three-silo.json)
+// replaces the invalidated v6/v7 records; later refactors must diff against it.
 //
 // Opt-in via SILO40_PARITY_DUMP=<output.json>; skipped otherwise so it never
 // runs in normal CI.

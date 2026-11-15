@@ -105,4 +105,4 @@ go test -race ./...
 go test ./internal/service -run 'TestContentGuard|TestActionGate|TestWeightedEnding' -v
 ```
 
-行为中性改动还应与 `references/parity-v7-three-silo.json` 做同 seed diff。涉及生产门控、结局权重或真实采样时，再补对应集成测试，不能用跳过门控的旧 fixture 代替全部验收。
+行为中性改动还应与 `references/parity-v8-three-silo.json` 做同 seed diff。涉及生产门控、结局权重或真实采样时，再补对应集成测试，不能用跳过门控的旧 fixture 代替全部验收。
