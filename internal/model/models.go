@@ -443,6 +443,87 @@ type Silo1BlackBoxState struct {
 	Log []BlackBoxLogEntry `json:"log,omitempty"`
 }
 
+// 盲区经营六通道 (23 系列 04 卷 §1.1)。固定顺序即存档数组序与累加序，
+// 禁止 map 遍历序 (确定性纪律)。
+const (
+	BlindSpotChannelEquipment = "equipment" // 监控设备盲区
+	BlindSpotChannelSchedule  = "schedule"  // 排班/迎检安排
+	BlindSpotChannelReports   = "reports"   // 报表口径
+	BlindSpotChannelLedger    = "ledger"    // 台账/回执
+	BlindSpotChannelCensus    = "census"    // 人口底册
+	BlindSpotChannelTiming    = "timing"    // 上报时点
+)
+
+// 拆穿阶段 (23 系列 04 卷 §3.4)。
+const (
+	BlindSpotStageNone      = ""
+	BlindSpotStageDoubt     = "doubt"     // 起疑
+	BlindSpotStageVerify    = "verify"    // 查证
+	BlindSpotStageConfirmed = "confirmed" // 坐实
+)
+
+// BlindSpotTraceEntry 手段使用在世界侧留下的可追溯痕迹 (事实层；1 号侧永不
+// 直读，只能经稽查抽样与统计形状间接捕捉)。
+type BlindSpotTraceEntry struct {
+	Year      int     `json:"year"`
+	Month     int     `json:"month"`
+	Channel   string  `json:"channel"`   // BlindSpotChannel*
+	Kind      string  `json:"kind"`      // 痕迹类型 (04 卷 §1.4 表)
+	Magnitude float64 `json:"magnitude"` // 痕迹量级 ∝ 手段力度
+	Seq       int     `json:"seq"`       // 堡内单调序号 (排序键)
+}
+
+// BlindSpotEvidenceEntry 拆穿判据窗口内的证据事件 (环形上限 24)。
+type BlindSpotEvidenceEntry struct {
+	Year      int     `json:"year"`
+	Month     int     `json:"month"`
+	Source    string  `json:"source"`    // cross_mismatch / proto_contrast / burst_residual / trace_shape
+	Magnitude float64 `json:"magnitude"` // 证据量级 ∈ [0,1]
+	Seq       int     `json:"seq"`
+}
+
+// BlindSpotCultivationState 每堡盲区经营累积状态 (23 系列 04 卷 §1.5)。
+// 零值 = 未经营 = 注入恒等映射 = 旧档逐位不变。
+type BlindSpotCultivationState struct {
+	// Initialized 零值 false → 功能未启用 = 旧档语义。
+	Initialized bool `json:"initialized,omitempty"`
+	// Coverage 逐通道盲区厚度 Cov_c ∈ [0,1]，固定通道序 (六通道)。
+	Coverage [6]float64 `json:"coverage"`
+	// Bias 逐通道被经营偏置 ∈ [0,1] (方向固定朝"平静")，固定通道序。
+	Bias [6]float64 `json:"bias"`
+	// Suspicion 怀疑计数器 ∈ [0,1] (04 卷 §3.2)。
+	Suspicion float64 `json:"suspicion"`
+	// Stage 拆穿阶段 (BlindSpotStage*)；StageMonths 当前阶段已持续月数。
+	Stage       string `json:"stage,omitempty"`
+	StageMonths int    `json:"stage_months,omitempty"`
+	// Traces 痕迹账本 (保留期 36 月，升序)。
+	Traces []BlindSpotTraceEntry `json:"traces,omitempty"`
+	// TraceSeq 堡内痕迹单调序号计数器。
+	TraceSeq int `json:"trace_seq,omitempty"`
+	// Evidence 近期证据事件 (环形上限 24)。
+	Evidence []BlindSpotEvidenceEntry `json:"evidence,omitempty"`
+	// ChannelResetMonth 逐通道最近一次重置月 (04 卷 §4.5)。
+	ChannelResetMonth [6]int `json:"channel_reset_month"`
+	// StrictUntil 「更严监控」标记的截止月 (04 卷 §4.2)。
+	StrictUntil int `json:"strict_until,omitempty"`
+	// ActiveDisguise 上月选中手段类 (惯性因子输入，03 卷 §2.9)。
+	ActiveDisguise string `json:"active_disguise,omitempty"`
+	// Log 盲区经营决策审计日志 (世界侧，环形上限 24；不进玩家界面)。
+	Log []BlindSpotDecisionLogEntry `json:"log,omitempty"`
+}
+
+// BlindSpotDecisionLogEntry 一次盲区经营决策的审计留痕 (23 系列 03 卷)。
+type BlindSpotDecisionLogEntry struct {
+	Year      int    `json:"year"`
+	Month     int    `json:"month"`
+	Acted     bool   `json:"acted"`            // 第一级抽取结果
+	Choice    string `json:"choice,omitempty"` // 手段类 ID (不动手为 idle)
+	Channel   string `json:"channel,omitempty"`
+	Intensity int    `json:"intensity,omitempty"` // 力度档
+	Weights   string `json:"weights"`             // 归一化权重表
+	Factors   string `json:"factors"`             // 六因子读数摘要 (可归因)
+}
+
 // World 一局游戏的顶层聚合 (多堡研究 §2)。P0.5 起可挂两个完整模拟堡：
 // 世界时钟为权威 (各堡时钟是其镜像)、跨堡事件队列按 (到期月, Seq) 排序、
 // Silo 1 为脚本化状态机。单堡 (空邻堡) 配置下所有多堡机制关闭，行为与
@@ -617,6 +698,8 @@ type Silo struct {
 	// BlackBox 每堡黑箱状态 (22 黑箱学习系列 01 卷 §8)：真值 Theta 与信念 Belief
 	// 分字段存放。零值 = 功能未启用 = 旧档语义。
 	BlackBox Silo1BlackBoxState `gorm:"type:text;serializer:json" json:"black_box"`
+	// BlindSpot 每堡盲区经营累积状态 (23 系列 04 卷)。零值 = 未经营 = 恒等映射。
+	BlindSpot BlindSpotCultivationState `gorm:"type:text;serializer:json" json:"blind_spot"`
 	// SafeguardIncidents 引擎侧后果事件登记簿 (ADR-0017)：原直接累加风险度的各
 	// 累加点改为在此登记 (kind -> 计数)，经观测管线进入 1 号信念。引擎包写入
 	// (协议偏离/IT 过度干预/不作为/蒙蔽崩塌)，观测管线消费。

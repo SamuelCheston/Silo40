@@ -350,6 +350,10 @@ func (e *GameEngine) RunLocalPhase(silo *model.Silo, agent *model.Agent, deltaYe
 	// 4.6 IT 权威回合：二元联盟维护与隐蔽动作 (§5)。
 	e.RunITAuthorityMonthly(silo, agent)
 
+	// 4.62 盲区经营决策 (23 系列 03 卷)：六因子连乘权重 + ε 地板的三级抽取，
+	// 先花 R_op 后看余额，先于 4.65 定下本月伪装部署。门控：功能关闭零 RNG。
+	RunBlindSpotCultivationMonthly(silo)
+
 	// 4.65 黑箱观测产生 (22 黑箱学习系列 01 卷 §2.2)：反映结算后的 Θ，按延迟入队。
 	// 唯一 RNG 消耗点 (门控：功能关闭或信号当月不产生则零消耗)。
 	GenerateBlackBoxObservations(silo)
