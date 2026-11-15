@@ -136,16 +136,14 @@
 | `ESCAPE_RECEPTION_STOCKING` | `escape_reception_stocking.js` | `preparationTransfer("Supplies", 150)`＋`preparationStage("stocked")` | 先遣派遣；`canTrigger` 读档位 confirmed/stocked | 已囤备不重复划拨 |
 | `ESCAPE_SPILLOVER_{IT_LINE,CROSS_SIGNAL,PHYSICAL}` | `escape_spillover_*.js` | `spilloverChannelAdd(kind, 3, 0.75/0.55/0.35)` | IT 专线：首档＋IT 0.3；跨堡信号：首档；实体：意愿 | 目标堡 3＝18 号（三堡布局）；投递属 Layer 3 |
 
-### 反制事件 escape_prep_audit_seizure（审计没收）
+### 反制层：审计没收已移除，改为组织怀疑度驱动的 IT 响应
 
-| 字段 | 规格 |
-| --- | --- |
-| 事件文件 | `events/crisis/escape_prep_audit_seizure.js` |
-| 触发条件 | `preparationGte("prep_exposure", 0.5)`（`TODO(balance)`）；REPEATABLE，冷却 6 月；`canTrigger` 读 `top_stance.it === "block"`（IT 不阻挠/配合时风险消失，16 §4.2-3） |
-| 效果 | `suits_functional −2`、`prep_exposure −0.3`、`panic_value +0.02`（`TODO(balance)`） |
-| 完成键 | `crisis:escape_prep_audit_seizure`（计数键） |
-| DSL 能力 | 全部现有＋本批 `preparation_gte` 触发器 |
-| 依赖 | 无 |
+原 `escape_prep_audit_seizure`（`prep_exposure ≥ 0.5` 且 IT 阻挠时没收已修服 −2）已整体移除：它造成反向梯度——准备越重、暴露越高、被没收越多，重准备反而更吃亏。替代口径（20 分册修订、ADR-0014）：
+
+- 反制只抬成本与风险，不没收囤积、不困死玩家；
+- 组织怀疑度只由组织行为（动员范围、通信频次与规模）驱动，囤积（修服/划拨/囤备）不抬高怀疑度；
+- 怀疑度到门槛后 IT 做带权随机三选一：镇压／蒙住 1 号／不作为，权重可归因、决策日志留痕；
+- 不镇压又蒙不住时 safeguard 风险上升，后果落在"日后更贵、更窄"，不是当场判负。
 
 ## 2. 清单1：可直接写的节点（本批已全部落地）
 
@@ -157,7 +155,7 @@
 | W-4 出发 | `escape_departure_launch.js` | 本批 `escape_departure_settle`（服务层结算） |
 | 立场生产者 | `escape_negotiation_guarantee.js` | 最小保障动作 |
 | 谈判层五动作 | `negotiation_open_channel.js`、`negotiation_probe.js`、`negotiation_offer_terms.js`、`negotiation_takeover.js`、`negotiation_hands_off.js` | 本批 `negotiation_*` 效果全家 |
-| 准备层十五动作＋审计反制 | 见 §1 准备层表 | 本批 `preparation_*` 全家 |
+| 准备层十五动作 | 见 §1 准备层表 | 本批 `preparation_*` 全家；审计没收已移除，反制改由组织怀疑度驱动的 IT 响应层承担（§1 反制层） |
 | 门控条目 | `events/action_gates.json` 追加 26 条 | — |
 
 ## 3. 清单2：必须等机制的节点
@@ -165,7 +163,7 @@
 | 节点/能力 | 等的机制 | 未到位前的处理 |
 | --- | --- | --- |
 | ~~堡外月度维持检查~~ | **已落地（Layer 2）**：出发结算初始化 `OutsideState`，月度阶段 2c 结算补给/防护服/路线三侧面，覆没写明冻死/耗尽/被困 | — |
-| ~~追踪四档~~ | **已落地（Layer 2）**：没人注意/已被察觉/咬住痕迹/正在追捕，热度＝出发定档基数＋1 号注意力现值−距离衰减；咬住起弃置补给，追捕封觅食并逐月损耗 | 反制入口仍待"日常动作中的反制"批次 |
+| ~~追踪四档~~ | **已落地（Layer 2）**：没人注意/已被察觉/咬住痕迹/正在追捕，热度＝出发定档基数＋safeguard 风险项＋1 号注意力现值−距离衰减；咬住起弃置补给，追捕封觅食并逐月损耗 | 反制入口由组织怀疑度驱动的 IT 响应层承担（§1 反制层） |
 | ~~仲裁读群体质量~~ | **已落地（Layer 2）**：`PlayerEscapeGroupQuality` 玩家贡献项读组合事实（老人/伤者/工匠/领头人），只对合格候选计分；资格仍只读群体存续 | — |
 | 信道投递与独立接收 | Layer 3（外溢模型主体） | 信道只登记（建立侧），`PlayerPerSpilloverSilo` 口径收紧待 Layer 3 |
 | 回退规则（窗口关闭 → 外溢） | "撤离窗口关闭"事实的生产 | 口径已登记（Witness 回退规则），事实生产属后话 |

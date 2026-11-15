@@ -21,5 +21,7 @@ defineEvent({
   trigger: playerActionIs("ESCAPE_SPILLOVER_PHYSICAL"),
   effects: [
     spilloverChannelAdd("physical_handoff", 3, 0.35), // TODO(balance)
+    // 通信规模驱动组织怀疑度：实体交接较信号更不显眼（20 修订/ADR-0014）。
+    orgSuspicionDelta(0.04), // TODO(balance)
   ],
 });

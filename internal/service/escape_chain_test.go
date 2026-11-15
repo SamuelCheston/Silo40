@@ -40,7 +40,6 @@ func TestEscapeLineContentLoads(t *testing.T) {
 		// 准备账本生产者（Layer 1）
 		"player_actions:escape_prep_suit_repair",
 		"player_actions:escape_prep_suit_warehouse",
-		"crisis:escape_prep_audit_seizure",
 		"player_actions:escape_prep_transfer_supplies",
 		"player_actions:escape_prep_transfer_materials",
 		"player_actions:escape_plan_mechanical",
@@ -60,6 +59,11 @@ func TestEscapeLineContentLoads(t *testing.T) {
 		if _, ok := defs[key]; !ok {
 			t.Fatalf("expected content definition %q to load from events/", key)
 		}
+	}
+	// 审计没收已整体移除（反向梯度：准备越重被没收越多，重准备反而吃亏）。
+	// 囤积不再被没收；反制改由组织怀疑度驱动的 IT 响应层承担（20 分册修订）。
+	if _, ok := defs["crisis:escape_prep_audit_seizure"]; ok {
+		t.Fatal("escape_prep_audit_seizure must stay removed; confiscation of hoarded prep is banned")
 	}
 	for actionID, key := range map[string]string{
 		"ESCAPE_DEPARTURE_LAUNCH":       "player_actions:escape_departure_launch",

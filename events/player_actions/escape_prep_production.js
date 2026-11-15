@@ -24,5 +24,7 @@ defineEvent({
   effects: [
     preparationSetBool("production_start", true),
     preparationDelta("prep_exposure", 0.03), // TODO(balance)
+    // 动员范围驱动组织怀疑度：布置生产起点要动用人手（20 修订/ADR-0014）。
+    orgSuspicionDelta(0.03), // TODO(balance)
   ],
 });

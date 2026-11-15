@@ -152,6 +152,10 @@ function preparationTransfer(resource, amount) {
 function spilloverChannelAdd(kind, targetSilo, reliability) {
   return { type: "spillover_channel_add", flag: kind, count: targetSilo, value: reliability || 0 };
 }
+function orgSuspicionDelta(value) {
+  // 20 修订/ADR-0014：组织行为 (动员/通信) 累积组织怀疑度；囤积类动作禁用。
+  return { type: "escape_org_suspicion_delta", value: value || 0 };
+}
 function preparationGte(field, value) {
   return { type: "preparation_gte", metric: field, value: value };
 }

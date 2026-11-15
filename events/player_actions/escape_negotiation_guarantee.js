@@ -23,5 +23,7 @@ defineEvent({
   effects: [
     topStanceGuarantee(0.3), // TODO(balance)
     topStanceReeval("both"),
+    // 通信规模驱动组织怀疑度：与顶层磋商保障是大动静（20 修订/ADR-0014）。
+    orgSuspicionDelta(0.04), // TODO(balance)
   ],
 });

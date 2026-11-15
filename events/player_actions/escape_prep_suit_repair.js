@@ -1,12 +1,13 @@
 defineEvent({
   id: "escape_prep_suit_repair",
   title: "暗中修复防护服",
-  description: "清洁服全是处刑工具：劣质热封胶带让每一套都必然失效。机械师在维修间里换优质胶带，一套一套地换，一次一次地赌审计不来。可用防护服不是存款——它随时可能被换回劣质胶带，或者被整个没收。",
+  description: "清洁服全是处刑工具：劣质热封胶带让每一套都必然失效。机械师在维修间里换优质胶带，一套一套地换。囤积本身不惹眼——惹眼的是集结与串联的组织行为；修好的服不会被没收，但筹备的痕迹仍会记入出发时的追踪。",
   type: "TECHNICAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 2, // TODO(balance)
   // 修服链（16 §2.4 来源二）：本地清洁服转化。暗中换胶带，每次获取有
-  // 暴露成本；IT 立场塑形可得性与成本（审计反制见 escape_prep_audit_seizure）。
+  // 暴露成本（喂出发追踪）；囤积不抬高组织怀疑度、不被没收（20 分册修订、
+  // ADR-0014：反制只抬成本与风险，不困死玩家）。
   player_action: {
     id: "ESCAPE_PREP_SUIT_REPAIR",
     label: "暗中修复防护服",

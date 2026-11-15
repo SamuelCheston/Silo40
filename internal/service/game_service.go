@@ -2092,6 +2092,14 @@ func (s *GameService) runOneMonthSingle(source string) ([]string, []model.StoryE
 		st := negotiationStories[i]
 		stories = append(stories, &st)
 	}
+	// 20 修订/ADR-0014：筹备反制层月度回合 (组织怀疑度衰减与 IT 响应)。
+	// 仅当组织怀疑度已产生时结算；未做组织动作的运行逐位不变。
+	responseLogs, responseStories := s.runEscapeResponseMonth(s.silo)
+	logs = append(logs, responseLogs...)
+	for i := range responseStories {
+		st := responseStories[i]
+		stories = append(stories, &st)
+	}
 	// 世界时钟镜像玩家堡时钟。权威时钟仍在堡内流水线；多堡阶段 (P0.5+) 会把
 	// 时钟推进上移到世界 tick 编排，此处改为世界时钟下发到各堡。
 	if s.world != nil {

@@ -644,6 +644,12 @@ func validateEffect(effect ContentEffect) error {
 		if effect.Count <= 0 {
 			return fmt.Errorf("spillover_channel_add requires positive count (target silo id)")
 		}
+	case "escape_org_suspicion_delta":
+		// 20 修订/ADR-0014：组织行为累积组织怀疑度。只增不减 (衰减走月度
+		// 回合)；囤积类动作永不声明本效果。
+		if effect.Value <= 0 {
+			return fmt.Errorf("escape_org_suspicion_delta requires positive value")
+		}
 	case "escape_departure_settle":
 		// 16 §3.4 (departure settlement point, minimal form): the service layer
 		// settles after all effects apply. No fields; the settlement reads the
@@ -1299,6 +1305,10 @@ func applyContentEffectScoped(effect ContentEffect, sc *ScopeContext) {
 		if err := applySpilloverChannelAdd(sc.Self, effect.Flag, effect.Count, effect.Value); err != nil {
 			sc.reportError(err.Error())
 		}
+		return
+	case "escape_org_suspicion_delta":
+		// 20 修订/ADR-0014：组织行为累积组织怀疑度 (囤积不驱动)。
+		AddEscapeOrgSuspicion(sc.Self, effect.Value)
 		return
 	}
 

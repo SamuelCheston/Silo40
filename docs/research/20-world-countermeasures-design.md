@@ -1,10 +1,11 @@
 # Silo40「世界的反制」设计：权力方对情报流通与逃跑组织的反应
 
-> 日期：2026-11-15
+> 日期：2026-11-15（修订：审计没收移除与组织怀疑度响应层落地，ADR-0014）
 > 性质：机制设计与规格，不包含代码改动。
 > 范围：玩家主动推动情报流通（《共证》线）或组织逃跑（《越岭》线）时，地堡里的权力方怎么反应、怎么发现、反制到什么程度，以及这些反制如何藏在日常小动作里而不是弹窗告知。
 > 本轮边界：确定反制的主体谱系与动机差异、发现口径对现有检测机制的映射、三档反制的效果形态、呈现通道纪律、数值锚点推导与受影响测试账。凡需 sim 校准的数值一律标 `TODO(balance)`，不给平衡数值。
-> 上游约束：[ADR-0009 情报会淡忘](../../knowledge/adr/0009-intel-fading.md)、[ADR-0010 玩家是干涉者不是指挥者](../../knowledge/adr/0010-player-as-intervener.md)、[ADR-0011 开局偏向必须与可玩路线测试重调同时落地](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)、[16 准备度→成果换算](./16-preparation-outcome-design.md)、[17 《共证》线经济设计](./17-information-economy-design.md)、[18 时间渗透设计](./18-time-permeation-design.md)、[10 IT 控制可信度](./10-it-control-credibility.md) §3/§5/§8、[20 《除名》事件链](../story/endings/20-chain-agent-compromised.md)、[29 五个失败结局](../story/endings/29-failure-endings.md)、[37 《越岭》事件规格](../story/endings/37-rebellion-event-spec.md)。
+> **修订口径（ADR-0014）**：筹备审计没收（原 T2-1/T2-1b）已整体移除——它造成反向梯度（准备越重、暴露越高、被没收越多，重准备反而更吃亏）。逃跑筹备层的反制改由**组织怀疑度驱动的 IT 响应**承担：怀疑度只由组织行为（动员范围、通信频次与规模）驱动，囤积不驱动；怀疑度到门槛后 IT 做**带权随机三选一**（镇压／蒙住 1 号／不作为），权重可归因、决策日志留痕；不镇压又蒙不住时 safeguard 风险上升，后果落在"日后更贵、更窄"（出发追踪加重），不是当场判负。**任何机制都不把玩家困死**：反制只抬成本与风险，囤积账本永不被扣减。
+> 上游约束：[ADR-0009 情报会淡忘](../../knowledge/adr/0009-intel-fading.md)、[ADR-0010 玩家是干涉者不是指挥者](../../knowledge/adr/0010-player-as-intervener.md)、[ADR-0011 开局偏向必须与可玩路线测试重调同时落地](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)、[ADR-0014 反制只抬成本与风险、怀疑度只由组织行为驱动](../../knowledge/adr/0014-countermeasures-cost-suspicion-org-only.md)、[16 准备度→成果换算](./16-preparation-outcome-design.md)、[17 《共证》线经济设计](./17-information-economy-design.md)、[18 时间渗透设计](./18-time-permeation-design.md)、[10 IT 控制可信度](./10-it-control-credibility.md) §3/§5/§8、[20 《除名》事件链](../story/endings/20-chain-agent-compromised.md)、[29 五个失败结局](../story/endings/29-failure-endings.md)、[37 《越岭》事件规格](../story/endings/37-rebellion-event-spec.md)。
 > 本册是 [roadmap](../roadmap.md)「逃出群体与《越岭》逃离模型」剩余项"追踪的反制入口（'反制藏进日常小动作'批次）"与 [29 §5](../story/endings/29-failure-endings.md) `silo1_purge_exposed` 反制绑定 TODO 的设计交付。
 
 ## 0. 标注口径
@@ -26,7 +27,7 @@
 2. **反制的输出必须是成本而不是判决**。结局资格全部由事实经仲裁判定（12 §2.2）；反制若直接写资格或直接判负，等于在仲裁之外新增一个投票主体，与"玩家是干涉者不是指挥者"直接冲突。正确形态是：反制让后面的路**变贵**（AP/月份）、**变窄**（信道/目标/窗口），走不走、怎么绕仍是玩家的决策。唯一通向失败结局的路径是既有的怀疑度封顶硬护栏（`victory_check`，【现状】），反制只能按既有公式贡献增量，不能设置封顶。
 3. **反制的呈现必须藏在日常小动作里**。已裁决的反制形态是"有对象、地点、时机、材料与痕迹的情境化动作"（[silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js) 的 TODO(Countermeasure binding) 注释）；呈现走月度故事、行动回执与门控灰置这些既有通道，玩家看到的是"住处被例行检查""熟悉的联系人调去了夜班""该部门近期严查内外往来"，而不是"你被发现了"。
 
-**明确不做**：不新造"隐蔽值"这类单一不可见总计量；不新增结局类型；不新增随机源（反制判定全部确定性，立场重估复用既有单一 RNG 流口径，[top_stance.go](../../internal/engine/top_stance.go)）；不改动任何初始思潮值（门控耦合旋钮，[ADR-0011](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)）；不改动既有资格口径与仲裁逻辑；宣传不是反制、不得充当反制（[silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js) 既有裁决）。
+**明确不做**：不新造"隐蔽值"这类单一不可见总计量；不新增结局类型；不改动任何初始思潮值（门控耦合旋钮，[ADR-0011](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)）；不改动既有资格口径与仲裁逻辑；宣传不是反制、不得充当反制（[silo1_purge_exposed.js](../../events/special/silo1_purge_exposed.js) 既有裁决）。随机源纪律（修订）：反制判定主体仍是确定性状态反应，**唯一例外**是筹备层 IT 响应决策——按 [ADR-0014](../../knowledge/adr/0014-countermeasures-cost-suspicion-org-only.md) 走带权随机裁量，取样经引擎单一 RNG 流（ADR-0007/0013 同构）：未产生组织怀疑度的运行不进入任何取样，RNG 消耗逐位不变。
 
 ## 2. 谁在反制：五个主体、五种动机
 
@@ -34,7 +35,7 @@
 
 | 主体 | 怕什么（动机） | 读什么（可观察输入）【现状】 | 能做什么（反制手段） | 指向 |
 | --- | --- | --- | --- | --- |
-| **本地 IT** | 怕自己的操控被证实（`E`/`Q` 上升，法警调度证据链成形，10 §3.3/§3.7）；怕失控招来 1 号问责（`R_s`）；怕 Protocol 偏离 | `playerThreatVisible`：公开证据 >0 或核验证据 >0 或 `E ≥ 0.2`（[it_authority.go](../../internal/engine/it_authority.go)）；部门戒备；泄漏事实的部门信念层（§3.2） | 月度权威回合的 17 个候选动作（维护 8＋隐蔽 7＋反击 2），`R_op` 预算约束；立场阻挠（[top_stance.go](../../internal/engine/top_stance.go)）；审计没收（[escape_prep_audit_seizure.js](../../events/crisis/escape_prep_audit_seizure.js)） | 群体/信道为主；玩家本人仅在威胁可见时（`counter_investigate_player`） |
+| **本地 IT** | 怕自己的操控被证实（`E`/`Q` 上升，法警调度证据链成形，10 §3.3/§3.7）；怕失控招来 1 号问责（`R_s`）；怕 Protocol 偏离 | `playerThreatVisible`：公开证据 >0 或核验证据 >0 或 `E ≥ 0.2`（[it_authority.go](../../internal/engine/it_authority.go)）；部门戒备；泄漏事实的部门信念层（§3.2）；**组织怀疑度**（筹备期组织行为累积，§3.1 修订） | 月度权威回合的 17 个候选动作（维护 8＋隐蔽 7＋反击 2），`R_op` 预算约束；立场阻挠（[top_stance.go](../../internal/engine/top_stance.go)）；**组织怀疑度响应层**（镇压／蒙住 1 号／不作为的带权随机三选一，[escape_response.go](../../internal/engine/escape_response.go)，ADR-0014；审计没收已移除） | 群体/信道为主；玩家本人仅在威胁可见时（`counter_investigate_player`） |
 | **Judicial（司法部）** | 怕程序不自洽、怕被某一方工具化——它的权力就是程序本身；归属在 IT/SWING/PACT 三态间迁移，最终归属只有 IT 或约章，SWING 是争夺态，市长仅有影响力修正、永不构成归属（[authority.go](../../internal/engine/authority.go)，[ADR-0005](../../knowledge/adr/0005-judicial-not-mayors.md)） | 纸面痕迹（身份链完成键计数，[20 分册](../story/endings/20-chain-agent-compromised.md)）；搜查中见到的不一致 | 复核来历（`identity_query_local`）、档案复查（`archive_review_opened`）、搜查与逮捕（职业动作面）、封顶时签发逮捕令（`victory_check` 演出） | 痕迹指向谁就指向谁；多数时候指向"对不上的纸面"，不指向人 |
 | **市长** | 怕正统性流失（`MayorLegitimacy`）与叛乱失控——镇压可行性随叛乱下降（[top_stance.go](../../internal/engine/top_stance.go) `mayorStanceWeights`） | 叛乱值；正统性；公开秩序事件 | 直接命令、警察处置（`PoliceObedience` 是执行前提）、公开叙事；立场三档（阻挠/不阻挠/配合）塑形逃跑人数（裁决 F，16 §3.2） | 群体；市长反制的是"秩序松动"，不是某个人 |
 | **1 号（上层控制方）** | 怕失序——它读的是复合压力，不分辨个人：`order_pressure = 0.6·叛乱 + 0.4·平均恐慌 ≥ 0.45` 且宣传等级 `≥ 2`（有组织煽动门，[content_events.go](../../internal/engine/content_events.go)） | 各堡叛乱值（注意力 = 叛乱，[world.go](../../internal/service/world.go)）；通牒后压力是否回落 | 通牒 → 三条反应链：本地整肃（前兆 U+4/执行 U+7）、终止投放（自检 U+10/投放 U+14）、投送打击（侦察 U+16/打击 U+19）（[silo1_purge_omen.js](../../events/special/silo1_purge_omen.js) 时点注释） | 整个堡；玩家只是被波及 |
@@ -49,13 +50,14 @@
 
 玩家的每个推进行为都在喂既有的检测量。本节把"什么行为提高被注意的概率"写成**行为 → 检测量 → 读取方**的映射表，全部落在既有公式与既有状态上；新增的只是把流通类行为接进既有因子表（【项目外推】），公式本身不改。
 
-### 3.1 三个检测量及其生产者
+### 3.1 检测量及其生产者
 
 | 检测量 | 语义 | 生产者【现状】 | 读取方【现状】 |
 | --- | --- | --- | --- |
 | **痕迹**（`suspicion_level`，actor 层） | 玩家个人纸面接缝的累积；只升是设计口径（20 分册 §3），年衰减 0.05（[core_systems.js](../../events/mechanics/core_systems.js)） | `sampledSuspicion = base·V_identity·F_fit·W_witness·R_record·(1+mismatch)`（[mechanics.go](../../internal/engine/mechanics.go) 注入 prelude，10 §8.3）；固定增量 `suspicionDelta`（Build 0.01、Incite 0.05、职务动作 0.01–0.03）；秘密行动开场 0.002–0.008＋结算 0.01–0.05（[station_operations.go](../../internal/service/station_operations.go)） | 《除名》链三级节点（完成键计数代理）；封顶 `≥1.0` 硬护栏；`agent_erasure_staged` 读 `≥0.7` |
 | **方向**（反制方对"泄漏事实"的 `B/π`） | 反制方知道"有人在传某件事"，不知道是谁——确信随流通次数上升，归因由版本分布 `π` 表达 | 玩家流通行为生成观察，经既有吸收公式 `s_i = rel·(0.85+0.15·related_f)·independence`、`B_new = 1−(1−B_old)·(1−s_i/(1+0.25·n))`（10 §3.5，[information.go](../../internal/engine/information.go)）进入 IT/Judicial 层 | §4 各档反制的触发输入；IT 的 `π` 归因（外来渗透者 vs 内部不满，同构 `it_directed/mundane` 版本对）决定它选哪类反制动作 |
-| **账本**（可见筹备与流量） | 看得见的准备与看得见的流量：修了多少服、划拨了多少物资、信道用了多少次 | `prep_exposure`：修服 +0.08、演练 +0.06、预案 +0.02、划拨 +0.04（市长非配合时）、照护/生产 +0.03（[37 分册](../story/endings/37-rebellion-event-spec.md) 动作表）；`StationOps.Exposure`/`Silo1.Exposure`：跨堡行动反向追查 0.04–0.14（[station_operations.go](../../internal/service/station_operations.go)）；信道暴露成本（[16 §2.3](./16-preparation-outcome-design.md)） | 审计没收（`prep_exposure ≥ 0.5`，[escape_prep_audit_seizure.js](../../events/crisis/escape_prep_audit_seizure.js)）；出发追踪（`≥0.6` 折减 30%，[escape_settlement.go](../../internal/service/escape_settlement.go)）；堡外追踪热度（筹备暴露权重 0.8，[escape_outside.go](../../internal/service/escape_outside.go)） |
+| **账本**（可见筹备与流量） | 看得见的准备与看得见的流量：修了多少服、划拨了多少物资、信道用了多少次 | `prep_exposure`：修服 +0.04、演练 +0.06、预案 +0.02、划拨 +0.04（市长非配合时）、照护/生产 +0.03（[37 分册](../story/endings/37-rebellion-event-spec.md) 动作表）；`StationOps.Exposure`/`Silo1.Exposure`：跨堡行动反向追查 0.04–0.14（[station_operations.go](../../internal/service/station_operations.go)）；信道暴露成本（[16 §2.3](./16-preparation-outcome-design.md)） | 出发追踪（`≥0.6` 折减 30%，[escape_settlement.go](../../internal/service/escape_settlement.go)）；堡外追踪热度（筹备暴露权重 0.8，[escape_outside.go](../../internal/service/escape_outside.go)）。**修订：审计没收门已移除**——账本不再喂任何没收型反制（ADR-0014） |
+| **组织怀疑度**（`OrgSuspicion`，堡层，修订新增） | "有人在组织"的风声：只由组织行为驱动——动员范围（演练、预案功能位、照护与生产组织）与通信频次规模（外溢信道、保障磋商）；**囤积（修服/划拨/囤备）永不驱动**（准备本身不惹眼，惹眼的是组织行为） | 组织类动作经 `orgSuspicionDelta` 显式声明增量（演练 +0.06、预案每位 +0.03、照护/生产 +0.03、信道 +0.04–0.06、保障磋商 +0.04，`TODO(balance)`）；月度衰减 0.01（同淡忘口径）；开窗/出发后层结束 | IT 响应层决策门（`≥0.35` 且冷却 4 月已过 → 带权随机三选一，[escape_response.go](../../internal/engine/escape_response.go)，ADR-0014） |
 
 ### 3.2 方向量怎么累积：泄漏事实的 B/π 复用（本册新增映射）
 
@@ -76,7 +78,8 @@
 | Incite Rebellion | 痕迹 +0.05＋叛乱＋恐慌 | 既有固定增量 | 市长（叛乱）；1 号（`order_pressure` 复合）；部门（恐慌） |
 | verify/publish（公开证据） | `E`/`Q` 聚合（10 §3.3/§3.7）＋方向（公开档 2.2） | `playerThreatVisible` 门 | IT（反击候选集解锁，既有）；Judicial（`Q` 是约章门输入） |
 | 秘密行动（STATION_*/SILO1_DECEIVE） | 痕迹（开场+结算）＋身份链完成键计数＋`Exposure` | 0.002–0.008 开场、0.01–0.05 结算；`identity_trace_accumulates` cd2 | Judicial（纸面接缝）；1 号（`Exposure` 反向追查） |
-| 逃跑筹备各动作 | `prep_exposure` 账本 | 0.02–0.08（37 分册表） | IT（审计没收门 0.5）；出发追踪（0.6） |
+| 逃跑筹备·囤积动作（修服/开库/划拨/囤备） | `prep_exposure` 账本 | 0.02–0.06（37 分册表） | 出发追踪（0.6）。**不抬高组织怀疑度、不被没收**（修订，ADR-0014） |
+| 逃跑筹备·组织动作（演练/预案/照护/生产/信道/保障磋商） | `prep_exposure` 账本＋**组织怀疑度** | 暴露 0.02–0.06；怀疑度 0.03–0.06（§3.1 修订行） | 出发追踪（0.6）；IT 响应层决策门（0.35） |
 | 外溢信道建立/使用 | 信道暴露成本 | 可靠度 0.75/0.55/0.35 三档（[escape_spillover_*.js](../../events/player_actions/)） | 1 号（异常流量观察，Layer 3，16 §2.3 预留） |
 
 **矿工结构性豁免不变**：`UNSAMPLED` 类（矿工普通行为）不进入检测流程、无怀疑增量（10 §8.2，[information.go](../../internal/engine/information.go)）；本册不改动检测分类。
@@ -100,13 +103,15 @@
 
 | 编号 | 反制 | 触发输入 | 效果形态 | 现状 |
 | --- | --- | --- | --- | --- |
-| T2-1 | 筹备审计没收 | `prep_exposure ≥ 0.5` 且 IT 立场阻挠（`canTrigger` 读 `top_stance.it === "block"`）；REPEATABLE cd6 | 已修服 −2、`prep_exposure −0.3`、恐慌 +0.02 | **既有**（[escape_prep_audit_seizure.js](../../events/crisis/escape_prep_audit_seizure.js)） |
-| T2-1b | 囤积审计没收（同构扩展） | 同上＋`supplies_packed/materials_packed ≥` 门槛（起点 150/80，【推导，TODO(balance)】） | 封存补给/材料按比例没收（起点 20%，【推导】），`prep_exposure −0.3` | 【项目外推】效果接口既有（`preparationDelta`） |
+| T2-1 | IT 响应层：镇压 | 组织怀疑度 `≥0.35` 且冷却 4 月已过 → 带权随机三选一命中镇压（权重：残余力量、怀疑度深度、`R_op` 预算、`R_s` 压力、保障可信度、IT 立场；自由裁量地板 0.05，`TODO(balance)`） | 组织怀疑度 −0.25（风声被消费）、Judicial/IT 戒备 +0.10、全部门恐慌 +0.02。**只压组织，不碰囤积**——账本与信道分毫不动（ADR-0014） | **既有**（[escape_response.go](../../internal/engine/escape_response.go)） |
+| T2-1c | IT 响应层：蒙住 1 号 | 同上命中蒙蔽 | 不镇压（组织继续）；IT 按月付 `R_op`（弱势成本曲线，基础 5，`TODO(balance)`）把异常瞒住；暴露概率随月上浮（0.06 起、+0.03/月、封顶 0.5）；付不起或暴露即崩塌 → `R_s +0.08`，决策日志记录结果 | **既有**（同上） |
+| T2-1d | IT 响应层：不作为 | 同上命中不作为 | IT 的自由裁量，但异常悬而未决 → `R_s +0.03`。`R_s` 经出发追踪基数（权重 0.3）落成"日后更贵、更窄"，不是当场判负；预算不变式：本通道全程净贡献 ≤0.25，单独到不了硬护栏 1.0 | **既有**（同上；追踪接线 [escape_outside.go](../../internal/service/escape_outside.go)） |
+| ~~T2-1b~~ | ~~囤积审计没收~~ | — | **已移除**（修订，ADR-0014）：没收囤积造成反向梯度（准备越重被没收越多），且"囤了多少"本就不该抬高怀疑度 | 移除 |
 | T2-2 | 信道审计 | 信道使用次数 × 信道暴露成本 ≥ 门槛（起点：IT 专线类 3 次、信号类 5 次、实体类 8 次，【推导，TODO(balance)】，与三档可靠度 0.75/0.55/0.35 反相关） | 该信道可靠度降一档或中断；信道卡上的数字变化玩家可见（既有账本字段） | 【项目外推】16 §2.3 预留的"外溢暴露与宿主风险结算"的首个落点 |
 | T2-3 | 分享目标收紧 | 目标部门 `Alertness ≥` 高门槛（起点 0.50，【推导】） | 针对该部门的流通类动作进入灰置：`available` 增加戒备上限条件，`DisabledReason` 自然可读（"该部门近期严查内外往来"）；戒备回落后自动恢复——**灰置不是锁定**，动作不重新隐藏（15 分册 §3.3 三态纪律） | 【项目外推】机制既有（[action_gates.go](../../internal/service/action_gates.go) `available` 每次快照重算） |
 | T2-4 | 谈判可信度侵蚀 | `prep_exposure ≥` 门槛（起点 0.4，【推导】） | 保障可信度 `Guarantee −δ`（起点 0.15，【推导】）经既有 `addTopStanceGuarantee` 接口 → 顶层立场权重自然偏向阻挠（既有 `mayorStanceWeights/itStanceWeights` 读 `Guarantee`）→ 出发人数自然变少（裁决 F：立场只塑形人数，不做判定闸） | 【项目外推】接口与权重既有（[top_stance.go](../../internal/engine/top_stance.go)） |
 
-**玩家可读的因果链**：T2-1/1b 是账本数字直接减少＋月度故事"审计"条目；T2-2 是信道卡可靠度数字变化＋"例行流量审计"故事；T2-3 是动作灰置原因文本；T2-4 是谈判接触卡措辞变模糊（内容层），没有任何数值弹窗。
+**玩家可读的因果链**：T2-1/1c/1d 走月度故事——"突击清查扫过维修夹层与集结点""IT 调整了一批例行流量排班，没有解释""一些异常记录被归档了"，以及蒙蔽崩塌时的"上级来了一份例行问询"；叙事只描述发生的事，不指认玩家（§5.2）。决策日志（归一化权重＋因子摘要）留在存档内供复盘，不进玩家界面。T2-2 是信道卡可靠度数字变化＋"例行流量审计"故事；T2-3 是动作灰置原因文本；T2-4 是谈判接触卡措辞变模糊（内容层），没有任何数值弹窗。
 
 ### 4.3 第三档：具体的人被盯上（目标 = 个体）
 
@@ -124,7 +129,7 @@
 ### 4.4 档间关系
 
 - **不跳档**：第三档的触发必须经过第一、二档同款公开事实（痕迹计数、泄漏 `B`），不存在"跳过恶化直接抓人"的路径。
-- **可反制**：每档都有玩家侧的应对——第一档靠等（戒备衰减）与换目标；第二档靠降暴露（低暴露动作、IT 立场转向后风险消失，既有 `canTrigger` 口径）；第三档靠收手（痕迹只升不降，但停止秘密行动即停止计数，既有 cd2 口径）。应对全部是既有玩法，不新增反反制按钮。
+- **可反制**：每档都有玩家侧的应对——第一档靠等（戒备衰减）与换目标；第二档靠控制组织节奏（组织怀疑度按月衰减 0.01：停下大动静，风声会淡；IT 响应层的三档后果全部是成本，囤积永不扣减，ADR-0014）；第三档靠收手（痕迹只升不降，但停止秘密行动即停止计数，既有 cd2 口径）。应对全部是既有玩法，不新增反反制按钮。
 - **不同主体在各档的分布**：第一档以 IT 与部门为主，第二档以 IT 为主（信道审计涉及 1 号），第三档以 Judicial/IT 为主（身份线）与 IT 为主（联系人）；市长与 1 号的反制始终是群体级（市长在第二档只经立场权重间接出现）。
 
 ## 5. 藏在日常小动作里：呈现通道纪律
@@ -169,8 +174,9 @@
 ### 6.2 怀疑度预算（锚：既有增量表与封顶 1.0）
 
 - 封顶 1.0；年衰减 0.05（≈0.0042/月）；既有增量：Build 0.01、Incite 0.05、探查 ~0.01×因子、秘密行动 0.002–0.008 开场＋0.01–0.05 结算、IT 反击 `counter_investigate_player` 0.08（既有）。
-- **反制系统的全程净贡献 ≤ 0.25（封顶值的四分之一）**【推导，TODO(balance)】：T3-2 单次 +0.03（起点，同构身份链单次痕迹量级）；第一、二档反制**不贡献怀疑度**（指向群体，不归属玩家——档位原则 §2）；T3-1 沿用既有链，不新增增量。
+- **反制系统的全程净贡献 ≤ 0.25（封顶值的四分之一）**【推导，TODO(balance)】：T3-2 单次 +0.03（起点，同构身份链单次痕迹量级）；第一、二档反制**不贡献痕迹怀疑度**（指向群体，不归属玩家——档位原则 §2）；T3-1 沿用既有链，不新增增量。
 - 理由：《除名》的叙事是"一直赌下一次行动是最后一次"（29 §3）——失败必须来自玩家的贪，不能来自世界的自动累积；0.25 的预算保证反制把玩家**推向**悬崖，但跳下去的那一步永远是玩家自己迈的。
+- **组织怀疑度是另一个量**（修订，ADR-0014）：`OrgSuspicion` 在堡层、只读组织行为、只喂 IT 响应层决策门，与 actor 层痕迹怀疑度（《除名》通道）完全隔离——两条预算各自独立，互不贡献。组织怀疑度无封顶硬护栏：它的终点不是判负，而是 IT 的三选一；三档后果全部是成本（§4.2），其中不作为/蒙蔽崩塌对 `R_s` 的全程净贡献 ≤0.25（预算测试锁定，[escape_response_test.go](../../internal/service/escape_response_test.go)）。
 
 ### 6.3 时长与衰减（锚：18 §3.3 单次分享自然寿命 25–30 月、渗透区间 [24, 36]）
 
@@ -180,13 +186,13 @@
 
 ### 6.4 冷却与事件密度（锚：既有 cd 序列与文本墙治理）
 
-- 既有冷却序列：身份痕迹 cd2、演练 cd3、外溢信道 cd4、审计没收 cd6、常态硬化 cd12。本册新增事件冷却全部落在 **[4, 12] 月**区间【推导，TODO(balance)】：T1 事件 cd ≥ 6、T2-1b cd6（与 T2-1 共用审计名义，同月不并发）、T2-2 cd ≥ 6、T3-2 cd4。
-- **同源去重**：同一触发源（同一部门戒备越线、同一信道审计）每冷却周期只生效一次，不叠加（同构决定性冲击同源去重裁决）；审计记录永久保留（供线面板与结算行引用）。
+- 既有冷却序列：身份痕迹 cd2、演练 cd3、外溢信道 cd4、常态硬化 cd12；**IT 响应层决策冷却 4 月**（修订：审计没收 cd6 随机制移除，ADR-0014）。本册新增事件冷却全部落在 **[4, 12] 月**区间【推导，TODO(balance)】：T1 事件 cd ≥ 6、T2-2 cd ≥ 6、T3-2 cd4。
+- **同源去重**：同一触发源（同一部门戒备越线、同一信道审计）每冷却周期只生效一次，不叠加（同构决定性冲击同源去重裁决）；审计记录永久保留（供线面板与结算行引用）。IT 响应层决策日志同口径：环形保留最近 24 条，归一化权重与因子摘要可复盘。
 - **新增事件条目预算 ≤ 8 个**：多堡事件重构已确立"同月同类重复事件必须合并、避免文本墙"的治理口径（[perception.go](../../internal/service/perception.go) 合并逻辑）；反制事件全部走该通道，条目数受同一密度约束。
 
 ### 6.5 IT 资源一致性（锚：it_authority.go 既有预算）
 
-- 凡 IT 执行的反制（T1-1/2/3、T2-1/1b/2、T3-2）必须走既有 `R_op` 预算（初始 60、收入 8/月、上限 100）与弱势成本曲线 `ceil(base·(1+3·(1−W/100)²))`——**没有免费反制**。
+- 凡 IT 执行的反制（T1-1/2/3、T2-1/1c/2、T3-2）必须走既有 `R_op` 预算（初始 60、收入 8/月、上限 100）与弱势成本曲线 `ceil(base·(1+3·(1−W/100)²))`——**没有免费反制**。蒙蔽维持按月付费（基础 5，修订）：付不起即崩塌，弱势的 IT 蒙不住大事。
 - 新增候选动作成本取既有目录区间 [5, 12] 内的值【推导，TODO(balance)】；反击加成、双动机 utility、资源枯竭衰减全部沿用（10 §5.5："玩家须承受至少一次反击；强度随资源枯竭衰减"）。
 - 叙事同构：W 越低 IT 越反制不起——弱势的权力方收手是自保，不是仁慈。
 
@@ -205,7 +211,8 @@
 | --- | --- | --- |
 | `TestInformationEndingPlayableFromNewGame` | [info_endgame_test.go](../../internal/service/info_endgame_test.go) | **核心受影响**：摩擦窗口与联系人监视改变流通节奏；策略需预留摩擦 AP（§6.1 预算内）；断言链（内容键＋公开证据＋INFORMATION 结算）不变，结算月可能后移 |
 | 三策略基线 | [info_economy_harness_test.go](../../internal/service/info_economy_harness_test.go) | **基线重测**：17 §4 对比表在反制落地后再次失效，需重建（零操作/最低维持仍应输，有节奏推进应赢） |
-| `escape_chain_test.go`／`escape_outside_test.go` | [escape_chain_test.go](../../internal/service/escape_chain_test.go)、[escape_outside_test.go](../../internal/service/escape_outside_test.go) | T2-1b/T2-4 改变筹备节奏与保障可信度；断言（逃出人数、追踪档位、群体存续）不变 |
+| `escape_chain_test.go`／`escape_outside_test.go` | [escape_chain_test.go](../../internal/service/escape_chain_test.go)、[escape_outside_test.go](../../internal/service/escape_outside_test.go) | 审计没收键已从加载清单移除并加"不得回归"断言；T2-1/1c/1d 改变筹备节奏与保障可信度；断言（逃出人数、追踪档位、群体存续）不变 |
+| 组织怀疑度与 IT 响应层（修订新增） | [escape_response_test.go](../../internal/service/escape_response_test.go)、[escape_response_test.go（引擎）](../../internal/engine/escape_response_test.go) | 驱动边界（囤积不驱动、组织驱动）、决策点火与日志归因、蒙蔽付费/崩塌、冷却、预算 ≤0.25、**反向梯度实跑验收**（同种子 full≥sparse：出发人数与路上幸存） |
 | `rule_of_law_chain_test.go`／结局验收宿主 | [rule_of_law_chain_test.go](../../internal/service/rule_of_law_chain_test.go)、[ending_acceptance_harness_test.go](../../internal/service/ending_acceptance_harness_test.go) | 间接：玩家时间分配竞争（同 18 §6 说明 1 口径）；**必须重跑**，dump 基线 JSON 重建 |
 | `compromised_endgame_test.go`／`failure_endings_test.go` | [compromised_endgame_test.go](../../internal/service/compromised_endgame_test.go)、[failure_endings_test.go](../../internal/service/failure_endings_test.go) | T3-1b 绑定改变抹除准备期的动作可用性；封顶口径与断言不变 |
 | 同种子 parity 双跑 | [parity_harness_test.go](../../internal/service/parity_harness_test.go) | 新增反制状态（戒备衰减计数、摩擦窗口计数、联系人不可用计数、信道审计状态）**必须进快照**；双跑逐字节一致契约不变 |
@@ -233,20 +240,21 @@
 
 | 约束 | 本册核对 |
 | --- | --- |
-| 不得削弱现有可玩性保证 | §6.1 摩擦预算在 AP 富余内、§6.3 恶化窗口 ≤ 渗透下界、§7.1 矩阵同口径复跑、§7.2 判据 4/5 显式失败纪律 |
+| 不得削弱现有可玩性保证 | §6.1 摩擦预算在 AP 富余内、§6.3 恶化窗口 ≤ 渗透下界、§7.1 矩阵同口径复跑、§7.2 判据 4/5 显式失败纪律；响应层后果全部成本型、预算 ≤0.25，不新增判负通路（修订） |
 | 不得改任何初始思潮值（ADR-0011） | §6.6：反制不触初始思潮；恐慌增量走既有漂移且全程 ≤ 0.1 并进测试账；本册所有新旋钮均为自由旋钮（资源/冷却/门槛），只需 parity 回归 |
-| 不新增随机源 | 反制判定全部确定性（读状态、比门槛、走既有月度 dispatch）；立场重估复用既有单一 RNG 流口径，不新增取样点 |
+| 随机源纪律（修订） | 反制判定主体为确定性状态反应；筹备层 IT 响应决策为唯一带权随机取样点，走引擎单一 RNG 流（ADR-0007/0013 同构、[08 确定性约定](../../knowledge/08-determinism-known-issues.md)）：未产生组织怀疑度的运行（含 parity 基线）不进入取样，轨迹逐位不变 |
 | 不改资格口径与仲裁 | 反制只产成本；唯一失败通路是既有怀疑度封顶，增量受 §6.2 预算 |
 | 正典具名人物 | §4.3：反制只动匿名联系人；具名人物生死唯一来源仍是事件链节点 |
-| 空配置保持原行为 | 反制事件未配置/门槛未越线时逐位不变（既有事件系统口径）；新账本字段零值 = 旧档语义 |
+| 空配置保持原行为 | 反制事件未配置/门槛未越线时逐位不变（既有事件系统口径）；新账本字段零值 = 旧档语义（响应层零值 = 无组织行为 = 不结算不取样） |
+| 不困死玩家（修订新增，ADR-0014） | 囤积账本永不被反制扣减（结构性不变式测试锁定）；响应层三档后果全部是成本与风险上浮；safeguard 通道预算 ≤0.25，单独到不了硬护栏 1.0 |
 
 ## 9. 明确不做
 
-1. 不新造"隐蔽值"或任何单一不可见总计量；检测只有三个既有检测量（§3.1）。
-2. 不让反制直接判负、直接写资格、直接锁死动作（灰置必须可恢复，锁定只来自既有三态门控的 `unlock` 语义）。
-3. 不新增结局类型、不新增随机源、不改初始思潮、不改 1 号通牒门槛与反应链时点。
+1. 不新造"隐蔽值"或任何单一不可见总计量；检测只有既有的检测量（§3.1；组织怀疑度是堡层公开行为的风声量，不是隐蔽值——它有明确生产者、按月衰减、玩家可从叙事与数字反推）。
+2. 不让反制直接判负、直接写资格、直接锁死动作（灰置必须可恢复，锁定只来自既有三态门控的 `unlock` 语义）。**不没收囤积**（修订，ADR-0014）。
+3. 不新增结局类型、不改初始思潮、不改 1 号通牒门槛与反应链时点；随机源只增一个受控取样点（IT 响应决策，单一 RNG 流，未激活不取样）。
 4. 不让宣传充当反制（既有裁决）；不新造专用反制组织（15 分册 §5.1 同口径）。
-5. 不在本轮写代码、事件、配置与数值；本册只产出机制设计与规格。
+5. 不在本轮写代码、事件、配置与数值；本册只产出机制设计与规格。（修订部分已随 ADR-0014 批次落地，标注【既有】。）
 6. 不给反制加"教学"：读不出信号是设计允许的代价（§5.2 禁令 4）。
 
 ## 10. 主要依据
@@ -254,7 +262,7 @@
 - 检测三类与因子表、吸收公式、E/Q 聚合：[10-it-control-credibility](./10-it-control-credibility.md) §3/§8（子文件 03/13）、[information.go](../../internal/engine/information.go)、[mechanics.go](../../internal/engine/mechanics.go) prelude。
 - IT 月度回合、`R_op` 预算、反击目录与衰减：[it_authority.go](../../internal/engine/it_authority.go)（10 §5 的实现）。
 - 立场三档与权重输入：[top_stance.go](../../internal/engine/top_stance.go)、[16 §3.2](./16-preparation-outcome-design.md)。
-- 筹备暴露、审计没收、出发与堡外追踪：[37 分册](../story/endings/37-rebellion-event-spec.md)、[escape_prep_audit_seizure.js](../../events/crisis/escape_prep_audit_seizure.js)、[escape_settlement.go](../../internal/service/escape_settlement.go)、[escape_outside.go](../../internal/service/escape_outside.go)。
+- 筹备暴露、出发与堡外追踪：[37 分册](../story/endings/37-rebellion-event-spec.md)、[escape_settlement.go](../../internal/service/escape_settlement.go)、[escape_outside.go](../../internal/service/escape_outside.go)。筹备层反制（修订）：[escape_response.go](../../internal/engine/escape_response.go)（组织怀疑度与 IT 带权响应；审计没收已移除）、[ADR-0014](../../knowledge/adr/0014-countermeasures-cost-suspicion-org-only.md)。
 - 身份线四节点与封顶：[20-chain-agent-compromised.md](../story/endings/20-chain-agent-compromised.md)、[events/special/identity_*.js 与 agent_erasure_staged.js](../../events/special/)。
 - 1 号反应链门槛与时点阶梯：[content_events.go](../../internal/engine/content_events.go)（`OrderPressure`/`Silo1UltimatumPressure`/`Silo1AgitationPropaganda`）、[world.go](../../internal/service/world.go)、[silo1_purge_omen.js](../../events/special/silo1_purge_omen.js)。
 - 征兆聚合与呈现纪律：[lines_progress.go](../../internal/service/lines_progress.go)、[29-failure-endings.md](../story/endings/29-failure-endings.md)。

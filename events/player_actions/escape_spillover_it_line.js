@@ -22,5 +22,7 @@ defineEvent({
   effects: [
     // 目标堡 3 = 18 号（三堡布局）；可靠度与暴露成本 TODO(balance)。
     spilloverChannelAdd("it_line", 3, 0.75),
+    // 通信规模驱动组织怀疑度：专线夹带是最显眼的通信（20 修订/ADR-0014）。
+    orgSuspicionDelta(0.06), // TODO(balance)
   ],
 });

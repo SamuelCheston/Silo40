@@ -20,5 +20,7 @@ defineEvent({
   effects: [
     preparationPlanRole("agricultural"),
     preparationDelta("prep_exposure", 0.02), // TODO(balance)
+    // 动员范围驱动组织怀疑度：对接功能位＝把一个部门拉进计划（20 修订/ADR-0014）。
+    orgSuspicionDelta(0.03), // TODO(balance)
   ],
 });

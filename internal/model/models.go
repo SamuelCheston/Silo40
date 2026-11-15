@@ -488,6 +488,7 @@ type Silo struct {
 	Negotiation     NegotiationState        `gorm:"type:text;serializer:json" json:"negotiation"`       // 市长与叛乱方谈判/妥协层 (21 设计卷)：只改变谁在阻碍谁，不发放胜利
 	EscapePrep      EscapePreparation       `gorm:"type:text;serializer:json" json:"escape_prep"`       // 逃跑准备账本 (16 §2)：事实账本，仲裁不读
 	SpilloverPrep   SpilloverPreparation    `gorm:"type:text;serializer:json" json:"spillover_prep"`    // 外溢准备账本 (16 §2.3)：信道建立侧
+	EscapeResponse  EscapeResponseState     `gorm:"type:text;serializer:json" json:"escape_response"`   // 筹备反制层 (20 修订/ADR-0014)：组织怀疑度与 IT 带权响应
 	PreFallSnapshot PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
 	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
 	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
@@ -695,6 +696,57 @@ func (n *NegotiationState) AppendLogEntry(entry NegotiationLogEntry) {
 // 妥协尚未成立 (妥协成立后谈判阶段结束，进入选择阶段)。
 func (n NegotiationState) NegotiationActive() bool {
 	return n.Initialized && n.ChannelOpen && !n.Closed && !n.CompromiseEstablished
+}
+
+// IT 对逃跑筹备的响应档位 (20 分册修订、ADR-0014)：组织怀疑度到门槛后，
+// IT 必须做选择——带权重的随机裁量，不是阈值 if-else (ADR-0007 同构)。
+const (
+	EscapeResponseSuppress = "suppress" // 镇压：驱散组织、抬戒备恐慌；不触碰囤积账本
+	EscapeResponseConceal  = "conceal"  // 蒙蔽：不镇压，自己把 1 号蒙住 (占 IT 资源，暴露风险随月上浮)
+	EscapeResponseIgnore   = "ignore"   // 不作为：自由裁量，但承担后果 (safeguard 风险上浮)
+)
+
+// EscapeResponseLogEntry IT 响应决策日志的一条：权重可归因、事后可复盘
+// (同谈判层日志口径，21 设计卷)。
+type EscapeResponseLogEntry struct {
+	Year     int                `json:"year"`
+	Month    int                `json:"month"`
+	Decision string             `json:"decision"`
+	Weights  map[string]float64 `json:"weights,omitempty"` // 归一化后的档位权重
+	Factors  string             `json:"factors,omitempty"` // 决策时刻的因子读数摘要
+	Outcome  string             `json:"outcome,omitempty"` // 后续结果 (蒙蔽崩塌/窗口开启等)
+}
+
+// EscapeResponseLogCap 决策日志环形上限 (同谈判层)。
+const EscapeResponseLogCap = 24
+
+// EscapeResponseState 逃跑筹备的反制层状态 (20 分册修订、ADR-0014)。
+//
+// 设计纪律：
+//   - 组织怀疑度只由组织行为 (动员范围、通信频次与规模) 驱动；囤积
+//     (修服/划拨/囤备) 永不抬高怀疑度——准备本身不惹眼，惹眼的是组织行为。
+//   - 反制只抬成本与风险：任何响应都不扣减囤积账本、不直接判负、
+//     不困死玩家；玩家永远还有路走。
+//   - 零值 = 无响应层活动 = 旧档语义 (未做任何组织动作的运行逐位不变)。
+type EscapeResponseState struct {
+	Initialized       bool    `json:"initialized"`
+	OrgSuspicion      float64 `json:"org_suspicion"` // 组织怀疑度 (0-1)
+	LastDecisionYear  int     `json:"last_decision_year,omitempty"`
+	LastDecisionMonth int     `json:"last_decision_month,omitempty"`
+	CoverActive       bool    `json:"cover_active"` // IT 正在把动向蒙住，不让 1 号察觉
+	CoverMonths       int     `json:"cover_months"`
+	Decisions         []EscapeResponseLogEntry `json:"decisions,omitempty"` // 环形保留最近 24 条
+}
+
+// AppendDecision 追加一条决策日志并夹到环形上限 (超限时丢弃最旧条目)。
+func (r *EscapeResponseState) AppendDecision(entry EscapeResponseLogEntry) {
+	if r == nil {
+		return
+	}
+	r.Decisions = append(r.Decisions, entry)
+	if len(r.Decisions) > EscapeResponseLogCap {
+		r.Decisions = r.Decisions[len(r.Decisions)-EscapeResponseLogCap:]
+	}
 }
 
 // 接应档位 (16 §2.1)：none = 无接应事实；surveyed = 路线已勘察；
