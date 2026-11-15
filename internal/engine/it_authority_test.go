@@ -167,9 +167,11 @@ func TestDispatchIsTheOnlyDirectLeak(t *testing.T) {
 	}
 }
 
-// TestProtocolDisposalProtectsAndRestores locks the §5.5 same-direction case:
-// protocol disposal lowers safeguard risk and closes the earliest unmet target.
-func TestProtocolDisposalProtectsAndRestores(t *testing.T) {
+// TestProtocolDisposalRestoresAndRegistersOverreach locks the §5.5
+// same-direction case under ADR-0017: protocol disposal closes the earliest
+// unmet target; the protective risk tampering no longer lowers safeguard risk
+// directly — it registers an it_overreach incident instead.
+func TestProtocolDisposalRestoresAndRegistersOverreach(t *testing.T) {
 	e := NewGameEngine()
 	silo := CreateInitialSilo("Disposal Fixture", 122, nil)
 	silo.SafeguardRisk = 0.2
@@ -178,8 +180,11 @@ func TestProtocolDisposalProtectsAndRestores(t *testing.T) {
 		{ClauseID: "O-01", Kind: DeviationUnmet, Open: true},
 	}
 	e.executeItAction(silo, nil, ItAction{ID: "protocol_disposal", BaseCost: 7, WShock: 2, RSDelta: -0.04})
-	if math.Abs(silo.SafeguardRisk-0.16) > 1e-12 {
-		t.Fatalf("safeguard after protective disposal = %v, want 0.16", silo.SafeguardRisk)
+	if silo.SafeguardRisk != 0.2 {
+		t.Fatalf("disposal must not write safeguard risk directly: %v", silo.SafeguardRisk)
+	}
+	if silo.SafeguardIncidents[SafeguardIncidentITOverreach] != 1 {
+		t.Fatalf("protective disposal must register one it_overreach incident: %+v", silo.SafeguardIncidents)
 	}
 	for _, dev := range silo.Protocol.Deviations {
 		if dev.ClauseID == "O-01" && dev.Open {
@@ -225,6 +230,59 @@ func TestItCounterattacksOnlyUnderVisibleThreat(t *testing.T) {
 	if agent.SuspicionLevel <= suspicionBefore {
 		t.Fatalf("investigation counter must raise player suspicion: %v -> %v",
 			suspicionBefore, agent.SuspicionLevel)
+	}
+}
+
+// TestExecutionIntensityGatesOrderIntentActions locks E 主消费点 (22-00 裁决 1)：
+// Order 意图方向的执行候选 (RSDelta < 0) 效用乘本堡执行强度；E=0 时这类候选
+// 整体出局，未启用 (关闭/旧档) 按 1.0 处理、与启用且 E=1 逐位一致。选择纪律
+// (严格更高分才替换、同分按 ID 升序) 不变。
+func TestExecutionIntensityGatesOrderIntentActions(t *testing.T) {
+	run := func(seed int64, initialized bool, execution float64) []string {
+		prev := rng
+		SetRNG(rand.New(rand.NewSource(seed)))
+		defer SetRNG(prev)
+
+		e := NewGameEngine()
+		silo := CreateInitialSilo("Execution Fixture", 122, nil)
+		InitializeItAuthority(silo)
+		silo.Authority.W = 50
+		silo.ItAuthority.ROp = 60
+		if initialized {
+			silo.BlackBox.Initialized = true
+			silo.BlackBox.CurrentExecution = execution
+		}
+		e.RunITAuthorityMonthly(silo, nil)
+		return append([]string(nil), silo.ItAuthority.LastActions...)
+	}
+	contains := func(actions []string, id string) bool {
+		for _, a := range actions {
+			if a == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	full := run(21, true, 1.0)
+	if !contains(full, "protocol_disposal") {
+		t.Fatalf("E=1 must keep the protective disposal actionable: %+v", full)
+	}
+
+	zero := run(21, true, 0.0)
+	if contains(zero, "protocol_disposal") || contains(zero, "suppress_signal") {
+		t.Fatalf("E=0 must drop all Order-intent candidates: %+v", zero)
+	}
+
+	// 未启用 = 逐位不变 (等价 E=1)。
+	off := run(21, false, 0)
+	if len(off) != len(full) {
+		t.Fatalf("uninitialized run diverged: %v vs %v", off, full)
+	}
+	for i := range off {
+		if off[i] != full[i] {
+			t.Fatalf("uninitialized run diverged at %d: %v vs %v", i, off, full)
+		}
 	}
 }
 
