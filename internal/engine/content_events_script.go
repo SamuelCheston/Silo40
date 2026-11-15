@@ -158,6 +158,15 @@ function preparationGte(field, value) {
 function escapeDepartureSettle() {
   return { type: "escape_departure_settle" };
 }
+function negotiationOpen() {
+  return { type: "negotiation_open" };
+}
+function negotiationRound(kind) {
+  return { type: "negotiation_round", flag: kind || "probe" };
+}
+function negotiationResolve(kind) {
+  return { type: "negotiation_resolve", flag: kind || "hands_off" };
+}
 function completePlayerAction(actionId) {
   return { type: "player_action_complete", action: actionId };
 }
@@ -429,6 +438,23 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			"mayor":       ctx.Silo.TopStance.MayorStance(),
 			"it":          ctx.Silo.TopStance.ITStance(),
 			"guarantee":   ctx.Silo.TopStance.Guarantee,
+		}
+		// 21 设计卷：谈判/妥协层只读视图。内容可读它塑形动作可得性
+		// (信道畅通/妥协成立)，决策与叙事由服务层执行。
+		result["negotiation"] = map[string]interface{}{
+			"initialized":            ctx.Silo.Negotiation.Initialized,
+			"channel_open":           ctx.Silo.Negotiation.ChannelOpen,
+			"mayor_disposition":      ctx.Silo.Negotiation.MayorDisposition,
+			"rounds":                 ctx.Silo.Negotiation.Rounds,
+			"mayor_path":             ctx.Silo.Negotiation.MayorPath,
+			"mayor_lean":             ctx.Silo.Negotiation.MayorLean,
+			"rebel_posture":          ctx.Silo.Negotiation.RebelPosture,
+			"offer_on_table":         ctx.Silo.Negotiation.OfferOnTable,
+			"offered_by":             ctx.Silo.Negotiation.OfferedBy,
+			"compromise_established": ctx.Silo.Negotiation.CompromiseEstablished,
+			"takeover":               ctx.Silo.Negotiation.Takeover,
+			"closed":                 ctx.Silo.Negotiation.Closed,
+			"close_reason":           ctx.Silo.Negotiation.CloseReason,
 		}
 		// 16 Layer 1：准备账本只读视图。账本塑形出发结算与动作可得性；
 		// 仲裁永不读它 (囤积准备不是胜利进度条)。

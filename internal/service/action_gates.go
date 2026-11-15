@@ -158,7 +158,9 @@ func validateActionCondition(condition actionCondition) error {
 func supportedActionMetric(metric string) bool {
 	switch metric {
 	case "action_points", "political_prestige", "propaganda_level", "suspicion_level", "known_fragments",
-		"legitimacy", "cohesion", "rebellion", "history_burden":
+		"legitimacy", "cohesion", "rebellion", "history_burden",
+		// 21 设计卷：谈判层 0/1 门控指标。
+		"negotiation_channel", "negotiation_compromise", "negotiation_takeover_decided":
 		return true
 	default:
 		return false
@@ -305,6 +307,24 @@ func (s *GameService) actionConditionValue(condition actionCondition) (float64, 
 		return s.silo.Rebellion, true
 	case "history_burden":
 		return s.silo.HistoryBurden, true
+	case "negotiation_channel":
+		// 21 设计卷：谈判信道畅通 (开信且未崩塌) 为 1，否则 0。
+		if s.silo.Negotiation.ChannelOpen && !s.silo.Negotiation.Closed {
+			return 1, true
+		}
+		return 0, true
+	case "negotiation_compromise":
+		// 21 设计卷：妥协成立为 1，否则 0。
+		if s.silo.Negotiation.CompromiseEstablished {
+			return 1, true
+		}
+		return 0, true
+	case "negotiation_takeover_decided":
+		// 21 设计卷：妥协后二选一已定为 1，否则 0。
+		if s.silo.Negotiation.Takeover != "" {
+			return 1, true
+		}
+		return 0, true
 	default:
 		return 0, false
 	}
