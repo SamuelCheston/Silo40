@@ -141,22 +141,9 @@ func (s *GameService) applyStationOperation(def silo1OperationDef, operationID i
 	historyBefore := snapshotHistoryMetrics(target)
 	switch def.ActionID {
 	case StationOpIntel:
-		var resolution string
-		if s.world != nil && s.world.Silo1BlackBoxEnabled {
-			// 00 卷裁决 5：功能开启时 STATION_INTEL 类精确读数改为分档 + 翻转
-			// 噪声读数；成本/暴露/怀疑度不变 (均在调度侧收取，此处不动)。
-			// 逐项按固定顺序 (合法性/凝聚力/叛乱) 各消耗 1 次 DrawFloat64。
-			resolution = fmt.Sprintf("Y%d M%d 合法性 %s 档、凝聚力 %s 档、叛乱 %s 档；部门构成 %s。",
-				target.CurrentYear, target.CurrentMonth,
-				blackBoxBandFlip(rebellionBand(target.MayorLegitimacy()), stabilityReportFlipProb),
-				blackBoxBandFlip(rebellionBand(target.Cohesion), stabilityReportFlipProb),
-				blackBoxBandFlip(rebellionBand(target.Rebellion), stabilityReportFlipProb),
-				strings.Join(stationDepartmentNames(target), "/"))
-		} else {
-			resolution = fmt.Sprintf("Y%d M%d 合法性 %.2f、凝聚力 %.2f、叛乱 %.2f；部门构成 %s。",
-				target.CurrentYear, target.CurrentMonth, target.MayorLegitimacy(), target.Cohesion, target.Rebellion,
-				strings.Join(stationDepartmentNames(target), "/"))
-		}
+		resolution := fmt.Sprintf("Y%d M%d 合法性 %.2f、凝聚力 %.2f、叛乱 %.2f；部门构成 %s。",
+			target.CurrentYear, target.CurrentMonth, target.MayorLegitimacy(), target.Cohesion, target.Rebellion,
+			strings.Join(stationDepartmentNames(target), "/"))
 		s.recordHistoryImpact(target, operationID, def, historyBefore, resolution)
 		return resolution
 	case StationOpInfiltrate:
