@@ -283,8 +283,12 @@ func selectsFlagGuard(def engine.ContentEventDefinition, flag string) bool {
 // scheduled strike lands. No metric, content fact, escape group, ending status,
 // or delay task is seeded by the test.
 func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testDeathPhysicalStrikePlayableFromNewGame)
+}
+
+func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "death-physical-strike.db"))
-	req := threeSiloRequest(2101)
+	req := threeSiloArchetypeRequest(2101, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
@@ -473,8 +477,12 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 // maintenance-night action. The jam lands a month later; the physical channel
 // still kills the silo, which is the point of the per-channel discipline.
 func TestTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testTerminationChannelCountermeasurePlayableFromNewGame)
+}
+
+func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "termination-jam.db"))
-	req := threeSiloRequest(2101)
+	req := threeSiloArchetypeRequest(2101, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
@@ -540,6 +548,20 @@ func TestTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T) {
 		}
 
 		buildupOpen := svc.silo.CurrentYear >= 128
+		switch svc.silo.Archetype {
+		case engine.ArchetypeFamine:
+			// 荒年的危机驱动恐慌把一号堡阶梯整体提前，信道自检早于基线约一年
+			// 到达；积累窗口相应前移，保证自检仍由真实叛乱 (玩家策反) 达到，
+			// 而不是被动等来自饥荒压力的阶梯 (19 §6.3 策略时机迁移)。
+			buildupOpen = svc.silo.CurrentYear >= 126
+		case engine.ArchetypeRift:
+			// 裂隙的波动放大同样提前自检；在真实自检窗口前先使用既有策反。
+			buildupOpen = svc.silo.CurrentYear >= 127
+		case engine.ArchetypeBedrock:
+			// 磐石档的阶梯轨迹实测把自检推到 126-06 (高 W 改变早期事件时序)，
+			// 积累窗口同荒年前移，保证自检经真实叛乱达到。
+			buildupOpen = svc.silo.CurrentYear >= 126
+		}
 		buildingRebellion := buildupOpen && svc.silo.Rebellion < 0.82
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
 		energyGuard := svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500
@@ -651,8 +673,12 @@ func TestPurgeExecutionGradesOnCountermeasure(t *testing.T) {
 // The execution's graded toll is locked separately in
 // TestPurgeExecutionGradesOnCountermeasure.
 func TestPurgeCountermeasurePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testPurgeCountermeasurePlayableFromNewGame)
+}
+
+func testPurgeCountermeasurePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "purge-countermeasure.db"))
-	req := threeSiloRequest(2101)
+	req := threeSiloArchetypeRequest(2101, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
@@ -739,8 +765,12 @@ func TestPurgeCountermeasurePlayableFromNewGame(t *testing.T) {
 // count times" action after the omen. It records silo1_purge_exposed, which grades
 // the execution at the middle tier (see TestPurgeExecutionGradesOnCountermeasure).
 func TestPurgePlotLeakPlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testPurgePlotLeakPlayableFromNewGame)
+}
+
+func testPurgePlotLeakPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "purge-plot-leak.db"))
-	req := threeSiloRequest(2103)
+	req := threeSiloArchetypeRequest(2103, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
