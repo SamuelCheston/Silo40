@@ -15,11 +15,11 @@ defineEvent({
     eventTriggered("player_action", "action_share_info")
   ),
   effects: [
-    // Legitimacy is a derived metric (metrics_update resets it to the
-    // faction-weighted cohesion every tick), but the delta is read by the
-    // next monthly authority advance first: police obedience converges toward
-    // legitimacy at the engine response rate. Each feeding step is one month
-    // of obedience pull (30-nodes §5).
+    // Legitimacy is a persisted state (metrics_update no longer resets it):
+    // the delta accumulates, and the next monthly authority advance reads it —
+    // police obedience converges toward legitimacy at the engine response
+    // rate. Each feeding step is one month of obedience pull plus a lasting
+    // +0.02 to the mayor's personal authority (30-nodes §5).
     siloMetricDelta("legitimacy", 0.02), // initial calibration, TODO(balance)
   ],
 });

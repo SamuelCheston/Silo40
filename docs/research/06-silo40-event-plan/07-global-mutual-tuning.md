@@ -18,8 +18,9 @@
 | 人口 | −40 | −80 | （−0.5%/月 规则档） | |
 | 稳定度 | ±0.04 | ±0.08 | +0.10（修复） | 仅 Lower 区承受衰减 |
 
-派生指标（cohesion/legitimacy/dept_tension/class_fragmentation/部门思潮）的 delta 已全部
-从存量事件中清除，换成持久杠杆。
+派生指标（cohesion/dept_tension/class_fragmentation/部门思潮）的 delta 已全部
+从存量事件中清除，换成持久杠杆。（legitimacy 当时也在派生列，后改为持久状态：
+离散写入累积＋月度叛乱侵蚀，见 02 号基线 §2.2。）
 
 ### 7.2 因果网与母题分工
 

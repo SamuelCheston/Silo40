@@ -273,7 +273,10 @@ defineMechanics([
       if (totalInf > 0) {
         const cohesion = weightedCohesion / totalInf;
         mutations.push({ type: "silo_metric_set", metric: "cohesion", value: cohesion });
-        mutations.push({ type: "silo_metric_set", metric: "legitimacy", value: cohesion });
+        // legitimacy（市长个人正统性）不是凝聚力的派生值：它由离散写入
+        // （内容效果、跨堡行动、谈判层、18 号链）与月度叛乱侵蚀
+        // （引擎 runMonthlyPoliticalDispatch）维护。此处曾把它覆写为
+        // 凝聚力，导致所有增减活不过一个月——禁止在月度指标更新里碰它。
         const stressFactor = radicalInf / totalInf;
         if (stressFactor > 0.05) {
           rebellion += (stressFactor - 0.05) * deltaYears * 0.1;

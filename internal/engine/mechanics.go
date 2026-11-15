@@ -1271,6 +1271,7 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 		silo, _ := event.Data["silo"].(*model.Silo)
 		agent, _ := event.Data["agent"].(*model.Agent)
 		e.runMonthlyBeliefDispatch(eventType, event, silo)
+		e.runMonthlyPoliticalDispatch(eventType, event, silo)
 		e.applyWeightedEnding(eventType, silo, agent)
 		if len(result.Logs) > 0 {
 			for _, entry := range result.Logs {
@@ -1296,6 +1297,7 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 		e.checkVictoryConditions(silo, agent)
 	}
 	e.runMonthlyBeliefDispatch(eventType, event, silo)
+	e.runMonthlyPoliticalDispatch(eventType, event, silo)
 	e.applyWeightedEnding(eventType, silo, agent)
 }
 
@@ -1323,6 +1325,29 @@ func (e *GameEngine) runMonthlyBeliefDispatch(eventType string, event *GameEvent
 	cfg := DefaultInformationConfig()
 	ApplyBeliefForgetting(silo, cfg)
 	ApplyPermeation(silo, cfg)
+}
+
+// runMonthlyPoliticalDispatch 月度政治层结算：叛乱侵蚀市长个人正统性
+// (ADR-0007 后果条、18 §4)，确定性。
+//
+// 与 runMonthlyBeliefDispatch 同型：runEventMechanic 的 JS 成功路与 Go
+// 兜底路各调用本函数一次，但两路互斥，故每个 EVENT_METRICS_UPDATE 恰好
+// 一次。此前侵蚀只挂在 Go 兜底的 updateSiloMetrics 里，而 JS 的
+// metrics_update 总是成功、兜底不可达——真实流程里侵蚀从未发生。现在
+// 无论 JS 成败都在同一时点执行（读当月更新后的叛乱值），且
+// updateSiloMetrics 不再调用它：全引擎只有这一条月度正统性路径。
+//
+// deltaYears <= 0 的零月路径不结算 (与 JS 侧守卫一致)；纯算术不耗 RNG，
+// 叛乱为 0 时逐位不变。
+func (e *GameEngine) runMonthlyPoliticalDispatch(eventType string, event *GameEvent, silo *model.Silo) {
+	if eventType != EVENT_METRICS_UPDATE || silo == nil {
+		return
+	}
+	deltaYears, _ := event.Data["deltaYears"].(float64)
+	if deltaYears <= 0 {
+		return
+	}
+	ApplyRebellionLegitimacyErosion(silo, deltaYears)
 }
 
 // applyWeightedEnding lets the service arbitrate the terminal evaluation

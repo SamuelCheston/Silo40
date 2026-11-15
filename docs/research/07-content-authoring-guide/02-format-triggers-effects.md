@@ -47,11 +47,11 @@
 | `floor_stability_delta` | `floorStabilityDelta(zone?, v)` | zone 空=全部楼层，否则 `Upper`/`Mid`/`Lower`；0–1 截断 | 持久 |
 | `schedule_event` | `scheduleEvent(event_id, delay_months)` | `delay_months > 0` | 见 §6 |
 
-指标持久性（`metrics_update`/`ideology_update` 每 tick 重设派生值，内容 delta 活不过下一 tick）：
+指标持久性（`metrics_update`/`ideology_update` 每 tick 重设派生值，派生指标的内容 delta 活不过下一 tick）：
 
 | 持久（内容事件的有效杠杆） | 派生/短暂（写了只有当次快照可见） |
 | --- | --- |
-| `rebellion`、`history_burden`、`countdown`、资源、人口、部门 `panic_value`、`productivity`、部门碎片、楼层稳定度 | `cohesion`、`legitimacy`（=派系加权凝聚力）、`dept_tension`（=1−关系均值）、`class_fragmentation`（=忠诚差）、部门 `Ideologies`（§8） |
+| `rebellion`、`history_burden`、`countdown`、资源、人口、部门 `panic_value`、`productivity`、部门碎片、楼层稳定度、`legitimacy`（市长个人正统性：离散写入累积＋月度叛乱侵蚀，不再是派生值） | `cohesion`、`dept_tension`（=1−关系均值）、`class_fragmentation`（=忠诚差）、部门 `Ideologies`（§8） |
 
 **别碰 `event_trigger`**：空池虽已防护（`bd04aac`），正向 delta 仍无收益、只有风险。
 

@@ -33,9 +33,13 @@
 `metrics_update` / `ideology_update`（`core_systems.js`）每 tick 会**重设**以下指标，内容事件
 对它们的 delta 只能在落点当月的快照里可见，不构成持久机制：
 
-- `cohesion` / `legitimacy`（= 派系影响力加权凝聚力；无政治派系时不重设，delta 才残留）
+- `cohesion`（= 派系影响力加权凝聚力；无政治派系时不重设，delta 才残留）
 - `dept_tension`（= 1 − 部门关系均值）、`class_fragmentation`（= 精英/平民忠诚差）
 - 部门 `Ideologies`（`sync_profession_ideologies_from_cohorts` 每 tick 用 cohort 人口加权覆写）
+
+`legitimacy`（市长个人正统性）曾在此列（每 tick 重设为派系加权凝聚力），该缺陷已修复：
+现为持久状态，离散写入累积＋月度叛乱侵蚀（引擎 `runMonthlyPoliticalDispatch`），按持久
+杠杆使用。
 
 **持久杠杆**（内容事件 delta 会留存并继续参与后续结算）：
 
