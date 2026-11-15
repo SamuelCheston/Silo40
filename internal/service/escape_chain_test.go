@@ -447,8 +447,10 @@ func TestEscapeLedgerNotReadByArbitration(t *testing.T) {
 
 // TestRebellionEndingNarrative locks the REBELLION settlement presentation:
 // the ending screen tells the second-roll-call story with the departure
-// facts (departed/survived/fragile/what remains), and the pyrrhic branch
-// keeps the same settlement line when the origin station falls afterwards.
+// facts (departed/survived/fragile), closes on the destroyed-origin canon
+// (nothing is left behind — no residents remain, no ongoing relationship),
+// and the pyrrhic branch keeps the same settlement line when the origin
+// station falls afterwards.
 func TestRebellionEndingNarrative(t *testing.T) {
 	newGroupStation := func() (*GameService, *model.Silo) {
 		svc, station, _ := weightedEndingFixture("REBELLION")
@@ -473,11 +475,15 @@ func TestRebellionEndingNarrative(t *testing.T) {
 		"表上没有你的名字",
 		"本局共有 150 人出发，120 人幸存落地，路上损耗 30 人",
 		"他们于 126 年 3 月离开",
-		"驻地仍有居民 5000 人",
+		"逃出发生时原堡已被摧毁",
 	} {
 		if !strings.Contains(decision.Reason, want) {
 			t.Fatalf("narrative missing %q: %q", want, decision.Reason)
 		}
+	}
+	// 口径锁：逃出型结局的结算行不得再声称原堡仍有居民或后续关系。
+	if strings.Contains(decision.Reason, "仍有居民") {
+		t.Fatalf("escape settlement must not claim residents remain in the origin station: %q", decision.Reason)
 	}
 
 	// 脆弱群体：结算行标注脆弱。
@@ -562,6 +568,75 @@ func TestOutsideSustenanceAfterDeparture(t *testing.T) {
 	if station.EscapedGroup.Outside.SuppliesLeft >= 600 {
 		t.Fatal("outside months must consume the sealed supplies")
 	}
+}
+
+// TestRebellionLinePlayableFromNewGame is the strict REBELLION acceptance:
+// a fresh game must reach 《越岭》 through real play only — willingness,
+// route, window, departure, outside sustenance and settlement — with no
+// fixture seeding willingness, route facts, stances, preparation, an escaped
+// group, or the ending decision.
+//
+// Why the full-preparation route: departure capacity reads suits 1:1, and a
+// group below outsideMinGroupSize (20) disbands in its first outside
+// sustenance month. Short-preparation routes cannot field 20+ survivors in
+// time — repair is cooldown-limited and audit-seized, the suit warehouse
+// only opens under IT cooperation, and the pressure engine's own fracture
+// clock runs out first; the 58-run acceptance batch measured every sparse
+// route departing through the forced channel and dying on the road or in
+// month 1. The full-preparation route is the demonstrated playable line
+// (acceptance batch seed 2402: departed 28, landed 22, survived 5 pursuit
+// months outside, REBELLION settled pyrrhic while the silo fractured in the
+// group's absence).
+//
+// Strict settlement semantics (the reason this test exists): the monthly
+// pipeline runs outside sustenance BEFORE the victory check
+// (runOneMonthSingle), and sustenance stops entirely once the game is over —
+// so MonthsOut >= 1 at settlement proves the group faced the sub-20 disband
+// judgment, supply consumption, suit wear and tracking at least once, and
+// the terminal evaluation cannot preempt it by settling in the departure
+// action itself. A departure that settles before any outside month is a
+// false green, whatever the headcount.
+func TestRebellionLinePlayableFromNewGame(t *testing.T) {
+	rec := runEscapeLine(t, "rebellion-strict", 2402, "full")
+
+	t.Logf("strict rebellion route: seed=%d prep=%s ending=%s won=%v departed=%d survivors=%d months_out=%d demise=%q group_at_settlement=%d surviving=%v stance_at_launch=%s",
+		rec.Seed, rec.PrepLevel, rec.Ending, rec.Won, rec.Departed, rec.Survivors,
+		rec.MonthsOut, rec.Demise, rec.GroupPopulationAtSettlement,
+		rec.GroupSurvivingAtSettlement, rec.StanceAtLaunch)
+
+	// The chain must complete through a real launch.
+	if rec.LaunchMonth == 0 || rec.Departed <= 0 {
+		t.Fatalf("real REBELLION chain did not reach departure: launchMonth=%d departed=%d stance_at_launch=%s excluded=%v",
+			rec.LaunchMonth, rec.Departed, rec.StanceAtLaunch, rec.Excluded)
+	}
+	// The ending must settle, and it must be 《越岭》.
+	if rec.Ending != endingRebellion || !rec.Won {
+		t.Fatalf("settled %q (won=%v), want REBELLION; pool=%v scores=%v excluded=%v reason=%q",
+			rec.Ending, rec.Won, rec.Pool, rec.Scores, rec.Excluded, rec.Reason)
+	}
+	// Strict ordering lock: sustenance runs before the victory check in the
+	// monthly pipeline and never again once the game is over, so a settled
+	// ending with MonthsOut == 0 means the terminal evaluation preempted the
+	// group's first outside month — the exact false green this test forbids.
+	if rec.MonthsOut < 1 {
+		t.Fatalf("ending settled before the group lived one outside month: monthsOut=%d demise=%q",
+			rec.MonthsOut, rec.Demise)
+	}
+	// Strict disband/survival semantics: the settled group must be alive and
+	// must have cleared the 20-person disband judgment — surviving MonthsOut
+	// sustenance months means every check (size, supplies, suits, route)
+	// passed; assert the margin explicitly so a future reordering that
+	// settles before the check cannot hide behind luck.
+	if !rec.GroupSurvivingAtSettlement || rec.Demise != "" {
+		t.Fatalf("settled REBELLION on a dead escaped group: surviving=%v demise=%q monthsOut=%d",
+			rec.GroupSurvivingAtSettlement, rec.Demise, rec.MonthsOut)
+	}
+	if rec.GroupPopulationAtSettlement < outsideMinGroupSize {
+		t.Fatalf("settled group never cleared the %d-person disband judgment: population=%d monthsOut=%d",
+			outsideMinGroupSize, rec.GroupPopulationAtSettlement, rec.MonthsOut)
+	}
+	t.Logf("REBELLION settled from real play after %d outside months: departed=%d population=%d surviving=%v reason=%q",
+		rec.MonthsOut, rec.Departed, rec.GroupPopulationAtSettlement, rec.GroupSurvivingAtSettlement, rec.Reason)
 }
 
 // deterministicTestRNG 为引擎单一 RNG 流注入固定种子。

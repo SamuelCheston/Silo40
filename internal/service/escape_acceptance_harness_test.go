@@ -87,6 +87,12 @@ type escapeRecord struct {
 	MonthsOut      int      `json:"months_out"`
 	Demise         string   `json:"demise,omitempty"`
 
+	// Escaped-group facts at settle time (the strict REBELLION acceptance reads
+	// these: the ending may only settle after the group faced real outside
+	// sustenance and cleared the disband judgment).
+	GroupPopulationAtSettlement int  `json:"group_population_at_settlement"`
+	GroupSurvivingAtSettlement  bool `json:"group_surviving_at_settlement"`
+
 	PopulationAtSettlement int              `json:"population_at_settlement"`
 	Prestige               float64          `json:"prestige"`
 	Suspicion              float64          `json:"suspicion"`
@@ -516,6 +522,8 @@ func (r *escapeRunner) settle() {
 	r.rec.MonthsOut = group.Outside.MonthsOut
 	r.rec.Demise = group.Outside.DemiseCause
 	r.rec.PopulationAtSettlement = silo.TotalPopulation
+	r.rec.GroupPopulationAtSettlement = group.Population
+	r.rec.GroupSurvivingAtSettlement = group.Surviving
 	r.rec.Prestige = r.svc.agent.PoliticalPrestige
 	r.rec.Suspicion = r.svc.agent.SuspicionLevel
 	r.rec.ReevaluationsTotal = silo.TopStance.Reevaluations
