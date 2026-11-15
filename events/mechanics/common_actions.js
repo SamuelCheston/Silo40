@@ -13,11 +13,11 @@ defineMechanics([
     apply(ctx) {
       const target = ctx.action.target_dept;
       if (!target) {
-        return { action_result: { executed: false, message: "Invalid target department." } };
+        return { action_result: { executed: false, message: "目标部门无效。" } };
       }
       const profession = professionByName(ctx, target);
       if (!profession) {
-        return { action_result: { executed: false, message: "Target department not found." } };
+        return { action_result: { executed: false, message: "找不到目标部门。" } };
       }
       const unknown = unknownFragmentsFrom(ctx, target);
       // 复核路径 (修复6)：目标部门的新材料枯竭后，探查不再生效新碎片，但
@@ -33,7 +33,7 @@ defineMechanics([
           return knownSet[fragment];
         });
         if (pool.length === 0) {
-          return { action_result: { executed: false, message: "Your department already knows everything about " + target + "." } };
+          return { action_result: { executed: false, message: "关于 " + target + "，你的部门已经知道一切。" } };
         }
         recheck = true;
       }
@@ -67,7 +67,7 @@ defineMechanics([
         }
         return {
           mutations,
-          action_result: { executed: true, message: "The probe on " + target + " found nothing this time (chance " + Math.round(p * 100) + "%). The department grows more alert." },
+          action_result: { executed: true, message: "这次对 " + target + " 的探查一无所获（概率 " + Math.round(p * 100) + "%）。该部门戒备上升。" },
         };
       }
       mutations.push({
@@ -95,8 +95,8 @@ defineMechanics([
         action_result: {
           executed: true,
           message: recheck
-            ? "Re-examined the material on " + fragment + " against " + target + "'s records via " + channel.id + ". Your conviction deepens."
-            : "Observed new material on " + fragment + " from " + target + " via " + channel.id + " (chance " + Math.round(p * 100) + "%).",
+            ? "经 " + channel.id + " 把材料 " + fragment + " 对照 " + target + " 的记录复核了一遍。你的确信加深。"
+            : "经 " + channel.id + " 从 " + target + " 观察到新材料 " + fragment + "（概率 " + Math.round(p * 100) + "%）。",
         },
       };
     },
@@ -116,16 +116,16 @@ defineMechanics([
       const target = ctx.action.target_dept;
       const fragmentIds = ctx.action.fragment_ids || [];
       if (!target || fragmentIds.length === 0) {
-        return { action_result: { executed: false, message: "Invalid target or no fragments selected." } };
+        return { action_result: { executed: false, message: "目标无效，或未选择任何碎片。" } };
       }
       const profession = professionByName(ctx, target);
       if (!profession) {
-        return { action_result: { executed: false, message: "Target department not found." } };
+        return { action_result: { executed: false, message: "找不到目标部门。" } };
       }
       for (const fragment of fragmentIds) {
         // §3.6 行动资格：B < 0.30 的材料只是私人笔记，不能作为事实分享。
         if (beliefB(ctx, fragment) < INFO_CFG.qual_rumor) {
-          return { action_result: { executed: false, message: fragment + " is still private suspicion (belief below " + INFO_CFG.qual_rumor + "); it cannot be shared as a fact." } };
+          return { action_result: { executed: false, message: fragment + " 仍是私人猜测（确信 B 低于 " + INFO_CFG.qual_rumor + "），不能作为事实分享。" } };
         }
       }
       // §3.6 分享接收：强度 = B_player·transmit_c·receptivity_g。接收方得到的是
@@ -135,8 +135,13 @@ defineMechanics([
       const transmit = 0.5 + 0.5 * connectionValue;
       const receptivity = 0.5 + 0.5 * ((profession.ideologies || {}).pro_foreign || 0);
       const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
+      // 已持有计数：接收部门信念层已不低于本次传入强度的事实，本次分享不再
+      // 抬升它——反馈要说清楚，否则玩家看到的是"选了 3 份只吸收 2 份"。
+      let alreadyHeld = 0;
       for (const fragment of fragmentIds) {
         const absorbed = beliefB(ctx, fragment) * transmit * receptivity;
+        const existing = (profession.beliefs || []).find(function (b) { return b.fact_id === fragment; });
+        if (existing && (existing.b || 0) >= absorbed) alreadyHeld++;
         mutations.push({
           type: "profession_belief_absorb",
           profession: profession.name,
@@ -158,12 +163,15 @@ defineMechanics([
           value: absorbed * 0.12,
         });
       }
+      const heldNote = alreadyHeld > 0
+        ? "其中 " + alreadyHeld + " 份对方已以不低于本次强度的水平持有，未再抬升。"
+        : "";
       return {
         mutations,
         action_result: {
           executed: true,
           message:
-            profession.name + " absorbed " + fragmentIds.length + " fact(s) into their belief layer (transmit " + transmit.toFixed(2) + ", receptivity " + receptivity.toFixed(2) + "). Belief fades with time — keep circulating to hold it.",
+            profession.name + " 把 " + fragmentIds.length + " 份事实吸收进信念层（传输 " + transmit.toFixed(2) + "，接收 " + receptivity.toFixed(2) + "）。" + heldNote + "信念随时间淡忘——持续流通才守得住。",
         },
       };
     },
@@ -181,11 +189,11 @@ defineMechanics([
     apply(ctx) {
       const target = ctx.action.target_dept;
       if (!target) {
-        return { action_result: { executed: false, message: "Invalid target department." } };
+        return { action_result: { executed: false, message: "目标部门无效。" } };
       }
       const profession = professionByName(ctx, target);
       if (!profession) {
-        return { action_result: { executed: false, message: "Target department not found." } };
+        return { action_result: { executed: false, message: "找不到目标部门。" } };
       }
       let increase = 0.05 + (ctx.actor.political_prestige || 0) * 0.005;
       if ((ctx.actor.traits || []).includes("魅力非凡")) {
@@ -197,7 +205,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.01),
         ],
-        action_result: { executed: true, message: "Successfully built connections with " + profession.name + "." },
+        action_result: { executed: true, message: "与 " + profession.name + " 的关系建立成功（+" + increase.toFixed(2) + "）。" },
       };
     },
   },
@@ -226,7 +234,7 @@ defineMechanics([
       mutations.push(suspicionDelta(ctx, 0.05));
       return {
         mutations,
-        action_result: { executed: true, message: "Incited unrest among all commoner departments." },
+        action_result: { executed: true, message: "已在所有平民部门煽动起不安。" },
       };
     },
   },
@@ -246,7 +254,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.02),
         ],
-        action_result: { executed: true, message: "Conducted propaganda. Propaganda Level increased by 1.0." },
+        action_result: { executed: true, message: "宣传已展开。宣传力度 +1.0。" },
       };
     },
   },
@@ -262,10 +270,10 @@ defineMechanics([
     apply(ctx) {
       const faction = ctx.actor.faction;
       if (!ctx.actor.is_representative || !faction) {
-        return { action_result: { executed: false, message: "Only faction representatives can publicize their faction." } };
+        return { action_result: { executed: false, message: "只有派系代表才能公开自己的派系。" } };
       }
       if (faction.is_public) {
-        return { action_result: { executed: false, message: "Faction is already public." } };
+        return { action_result: { executed: false, message: "派系已经公开。" } };
       }
       return {
         mutations: [
@@ -273,7 +281,7 @@ defineMechanics([
           { type: "faction_metric_delta_actor", field: "prestige", value: 15.0 },
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
         ],
-        action_result: { executed: true, message: "Successfully publicized " + faction.name + ". The silo is now aware of your presence." },
+        action_result: { executed: true, message: faction.name + " 已公开。地堡现在知道了你的存在。" },
       };
     },
   },
