@@ -216,39 +216,96 @@ func (s *GameService) contentFactTriggered(siloID uint, key string) bool {
 	return states[key].Triggered
 }
 
-// spilloverSiloCount G7: distinct non-station silos that received at least one
-// station-originated cross signal. Read from the persisted outbound log, which
-// is appended in deterministic dispatch order.
+// spilloverSiloCount G7 + 16 §3.5 (Layer 3) 口径收紧：
+//   - 通用跨堡信号 (Spillover=false)：维持 G7 口径——驻地发出且到达即计数，
+//     旧档与既有测试逐位不变；
+//   - 外溢包裹 (Spillover=true)：只计"到达且独立接收"的堡——链以 RootSilo
+//     归属 (再复制代的 SourceSilo 是接收堡，不是驻地)。
+//
+// 读取的出站日志按确定性派发顺序追加。外溢不进资格，本计数只进加权。
 func (s *GameService) spilloverSiloCount(stationID uint) int {
 	if s.world == nil {
 		return 0
 	}
 	reached := map[uint]bool{}
 	for _, signal := range s.world.OutboundSignals {
-		if signal.SourceSilo != stationID || signal.TargetSilo == stationID || signal.TargetSilo == 0 {
+		if signal.TargetSilo == stationID || signal.TargetSilo == 0 {
 			continue
 		}
-		reached[signal.TargetSilo] = true
+		if signal.Spillover {
+			if signal.RootSilo == stationID && signal.Received {
+				reached[signal.TargetSilo] = true
+			}
+			continue
+		}
+		if signal.SourceSilo == stationID {
+			reached[signal.TargetSilo] = true
+		}
 	}
 	return len(reached)
 }
 
-// spilloverSignalCount counts every station-originated outbound signal
-// (deterministic log order). Together with spilloverSiloCount it renders the
-// spillover settlement line: how much was sent out, how many silos it
-// reached. Spillover never gates victory; this is settlement information
-// only (25-information-endgame §3).
+// spilloverSignalCount counts outbound signals sent out from the station
+// (deterministic log order): legacy station-originated cross signals keep the
+// G7 arrival count; spillover packages count generation-1 arrivals (sent from
+// the station and survived transit). Together with spilloverSiloCount it
+// renders the spillover settlement line. Spillover never gates victory; this
+// is settlement information only (25-information-endgame §3).
 func (s *GameService) spilloverSignalCount(stationID uint) int {
 	if s.world == nil {
 		return 0
 	}
 	count := 0
 	for _, signal := range s.world.OutboundSignals {
-		if signal.SourceSilo == stationID && signal.TargetSilo != stationID && signal.TargetSilo != 0 {
+		if signal.TargetSilo == stationID || signal.TargetSilo == 0 {
+			continue
+		}
+		if signal.Spillover {
+			if signal.RootSilo == stationID && signal.Generation == 1 {
+				count++
+			}
+			continue
+		}
+		if signal.SourceSilo == stationID {
 			count++
 		}
 	}
 	return count
+}
+
+// spilloverDeliveryStats 汇总驻地外溢投递事实供结算行 (16 §3.5)：投递尝试数
+// (发送侧账本)、路上丢失数、独立接收的他堡数与链的最大代次。尝试数为 0 时
+// 结算行维持旧口径逐位不变。
+func (s *GameService) spilloverDeliveryStats(stationID uint) (attempts, lost, receivedSilos, maxGeneration int) {
+	station := s.siloByID(stationID)
+	if station == nil {
+		return 0, 0, 0, 0
+	}
+	attempts = len(station.SpilloverPrep.Deliveries)
+	if s.world == nil {
+		return attempts, attempts, 0, 0
+	}
+	reached := map[uint]bool{}
+	arrivedGen1 := 0
+	for _, signal := range s.world.OutboundSignals {
+		if !signal.Spillover || signal.RootSilo != stationID {
+			continue
+		}
+		if signal.Generation == 1 {
+			arrivedGen1++
+		}
+		if signal.Received {
+			reached[signal.TargetSilo] = true
+		}
+		if signal.Generation > maxGeneration {
+			maxGeneration = signal.Generation
+		}
+	}
+	lost = attempts - arrivedGen1
+	if lost < 0 {
+		lost = 0
+	}
+	return attempts, lost, len(reached), maxGeneration
 }
 
 // exclusionistEligible reports whether the closed order still dominates the
@@ -636,6 +693,19 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 			narrative += "本局没有信号送出驻地——外溢为零，不影响本次裁决。"
 		} else {
 			narrative += fmt.Sprintf("本局共有 %d 条信号送出驻地，到达 %d 座他堡。", sent, reached)
+		}
+		// 16 §3.5 (Layer 3)：外溢包裹投递明细——只在确有投递尝试时追加，
+		// 无尝试时结算行维持旧口径逐位不变。外溢是评分项，不是资格。
+		if attempts, lost, receivedSilos, maxGeneration := s.spilloverDeliveryStats(station.ID); attempts > 0 {
+			line := fmt.Sprintf("外溢包裹：共 %d 次投递", attempts)
+			if lost > 0 {
+				line += fmt.Sprintf("，%d 次路上丢失", lost)
+			}
+			line += fmt.Sprintf("，%d 座他堡独立完成核验", receivedSilos)
+			if maxGeneration > 1 {
+				line += fmt.Sprintf("，链在宿主之外再复制到第 %d 代", maxGeneration)
+			}
+			narrative += line + "。"
 		}
 	}
 	if best == endingRuleOfLaw {

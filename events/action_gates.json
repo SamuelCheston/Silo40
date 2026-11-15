@@ -493,6 +493,69 @@
       "reason": "需要离开意愿"
     },
     {
+      "id": "ESCAPE_SPILLOVER_PACKAGE_FACTS",
+      "unlock": { "stage_at_least": "chain_living" },
+      "available": {},
+      "reason": "需要本地活链：驻地内的链不再需要逐日维持，才谈得上把下一环送出去"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_PACKAGE_VERIFY",
+      "unlock": { "stage_at_least": "chain_living" },
+      "available": {},
+      "reason": "需要本地活链：驻地内的链不再需要逐日维持，才谈得上把下一环送出去"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_PACKAGE_COUNTER",
+      "unlock": { "stage_at_least": "chain_living" },
+      "available": {},
+      "reason": "需要本地活链：驻地内的链不再需要逐日维持，才谈得上把下一环送出去"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_PACKAGE_CONCEAL",
+      "unlock": { "stage_at_least": "chain_living" },
+      "available": {},
+      "reason": "需要本地活链：驻地内的链不再需要逐日维持，才谈得上把下一环送出去"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_PACKAGE_RELAY",
+      "unlock": { "stage_at_least": "chain_living" },
+      "available": {},
+      "reason": "需要本地活链：驻地内的链不再需要逐日维持，才谈得上把下一环送出去"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_SEND_IT_LINE",
+      "unlock": { "stage_at_least": "chain_living" },
+      "available": {
+        "all": [
+          { "metric": "spillover_channel_it_line", "min": 1 },
+          { "metric": "package_quality", "min": 0.2 }
+        ]
+      },
+      "reason": "需要已建立的专线信道与至少装入一种能力的包裹（初始校准值 TODO(balance)）"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_SEND_CROSS_SIGNAL",
+      "unlock": { "stage_at_least": "chain_living" },
+      "available": {
+        "all": [
+          { "metric": "spillover_channel_cross_signal", "min": 1 },
+          { "metric": "package_quality", "min": 0.2 }
+        ]
+      },
+      "reason": "需要已建立的跨堡信号信道与至少装入一种能力的包裹（初始校准值 TODO(balance)）"
+    },
+    {
+      "id": "ESCAPE_SPILLOVER_SEND_PHYSICAL",
+      "unlock": { "stage_at_least": "chain_living" },
+      "available": {
+        "all": [
+          { "metric": "spillover_channel_physical", "min": 1 },
+          { "metric": "package_quality", "min": 0.2 }
+        ]
+      },
+      "reason": "需要已建立的实体交接信道与至少装入一种能力的包裹（初始校准值 TODO(balance)）"
+    },
+    {
       "id": "NEGOTIATION_OPEN_CHANNEL",
       "unlock": { "metric": "rebellion", "min": 0.3 },
       "available": { "metric": "negotiation_channel", "max": 0 },

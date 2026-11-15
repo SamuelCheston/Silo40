@@ -15,12 +15,12 @@
 - **本地整肃反制**：`PURGE_ROSTER_TAMPER` → `silo1_purge_softened` 取轻档；信息侧 `PURGE_PLOT_LEAK` → `silo1_purge_exposed` 按中档，与轻档并存时按轻档。
 - **逃跑组织侧 IT 响应层**：[escape_response.go](../internal/engine/escape_response.go)——组织怀疑度（只由组织行为驱动）≥0.35 且冷却 4 月已过，带权随机三选一：镇压/蒙住 1 号/不作为，后果只抬成本与风险，囤积账本永不扣减。
 
-剩余五档（设计 §4 均标【项目外推】，逐项核实确未实现）：
+剩余四档（设计 §4 均标【项目外推】，逐项核实确未实现；T2-2 已随《共证》外溢投递侧落地）：
 
 | 档 | 反制 | 形态要点（起点值均 TODO(balance)） |
 | --- | --- | --- |
 | T1-3 | 关系冷却 | 部门对泄漏事实 `B ≥ 0.45` → 该部门关系增长减半、持续 12 月；Build 回执措辞变化 |
-| T2-2 | 信道审计 | 信道使用次数 × 暴露成本 ≥ 门槛（专线类 3 次/信号类 5 次/实体类 8 次）→ 该信道可靠度降一档或中断；是 16 §2.3「外溢暴露与宿主风险结算」的首个落点 |
+| ~~T2-2~~ | ~~信道审计~~ | **已落地**（[spillover.go](../internal/service/spillover.go)）：外溢信道使用次数到档（专线类 3 次/信号类 5 次/实体类 8 次）→ 可靠度降档，跌破地板中断 |
 | T2-4 | 谈判可信度侵蚀 | `prep_exposure ≥ 0.4` → 保障可信度 `Guarantee −0.15`，经既有 `addTopStanceGuarantee` 接口（[top_stance.go](../internal/engine/top_stance.go)）→ 顶层立场权重自然偏向阻挠。注意：谈判层 IT 的 `undermine` 立场（[negotiation.go](../internal/engine/negotiation.go)）已会侵蚀保障可信度，但那是磋商铺位，不是本档由筹备暴露驱动的通道 |
 | T3-1b | 身份线「日常小动作」绑定 | 复核期＝地点类动作次月灰置；复查期＝职务动作当月灰置；抹除准备期＝秘密行动类动作灰置（`available: suspicion < 0.7`）。灰置机制既有；身份线四节点（T3-1）与 1 号反应链（T3-3）是既有档，不在剩余清单 |
 | T3-2 | 联系人被盯上 | 部门对泄漏事实 `B ≥ 0.60` → 匿名联系人被调离/问话：关系 −0.10、接触类动作 3 月不可用（cd 保护）＋月度故事。只动匿名联系人，不碰正典具名人物 |
@@ -29,7 +29,7 @@
 
 ### 《共证》外溢投递侧
 
-**状态：部分完成（准备侧已落，投递侧未排期）。** 裁决口径保持：**外溢不进胜负判定——外溢为零同样可以判胜，外溢数量只影响结算分数**——仲裁已按此实现：[weighted_endings.go](../internal/service/weighted_endings.go) `spilloverSiloCount`（到达的不同地堡数）与 `spilloverSignalCount` 只进《共证》加权，不进资格。
+**状态：准备侧与投递侧均已落地。** 裁决口径保持：**外溢不进胜负判定——外溢为零同样可以判胜，外溢数量只影响结算分数**——仲裁已按此实现：[weighted_endings.go](../internal/service/weighted_endings.go) `spilloverSiloCount` 与 `spilloverSignalCount` 只进《共证》加权与结算行，不进资格。
 
 已落地（准备侧，随《越岭》Layer 1）：
 
@@ -37,13 +37,15 @@
 - 三种信道接触卡与建立动作：[preparation.go](../internal/engine/preparation.go) `applySpilloverChannelAdd`（`it_line` 专线/`cross_signal` 跨堡信号/`physical_handoff` 实体交接），玩家动作 [escape_spillover_it_line.js](../events/player_actions/escape_spillover_it_line.js)/[escape_spillover_cross_signal.js](../events/player_actions/escape_spillover_cross_signal.js)/[escape_spillover_physical.js](../events/player_actions/escape_spillover_physical.js)（建立即计组织怀疑度）；
 - 信道可靠度与谈判联动：`NEGOTIATION_HANDS_OFF`（不接管市长职位）提升既有信道可靠度（[negotiation.go](../internal/service/negotiation.go)）。
 
-未落地（投递侧）：
+已落地（投递侧，[spillover.go](../internal/service/spillover.go)，16 §3.5 Layer 3）：
 
-- **投递结算**：信道目前只是账本字段＋JS 上下文暴露（[content_events_script.go](../internal/engine/content_events_script.go)），没有任何消费信道执行投递的结算；
-- **外部接收方的独立核验与再复制结算**（跨堡编排、接收堡模拟状态与「独立复制一代」的判定）：未实现。《共证》线既有的复制里程碑（[replication_progress.js](../events/special/replication_progress.js)、[independent_receivers_met.js](../events/special/independent_receivers_met.js)、[copies_distributed.js](../events/special/copies_distributed.js)）全部是本堡内部事件，不是跨堡结算；
-- **外溢暴露与宿主风险的结算**（异常流量、可操作观察与处置升级）：未实现；反制 T2-2 信道审计是其首个落点，同样未实现。
+- **受限渠道投递**：三种信道各自的投递因果——能带多少（专线/实体整包、信号只带 0.6）、多长时间到（专线 1 月/信号 2 月/实体 6 月）、路上损耗什么（信号衰减/实体磨损），可靠度按种子确定性抽取，成功经 `World.CrossQueue`（到期月, Seq 纪律）投递，失败记路上丢失；发送侧账本 `SpilloverPrep.Deliveries` 留审计痕迹；
+- **包裹组装**：I-3 五种能力各一张封装卡（事实与来源/独立核验/反制方法/隐匿与交接/再传递，各 +0.2 包裹质量，`chain_living` 阶段门控），补齐了 `package_quality` 此前无生产者的缺口；
+- **外部接收方独立核验与再复制**：包裹到达时目标堡按自身模拟状态（碎片基础、开放程度、IT 控制强度）带权裁量是否独立接收；接收后向尚未到达过的邻堡再复制一代（质量逐代衰减、无回声、代次上限），全程复用既有多堡模拟与跨堡派发阶段，不另造影子状态、不修改接收堡正典状态；
+- **外溢暴露与宿主风险**：使用即付——组织怀疑度（通信规模，ADR-0014）＋1 号反谍轨道（专线异常流量）；T2-2 信道审计作为首个落点随本批落地（使用次数到档可靠度降档、跌破地板中断）。风险全部落在成本与选择空间，不没收、不判负；
+- **口径收紧**：触达计数对包裹记录收紧为「到达且独立接收」（链按 `RootSilo` 归属），通用跨堡信号维持 G7 到达口径逐位不变；结算行在确有投递时追加包裹明细（尝试/丢失/独立接收/代次）。
 
-投递侧设计完成前，《共证》资格只读本地活链与跨部门公共事实。准备侧（受限信道、包裹质量与暴露代价如何换算为外溢触达与接收）的机制设计见 [16-preparation-outcome-design.md](research/16-preparation-outcome-design.md)。
+剩余缺口（见 [KNOWN_GAPS.md](../KNOWN_GAPS.md)）：实体交接与逃出群体的顺带携带耦合（再传递任务随出发结算）未实现；`Silo1State.Attention` 被月度叛乱值覆写、无法承载累积型暴露，本期以 1 号反谍轨道与组织怀疑度替代。投递侧机制设计见 [16-preparation-outcome-design.md](research/16-preparation-outcome-design.md) §3.5。
 
 ### LLM 上下文档位可调
 
@@ -118,6 +120,5 @@
 | 2 | 见证者成就树（ADR-0004） | 独立 | 只读既有结局资格事实与完成键，不碰仲裁；逃离/外溢未落部分只预留节点 |
 | 3 | 22 号黑箱学习 | 独立（1 号侧） | 设计定稿、参数已重算；不碰玩家侧，唯一新增确定性状态在 1 号侧 |
 | 4 | 19 号开局可变性剩余 | 独立但带测试账 | 必须与可玩路线测试重调同时落地（ADR-0011）；本地工作分支在进行中，接手前先对齐 |
-| 5 | 世界的反制剩余档（T1-3/T2-2/T2-4/T3-1b/T3-2） | 独立但带测试账 | 五档须与 20 §7 测试账重调同批合并（§7.2 判据 6），接口全部既有 |
+| 5 | 世界的反制剩余档（T1-3/T2-4/T3-1b/T3-2） | 独立但带测试账 | 四档须与 20 §7 测试账重调同批合并（§7.2 判据 6），接口全部既有；T2-2 信道审计已随《共证》外溢投递侧落地 |
 | 6 | 23 号盲区经营 | **依赖 22 号** | 被经营偏置注入 22 观测管线（23-05 卷），排在 22 号落地之后 |
-| — | 《共证》外溢投递侧 | 待裁决 | 现行裁决「本轮不做」，不排期；若恢复，T2-2 信道审计是其首个落点 |

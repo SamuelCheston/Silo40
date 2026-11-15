@@ -167,7 +167,9 @@ func supportedActionMetric(metric string) bool {
 	case "action_points", "political_prestige", "propaganda_level", "suspicion_level", "known_fragments",
 		"legitimacy", "cohesion", "rebellion", "history_burden",
 		// 21 设计卷：谈判层 0/1 门控指标。
-		"negotiation_channel", "negotiation_compromise", "negotiation_takeover_decided":
+		"negotiation_channel", "negotiation_compromise", "negotiation_takeover_decided",
+		// 16 §3.5 (Layer 3)：外溢投递侧门控指标——包裹质量与各信道可用性。
+		"package_quality", "spillover_channel_it_line", "spillover_channel_cross_signal", "spillover_channel_physical":
 		return true
 	default:
 		return false
@@ -335,9 +337,26 @@ func (s *GameService) actionConditionValue(condition actionCondition) (float64, 
 			return 1, true
 		}
 		return 0, true
+	case "package_quality":
+		// 16 §3.5 (Layer 3)：外溢包裹五种能力完备度 (0-1)。
+		return s.silo.SpilloverPrep.PackageQuality, true
+	case "spillover_channel_it_line":
+		return spilloverChannelGateValue(s.silo, model.SpilloverChannelITLine), true
+	case "spillover_channel_cross_signal":
+		return spilloverChannelGateValue(s.silo, model.SpilloverChannelCrossSignal), true
+	case "spillover_channel_physical":
+		return spilloverChannelGateValue(s.silo, model.SpilloverChannelPhysicalHandoff), true
 	default:
 		return 0, false
 	}
+}
+
+// spilloverChannelGateValue 该种类未中断信道存在为 1，否则 0 (16 §3.5)。
+func spilloverChannelGateValue(silo *model.Silo, kind string) float64 {
+	if spilloverChannelForSend(silo, kind) >= 0 {
+		return 1
+	}
+	return 0
 }
 
 func (s *GameService) gateForAction(id string, actionType model.AgentActionType) (actionGate, string, bool) {
