@@ -47,8 +47,23 @@ const absorptionMoment = {
     body: '事实进入了他们的信念层——开始不依赖你而存在，也开始随时间淡忘。这就是"这套东西是活的"：持续流通，才跑赢淡忘。',
 };
 
+// 结局类型 → 可读结局名（对应结局体系 12 的线名与硬失败名）。
+// 界面上不允许出现裸枚举。
+const endingTitle: Record<string, string> = {
+    INFORMATION: '《共证》',
+    REBELLION: '《越岭》',
+    RULE_OF_LAW: '《公议》',
+    TIME: '《无人裁决》',
+    PERSONAL_RULE: '《人治》',
+    EXCLUSIONIST: '《深闭》',
+    RESET: '《遗忘》',
+    FRACTURE: '《断层》',
+    DEATH: '《寂堡》',
+    AGENT_COMPROMISED: '《除名》',
+};
+
 function App() {
-    const [resultText, setResultText] = useState("Please enter your name below 👇");
+    const [resultText, setResultText] = useState("在下方输入特工代号 👇");
     const [name, setName] = useState('');
     const [gameStarted, setGameStarted] = useState(false);
     const [showSetup, setShowSetup] = useState(false);
@@ -74,6 +89,11 @@ function App() {
     // 从状态快照里检测"关键时刻"：阶段跃迁、第一次吸收、主线确立与改道、
     // 线回摆。只在已有前值（即非首次加载）时比较，开局与读档不会误报。
     const detectMoments = useCallback((state: any) => {
+        // 结局已定：不再弹任何过程性横幅——结局框就是唯一的焦点。
+        if (state?.silo?.victory_status) {
+            setMoments([]);
+            return;
+        }
         const fresh: { title: string; body: string }[] = [];
         const stage = state?.world?.progress_stage || null;
         if (prevStageRef.current !== null && stage && stage !== prevStageRef.current) {
@@ -157,6 +177,16 @@ function App() {
         return acc;
     }, {} as Record<string, PlayerActionMeta[]>), [availableActions]);
 
+    // 确信 (B) 查找表：碎片够不够格离手要能在徽章上一眼看出来，
+    // 而不是点了执行被拒后才知道。
+    const beliefOf = useMemo(() => {
+        const m: Record<string, number> = {};
+        (agent?.beliefs || []).forEach((b: any) => { m[b.fact_id] = b.b; });
+        return m;
+    }, [agent?.beliefs]);
+    // 与 events/mechanics 的 INFO_CFG.qual_rumor 保持一致的分享门槛。
+    const SHARE_FLOOR = 0.30; // TODO(balance)
+
     const selectedActionMeta = useMemo(() => availableActions.find((action) => {
         if (action.action_type !== actionType) return false;
         if (action.action_type === 'PROFESSION_ACTION') return action.id === professionActionId;
@@ -220,7 +250,7 @@ function App() {
     useEffect(() => {
         GetAllFragments()
             .then(setAllFragments)
-            .catch(err => updateResultText(`Failed to load fragments: ${err}`));
+            .catch(err => updateResultText(`碎片清单加载失败：${err}`));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -234,10 +264,10 @@ function App() {
             .then(state => {
                 if (!state) return;
                 applyGameState(state);
-                refreshEventHistory().catch(err => updateResultText(`Failed to load event history: ${err}`));
-                setResultText(`Resumed ${state.silo.name}. The year is ${state.silo.current_year}, Month ${state.silo.current_month}.`);
+                refreshEventHistory().catch(err => updateResultText(`事件历史加载失败：${err}`));
+                setResultText(`已恢复 ${state.silo.name} 的存档。当前 ${state.silo.current_year} 年 ${state.silo.current_month} 月。`);
             })
-            .catch(err => updateResultText(`Failed to load saved game: ${err}`));
+            .catch(err => updateResultText(`存档加载失败：${err}`));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -278,21 +308,21 @@ function App() {
         prevAbsorbedRef.current = null;
         prevMainLineRef.current = null;
         prevRegressedRef.current = {};
-        setResultText('Start a new Silo 40 operation. Your previous save remains until the new game is created.');
+        setResultText('开始新一局 Silo 40 行动。创建新局之前，旧存档仍然保留。');
     }, []);
 
     const handleSave = useCallback(async () => {
         try {
             await SaveGame();
-            updateResultText(`Saved ${silo?.name || 'station'} at Y${silo?.current_year} M${silo?.current_month}.`);
+            updateResultText(`已保存 ${silo?.name || '驻地'}（${silo?.current_year} 年 ${silo?.current_month} 月）。`);
         } catch (err) {
-            updateResultText(`Save failed: ${err}`);
+            updateResultText(`保存失败：${err}`);
         }
     }, [silo, updateResultText]);
 
     // 新建游戏：初始化/落库/缓存全部由 Go 后端完成
     const handleSetupComplete = useCallback(async (selectedTraitIds: string[], profession: string) => {
-        const agentName = name || "Operative";
+        const agentName = name || "无名特工";
         const siloName = "ASSIGNED_STATION";
 
         try {
@@ -309,7 +339,7 @@ function App() {
             setEventHistory([]);
             updateResultText(`40 号派出，现驻 ${state.silo?.name || '未知地堡'}。你的行动只作用于驻地；1 号仅开放有限情报与欺骗通道。`);
         } catch (err) {
-            updateResultText(`Failed to initialize silo: ${err}`);
+            updateResultText(`地堡初始化失败：${err}`);
         }
     }, [name, startYear, applyGameState, updateResultText]);
 
@@ -323,9 +353,9 @@ function App() {
             applyEventState(state);
             const step = await drainOperation();
             const stories = (step.stories || []).map(formatStory).join(' | ');
-            updateResultText(`Advanced to Y${step.silo.current_year} M${step.silo.current_month}.${stories ? ` ${stories}` : ' No new story event.'}`);
+            updateResultText(`已推进至 ${step.silo.current_year} 年 ${step.silo.current_month} 月。${stories ? ` ${stories}` : ' 本月没有新的故事事件。'}`);
         } catch (err) {
-            updateResultText(`Failed to advance time: ${err}`);
+            updateResultText(`时间推进失败：${err}`);
         } finally {
             setBusy(false);
         }
@@ -342,21 +372,21 @@ function App() {
         let actionTarget: string | undefined = targetDept;
         if (selected?.target_type === 'DEPT') {
             if (!targetDept) {
-                updateResultText("Please select a target department.");
+                updateResultText("请先选择目标部门。");
                 return;
             }
         } else if (selected?.target_type === 'RESOURCE') {
             if (!resourceTarget) {
-                updateResultText("Please select a target resource.");
+                updateResultText("请先选择目标资源。");
                 return;
             }
             actionTarget = resourceTarget;
         } else if (!isGlobalAction && !targetDept) {
-            updateResultText("Please select a target department.");
+            updateResultText("请先选择目标部门。");
             return;
         }
         if (actionType === 'SHARE_INFO' && selectedFragments.length === 0) {
-            updateResultText("Please select at least one fragment to share.");
+            updateResultText("请至少选择一份要分享的碎片。");
             return;
         }
 
@@ -376,25 +406,28 @@ function App() {
             const state = await BeginAction(action);
             applyEventState(state);
             const step = await drainOperation();
-            const result = step.action_result?.message || 'Action resolved.';
+            const result = step.action_result?.message || '动作已结算。';
             const stories = (step.stories || []).map(formatStory).join(' | ');
             updateResultText(`${result}${stories ? ` | ${stories}` : ''}`);
         } catch (err) {
-            updateResultText(`Failed to execute action: ${err}`);
+            updateResultText(`动作执行失败：${err}`);
         } finally {
             setBusy(false);
+            // 分享执行后清空碎片选中：残留选中会让下一次执行带上玩家没选的
+            // 碎片（报错指向意料之外的碎片，"反应在别的地方"）。
+            if (actionType === 'SHARE_INFO') setSelectedFragments([]);
         }
     }, [silo, agent, selectedActionMeta, targetDept, resourceTarget, actionType, selectedFragments, professionActionId, playerActionId, busy, applyEventState, drainOperation, updateResultText]);
 
     const groupOrder = ['station', 'silo1', 'common', 'profession', 'profession_group', 'faction_member', 'faction_leader'];
     const groupTitle: Record<string, string> = {
-        silo1: 'Cross-Silo Operations: Silo 1',
-        station: `Assigned Station Operations: ${silo?.name || 'Loading...'}`,
-        common: 'Common Actions',
-        profession: `Profession Actions: ${agent?.profession || ''}`,
-        profession_group: 'Profession Group Actions',
-        faction_member: 'Faction Member Actions',
-        faction_leader: 'Faction Leader Actions',
+        silo1: '跨堡行动 · 1 号',
+        station: `驻地行动 · ${silo?.name || '加载中…'}`,
+        common: '通用动作',
+        profession: `职务动作 · ${agent?.profession || ''}`,
+        profession_group: '职务圈层动作',
+        faction_member: '派系成员动作',
+        faction_leader: '派系领袖动作',
     };
     const groupColor: Record<string, string> = {
         silo1: 'red',
@@ -407,7 +440,11 @@ function App() {
     };
     // 每个动作分组在目标里的意义：玩家要能回答"我为什么要做这些"。
     const groupNote: Record<string, string> = {
-        common: '流通的主干动词：取材料（Gather）、交材料（Share）、建信任（Build）。《共证》线靠它们推进。',
+        // 与阶段门控一致：arrival 阶段只有 Gather 可见，Share/职务动作在
+        // 第一次本地观察后解锁——注释不能承诺界面上还看不到的按钮。
+        common: world?.progress_stage === 'arrival'
+            ? '流通的主干动词是取材料（Gather）、交材料（Share）、建信任（Build）。完成第一次「Gather Info」后，Share 与职务动作解锁。'
+            : '流通的主干动词：取材料（Gather）、交材料（Share）、建信任（Build）。《共证》线靠它们推进。',
         profession: '职务动作是你的合法外壳与就近渠道：维持岗位身份，部分动作能直接取得或深化材料。',
         profession_group: '职务圈层的协同动作：以岗位身份为掩护，做单人做不了的事。',
         station: '针对驻地的行动：把本地关系转化为可核验的结果。',
@@ -485,10 +522,21 @@ function App() {
                         {gameStarted && silo?.victory_status && (
                             <Box w="full" p={5} borderRadius="md" bg={silo.victory_status.is_won ? 'green.50' : 'red.50'} border="2px solid" borderColor={silo.victory_status.is_won ? 'green.400' : 'red.400'}>
                                 <Heading size="sm" color={silo.victory_status.is_won ? 'green.700' : 'red.700'}>
-                                    结局：{silo.victory_status.type} · {silo.victory_status.is_won ? '任务成功' : '任务失败'}
+                                    结局：{endingTitle[silo.victory_status.type] || silo.victory_status.type} · {silo.victory_status.is_won ? '任务成功' : '任务失败'}
                                 </Heading>
                                 <Text mt={2}>{silo.victory_status.description}</Text>
-                                {silo.victory_status.score && <Text mt={2} fontWeight="bold">总分：{silo.victory_status.score.total}（含历史引导 +{silo.victory_status.score.history_influence?.total || 0}）</Text>}
+                                {silo.victory_status.score && (
+                                    <Box mt={2}>
+                                        <Text fontWeight="bold">总分：{silo.victory_status.score.total}（含历史引导 +{silo.victory_status.score.history_influence?.total || 0}）</Text>
+                                        <Text fontSize="xs" color="gray.600" mt={1}>
+                                            构成：存续（人口）{silo.victory_status.score.survival_points} ·
+                                            生产多样 {silo.victory_status.score.diversity_points} ·
+                                            历史遗产 {silo.victory_status.score.heritage_points} ·
+                                            思潮开放 {silo.victory_status.score.ideology_points}，
+                                            × 结局倍率 {Number(silo.victory_status.score.multiplier).toFixed(1)}
+                                        </Text>
+                                    </Box>
+                                )}
                                 {silo.victory_status.decision && (
                                     <Box mt={3} p={3} bg="white" borderRadius="md">
                                         <Text fontSize="sm" fontWeight="bold">多主体权重分流 · 配置 v{silo.victory_status.decision.config_version}</Text>
@@ -521,7 +569,7 @@ function App() {
                         {!gameStarted && !showSetup && (
                             <VStack gap={6} w="full" maxW="400px">
                                 <Input
-                                    placeholder="Enter operative name"
+                                    placeholder="输入特工代号"
                                     value={name}
                                     onChange={updateName}
                                     size="md"
@@ -535,7 +583,7 @@ function App() {
                                     这一局的目标：让 40 号的覆灭与 1 号的控制方式不再只能由控制者单方叙述——
                                     使真相能被独立核验、被驻地的人保有。你通过情报、关系与隐蔽行动引导驻地，而不是经营人口。
                                 </Text>
-                                <Button colorPalette="blue" size="lg" w="full" onClick={() => setShowSetup(true)}>
+                                <Button colorPalette="blue" size="lg" w="full" onClick={() => { setShowSetup(true); updateResultText('定制你的特工：选择所属部门与特质，然后确认开局。'); }}>
                                     以 Silo 40 特工身份开局
                                 </Button>
                             </VStack>
@@ -569,7 +617,7 @@ function App() {
                                     {/* Actions Panel — 结局已定后收起操作区，服务端也会拒绝动作 */}
                                     {!silo?.victory_status && (
                                     <Box w="full" p={5} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                                        <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>Agent Action Interface</Heading>
+                                        <Heading size="sm" mb={4} color="gray.800" borderBottom="1px solid" borderColor="gray.200" pb={2}>特工行动台</Heading>
                                         <VStack gap={5} align="stretch">
                                             {orderedGroups.map((group) => (
                                                 <VStack key={group} align="start" gap={2}>
@@ -621,10 +669,10 @@ function App() {
 
                                             {showDeptSelector && (
                                                 <VStack align="start" gap={1}>
-                                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Dept:</Text>
+                                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">目标部门：</Text>
                                                     <NativeSelect.Root size="md" w="full" bg="white">
                                                         <NativeSelect.Field value={targetDept} onChange={(e) => setTargetDept(e.target.value)}>
-                                                            <option value="" disabled>Select Department...</option>
+                                                            <option value="" disabled>选择部门…</option>
                                                             {silo?.professions?.map(p => (
                                                                 <option key={p.id} value={p.name}>{p.name}</option>
                                                             ))}
@@ -636,10 +684,10 @@ function App() {
 
                                             {showResourceSelector && (
                                                 <VStack align="start" gap={1}>
-                                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">Target Resource:</Text>
+                                                    <Text fontSize="sm" fontWeight="bold" color="gray.700">目标资源：</Text>
                                                     <NativeSelect.Root size="md" w="full" bg="white">
                                                         <NativeSelect.Field value={resourceTarget} onChange={(e) => setResourceTarget(e.target.value)}>
-                                                            <option value="" disabled>Select Resource...</option>
+                                                            <option value="" disabled>选择资源…</option>
                                                             {['Energy', 'Materials', 'Supplies'].map(r => (
                                                                 <option key={r} value={r}>{r}</option>
                                                             ))}
@@ -652,49 +700,68 @@ function App() {
                                             {actionType === 'SHARE_INFO' && (
                                                 <>
                                                     <VStack align="start" gap={1}>
-                                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">Fragments to Share (Real & Fake):</Text>
+                                                        <Text fontSize="sm" fontWeight="bold" color="gray.700">要分享的碎片（徽章带确信 B，B ≥ {SHARE_FLOOR.toFixed(2)} 才够格分享）:</Text>
                                                         {(agent?.known_fragments?.length || 0) === 0 && (
                                                             <Text fontSize="xs" color="orange.700">
-                                                                你还没有任何可作为事实分享的材料——先用「Gather Info」把确信提到 B ≥ 0.30，材料才够格离手。
+                                                                你还没有任何可作为事实分享的材料——先用「Gather Info」把确信提到 B ≥ {SHARE_FLOOR.toFixed(2)}，材料才够格离手。
                                                             </Text>
                                                         )}
                                                         <HStack wrap="wrap" gap={2} maxH="200px" overflowY="auto" p={2} border="1px solid" borderColor="gray.200" borderRadius="md" w="full">
                                                             {allFragments.map(f => {
                                                                 const isSelected = selectedFragments.includes(f);
                                                                 const isKnown = agent?.known_fragments?.includes(f);
+                                                                const b = beliefOf[f];
+                                                                const shareable = isKnown && typeof b === 'number' && b >= SHARE_FLOOR;
+                                                                let palette: string;
+                                                                let title: string;
+                                                                let label = f;
+                                                                if (isKnown) {
+                                                                    label = `${f} · B ${(typeof b === 'number' ? b : 0).toFixed(2)}`;
+                                                                    if (shareable) {
+                                                                        palette = isSelected ? "blue" : "teal";
+                                                                        title = `确信 B ${b.toFixed(2)} ≥ ${SHARE_FLOOR.toFixed(2)}：可作为事实分享`;
+                                                                    } else {
+                                                                        palette = "orange";
+                                                                        title = `确信 B ${(typeof b === 'number' ? b : 0).toFixed(2)} < ${SHARE_FLOOR.toFixed(2)}：仍是私人猜测，不能分享——继续对该线「Gather Info」加深确信`;
+                                                                    }
+                                                                } else {
+                                                                    label = `${f}（假）`;
+                                                                    palette = isSelected ? "red" : "orange";
+                                                                    title = "假碎片：不在你手中。分享会大幅抬升怀疑并降低接收率";
+                                                                }
                                                                 return (
                                                                     <Badge
                                                                         key={f}
-                                                                        colorPalette={isSelected ? (isKnown ? "blue" : "red") : (isKnown ? "gray" : "orange")}
+                                                                        colorPalette={palette}
                                                                         variant={isSelected ? "solid" : "subtle"}
                                                                         cursor="pointer"
                                                                         onClick={() => toggleFragment(f)}
-                                                                        title={isKnown ? "Real Fragment" : "Fake Fragment (Increases Suspicion)"}
+                                                                        title={title}
                                                                     >
-                                                                        {f} {!isKnown && "(Fake)"}
+                                                                        {label}
                                                                     </Badge>
                                                                 );
                                                             })}
                                                         </HStack>
                                                     </VStack>
                                                     <Text fontSize="xs" color="gray.600" mt={1}>
-                                                        Sharing fake fragments boosts ideology spread but drastically increases Suspicion and lowers acceptance rate.
+                                                        分享假碎片会让思潮传得更快，但会大幅抬升怀疑度、拉低接收率。
                                                     </Text>
                                                 </>
                                             )}
 
                                             <VStack gap={3} mt={2}>
                                                 <Button colorPalette="blue" w="full" size="lg" onClick={handleExecuteAction} boxShadow="md" disabled={busy || pendingEvents > 0 || !selectedActionMeta || !selectedActionMeta.enabled}>
-                                                    {busy ? 'Resolving…' : 'Execute Action'}
+                                                    {busy ? '结算中…' : '执行动作'}
                                                 </Button>
                                                 <Button colorPalette="teal" variant="outline" w="full" size="md" onClick={handlePassTime} bg="white" disabled={busy || pendingEvents > 0}>
-                                                    Advance 1 Month
+                                                    推进 1 个月
                                                 </Button>
                                                 <Button colorPalette="gray" variant="outline" w="full" size="sm" onClick={handleSave} disabled={busy || pendingEvents > 0}>
-                                                    Save & Continue
+                                                    保存并继续
                                                 </Button>
                                                 <Text fontSize="xs" color="gray.600">
-                                                    Queue: {pendingEvents} pending{pendingOperation ? ` | ${pendingOperation}` : ''}
+                                                    队列：{pendingEvents} 项待处理{pendingOperation ? ` | ${pendingOperation}` : ''}
                                                 </Text>
                                             </VStack>
                                         </VStack>
@@ -720,7 +787,7 @@ function App() {
 
                         <Box w="full" pt={4} borderTop="1px solid" borderColor="gray.200">
                             <Text color="gray.400" fontSize="sm" textAlign="center">
-                                Silo40 Control Panel - Agent Operations
+                                Silo40 控制台 · 特工行动
                             </Text>
                         </Box>
                     </VStack>
