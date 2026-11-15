@@ -30,9 +30,9 @@ type ArchetypeConfig struct {
 	ID          string
 	DisplayName string // 玩家可见档名 (文案层可再议，机制不受影响)
 	Description string // 一句话机制说明，进开局面板原生呈现
-	// W0Delta 初始幕后威势偏移 (门控耦合旋钮，19 §6.2，TODO(balance))：
-	// 建档时 W = NewGameW + W0Delta。上调延长《公议》(W≤18) 与《人治》
-	// (W≤30) 的磨 W 期，偏移幅度受可达性约束 (a)(b)(c) 限制。
+	// W0Delta 初始幕后威势偏移 (门控耦合旋钮，19 §6.2)：建档时 W = NewGameW +
+	// W0Delta。上调延长《公议》(W≤18) 与《人治》(W≤30) 的磨 W 期，偏移幅度
+	// 受可达性约束 (a)(b)(c) 限制，逐档标定记录见 archetypeRegistry。
 	W0Delta float64
 	// WHalfLifeMonths 覆写 W 向平衡点收敛的半衰期 (月)；0 = 沿用基线
 	// (DefaultAuthorityConfig.WHalfLifeMonths)。值越大衰减越慢。
@@ -51,18 +51,29 @@ type ArchetypeConfig struct {
 	PanicRebellionAmp float64
 }
 
-// archetypeRegistry 三档旋钮起点。所有数值为 TODO(balance)：方向由 19 §3.2
-// 确定，量级由各原型验收宿主 sim 标定 (19 §6.2)。
+// archetypeRegistry 三档旋钮。方向由 19 §3.2 确定，量级由各原型验收宿主 sim
+// 标定 (19 §6.2)。
 var archetypeRegistry = map[string]ArchetypeConfig{
 	ArchetypeBedrock: {
 		ID:          ArchetypeBedrock,
 		DisplayName: "磐石",
 		Description: "IT 控制强化：幕后威势更高且退得更慢，探查更容易被抽样怀疑——信息线变贵，磨 W 期更长。",
-		// TODO(balance)：+8 与半衰期 12 月为 sim 起点；约束是《公议》/《人治》
-		// 在各自地平线内仍可达 (19 §6.2 (a)(b)(c))。
-		W0Delta:         8,
+		// 标定量级 (19 §6.2 (a)(b)(c)，archetype_bedrock_test.go 钉档实测)：
+		// - W0 +8 → +10：+10 时三线地平线内可达且磨 W 动作数不增——《公议》
+		//   (120 开局) 73/120 月结算、决定性发布仍在谷底带 (W≈39)、磨 W 曝光
+		//   7 次不变；《人治》13 次曝光顶压结算 W≈12.7 (门槛 30)；《共证》82
+		//   月结算、怀疑峰 0.73。+11 起《共证》种子 2401 的 IT 反击轨迹换相：
+		//   高 W 使 ItCostCurve 更便宜、反击更密，怀疑峰跳到 0.95+ (距《除名》
+		//   硬线 1.0 仅 0.03–0.05)，故 +10 是保留健康余量的最大偏移。
+		// - 半衰期 12 月保留：13/14 月同样经"高 W → 反击便宜"通路把《共证》
+		//   怀疑峰推至 0.80/0.95+、《断层》怀疑峰推至 0.78，12 是健康区上限。
+		// - 检测 1.25 → 1.5：钉档各线 (含无声探查《共证》与《断层》) 至 2.0
+		//   仍全绿——这些策略结构性规避 SAMPLED 探查，检测轴在钉档线上不咬合；
+		//   1.5 为未测的探查密集型矩阵组合 (§6.4 职业×种子) 保留 ≥2× 怀疑预算
+		//   余量，对裂隙 0.8 的档间比值 1.875 已充分可感知。
+		W0Delta:         10,
 		WHalfLifeMonths: 12,
-		DetectionFactor: 1.25,
+		DetectionFactor: 1.5,
 	},
 	ArchetypeRift: {
 		ID:          ArchetypeRift,
