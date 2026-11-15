@@ -272,10 +272,14 @@ func (r *acceptanceRunner) investigateLagging() {
 }
 
 // exposeBurst fires one public capability check when the interval and AP allow
-// (up to cap total exposes).
-func (r *acceptanceRunner) exposeBurst(m int, exposes, lastExpose *int, cap int) {
+// (up to cap total exposes). maxSuspicion is the trace the strategy tolerates:
+// 0.6 for ordinary phases (skilled play stays clear of IT's hunt), higher only
+// for the forced-horizon top-ups where the game ends at Silo 1's destruction
+// anyway — the hard-failure line is suspicion 1.0 (除名), so 0.85 still leaves
+// margin for one IT counter-investigate hit (+0.08).
+func (r *acceptanceRunner) exposeBurst(m int, exposes, lastExpose *int, cap int, maxSuspicion float64) {
 	svc := r.svc
-	if svc.agent.SuspicionLevel >= 0.6 {
+	if svc.agent.SuspicionLevel >= maxSuspicion {
 		return
 	}
 	beliefFloor := func(factID string) bool {
@@ -532,12 +536,15 @@ func runRuleOfLawFamily(t *testing.T, line string, seed int64, withMayorRoute bo
 			r.evidenceRoute(true, true)
 			if !circulationOnly {
 				r.investigateLagging()
-				r.exposeBurst(m, &exposes, &lastExpose, 8)
+				r.exposeBurst(m, &exposes, &lastExpose, 8, 0.6)
 			} else if withMayorRoute && svc.silo.Authority.Judicial.PactLocked &&
 				svc.silo.Authority.W >= 28 && svc.agent.ActionPoints >= 20 {
 				// Contention: keep W under the personal-rule bar after the
-				// lock so both lines stay eligible at the settlement.
-				r.exposeBurst(m, &exposes, &lastExpose, 14)
+				// lock so both lines stay eligible at the settlement. The
+				// top-up may spend suspicion capital up to 0.85: the horizon
+				// arrives at Silo 1's destruction anyway, and the hard
+				// failure line is 1.0.
+				r.exposeBurst(m, &exposes, &lastExpose, 14, 0.85)
 			}
 			reserve := 0.0
 			if withMayorRoute && circulationOnly {
@@ -647,7 +654,7 @@ func runPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRecord {
 					// only ~2 points over the last 2 months).
 					cal := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth
 					if 130*12+1-cal <= 8 {
-						r.exposeBurst(m, &exposes, &lastExpose, 14)
+						r.exposeBurst(m, &exposes, &lastExpose, 14, 0.6)
 					}
 				}
 				if resourceAmount(svc.silo, "Supplies") < 500 && svc.agent.ActionPoints >= 15 {
@@ -674,7 +681,7 @@ func runPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRecord {
 				supplies := resourceAmount(svc.silo, "Supplies")
 				switch {
 				case exposeDueWindow && svc.agent.ActionPoints >= 25:
-					r.exposeBurst(m, &exposes, &lastExpose, 10)
+					r.exposeBurst(m, &exposes, &lastExpose, 10, 0.6)
 				case supplies < 1000 && svc.agent.ActionPoints >= 15:
 					r.execute("supply_ration", model.AgentAction{
 						Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Supplies",
@@ -693,7 +700,7 @@ func runPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRecord {
 				exposeDue := exposes < 6 && m-lastExpose >= 3 && svc.agent.SuspicionLevel < 0.6
 				switch {
 				case exposeDue && svc.agent.ActionPoints >= 20:
-					r.exposeBurst(m, &exposes, &lastExpose, 6)
+					r.exposeBurst(m, &exposes, &lastExpose, 6, 0.6)
 				case resourceAmount(svc.silo, "Supplies") < 2500 && svc.agent.ActionPoints >= 15:
 					r.execute("supply_ration", model.AgentAction{
 						Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Supplies",
