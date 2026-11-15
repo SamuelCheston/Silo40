@@ -2084,7 +2084,7 @@ func (s *GameService) runOneMonthSingle(source string) ([]string, []model.StoryE
 		st := outsideStories[i]
 		stories = append(stories, &st)
 	}
-	// 18 设计卷：谈判层月度低强度通气。仅当信道畅通时执行回合并消耗 RNG；
+	// 21 设计卷：谈判层月度低强度通气。仅当信道畅通时执行回合并消耗 RNG；
 	// 未开信道的运行逐位不变。位置在本地结算后、时钟推进前。
 	negotiationLogs, negotiationStories := s.runNegotiationMonth(s.silo)
 	logs = append(logs, negotiationLogs...)
@@ -3052,7 +3052,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		escapeSettleRequested = false
 	}
 
-	// 18 设计卷：谈判层请求 (开信道/高强度回合/妥协后二选一) 在全部结构化
+	// 21 设计卷：谈判层请求 (开信道/高强度回合/妥协后二选一) 在全部结构化
 	// 效果施加后由服务层执行，叙事并入当前事件的故事汇点。
 	s.applyNegotiationRequests(simSilo, event, negotiationOpenRequested, negotiationRoundRequested, negotiationResolveRequested)
 
@@ -3126,11 +3126,11 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		s.settleEscapeDeparture(simSilo, event)
 	}
 
-	// 18 设计卷：脚本效果请求的谈判层动作 (与结构化路径同一口径)。
+	// 21 设计卷：脚本效果请求的谈判层动作 (与结构化路径同一口径)。
 	s.applyNegotiationRequests(simSilo, event, scriptNegotiationOpen, scriptNegotiationRound, scriptNegotiationResolve)
 }
 
-// applyNegotiationRequests 执行内容效果收集的谈判层请求 (18 设计卷)：
+// applyNegotiationRequests 执行内容效果收集的谈判层请求 (21 设计卷)：
 // 开信道、高强度回合 (试探/递条款)、妥协后二选一。全部随机决策经引擎
 // 单一 RNG 流；执行结果以中文叙事并入当前事件的故事汇点与持久记录。
 // 未开信道的运行不会收到任何请求，不消耗 RNG。

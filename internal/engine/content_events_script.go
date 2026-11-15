@@ -439,7 +439,7 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			"it":          ctx.Silo.TopStance.ITStance(),
 			"guarantee":   ctx.Silo.TopStance.Guarantee,
 		}
-		// 18 设计卷：谈判/妥协层只读视图。内容可读它塑形动作可得性
+		// 21 设计卷：谈判/妥协层只读视图。内容可读它塑形动作可得性
 		// (信道畅通/妥协成立)，决策与叙事由服务层执行。
 		result["negotiation"] = map[string]interface{}{
 			"initialized":            ctx.Silo.Negotiation.Initialized,

@@ -11,7 +11,7 @@ import (
 	"silo40/internal/model"
 )
 
-// 谈判/妥协层验收 (18 设计卷)：信道生命周期、带权决策轨迹的确定性、
+// 谈判/妥协层验收 (21 设计卷)：信道生命周期、带权决策轨迹的确定性、
 // 妥协可达性、妥协后二选一与出发结算加成、未开信道的零 RNG 保证。
 
 func newNegotiationGame(t *testing.T, name string, seed int64) *GameService {

@@ -804,7 +804,7 @@ func upgradeV11ToLineShifts(tx *gorm.DB) error {
 const negotiationSaveVersion = 13
 
 // UpgradeV12ToNegotiationSave adds the mayor–rebel negotiation layer
-// (18 设计卷): Silo.Negotiation (channel, rounds, mayor path/disposition,
+// (21 设计卷): Silo.Negotiation (channel, rounds, mayor path/disposition,
 // offer on table, compromise fact, post-compromise choice, decision log).
 // Nothing could write negotiation state before v13, so upgraded saves keep
 // their exact pre-upgrade behaviour: zero state = no channel, and runs that

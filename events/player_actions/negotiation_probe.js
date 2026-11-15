@@ -5,7 +5,7 @@ defineEvent({
   type: "SOCIAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 1, // TODO(balance)
-  // 谈判层·试探（18 设计卷 §5）：高强度回合。市长路径决策的权重读
+  // 谈判层·试探（21 设计卷 §5）：高强度回合。市长路径决策的权重读
   // 既有状态（正统性、叛乱、保障可信度、性情、压力），试探只通气不逼表态。
   player_action: {
     id: "NEGOTIATION_PROBE",

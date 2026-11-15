@@ -649,16 +649,16 @@ func validateEffect(effect ContentEffect) error {
 		// settles after all effects apply. No fields; the settlement reads the
 		// stance + ledger + route facts and writes the escape group.
 	case "negotiation_open":
-		// 18 设计卷：开信道请求，服务层执行 (性情抽取 + 叙事)。无字段。
+		// 21 设计卷：开信道请求，服务层执行 (性情抽取 + 叙事)。无字段。
 	case "negotiation_round":
-		// 18 设计卷：高强度回合请求。flag = probe 试探 | terms 递条款。
+		// 21 设计卷：高强度回合请求。flag = probe 试探 | terms 递条款。
 		switch effect.Flag {
 		case "probe", "terms":
 		default:
 			return fmt.Errorf("negotiation_round requires flag probe|terms")
 		}
 	case "negotiation_resolve":
-		// 18 设计卷：妥协后二选一。flag = takeover 接管 | hands_off 不接管。
+		// 21 设计卷：妥协后二选一。flag = takeover 接管 | hands_off 不接管。
 		switch effect.Flag {
 		case "takeover", "hands_off":
 		default:
@@ -1084,15 +1084,15 @@ type ScopeContext struct {
 	// 请求 (16 §3.4 第一段结算的最小形态)。服务层在全部效果施加后执行结算
 	// (结算读立场与账本，产出逃出群体；仲裁只读群体事实)。nil = 无处投递。
 	EscapeDepartureSettle *bool
-	// NegotiationOpenRequested 收集 negotiation_open 效果 (18 设计卷)：
+	// NegotiationOpenRequested 收集 negotiation_open 效果 (21 设计卷)：
 	// 开信道请求，服务层在全部效果施加后执行 (含性情抽取与叙事)。
 	// nil = 无处投递。
 	NegotiationOpenRequested *bool
-	// NegotiationRoundKind 收集 negotiation_round 效果 (18 设计卷)：
+	// NegotiationRoundKind 收集 negotiation_round 效果 (21 设计卷)：
 	// 高强度回合请求 (probe 试探 / terms 递条款)，服务层在全部效果施加后执行。
 	// nil = 无处投递。
 	NegotiationRoundKind *string
-	// NegotiationResolveKind 收集 negotiation_resolve 效果 (18 设计卷)：
+	// NegotiationResolveKind 收集 negotiation_resolve 效果 (21 设计卷)：
 	// 妥协后二选一请求 (takeover 接管 / hands_off 不接管)，服务层执行。
 	// nil = 无处投递。
 	NegotiationResolveKind *string
@@ -1210,19 +1210,19 @@ func ApplyContentEffectsScoped(effects []ContentEffect, sc *ScopeContext) []Cont
 			}
 			continue
 		case "negotiation_open":
-			// 18 设计卷：开信道请求 (性情抽取与叙事由服务层执行)。
+			// 21 设计卷：开信道请求 (性情抽取与叙事由服务层执行)。
 			if sc != nil && sc.NegotiationOpenRequested != nil {
 				*sc.NegotiationOpenRequested = true
 			}
 			continue
 		case "negotiation_round":
-			// 18 设计卷：高强度回合请求 (flag=probe|terms)。
+			// 21 设计卷：高强度回合请求 (flag=probe|terms)。
 			if sc != nil && sc.NegotiationRoundKind != nil {
 				*sc.NegotiationRoundKind = effect.Flag
 			}
 			continue
 		case "negotiation_resolve":
-			// 18 设计卷：妥协后二选一请求 (flag=takeover|hands_off)。
+			// 21 设计卷：妥协后二选一请求 (flag=takeover|hands_off)。
 			if sc != nil && sc.NegotiationResolveKind != nil {
 				*sc.NegotiationResolveKind = effect.Flag
 			}
