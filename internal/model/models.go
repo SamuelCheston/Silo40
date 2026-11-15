@@ -52,7 +52,12 @@ const (
 //     (LineShifts)——一局只有一条主线，改道是玩家可见的事实。
 //     新字段零值即旧档语义 (主线未定、无改道记录)，由当前事实确定性
 //     重推；v11 存档经备份+单事务+回读校验升级，不回填任何推测状态。
-const CurrentSaveVersion = 12
+//   - v13: 市长与叛乱方谈判/妥协层 (18 设计卷)。Silo 携带谈判状态
+//     (Negotiation)：信道、回合、市长路径与性情、桌上提案、妥协事实、
+//     妥协后二选一与决策日志。新字段零值即旧档语义 (无谈判信道)，
+//     未开信道的运行不消耗任何新 RNG；v12 存档经备份+单事务+回读校验
+//     升级，不回填任何推测状态。
+const CurrentSaveVersion = 13
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -468,6 +473,7 @@ type Silo struct {
 	Authority       ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`         // IT 幕后威势与 Judicial 附着
 	EscapedGroup    EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`     // 已离开且可能存续的堡外群体 (G5)
 	TopStance       TopStanceState          `gorm:"type:text;serializer:json" json:"top_stance"`        // 顶层立场 (16 §3.2)：内部状态，仲裁不读
+	Negotiation     NegotiationState        `gorm:"type:text;serializer:json" json:"negotiation"`       // 市长与叛乱方谈判/妥协层 (18 设计卷)：只改变谁在阻碍谁，不发放胜利
 	EscapePrep      EscapePreparation       `gorm:"type:text;serializer:json" json:"escape_prep"`       // 逃跑准备账本 (16 §2)：事实账本，仲裁不读
 	SpilloverPrep   SpilloverPreparation    `gorm:"type:text;serializer:json" json:"spillover_prep"`    // 外溢准备账本 (16 §2.3)：信道建立侧
 	PreFallSnapshot PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
@@ -568,6 +574,115 @@ func normalizeTopStance(v string) string {
 	default:
 		return TopStanceBlock
 	}
+}
+
+// 市长面对叛乱的三条路 (18 设计卷 §3.1)：带权重的随机决策档位，不是阈值
+// 触发——不存在"叛乱 ≥ X → 必须妥协"。
+const (
+	NegotiationPathSuppress = "suppress" // 镇压：封楼、抓人、断信道
+	NegotiationPathTalk     = "talk"     // 谈判：保持通气、拖延、不决议
+	NegotiationPathConcede  = "concede"  // 妥协：开出/接受妥协提案
+)
+
+// 叛乱方姿态 (18 §3.3)。
+const (
+	NegotiationPosturePress = "press" // 施压：维持压力
+	NegotiationPostureProbe = "probe" // 试探：观察市长倾向
+	NegotiationPostureOffer = "offer" // 递条款：推动玩家递出提案
+)
+
+// 市长性情 (18 §2)：开信道时经引擎单一 RNG 流一次性抽取，持久保存，
+// 作为后续路径决策的权重输入 (性格/特质归因)。
+const (
+	MayorDispositionHardliner  = "hardliner"  // 强硬派：镇压加权、妥协减权
+	MayorDispositionPragmatist = "pragmatist" // 务实派：谈判加权
+	MayorDispositionSurvivor   = "survivor"   // 求生派：命令源枯竭时妥协加权
+)
+
+// IT 对谈判信道的反应 (18 §3.4)：第三方独立裁量。
+const (
+	NegotiationITStandAside = "stand_aside" // 不干涉
+	NegotiationITUndermine  = "undermine"   // 破坏：削保障可信度、可能曝光信道
+	NegotiationITWatch      = "watch"       // 观望
+)
+
+// 妥协成立后叛乱方的二选一 (18 §3.7)。零值 (未选) 时结算不读加成，
+// 与 R-D 抉择未选择用中间系数同口径。
+const (
+	NegotiationTakeover = "takeover"  // 接管市长职位：顶层改由叛乱方主导
+	NegotiationHandsOff = "hands_off" // 不接管：带组织能力推进逃跑/外溢
+)
+
+// 信道崩塌原因 (合法失败结果)。
+const (
+	NegotiationClosedCrackdown  = "crackdown"   // 被镇压打断
+	NegotiationClosedITExposure = "it_exposure" // 被 IT 曝光
+)
+
+// NegotiationLogEntry 谈判决策日志的一条：可复盘依据 (18 §2)。
+// Weights 为归一化后的档位权重，Factors 为决策时刻的因子读数摘要。
+type NegotiationLogEntry struct {
+	Year     int                `json:"year"`
+	Month    int                `json:"month"`
+	Decider  string             `json:"decider"` // mayor | rebels | it
+	Decision string             `json:"decision"`
+	Weights  map[string]float64 `json:"weights,omitempty"`
+	Factors  string             `json:"factors,omitempty"`
+	Outcome  string             `json:"outcome,omitempty"`
+}
+
+// NegotiationState 市长与叛乱方的谈判/妥协层 (18 设计卷、ADR-0011)。
+//
+// 设计纪律：
+//   - 本层只改变"谁在阻碍谁"：产出写入顶层立场的权重输入与组织事实，
+//     不直接发放胜利；最终结算仍只看逃出去多少人。
+//   - 三方 (市长/叛乱方/IT) 的取舍都是带权重的随机决策，权重可归因，
+//     每个决策点经 Log 留下可复盘依据。
+//   - 谈判是持续过程：回合可反复，拖延是合法结果；最后一刻的妥协也成立，
+//     但须叛乱方接受 (接受是带权决策，不是自动成立)。
+//   - 零值 = 无谈判 = 旧档语义；未开信道的运行不消耗任何新 RNG。
+type NegotiationState struct {
+	Initialized           bool   `json:"initialized"`
+	ChannelOpen           bool   `json:"channel_open"`
+	OpenedYear            int    `json:"opened_year,omitempty"`
+	OpenedMonth           int    `json:"opened_month,omitempty"`
+	MayorDisposition      string `json:"mayor_disposition,omitempty"` // 开信道时一次性抽取
+	Rounds                int    `json:"rounds"`                      // 已交换回合数
+	MayorPath             string `json:"mayor_path,omitempty"`        // 市长最近一次路径决策
+	MayorLean             float64 `json:"mayor_lean"`                 // 玩家可感知的市长倾向 (0-1)
+	RebelPosture          string `json:"rebel_posture,omitempty"`     // 叛乱方最近姿态
+	StalledRounds         int    `json:"stalled_rounds"`              // 连续谈判无进展回合 (谈判权重软衰减输入)
+	SuppressRounds        int    `json:"suppress_rounds"`             // 累计镇压回合 (叛乱方拒绝权重输入)
+	OfferOnTable          bool   `json:"offer_on_table"`
+	OfferedBy             string `json:"offered_by,omitempty"` // mayor | rebels
+	OfferTerms            string `json:"offer_terms,omitempty"`
+	CompromiseEstablished bool   `json:"compromise_established"`
+	CompromiseYear        int    `json:"compromise_year,omitempty"`
+	CompromiseMonth       int    `json:"compromise_month,omitempty"`
+	Takeover              string `json:"takeover,omitempty"` // ""(未选)/takeover/hands_off
+	Closed                bool   `json:"closed"`
+	CloseReason           string `json:"close_reason,omitempty"`
+	Log                   []NegotiationLogEntry `json:"log,omitempty"` // 环形保留最近 24 条
+}
+
+// NegotiationLogCap 决策日志环形上限。
+const NegotiationLogCap = 24
+
+// AppendLogEntry 追加一条决策日志并夹到环形上限 (超限时丢弃最旧条目)。
+func (n *NegotiationState) AppendLogEntry(entry NegotiationLogEntry) {
+	if n == nil {
+		return
+	}
+	n.Log = append(n.Log, entry)
+	if len(n.Log) > NegotiationLogCap {
+		n.Log = n.Log[len(n.Log)-NegotiationLogCap:]
+	}
+}
+
+// NegotiationActive 报告月度回合是否应当进行：信道畅通、未崩塌、
+// 妥协尚未成立 (妥协成立后谈判阶段结束，进入选择阶段)。
+func (n NegotiationState) NegotiationActive() bool {
+	return n.Initialized && n.ChannelOpen && !n.Closed && !n.CompromiseEstablished
 }
 
 // 接应档位 (16 §2.1)：none = 无接应事实；surveyed = 路线已勘察；
