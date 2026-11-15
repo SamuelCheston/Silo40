@@ -6,6 +6,17 @@ import (
 	"silo40/internal/model"
 )
 
+// TestVictoryCheckMechanicRequestsLockedPact 锁住 JS 主路径的约章评估请求。
+func TestVictoryCheckMechanicRequestsLockedPact(t *testing.T) {
+	e := NewGameEngine()
+	silo := &model.Silo{TotalPopulation: 1000, Silo1Destroyed: true}
+	silo.Authority.Judicial.PactLocked = true
+	e.runEventMechanic(EVENT_VICTORY_CHECK, e.CreateVictoryCheckEvent(silo, &model.Agent{}), NewEventContext())
+	if silo.VictoryStatus == nil || !silo.VictoryStatus.IsWon || silo.VictoryStatus.Type != "RULE_OF_LAW" {
+		t.Fatalf("JS victory check must request RULE_OF_LAW from PactLocked, got %+v", silo.VictoryStatus)
+	}
+}
+
 // TestCheckVictoryConditionsFallbackSemantics 锁住 Go 兜底结局镜像的语义。
 // 该镜像是 events/mechanics/core_systems.js VICTORY_CHECK mechanic 的降级
 // 副本（JS 缺失/报错时生效）；修改任一侧结局规则必须同步另一侧并更新本测试。
@@ -42,6 +53,16 @@ func TestCheckVictoryConditionsFallbackSemantics(t *testing.T) {
 		e.checkVictoryConditions(silo, agent)
 		if silo.VictoryStatus == nil || !silo.VictoryStatus.IsWon || silo.VictoryStatus.Type != "INFORMATION" {
 			t.Fatalf("expected INFORMATION win, got %+v", silo.VictoryStatus)
+		}
+	})
+
+	t.Run("locked pact requests RULE_OF_LAW before TIME", func(t *testing.T) {
+		silo := baseSilo()
+		silo.Authority.Judicial.PactLocked = true
+		silo.Silo1Destroyed = true
+		e.checkVictoryConditions(silo, agent)
+		if silo.VictoryStatus == nil || !silo.VictoryStatus.IsWon || silo.VictoryStatus.Type != "RULE_OF_LAW" {
+			t.Fatalf("expected RULE_OF_LAW evaluation request, got %+v", silo.VictoryStatus)
 		}
 	})
 

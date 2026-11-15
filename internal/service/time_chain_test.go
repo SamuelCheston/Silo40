@@ -261,41 +261,40 @@ func TestTimeEndingNarrativeAndOverlap(t *testing.T) {
 	}
 }
 
-// TestTimeLinePlayableFromNewGame drives the line from a real new game: the
-// station is kept alive and calm (the lethal routes all need rebellion >=
-// 0.8), the farm keeps supplies up and gossips openness into the commoner
-// cohorts, the reset countermeasure is taken when the purge chain stirs, and
-// the pre-fall moment arrives (deadline fallback at the latest). The final
-// settlement must read the engine snapshot: TIME in the pool when
-// open-qualified, excluded when not.
-//
-// Balance note (TODO(balance)): under the current calibration the run below
-// settles with a closed snapshot — resource attrition plus the panic-to-
-// loyalty drift outrun the single agent's openness levers, so the honest
-// outcome demonstrated here is "outlasted into EXCLUSIONIST" (33-time-nodes
-// §2). The positive TIME path is locked by the fixture-driven arbitration
-// test above; making it reachable in play is a tuning batch (drift rate,
-// lever strength, NPC economy), not a wiring gap.
+// TestTimeLinePlayableFromNewGame drives TIME through real play only. Supply
+// rationing keeps the station alive while sustained circulation of one verified
+// fact builds openness department by department. The route answers the purge
+// chain through its real countermeasure and holds the pre-fall public inquiry;
+// no world fact, resource, ideology, snapshot, or ending state is pre-written.
 func TestTimeLinePlayableFromNewGame(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "time-playable.db"))
 	req := threeSiloRequest(3401)
-	req.Profession = "Agricultural"
+	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
 	}
-	tryExec := func(action model.AgentAction) bool {
+	execute := func(action model.AgentAction) bool {
 		outcome, err := svc.ExecuteAction(action)
-		return err == nil && outcome.Result.Executed
+		return err == nil && outcome != nil && outcome.Result.Executed
+	}
+	bestFact := func() string {
+		best, bestB := "", 0.0
+		for _, belief := range svc.agent.Beliefs {
+			if belief.B >= engine.DefaultInformationConfig().QualRumor &&
+				(belief.B > bestB || (belief.B == bestB && belief.FactID < best)) {
+				best, bestB = belief.FactID, belief.B
+			}
+		}
+		return best
 	}
 
-	// Opening: gather, two shares (the reset countermeasure later needs
-	// share trigger_count >= 2).
-	tryExec(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
-	if len(svc.agent.KnownFragments) > 0 {
-		tryExec(model.AgentAction{Type: model.ActionShareInfo, TargetDept: "Mayor", FragmentIds: []string{svc.agent.KnownFragments[0]}})
-		tryExec(model.AgentAction{Type: model.ActionShareInfo, TargetDept: "Supply", FragmentIds: []string{svc.agent.KnownFragments[0]}})
+	execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
+	if fact := bestFact(); fact != "" {
+		execute(model.AgentAction{Type: model.ActionShareInfo, TargetDept: "Mayor", FragmentIds: []string{fact}})
+		execute(model.AgentAction{Type: model.ActionShareInfo, TargetDept: "Supply", FragmentIds: []string{fact}})
 	}
 
+	shares, rations := 0, 0
 	for month := 1; month <= 100 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance TIME line at month %d: %v", month, err)
@@ -303,55 +302,114 @@ func TestTimeLinePlayableFromNewGame(t *testing.T) {
 		if svc.gameOver() {
 			break
 		}
-		ap := svc.agent.ActionPoints
 		countermeasure := actionByID(svc.availablePlayerActions(), "RESET_COUNTERMEASURE_OFFER")
 		inquiry := actionByID(svc.availablePlayerActions(), "PRE_FALL_OPEN_INQUIRY")
 		switch {
 		case countermeasure != nil && countermeasure.Enabled:
-			// The purge countermeasure outranks every other concern.
-			tryExec(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RESET_COUNTERMEASURE_OFFER"})
+			if !execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RESET_COUNTERMEASURE_OFFER"}) {
+				t.Fatal("real reset countermeasure offer was rejected")
+			}
+			continue
 		case inquiry != nil && inquiry.Enabled:
-			tryExec(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "PRE_FALL_OPEN_INQUIRY"})
+			if !execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "PRE_FALL_OPEN_INQUIRY"}) {
+				t.Fatal("real pre-fall public inquiry was rejected")
+			}
+			continue
 		case svc.silo.Rebellion >= 0.7:
 			// Lie low: the lethal routes all feed on rebellion >= 0.8.
-		case resourceAmount(svc.silo, "Supplies") < 4500 && ap >= 15:
-			tryExec(model.AgentAction{Type: model.ActionProfession, ProfessionAction: "AGRICULTURAL_INTENSIVE_HARVEST"})
-		case ap >= 10:
-			tryExec(model.AgentAction{Type: model.ActionProfession, ProfessionAction: "AGRICULTURAL_FIELD_GOSSIP", TargetDept: "Mechanical"})
+			continue
+		}
+
+		resource := ""
+		lowest := 1200.0
+		for _, candidate := range []string{"Supplies", "Energy", "Materials"} {
+			if amount := resourceAmount(svc.silo, candidate); amount < lowest {
+				resource, lowest = candidate, amount
+			}
+		}
+		if resource != "" && svc.agent.ActionPoints >= 15 {
+			if execute(model.AgentAction{
+				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: resource,
+			}) {
+				rations++
+			}
+			continue
+		}
+
+		fact := bestFact()
+		if fact == "" {
+			execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
+			continue
+		}
+		if svc.agent.ActionPoints < model.ACTION_COSTS[model.ActionShareInfo] {
+			continue
+		}
+		target := ""
+		leastOpen := 2.0
+		for _, profession := range svc.silo.Professions {
+			if openness := professionProForeign(svc.silo, profession.Name); openness >= 0 && openness < leastOpen {
+				target, leastOpen = profession.Name, openness
+			}
+		}
+		if target != "" && execute(model.AgentAction{
+			Type: model.ActionShareInfo, TargetDept: target, FragmentIds: []string{fact},
+		}) {
+			shares++
 		}
 	}
+	if shares == 0 || rations == 0 {
+		t.Fatalf("route did not exercise its real maintenance levers: shares=%d rations=%d", shares, rations)
+	}
 
-	// The pre-fall moment must arrive (deadline fallback at relative Y7M10 at
-	// the latest) and the settlement must have consumed the destruction fact.
-	if !contentTriggered(svc, "special:pre_fall_choice") {
-		t.Errorf("pre_fall_choice never arrived (deadline fallback failed)")
+	for _, key := range []string{
+		"special:open_discourse_milestone",
+		"special:pre_fall_choice",
+		"player_actions:pre_fall_open_inquiry",
+	} {
+		if !contentTriggered(svc, key) {
+			t.Errorf("real TIME route did not produce %s", key)
+		}
 	}
 	if !svc.silo.Silo1Destroyed {
 		t.Fatalf("silo1_destroyed_signal did not settle the run at %d-%02d", svc.silo.CurrentYear, svc.silo.CurrentMonth)
 	}
-	if !svc.silo.PreFallSnapshot.Taken {
+	snapshot := svc.silo.PreFallSnapshot
+	if !snapshot.Taken {
 		t.Fatal("destruction did not take the pre-fall ideology snapshot")
+	}
+	if !snapshot.OpenQualified || snapshot.Ideologies[model.IdeologyProForeign] <= 0 ||
+		snapshot.Ideologies[model.IdeologyProForeign] < snapshot.Ideologies[model.IdeologyLoyalty] {
+		t.Fatalf("real route did not earn an open pre-fall snapshot: %+v", snapshot)
 	}
 	status := svc.silo.VictoryStatus
 	if status == nil || status.Decision == nil {
 		t.Fatalf("destruction did not settle an ending: %+v", status)
 	}
-	inPool, excluded := false, false
+	if status.Decision.Selected != endingTime {
+		t.Fatalf("real open route must select TIME: %+v; snapshot=%+v", status.Decision, snapshot)
+	}
+	inPool := false
 	for _, outcome := range status.Decision.Pool {
 		if outcome == endingTime {
 			inPool = true
 		}
 	}
-	_, excluded = status.Decision.Excluded[endingTime]
-	if svc.silo.PreFallSnapshot.OpenQualified && !inPool {
-		t.Errorf("open-qualified snapshot must put TIME in the pool: %+v", status.Decision)
+	if !inPool {
+		t.Fatalf("selected TIME is absent from its own qualification pool: %+v", status.Decision)
 	}
-	if !svc.silo.PreFallSnapshot.OpenQualified && !excluded {
-		t.Errorf("pure-silo snapshot must exclude TIME with a reason: %+v", status.Decision)
+	if _, excluded := status.Decision.Excluded[endingTime]; excluded {
+		t.Fatalf("qualified TIME also carries an exclusion: %+v", status.Decision.Excluded)
 	}
-	t.Logf("TIME playable settled: selected=%s open_qualified=%v pf=%.2f loyalty=%.2f dominant=%s population=%d month=%d",
-		status.Decision.Selected, svc.silo.PreFallSnapshot.OpenQualified,
-		svc.silo.PreFallSnapshot.Ideologies[model.IdeologyProForeign],
-		svc.silo.PreFallSnapshot.Ideologies[model.IdeologyLoyalty],
-		svc.silo.PreFallSnapshot.DominantAxis, svc.silo.TotalPopulation, svc.silo.CurrentMonth)
+
+	terminalAction := model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"}
+	if outcome, err := svc.ExecuteAction(terminalAction); err == nil {
+		t.Fatalf("terminal TIME state accepted ExecuteAction: %+v", outcome.Result)
+	}
+	if _, err := svc.BeginAction(terminalAction); err == nil {
+		t.Fatal("terminal TIME state accepted BeginAction")
+	}
+	t.Logf("TIME playable settled: selected=%s pool=%v scores=%v open_qualified=%v pf=%.4f loyalty=%.4f dominant=%s population=%d date=%d-%02d shares=%d rations=%d",
+		status.Decision.Selected, status.Decision.Pool, status.Decision.Scores, snapshot.OpenQualified,
+		snapshot.Ideologies[model.IdeologyProForeign], snapshot.Ideologies[model.IdeologyLoyalty],
+		snapshot.DominantAxis, snapshot.Population, snapshot.Year, snapshot.Month, shares, rations)
 }

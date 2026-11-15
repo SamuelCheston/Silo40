@@ -126,9 +126,9 @@ func TestCovenantConvergenceDailyPressureAloneFails(t *testing.T) {
 	}
 
 	env := engine.ComputeInformationEnvironment(station)
-	t.Logf("daily-only: minW=%.2f finalW=%.2f E=%.4f Q=%.4f qualifying=%d maxLowStreak=%d shocks=%+v",
+	t.Logf("daily-only: minW=%.2f finalW=%.2f E=%.4f Q=%.4f qualifying=%d maxLowStreak=%d exposes=%d shocks=%+v",
 		minW, station.Authority.W, station.Authority.E, env.PublicEvidenceQ, env.QualifyingFacts,
-		maxLowStreak, station.Authority.DecisiveShocks)
+		maxLowStreak, exposes, station.Authority.DecisiveShocks)
 
 	if len(station.Authority.DecisiveShocks) != 0 {
 		t.Fatalf("daily pressure must not produce decisive shocks: %+v", station.Authority.DecisiveShocks)
@@ -148,14 +148,24 @@ func TestCovenantConvergenceDailyPressureAloneFails(t *testing.T) {
 }
 
 // TestCovenantConvergenceDecisiveEventSucceeds 锁定"决定性事件促成约章"：
-// 裁决的情形是"日常压力＋一次决定性事件"——先用同一技巧策略持续施压
-// (只发布第一份核心证据、核查/曝光/流通把 W 压向日常谷底)，等 W 落到谷底
-// 带后再发布第二份核心证据；第二份登记触发大规模公开证据冲击，击穿谷底
-// 并持续低于约章门，PactLocked 成立。(冲击量级按谷底带推导，见
-// 14-parameters-and-audit.md §9.1：冲击必须落在已被日常压力磨低的威势上。)
+// 裁决的情形是"日常压力＋一次决定性事件"——先只发布第一份核心证据，
+// 以核查、曝光和流通建立日常压力；随后储备同一结算月所需的 AP，发布
+// 第二份核心证据并立即曝光。第二份登记触发的大规模公开证据冲击与普通
+// 负冲击共同击穿日常谷底，持续低于约章门后 PactLocked 成立。发布门只读
+// 已完成的动作与资源，不再等待一个必须由本次发布自身才能产生的 W 谷底。
 func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 	svc := calibrationService(t, 421)
 	station := svc.silo
+	execute := func(action model.AgentAction) {
+		t.Helper()
+		outcome, err := svc.ExecuteAction(action)
+		if err != nil {
+			t.Fatalf("execute %+v: %v", action, err)
+		}
+		if !outcome.Result.Executed {
+			t.Fatalf("execute %+v rejected: %+v", action, outcome.Result)
+		}
+	}
 
 	station.Rebellion = 0.2
 	if _, err := svc.PassTime(1); err != nil {
@@ -172,66 +182,62 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 	shares := map[string]int{}
 	startAbs := station.CurrentYear*12 + station.CurrentMonth
 	decisiveFired := false
+	minW := station.Authority.W
+	decisivePublishW, decisiveImpactW := 0.0, 0.0
 
-	// Phase 1 (daily pressure) runs until W reaches the trough band; phase 2
-	// then publishes the second core fact as the decisive event. 132 个月上限：
-	// 邻堡资源曲线分化后 (每堡自己的节奏)，单一 RNG 流的交织改变，脚本化
-	// 策略到达谷底带与第二份发布的时点整体后移；煽动效应量落地 (叛乱即时
-	// 增量) 后 NPC 月度轨迹再次整体后移——收敛变慢但路径不变。
-	for gameMonth := 0; gameMonth <= 132 && !station.Authority.Judicial.PactLocked; gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
-		// 叛乱通道硬钉在 0.2：本测试度量的是约章/W 动力学。煽动效应量落地后
-		// NPC 月度煽动会真实推高叛乱并反噬 W 与信念接收，把外部通道钉住才能
-		// 让断言继续只测它要测的东西 (判据未变：第二份发布仍须真实发生)。
-		station.Rebellion = 0.2
+	// Establish daily pressure first, then combine the second publication with
+	// one final exposure so the ordinary and decisive shocks settle together.
+	// Keep main's 96-month calibration window for the divergent peer-silo rhythm.
+	for gameMonth := 0; gameMonth <= 96 && !station.Authority.Judicial.PactLocked && !svc.gameOver(); gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
+		if station.Rebellion < 0.2 {
+			station.Rebellion = 0.2
+		}
+
 		if station.DeptTension < 0.3 {
 			station.DeptTension = 0.3
 		}
-		// Skilled play answers the RESET omens (census -> requisition ->
-		// execution) with the countermeasure route; without it the long
-		// pressure campaign dies to 《遗忘》 before the covenant window.
-		progressResetCountermeasureForRoute(t, svc, func(action model.AgentAction) {
-			if _, err := svc.ExecuteAction(action); err != nil {
-				t.Logf("countermeasure step %+v deferred: %v", action, err)
-			}
-		})
+		progressResetCountermeasureForRoute(t, svc, execute)
 		if svc.gameOver() {
 			break
 		}
 
-		troughReached := station.Authority.W <= 34
+		// Establish everyday pressure first, then publish the second core fact as
+		// the decisive blow. The release gate is the pressure campaign itself, not
+		// a W trough that only the second publication's own shock can produce.
+		secondPublishReady := exposes >= 3 && svc.agent.ActionPoints >= 40 && gameMonth-lastExposeMonth >= 3
 
-		// Verify/publish: Judicial_1 as soon as ready; Judicial_2 only once the
-		// daily pressure has reached the trough (the decisive blow).
 		if playerCoreBelief(svc, "Judicial_1") >= 0.85 && !factVerified(station, "Judicial_1") &&
 			svc.agent.ActionPoints >= 15 {
 			tryAct(t, svc, "verify_evidence", 15)
 		}
-		if troughReached && decisiveFired == false && playerCoreBelief(svc, "Judicial_2") >= 0.85 &&
-			!factVerified(station, "Judicial_2") && svc.agent.ActionPoints >= 15 {
+		if factPublished(station, "Judicial_1") && !factVerified(station, "Judicial_2") &&
+			playerCoreBelief(svc, "Judicial_2") >= 0.85 && svc.agent.ActionPoints >= 15 {
 			tryAct(t, svc, "verify_evidence", 15)
 		}
 		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
-			if fact == "Judicial_2" && !troughReached {
+			if fact == "Judicial_2" && !secondPublishReady {
 				continue
 			}
 			if playerCoreBelief(svc, fact) >= 0.9 && factVerified(station, fact) &&
 				!factPublished(station, fact) && svc.agent.ActionPoints >= 20 {
 				if tryAct(t, svc, "publish_evidence", 20) && fact == "Judicial_2" {
 					decisiveFired = true
+					decisivePublishW = station.Authority.W
 				}
 				break
 			}
 		}
 
-		// Investigate whichever chain is behind (both must eventually reach the
-		// publish floor; the second one waits for the trough to be published).
+		// Investigate whichever chain is behind; both must reach the publish floor.
 		if svc.agent.ActionPoints >= 15 &&
 			(playerCoreBelief(svc, "Judicial_1") < 0.9 || playerCoreBelief(svc, "Judicial_2") < 0.9) &&
 			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
 			mustAct(t, svc, "investigate_dispatch", 15)
 		}
 
-		if exposes < 8 && gameMonth-lastExposeMonth >= 3 && svc.agent.ActionPoints >= 25 &&
+		exposeForPressure := !decisiveFired && exposes < 3 && svc.agent.ActionPoints >= 25
+		exposeForDecisive := decisiveFired && svc.agent.ActionPoints >= 20
+		if (exposeForPressure || exposeForDecisive) && gameMonth-lastExposeMonth >= 3 &&
 			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
 			mustAct(t, svc, "expose_execution_failure", 20)
 			exposes++
@@ -239,7 +245,8 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 		}
 		for _, dept := range []string{"Mechanical", "Supply"} {
 			for _, fact := range []string{"Judicial_1", "Judicial_2", "Judicial_3"} {
-				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 || shares[dept+":"+fact] >= 2 {
+				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 || shares[dept+":"+fact] >= 2 ||
+					(exposes >= 3 && !decisiveFired) {
 					continue
 				}
 				outcome, err := svc.ExecuteAction(model.AgentAction{
@@ -255,12 +262,18 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("pass time month %d: %v", gameMonth, err)
 		}
+		if station.Authority.W < minW {
+			minW = station.Authority.W
+		}
+		if decisiveFired && decisiveImpactW == 0 {
+			decisiveImpactW = station.Authority.W
+		}
 	}
 
 	j := station.Authority.Judicial
-	t.Logf("decisive: finalW=%.2f Q=%.4f qualifying=%d pact=%.3f regime=%s shocks=%+v applied=%d decisiveFired=%v",
-		station.Authority.W, j.PublicEvidenceQ, j.IndependentPublicFacts, j.Pact, j.Regime,
-		station.Authority.DecisiveShocks, station.Authority.DecisiveApplied, decisiveFired)
+	t.Logf("decisive: finalW=%.2f minW=%.2f Q=%.4f qualifying=%d pact=%.3f regime=%s exposes=%d shocks=%+v applied=%d decisiveFired=%v publishW=%.2f impactW=%.2f",
+		station.Authority.W, minW, j.PublicEvidenceQ, j.IndependentPublicFacts, j.Pact, j.Regime,
+		exposes, station.Authority.DecisiveShocks, station.Authority.DecisiveApplied, decisiveFired, decisivePublishW, decisiveImpactW)
 
 	if !decisiveFired {
 		t.Fatalf("the second publication never happened: W=%.2f beliefs=(%.2f, %.2f) evidence=%+v",

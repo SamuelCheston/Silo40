@@ -822,7 +822,18 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		return
 	}
 
-	// 4. 时间终局请求：一号地堡覆灭事实；思潮闸与加权在仲裁侧。
+	// 4. 公议终局请求：约章锁定自身就是评估时点，不能等一号地堡覆灭
+	// 借 TIME 请求间接进入仲裁。资格与加权仍由服务侧统一裁决。
+	if silo.Authority.Judicial.PactLocked {
+		silo.VictoryStatus = &model.VictoryStatus{
+			IsWon:       true,
+			Type:        "RULE_OF_LAW",
+			Description: "终局评估请求：公开约章已经锁定。是否成立《公议》须经统一资格与加权仲裁。",
+		}
+		return
+	}
+
+	// 5. 时间终局请求：一号地堡覆灭事实；思潮闸与加权在仲裁侧。
 	if silo.Silo1Destroyed {
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       true,
@@ -832,7 +843,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		return
 	}
 
-	// 5. 叛乱终局请求：高叛乱不等于《越岭》，须有实际逃离并存续的群体。
+	// 6. 叛乱终局请求：高叛乱不等于《越岭》，须有实际逃离并存续的群体。
 	if silo.Rebellion >= 1.0 {
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       true,
