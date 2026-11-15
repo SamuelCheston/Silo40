@@ -9,7 +9,8 @@ import (
 )
 
 type stubLlmAPI struct {
-	level string
+	level   string
+	context map[string]any
 }
 
 func (s *stubLlmAPI) LlmStatus() (any, error) {
@@ -23,6 +24,15 @@ func (s *stubLlmAPI) LlmDecisions(limit int) (any, error) {
 func (s *stubLlmAPI) SetLlmParticipation(level string) (string, error) {
 	s.level = level
 	return level, nil
+}
+
+func (s *stubLlmAPI) SetLlmContext(body []byte) (any, error) {
+	var cfg map[string]any
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		return nil, err
+	}
+	s.context = cfg
+	return cfg, nil
 }
 
 func newLlmTestServer(t *testing.T, llm LlmAPI) *httptest.Server {
@@ -84,5 +94,20 @@ func TestLlmRoutesServeStatusDecisionsAndSwitch(t *testing.T) {
 	resp.Body.Close()
 	if stub.level != "key" {
 		t.Fatalf("switch not applied: %q", stub.level)
+	}
+
+	// Context route: level + switches round-trip.
+	resp, err = http.Post(ts.URL+"/debug/game/llm/context", "application/json",
+		strings.NewReader(`{"level":"rich","personal_memory":false,"protocol_clauses":true,"peer_silo_intel":true,"event_summary_limit":9}`))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("context route: %v / %v", err, resp)
+	}
+	var ctxCfg map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ctxCfg); err != nil || ctxCfg["level"] != "rich" {
+		t.Fatalf("context body: %v / %+v", err, ctxCfg)
+	}
+	resp.Body.Close()
+	if stub.context["level"] != "rich" || stub.context["event_summary_limit"] != float64(9) {
+		t.Fatalf("context switch not applied: %+v", stub.context)
 	}
 }

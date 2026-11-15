@@ -46,6 +46,10 @@ type LlmAPI interface {
 	LlmStatus() (any, error)
 	LlmDecisions(limit int) (any, error)
 	SetLlmParticipation(level string) (string, error)
+	// SetLlmContext applies a context level/switches change; the body is the
+	// raw JSON config (kept raw so this package stays decoupled from the
+	// service-layer type).
+	SetLlmContext(body []byte) (any, error)
 }
 
 // AgentAPI is the agent-operator surface: an external AI agent with tool
@@ -94,6 +98,7 @@ func NewDebugHTTPServer(addr string, api GameAPI) *DebugHTTPServer {
 	mux.HandleFunc("/debug/game/llm/status", s.handleLlmStatus)
 	mux.HandleFunc("/debug/game/llm/decisions", s.handleLlmDecisions)
 	mux.HandleFunc("/debug/game/llm/participation", s.handleLlmParticipation)
+	mux.HandleFunc("/debug/game/llm/context", s.handleLlmContext)
 	mux.HandleFunc("/debug/agent/start", s.handleAgentStart)
 	mux.HandleFunc("/debug/agent/step", s.handleAgentStep)
 	mux.HandleFunc("/debug/agent/choose", s.handleAgentChoose)
@@ -352,6 +357,27 @@ func (s *DebugHTTPServer) handleLlmParticipation(w http.ResponseWriter, r *http.
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"level": level})
+}
+
+func (s *DebugHTTPServer) handleLlmContext(w http.ResponseWriter, r *http.Request) {
+	if !allowMethod(w, r, http.MethodPost) {
+		return
+	}
+	if s.llm == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("LLM advisor not attached"))
+		return
+	}
+	body, err := agentBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	cfg, err := s.llm.SetLlmContext(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cfg)
 }
 
 // agentBody reads a bounded raw JSON request body for the agent surface.
