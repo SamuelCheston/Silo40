@@ -136,12 +136,24 @@ defineMechanics([
       const receptivity = 0.5 + 0.5 * ((profession.ideologies || {}).pro_foreign || 0);
       const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
       for (const fragment of fragmentIds) {
+        const absorbed = beliefB(ctx, fragment) * transmit * receptivity;
         mutations.push({
           type: "profession_belief_absorb",
           profession: profession.name,
           fragment: fragment,
           source: "player",
-          value: beliefB(ctx, fragment) * transmit * receptivity,
+          value: absorbed,
+        });
+        // 开放痕迹 (《无人裁决》可达性)：被吸收的可核验事实让接收部门更开放。
+        // 开放思潮与《共证》传播是同一条路：流通既沉淀信念，也改变思潮。
+        // TODO(balance): 0.10 的推导——单次吸收量 ≈ 0.22–0.34，即每次分享给接收
+        // 部门 cohort 亲外 +0.022–0.034；~15 次有效分享可抬一个部门 ~0.4。
+        // 亲外以 0.35/年 向低目标回落，只有持续流通才守得住——不分享就回落。
+        mutations.push({
+          type: "cohort_ideology_delta_all",
+          profession: profession.name,
+          ideology: "pro_foreign",
+          value: absorbed * 0.10,
         });
       }
       return {

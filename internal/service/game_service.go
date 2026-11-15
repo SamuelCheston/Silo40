@@ -1643,6 +1643,10 @@ func absorbObservationInto(cfg engine.InformationConfig, beliefs *[]model.FactBe
 	engine.ObserveFact(cfg, belief, engine.FragmentSpecFor(req.FactID), obsPrefix+strconv.Itoa(seq), strength)
 }
 
+// publicFactOpennessNudge 每条新公共证据对全堡亲外思潮的推动量。推导见
+// applyPublicEvidenceWrites 内的 TODO(balance) 注释。
+const publicFactOpennessNudge = 0.02
+
 // applyPublicEvidenceWrites 落地 public_evidence_register 效果 (§3.7)：登记
 // 时间取本堡当前日历；同一事实重复登记只抬高 provenance/coverage。
 func (s *GameService) applyPublicEvidenceWrites(siloID uint, records []model.PublicEvidenceRecord) {
@@ -1657,10 +1661,31 @@ func (s *GameService) applyPublicEvidenceWrites(siloID uint, records []model.Pub
 		return
 	}
 	qualifyingBefore := engine.ComputeInformationEnvironment(silo).QualifyingFacts
+	newFacts := 0
 	for _, record := range records {
 		record.Year = silo.CurrentYear
 		record.Month = silo.CurrentMonth
+		factID := strings.TrimSpace(record.FactID)
+		isNew := true
+		for i := range silo.PublicEvidence {
+			if silo.PublicEvidence[i].FactID == factID {
+				isNew = false
+				break
+			}
+		}
 		engine.RegisterPublicEvidence(silo, record)
+		if isNew {
+			newFacts++
+		}
+	}
+	// 开放痕迹 (《无人裁决》可达性)：新事实成为公共真相时，全堡亲外思潮
+	// 得到一次方向性推动——公开性与《共证》是同一条路的两种结果。重复登记
+	// (同源去重后非新) 不再推动：开放只能由新的公共事实挣来。
+	// TODO(balance): 0.02/条 的推导——《共证》全程约 8–12 条公共证据，直接贡献
+	// 全人口加权亲外 +0.16–0.24；叠加分享在部门层的累积与忠诚侵蚀项后，
+	// 快照门槛 (亲外 ≥ 忠诚) 的交叉点 ~0.6 在持续流通可达区间内。
+	if newFacts > 0 {
+		engine.NudgeAllCohortIdeology(silo, model.IdeologyProForeign, publicFactOpennessNudge*float64(newFacts))
 	}
 	// 裁决的冲击通道 (三类触发源之一)：合格公开事实数因本次登记首次达到
 	// 约章门槛 = "大规模公开证据"。同源去重保证只发一次。
