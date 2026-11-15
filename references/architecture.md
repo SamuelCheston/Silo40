@@ -70,7 +70,7 @@
    - **内容**：`events/special/silo18_*.js` / `silo1_ultimatum_cross.js` 均为 schedule-only (`script.canTrigger=false`)，只经跨堡队列投递、从不自发触发，保证单堡奇偶校验不受影响。(原型期的 `neighbor_probe` 链已随 18 号链条落地而删除。)
    - **验收测试**：`internal/service/two_silo_test.go` (双跑逐字节一致/阶段顺序/计量隔离/存档 Resume)、`two_silo_sim_test.go` (存档体积 + 单双堡 sim 对照)、`silo18_chain_test.go` (逐节点触发表/耦合信号实测/具名人物生死/读档防重入)；v6 三堡构成、驻地范围、动作边界、operation 顺序与存档拒绝由 `station_operations_test.go` / `save_version_test.go` 锁定；新三堡逐位基线由 `parity_harness_test.go` 生成。
 27. **Silo 18 原著事件链 (第三堡正典)**：可试玩世界第三堡固定为 18 号 (`createSilo18`，带 `silo18_canon` 标记特质)，跑 Wool→Dust 正篇链条 N1–N9 (`internal/service/silo18.go` / `silo18_chain.go`)。
-   - **前史承载**：大革命/17 号陷落/Allison 之死不做节点，由开局计量承载 (`history_burden=0.55` 等)；可玩弧段 Y122M2 (Holston 清洁死亡) → Y130M1 (Donald 引爆，与既有 `silo1_destroyed_signal` 合流)。
+   - **前史承载**：大革命/17 号陷落/Allison 之死不做节点，由开局计量承载 (`history_burden=0.55` 等)；18 号正典弧段 Y122M2 (Holston 清洁死亡) → Y130M1 (Donald 引爆，与既有 `silo1_destroyed_signal` 合流)。Y130M1 是覆灭/结算锚点，不表示整局只有 8 年（ADR-0018）。
    - **强制触发 + 权威覆写**：节点按时间戳在阶段 0c 强制生效，直接覆写 18 号计量/人物生死/结局 (N8 设 DEATH)，覆盖 AI 漂移；生效记录写 `contentStates` (key `silo18_chain:N*`)，随 v3 存档持久化、读档防重入——**存档格式不变**。
    - **具名人物是真实个体**：Juliette/Bernard/Lukas/Holston/Jahns/Marnes/Walker/Knox/Shirly/George 为带 `named` 标签的 `Resident`，生死唯一来源是链条节点 (AI 群演只做零时长通用动作；引擎无模拟杀居民路径)。其他堡居民保留系统生成名。
    - **耦合"少数关键、多数独立"**：仅 8 个跨堡信号 (谣言/强信号/广播/断联)，每个有明确因果节点；N8 难民按原著流向 17 号、不入当前驻地；旧“14 种子 9 TIME / 5 rebellion”属于已作废的 40 号主 silo 基线，不作为 v6 分布结论。

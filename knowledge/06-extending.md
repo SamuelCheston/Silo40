@@ -23,7 +23,7 @@
 3. 多堡效果明确 self/world/silo/neighbors/all，不默认把“玩家堡”误当 40 号。
 4. 跨堡后果使用 cross_signal，不直接遍历或改写其他 Silo。
 5. schedule-only 事件用恒假 canTrigger 防普通月度提前触发。
-6. 检查 Y122–Y130 正典窗口和 Silo 18 不可干预边界。
+6. 检查 Y122–Y130 正典链区间（覆灭锚点范围，不是游戏窗口长度）；以及 Silo 18 不可干预边界。
 7. 跑内容守卫与固定 seed 对照。
 
 不要通过内容事件直接杀 Silo 18 具名人物、复活 Silo 1 或覆写 N 节点；这些属于 Go 正典权威。
