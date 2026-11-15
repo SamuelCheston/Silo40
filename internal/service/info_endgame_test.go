@@ -410,6 +410,8 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	// §3.3/§5). The cap stays an anti-deadlock bound, never a play target.
 	upkeepAttempts := map[string]int{}
 	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
+	// 96 是当前测试循环的保护上限（默认开局到覆灭锚点的差值），不是游戏标准时长；
+	// 断言语义不变，不得因未结算而放宽（ADR-0018）。
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance INFORMATION line at month %d: %v", month, err)

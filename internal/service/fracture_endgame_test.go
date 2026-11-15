@@ -36,6 +36,7 @@ func TestFractureEndingPlayableFromNewGame(t *testing.T) {
 	execute(model.AgentAction{Type: model.ActionConductPropaganda})
 
 	deceives := 0
+	// 96 是测试循环保护上限（默认开局到覆灭锚点的差值），不是游戏标准时长（ADR-0018）。
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		progressResetCountermeasureForRoute(t, svc, execute)
 		if svc.gameOver() {

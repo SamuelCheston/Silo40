@@ -458,6 +458,8 @@ func (r *acceptanceRunner) buildRelation(dept string, min float64, budget int) {
 	}
 }
 
+// acceptanceMaxMonths 是验收宿主的测试保护上限，不是游戏长度或标准窗口（ADR-0018）。
+// 132 覆盖 120 年起局的《公议》跨过 130/1 覆灭锚点所需月数；调大/调小属测试改动，须单独评审。
 const acceptanceMaxMonths = 132
 
 func runRuleOfLawAcceptance(t *testing.T, seed int64) *acceptanceRecord {

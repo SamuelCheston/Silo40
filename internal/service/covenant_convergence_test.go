@@ -197,7 +197,8 @@ func TestCovenantConvergenceDecisiveEventSucceeds(t *testing.T) {
 
 	// Establish daily pressure first, then combine the second publication with
 	// one final exposure so the ordinary and decisive shocks settle together.
-	// Keep main's 96-month calibration window for the divergent peer-silo rhythm.
+	// Keep the existing 96-month harness cap for the divergent peer-silo rhythm.
+	// 96 is a test bound, not the game length or a standard window (ADR-0018).
 	for gameMonth := 0; gameMonth <= 96 && !station.Authority.Judicial.PactLocked && !svc.gameOver(); gameMonth = station.CurrentYear*12 + station.CurrentMonth - startAbs {
 		if station.Rebellion < 0.2 {
 			station.Rebellion = 0.2

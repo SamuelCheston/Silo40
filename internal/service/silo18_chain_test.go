@@ -34,7 +34,7 @@ var silo18ExpectedFires = []silo18ExpectedFire{
 	{"N9", 130, 1},
 }
 
-// runSilo18FullGame 跑一局双堡到 Y130M1 之后 (96 月窗口 + 余量)。
+// runSilo18FullGame 跑一局双堡到 Y130M1 覆灭锚点之后 (默认开局差值 96 个月 + 余量)。
 // 玩家堡中途出结局也不停：世界时钟与链条继续推进 (链条不依赖玩家堡存活)。
 func runSilo18FullGame(t *testing.T, seed int64, months int) *GameService {
 	t.Helper()
