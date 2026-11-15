@@ -58,14 +58,28 @@ type endingOutcomeWeights struct {
 }
 
 type endingWeightConfig struct {
-	Version                int
-	MinimumScore           float64
-	PrestigeScale          float64
-	PlayerBase             endingOutcomeWeights
-	PlayerPerPrestige      endingOutcomeWeights
-	PlayerPerFragment      endingOutcomeWeights
-	PlayerPerPropaganda    endingOutcomeWeights
-	PlayerPerSpilloverSilo endingOutcomeWeights
+	Version       int
+	MinimumScore  float64
+	PrestigeScale float64
+	// PactLockedBonus 约章锁定后给 RULE_OF_LAW 的结构性加分。约章是单向制度
+	// 事实 ("它的价值恰在于不能被单方收回")，其资格已包含《共证》的证据底座
+	// (Q 与独立公开事实正是约章门)：锁定成立时制度成就应压过一般认知成就，
+	// 否则《公议》在与《共证》同池时结构性不可赢 (声望项 0.2 vs 0.5、底分
+	// 1 vs 3，而声望在开局后几乎不再增长)。取 5：覆盖对 INFORMATION 的底分差
+	// 2 + 终局碎片/外溢项的现实上限 (~0.05×40 碎片 + 0.5×2 堡 ≈ 3) 并留余量；
+	// 若同池仍输给《共证》，整条约章线将结构性不可赢。TODO(balance): sim 复测。
+	PactLockedBonus float64
+	// PersonalRuleSuccessionBonus 《人治》继承抉择 (SUCCESSION_PURE_RULE) 成立后
+	// 给 PERSONAL_RULE 的结构性加分。继承抉择是本线的收束事实 (30-nodes §4：
+	// "本线收束"，单向承诺)，与约章锁定之于《公议》对称：没有它，占位权重
+	// (底分 1 + 声望 0.3) 永远输给《共证》(底分 3 + 0.5 + 碎片/外溢) 与《深闭》
+	// (silo1 存续 +2)，本线结构性不可赢。TODO(balance): sim 复测。
+	PersonalRuleSuccessionBonus float64
+	PlayerBase                  endingOutcomeWeights
+	PlayerPerPrestige           endingOutcomeWeights
+	PlayerPerFragment           endingOutcomeWeights
+	PlayerPerPropaganda         endingOutcomeWeights
+	PlayerPerSpilloverSilo      endingOutcomeWeights
 	// PlayerEscapeGroupQuality (16 Layer 2)：逃出群体质量作为玩家贡献项。
 	// 只对合格候选计分 (pool 过滤)——资格仍只读群体存续，质量不是第二道资格门。
 	PlayerEscapeGroupQuality endingOutcomeWeights
@@ -85,14 +99,20 @@ type endingWeightConfig struct {
 // (结局体系 12 §9 leaves weights to sim). This round proves the qualification
 // and arbitration structure, not the ending distribution.
 var defaultEndingWeightConfig = endingWeightConfig{
-	Version:       2,
-	MinimumScore:  1,
-	PrestigeScale: 100,
+	Version:                     2,
+	MinimumScore:                1,
+	PrestigeScale:               100,
+	PactLockedBonus:             5, // TODO(balance): 见 endingWeightConfig.PactLockedBonus 注释。
+	PersonalRuleSuccessionBonus: 5, // TODO(balance): 见 endingWeightConfig.PersonalRuleSuccessionBonus 注释。
 	PlayerBase: endingOutcomeWeights{
 		Information: 3, Time: 2, Rebellion: 3, RuleOfLaw: 1, PersonalRule: 1, Exclusionist: 1,
 	},
 	PlayerPerPrestige: endingOutcomeWeights{
-		Information: 0.5, Time: 0.2, Rebellion: 0.8, RuleOfLaw: 0.2, PersonalRule: 0.3, Exclusionist: 0.1,
+		// RuleOfLaw 与 Information 同斜率 (0.5)：声望是《公议》锁定日的核心
+		// 资源 ("你用剩余的关系与威望为签署程序争取那一段时间")，而声望在开局
+		// 后几乎不再增长——0.2 的占位斜率使《公议》在同池时结构性不可赢。
+		// TODO(balance): 以 sim 复测为准。
+		Information: 0.5, Time: 0.2, Rebellion: 0.8, RuleOfLaw: 0.5, PersonalRule: 0.3, Exclusionist: 0.1,
 	},
 	PlayerPerFragment:        endingOutcomeWeights{Information: 0.05},
 	PlayerPerPropaganda:      endingOutcomeWeights{Rebellion: 0.4},
@@ -575,6 +595,18 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		accumulator.add("silo1", "silo:1", peer.Name, config.Silo1PerCohesion, peer.Cohesion)
 	}
 
+	// 约章锁定是单向制度事实 (22-chain-cross-arbitration §3)：锁定成立时给
+	// RULE_OF_LAW 结构性加分，使其能与《共证》同池竞争 (见
+	// endingWeightConfig.PactLockedBonus 的推导注释)。
+	if station.Authority.Judicial.PactLocked {
+		decision.Scores[endingRuleOfLaw] += config.PactLockedBonus
+	}
+	// 《人治》继承抉择是本线收束的单向承诺 (30-nodes §4)：与约章锁定对称，
+	// 给 PERSONAL_RULE 结构性加分 (见 PersonalRuleSuccessionBonus 注释)。
+	if s.contentFactTriggered(station.ID, "player_actions:succession_pure_rule") {
+		decision.Scores[endingPersonalRule] += config.PersonalRuleSuccessionBonus
+	}
+
 	// P3: strict ">" in fixed tie-break order keeps earlier candidates on ties;
 	// the minimum score only rejects qualified candidates without social support.
 	best := ""
@@ -613,6 +645,9 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if best == endingRuleOfLaw {
 		narrative += fmt.Sprintf("本局约章的证据底座为 %d 项独立公共事实，公开证据强度 Q=%.2f。",
 			station.Authority.Judicial.IndependentPublicFacts, station.Authority.Judicial.PublicEvidenceQ)
+		if ok, _ := personalRuleEligible(station); ok {
+			narrative += "公开约章与人治并存：两种秩序同时成立，本次加权倾向公议一侧；同分时按既定序亦让《公议》。"
+		}
 	}
 	if best == endingExclusionist {
 		// Two settlement variants (03-exclusionist §5): with Silo 1 alive the
