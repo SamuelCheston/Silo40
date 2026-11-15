@@ -40,9 +40,10 @@ const (
 	outsideTrackingTrailing        = 0.50 // 咬住痕迹
 	outsideTrackingPursuit         = 0.75 // 正在追捕
 	outsideTrackingDecay           = 0.02 // 距离随月数增长：热度衰减
-	outsideTrackingWeightExposure  = 0.8  // 筹备暴露权重 (出发时定档)
-	outsideTrackingWeightDeparted  = 0.5  // 出发清点权重 (人口占比越大越显眼)
-	outsideTrackingWeightAttention = 0.6  // 1 号注意力权重 (逐月读现值)
+	outsideTrackingWeightExposure   = 0.8  // 筹备暴露权重 (出发时定档)
+	outsideTrackingWeightDeparted   = 0.5  // 出发清点权重 (人口占比越大越显眼)
+	outsideTrackingWeightSafeguard  = 0.3  // safeguard 风险权重 (反制层"日后更贵"的落点，20 修订/ADR-0014)
+	outsideTrackingWeightAttention  = 0.6  // 1 号注意力权重 (逐月读现值)
 	outsideTrailingSupplyDrop      = 0.25 // 进入"咬住痕迹"：弃置补给比例
 	// 群体组合 (质量)。
 	outsideLeaderRate   = 0.02 // 领头人目标配比
@@ -127,8 +128,12 @@ func initOutsideState(silo *model.Silo, prep model.EscapePreparation, suitCovera
 	if itStance == model.TopStanceCooperate {
 		trackingExposure *= escapeCooperateTrackingFactor
 	}
+	// safeguard 风险项 (20 修订/ADR-0014)：IT 不镇压又蒙不住 1 号时累积的
+	// 风险在出发后落成更狠的追踪——反制后果"日后更贵、更窄"的落点，
+	// 不是当场判负。读现值：出发前全部来源 (响应层/Protocol 违反) 合并。
 	out.TrackingBase = outsideTrackingWeightExposure*trackingExposure +
-		outsideTrackingWeightDeparted*departedShare // TODO(balance)
+		outsideTrackingWeightDeparted*departedShare +
+		outsideTrackingWeightSafeguard*clampUnit01(silo.SafeguardRisk) // TODO(balance)
 	out.Tracking = outsideTrackingTier(out.TrackingBase + outsideTrackingWeightAttention*attention)
 	// 群体组合：领头人来自预案组织，工匠来自演练与材料，伤者来自路上损耗，
 	// 老人是地形学事实。全部 TODO(balance)。

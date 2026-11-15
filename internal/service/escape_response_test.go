@@ -239,3 +239,66 @@ func TestEscapeResponseWindowOpenEndsLayer(t *testing.T) {
 		t.Fatalf("no decision may fire after the window opens: %+v", state.Decisions)
 	}
 }
+
+// TestEscapeResponseSafeguardBudget 预算不变式：组织活动持续不断的最坏
+// 情况下，响应层对 safeguard 风险的全程净贡献 ≤0.25——本通道单独永远
+// 到不了硬护栏 1.0，后果只能是"日后更贵、更窄"，不困死玩家。
+func TestEscapeResponseSafeguardBudget(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "escape-response-budget.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(4206)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("settle opening month: %v", err)
+	}
+	svc.silo.EscapeResponse.Initialized = true
+	rsStart := svc.silo.SafeguardRisk
+
+	// 24 月筹备窗 (16 §6.3 渗透下界口径)：每月把怀疑度垫回门槛上方，
+	// 模拟"组织活动不停"的最坏情形。
+	for m := 0; m < 24; m++ {
+		svc.silo.EscapeResponse.OrgSuspicion = 0.5
+		if _, err := svc.PassTime(1); err != nil {
+			t.Fatalf("pass time month %d: %v", m+1, err)
+		}
+		if svc.silo.SafeguardRisk >= 1.0 {
+			t.Fatalf("response channel alone must never reach the safeguard hard guardrail: R_s=%v",
+				svc.silo.SafeguardRisk)
+		}
+	}
+	delta := svc.silo.SafeguardRisk - rsStart
+	if delta > 0.25 {
+		t.Fatalf("response channel contribution = %v, exceeds the 0.25 budget", delta)
+	}
+	if len(svc.silo.EscapeResponse.Decisions) == 0 {
+		t.Fatal("budget scenario must actually fire decisions (no empty green)")
+	}
+}
+
+// TestEscapePreparationGradientNotReversed 反向梯度消除的实跑验收：
+// 同种子下，准备更充分的一局 (full：路线确认+囤备、预案、演练、照护、
+// 生产、划拨、修服) 在出发人数与幸存人数上都不差于准备稀疏的一局
+// (sparse：无前遣、半数预案、无演练/照护/生产、单次划拨)。
+// 审计没收时代该对比可能反转 (准备越重被没收越多)；囤积不再被没收、
+// 怀疑度只由组织行为驱动后，梯度必须单调。
+func TestEscapePreparationGradientNotReversed(t *testing.T) {
+	full := runEscapeLine(t, "escapefull", 2401, "full")
+	sparse := runEscapeLine(t, "escapesparse", 2401, "sparse")
+
+	t.Logf("full:   ending=%s launch=%s departed=%d survivors=%d months_out=%d demise=%s",
+		full.Ending, full.StanceAtLaunch, full.Departed, full.Survivors, full.MonthsOut, full.Demise)
+	t.Logf("sparse: ending=%s launch=%s departed=%d survivors=%d months_out=%d demise=%s",
+		sparse.Ending, sparse.StanceAtLaunch, sparse.Departed, sparse.Survivors, sparse.MonthsOut, sparse.Demise)
+
+	if full.Departed <= 0 {
+		t.Fatalf("full prep run must depart: %+v", full)
+	}
+	if full.Departed < sparse.Departed {
+		t.Fatalf("gradient reversed on departed headcount: full=%d sparse=%d (full notes=%v)",
+			full.Departed, sparse.Departed, full.Notes)
+	}
+	if full.Survivors < sparse.Survivors {
+		t.Fatalf("gradient reversed on road survivors: full=%d sparse=%d (full notes=%v)",
+			full.Survivors, sparse.Survivors, full.Notes)
+	}
+}

@@ -75,8 +75,10 @@ const (
 	escapeResponseCoverLeakCap    = 0.50
 	escapeResponseCoverCollapseRS = 0.08 // 蒙蔽崩塌：safeguard 风险上浮
 
-	// 不作为后果：异常悬而未决，safeguard 风险上浮。
-	escapeResponseIgnoreRS = 0.04
+	// 不作为后果：异常悬而未决，safeguard 风险上浮。全程预算 ≤0.25：
+	// 决策冷却 4 月 → 24 月筹备窗内至多 6 次决策，6×0.03 = 0.18，叠加
+	// 一次蒙蔽崩塌 (+0.08) 仍在预算内——本通道单独永远到不了硬护栏 1.0。
+	escapeResponseIgnoreRS = 0.03
 )
 
 // EscapeResponseWeights 一次决策的三档权重 (未归一)。
