@@ -1105,9 +1105,10 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 		silo.Rebellion = 0
 	}
 
-	// 叛乱侵蚀现任市长个人正统性 (ADR-0007 后果条、18 §4)：接既有
-	// MayorLegitimacy，不新造状态；纯算术不消耗 RNG，叛乱为 0 时逐位不变。
-	ApplyRebellionLegitimacyErosion(silo, deltaYears)
+	// 叛乱侵蚀现任市长个人正统性 (ADR-0007 后果条、18 §4) 已移到
+	// runMonthlyPoliticalDispatch：JS 成功路与 Go 兜底路共用的唯一月度
+	// 路径。此处曾直接调用，但本函数只在 JS 机制失败时进入（真实流程
+	// 不可达），侵蚀从未发生；不要在这里恢复它，否则会双跑。
 
 	// DeptTension must not depend on Go map iteration or DB preload order.
 	// Sort a copy by persistent profession ID, then sort each Relations map by key.
