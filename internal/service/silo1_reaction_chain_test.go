@@ -152,6 +152,38 @@ func TestLocalPurgeSettlementIsNotADeathFact(t *testing.T) {
 	}
 }
 
+// TestReactionScheduleKeepsPhysicalStrikeReachable locks the minimal scheduling
+// invariant: the unopposed termination release cannot end the game before the
+// reconnaissance window plus its three-month physical delivery has elapsed.
+func TestReactionScheduleKeepsPhysicalStrikeReachable(t *testing.T) {
+	svc := bootstrapRealContent(t)
+	termination := findContentDefinitionByKey(t, svc, "special:termination_channel_test")
+	strike := findContentDefinitionByKey(t, svc, "special:strike_reconnaissance")
+	releaseDelay, reconDelay, bombingDelay := 0, 0, 0
+	for _, effect := range termination.Effects {
+		if effect.Type == "schedule_event" && effect.EventID == "termination_release" {
+			releaseDelay = effect.DelayMonths
+		}
+	}
+	for _, condition := range strike.Trigger.Conditions {
+		if condition.Type == "months_since_event_gte" && condition.EventID == "termination_channel_test" {
+			reconDelay = condition.Months
+		}
+	}
+	for _, effect := range strike.Effects {
+		if effect.Type == "schedule_event" && effect.EventID == "bombing_terminal" {
+			bombingDelay = effect.DelayMonths
+		}
+	}
+	if releaseDelay == 0 || reconDelay == 0 || bombingDelay == 0 {
+		t.Fatalf("reaction schedule is incomplete: release=%d recon=%d bombing=%d", releaseDelay, reconDelay, bombingDelay)
+	}
+	if releaseDelay <= reconDelay+bombingDelay {
+		t.Fatalf("termination release at +%d months must follow physical delivery at +%d months",
+			releaseDelay, reconDelay+bombingDelay)
+	}
+}
+
 // TestDeathPhysicalStrikePlayableFromNewGame drives the complete Silo 1 physical
 // termination channel through public game operations. Deception raises real
 // rebellion; Supply rationing keeps FRACTURE from winning the race before the
@@ -183,7 +215,9 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Mayor"})
 	}
-	execute(model.AgentAction{Type: model.ActionConductPropaganda})
+	for i := 0; i < 2; i++ {
+		execute(model.AgentAction{Type: model.ActionConductPropaganda})
+	}
 
 	observed := map[string]bool{}
 	observedAt := map[string]int{}
@@ -191,8 +225,12 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 		t.Helper()
 		for _, key := range []string{
 			"histories:silo1_ultimatum",
+			"special:silo1_ultimatum_cross",
+			"special:silo1_purge_omen",
+			"special:termination_channel_test",
 			"special:strike_reconnaissance",
 			"crisis:bombing_terminal",
+			"crisis:termination_release",
 		} {
 			if observed[key] || !contentTriggered(svc, key) {
 				continue
@@ -264,6 +302,9 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 	states := svc.contentStates[svc.silo.ID]
 	for _, key := range []string{
 		"histories:silo1_ultimatum",
+		"special:silo1_ultimatum_cross",
+		"special:silo1_purge_omen",
+		"special:termination_channel_test",
 		"special:strike_reconnaissance",
 		"crisis:bombing_terminal",
 	} {
@@ -290,6 +331,10 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 	}
 	if contentTriggered(svc, fractureFactKey) {
 		t.Fatal("FRACTURE settled before the physical strike could land")
+	}
+	if termination := states[terminationFactKey]; termination.Triggered &&
+		termination.LastTriggeredTimestamp <= bombing.LastTriggeredTimestamp {
+		t.Fatalf("remote termination did not land after the physical strike: bombing=%+v termination=%+v", bombing, termination)
 	}
 	if svc.silo.EscapedGroup.SurvivingEscapeGroup() {
 		t.Fatalf("route unexpectedly produced a surviving escape group: %+v", svc.silo.EscapedGroup)
