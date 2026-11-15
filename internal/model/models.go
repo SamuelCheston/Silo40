@@ -1378,6 +1378,7 @@ type GameState struct {
 	World               *WorldView             `json:"world,omitempty"`
 	InformationProgress *InformationProgress   `json:"information_progress,omitempty"`
 	LinesProgress       *LinesProgress         `json:"lines_progress,omitempty"`
+	WitnessTree         *WitnessTree           `json:"witness_tree,omitempty"`
 }
 
 // InformationChainNode 是《共证》链上单个节点的点亮状态。链的推进只存在于
@@ -1488,6 +1489,51 @@ type LinesProgress struct {
 	Omens    []OmenFact     `json:"omens,omitempty"`
 }
 
+// 见证者成就树 (ADR-0004)：国策树即成就系统。点亮节点的是可核验的成就——
+// 驻地里真实发生、别人也能确认的事实，不是玩家按钮或意愿。整棵树是结局
+// 资格事实与事件链完成键的只读派生快照：不裁决结局、不发放奖励、不引入
+// 任何新的持久化状态 (锁 = 资格否定的显形，同局永久；新开一局事实重置，
+// 树随之重置)。
+type WitnessTree struct {
+	Branches []WitnessBranch `json:"branches"`
+	// Shadow 树的影子：判据四——不是节点，是所有节点的永久前提。
+	Shadow string `json:"shadow,omitempty"`
+}
+
+// WitnessBranch 树上一条分支 (主干／三条胜利分支／收敛层)。
+type WitnessBranch struct {
+	Branch string        `json:"branch"` // trunk / info / rebellion / time / convergence
+	Title  string        `json:"title"`
+	Note   string        `json:"note,omitempty"` // 分支级事实说明 (如整支被事实锁定)
+	Nodes  []WitnessNode `json:"nodes"`
+}
+
+// WitnessNode 树上的一个节点。状态语义：
+//   - Lit：成就已经发生 (事实点亮，不是按钮点亮)。
+//   - Locked：被事实锁定——同局内永久不可解锁，节点保留在树上可见。
+//   - Reserved：预留节点，对应机制未实装，不假装可点亮。
+type WitnessNode struct {
+	ID       string          `json:"id"`
+	Title    string          `json:"title"`
+	Lit      bool            `json:"lit"`
+	Locked   bool            `json:"locked,omitempty"`
+	Reserved bool            `json:"reserved,omitempty"`
+	Count    int             `json:"count,omitempty"`
+	LockNote string          `json:"lock_note,omitempty"` // 锁的事实来源 (为什么关上了)
+	Missing  []string        `json:"missing,omitempty"`   // 还差什么 (行动指南，只报事实)
+	Guide    string          `json:"guide,omitempty"`     // 行动指南 (文档口径)
+	Note     string          `json:"note,omitempty"`      // 点亮说明 (哪个子事实点的亮)
+	Choices  []WitnessChoice `json:"choices,omitempty"`   // 互斥点子项 (二选一/三选一)
+}
+
+// WitnessChoice 互斥点里的一个选项：点亮其一，其余同局永久锁定。
+type WitnessChoice struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Lit    bool   `json:"lit"`
+	Locked bool   `json:"locked,omitempty"`
+}
+
 // AgentStats 后端下发的 Agent 派生指标，用于前端展示，避免 UI 复算引擎公式
 type AgentStats struct {
 	AvgConnection        float64 `json:"avg_connection"`
@@ -1546,6 +1592,7 @@ type EventQueueState struct {
 	PendingOperation    string               `json:"pending_operation,omitempty"`
 	InformationProgress *InformationProgress `json:"information_progress,omitempty"`
 	LinesProgress       *LinesProgress       `json:"lines_progress,omitempty"`
+	WitnessTree         *WitnessTree         `json:"witness_tree,omitempty"`
 }
 
 // EventStepResult 单步处理一个事件后的完整结果。
@@ -1568,6 +1615,7 @@ type EventStepResult struct {
 
 	InformationProgress *InformationProgress `json:"information_progress,omitempty"`
 	LinesProgress       *LinesProgress       `json:"lines_progress,omitempty"`
+	WitnessTree         *WitnessTree         `json:"witness_tree,omitempty"`
 }
 
 // EventHistoryResult 事件历史查询结果

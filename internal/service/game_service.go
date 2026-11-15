@@ -3373,6 +3373,7 @@ func (s *GameService) buildState() *model.GameState {
 		World:               s.publicWorldView(),
 		InformationProgress: s.informationProgress(),
 		LinesProgress:       s.linesProgress(),
+		WitnessTree:         s.witnessTree(),
 	}
 }
 
@@ -3520,6 +3521,7 @@ func (s *GameService) buildQueueState() *model.EventQueueState {
 		PendingOperation:    s.pendingOperationName(),
 		InformationProgress: s.informationProgress(),
 		LinesProgress:       s.linesProgress(),
+		WitnessTree:         s.witnessTree(),
 	}
 }
 
@@ -3540,6 +3542,7 @@ func (s *GameService) buildStepResult(processed *engine.GameEvent, logs []string
 
 		InformationProgress: s.informationProgress(),
 		LinesProgress:       s.linesProgress(),
+		WitnessTree:         s.witnessTree(),
 	}
 	if processed != nil {
 		result.ProcessedEventID = processed.ID
