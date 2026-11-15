@@ -446,6 +446,7 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 			DelayMonths: 0,
 		})
 		*logs = append(*logs, fmt.Sprintf("[Silo1] Ultimatum issued to silo %d", silo.ID))
+		s.stewardshipRegisterClearingObligation(silo.ID)
 		break
 	}
 }
