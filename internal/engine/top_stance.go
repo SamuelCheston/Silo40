@@ -135,7 +135,9 @@ func mayorStanceWeights(silo *model.Silo, world *model.World) stanceWeights {
 // 全部系数为初始校准值。TODO(balance)
 func itStanceWeights(silo *model.Silo, world *model.World) stanceWeights {
 	w := stanceWeights{block: 0.55, nonblock: 0.28, cooperate: 0.17} // TODO(balance)
-	wResidual := silo.Authority.W
+	// W 是 0-100 刻度 (W_eq 夹在 0-100)；其余权重输入 (叛乱/服从/保障) 都是
+	// 0-1。不归一化时残余力量 ≥3 即压过其它全部输入，IT 立场被锁死为阻挠。
+	wResidual := clampUnit(silo.Authority.W / 100) // TODO(balance)
 	rebellion := silo.Rebellion
 	guarantee := silo.TopStance.Guarantee
 	obedience := silo.Authority.PoliceObedience

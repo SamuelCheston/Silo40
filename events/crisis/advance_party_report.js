@@ -5,14 +5,20 @@ defineEvent({
   type: "TECHNICAL",
   fire_mode: "ONCE",
   // 纯调度事件（13 分册 §1）：由 advance_party_dispatch 延迟 4 个月点火。
-  // apply 守卫区分完好/受损：期间发生底层坍塌事故则路线受损。
+  // apply 守卫区分完好/受损：先遣不在场期间 (派遣之后) 发生底层坍塌事故则
+  // 路线受损。读时间戳而不是"是否曾经触发"——坍塌在派遣之前发生过属于既有
+  // 地形事实，先遣正是去实测它的，不构成路线受损。
   script: {
     canTrigger: function(ctx) {
       return false;
     },
     apply: function(ctx) {
       var states = ctx.states || {};
-      var damaged = !!(states["crisis:lower_deck_collapse"] && states["crisis:lower_deck_collapse"].triggered);
+      var collapse = states["crisis:lower_deck_collapse"];
+      var dispatch = states["player_actions:advance_party_dispatch"];
+      var damaged = !!(collapse && collapse.triggered &&
+        (!dispatch ||
+          (collapse.last_triggered_timestamp || 0) >= (dispatch.last_triggered_timestamp || 0)));
       if (damaged) {
         // 受损分支：接应档位停在 surveyed（未确认），存活率结算走地板值。
         return {

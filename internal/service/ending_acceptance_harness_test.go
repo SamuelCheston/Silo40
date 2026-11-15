@@ -44,6 +44,8 @@ type acceptanceBeat struct {
 	Reb    float64 `json:"rebellion,omitempty"`
 	Sus    float64 `json:"suspicion,omitempty"`
 	AP     float64 `json:"ap,omitempty"`
+	Sup    float64 `json:"supplies,omitempty"`
+	Nrg    float64 `json:"energy,omitempty"`
 }
 
 type acceptanceRecord struct {
