@@ -433,7 +433,12 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 		}
 		// Establish social support through the real Mines profession action before
 		// concentrating AP on evidence; continue it after the pact locks as AP allows.
-		tunnelTarget := 8
+		// Rift retune (19 §6.3): the amplified order volatility matures the
+		// rebellion spiral around Y126-127, so the pre-lock network stops at 5
+		// tunnels — the ~60 AP of the last three tunnels is exactly the expose
+		// fund the decisive sequence needs to land before the spiral does; the
+		// network keeps growing after the pact locks as AP allows.
+		tunnelTarget := 5
 		if svc.silo.Authority.Judicial.PactLocked {
 			tunnelTarget = 14
 		}
@@ -445,6 +450,14 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 				continue
 			}
 		}
+		// Rift retune (19 §6.3 重心迁移): the amplified order volatility matures
+		// the rebellion spiral around Y126, so once the tunnels are done the
+		// expose bursts outrank portfolio growth — investigate and the supply
+		// shares only spend the true AP surplus while the expose fund is due.
+		exposeReserve := 0.0
+		if !decisiveFired && exposes < 3 {
+			exposeReserve = 25
+		}
 		gameMonth := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth - startAbs
 		if windowOpenAt == 0 && svc.silo.Authority.W <= 18 &&
 			svc.silo.Authority.Judicial.PublicEvidenceQ >= 0.85 &&
@@ -453,10 +466,13 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 		}
 
 		// Verify the first chain and publish it before spending AP on the second.
-		// The second release waits for three real exposures plus enough AP for an
-		// immediate final exposure, never for a W value produced by its own shock.
+		// The second release waits for three real exposures, never for a W value
+		// produced by its own shock. Rift retune (19 §6.3): the AP cushion drops
+		// from 40 to the publish cost itself — the final exposure can wait one
+		// month for AP, but the decisive shock cannot wait for the rebellion
+		// spiral, which matures two months earlier than the publish-40 timeline.
 		secondPublishReady := exposes >= 3 && gameMonth-lastExposeMonth >= 3 &&
-			svc.agent.ActionPoints >= 40
+			svc.agent.ActionPoints >= 20
 		if playerCoreBelief(svc, "Judicial_1") >= 0.85 && !factVerified(svc.silo, "Judicial_1") &&
 			svc.agent.ActionPoints >= 15 {
 			attempt("verify_evidence", 15)
@@ -479,7 +495,7 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 				break
 			}
 		}
-		if svc.agent.ActionPoints >= 15 &&
+		if svc.agent.ActionPoints >= 15+exposeReserve &&
 			(playerCoreBelief(svc, "Judicial_1") < 0.9 || playerCoreBelief(svc, "Judicial_2") < 0.9) &&
 			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
 			attempt("investigate_dispatch", 15)
@@ -499,7 +515,7 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 		}
 		for _, dept := range []string{"Mechanical", "Supply"} {
 			for _, fact := range []string{"Judicial_1", "Judicial_2"} {
-				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25 ||
+				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25+exposeReserve ||
 					shares[dept+":"+fact] >= 2 || (exposes >= 3 && !decisiveFired) {
 					continue
 				}
