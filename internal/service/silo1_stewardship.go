@@ -29,9 +29,11 @@ func (s *GameService) runSilo1StewardshipMonth(logs *[]string, stories *[]model.
 	if !s.world.Silo1Stewardship.Initialized {
 		s.initSilo1Stewardship()
 	}
-	// 固定顺序：指标一 (履约与多样性) → 指标二 (寿命)。
+	// 固定顺序：指标一 (履约与多样性) → 指标二 (寿命) → 缺口通道 → Θ 行为化。
 	s.stewardshipExperimentMonth(logs, stories)
 	s.stewardshipLifespanMonth(logs, stories)
+	s.runBlackBoxChannelsMonth(logs, stories)
+	s.runBlackBoxBehaviorMonth(logs, stories)
 }
 
 // initSilo1Stewardship 首次启用：写入指标一/二初始状态 (确定性常量，不消耗 RNG)。
