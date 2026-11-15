@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -2600,6 +2601,13 @@ func (s *GameService) triggerSystemContentEvents(source string) ([]string, []mod
 	})
 }
 
+// 20 分册 T1-2 流通摩擦的校准起点（TODO(balance)）：部门戒备达到门槛后，
+// Share/Build 的 AP 成本按 ceil(base·(1+0.5·mismatch_alert)) 上浮。
+const (
+	alertFrictionThreshold = 0.30
+	alertFrictionMismatch  = 0.5
+)
+
 // resolveActionCost overwrites action.Cost with the server-authoritative AP
 // cost taken from the action definition itself. The client-submitted cost is
 // never trusted (a stale or crafted client could otherwise send cost=0 and
@@ -2653,6 +2661,25 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 			mismatch = engine.Mismatch(cfg.GatherDeviation, engine.DeptNorm(target))
 		}
 		action.Cost = engine.APCostWithMismatch(cfg, base, mismatch)
+	case model.ActionShareInfo, model.ActionBuildConnection:
+		// 20 分册 T1-2 流通摩擦：目标部门戒备 ≥ 0.30 时，Share/Build 的 AP
+		// 成本按既有 mismatch 公式上浮 ceil(base·(1+0.5·mismatch_alert))，
+		// mismatch_alert 起点 0.5（Share 3→4，Build 4→5）。只贵不堵，吸收
+		// 效果不变。数值为校准起点，TODO(balance)。
+		base, ok := model.ACTION_COSTS[action.Type]
+		if !ok {
+			return fmt.Errorf("unknown action type %q", action.Type)
+		}
+		action.Cost = base
+		if silo := s.playerActionSilo(); silo != nil && action.TargetDept != "" {
+			for i := range silo.Professions {
+				if silo.Professions[i].Name == action.TargetDept &&
+					silo.Professions[i].Alertness >= alertFrictionThreshold {
+					action.Cost = math.Ceil(base * (1 + 0.5*alertFrictionMismatch))
+					break
+				}
+			}
+		}
 	default:
 		cost, ok := model.ACTION_COSTS[action.Type]
 		if !ok {

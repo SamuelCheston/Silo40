@@ -198,6 +198,11 @@ function App() {
     }), [availableActions, actionType, professionActionId, playerActionId]);
     const showDeptSelector = selectedActionMeta?.target_type === 'DEPT';
     const showResourceSelector = selectedActionMeta?.target_type === 'RESOURCE';
+    // 20 分册 T1-2 流通摩擦：目标部门戒备 ≥ 0.30 时 Share/Build 多花 1 AP。
+    // 服务端按同一门槛计费；这里只负责把差价显示在选定目标之后。
+    const alertFrictionApplies = !!targetDept &&
+        (selectedActionMeta?.action_type === 'SHARE_INFO' || selectedActionMeta?.action_type === 'BUILD_CONNECTION') &&
+        (silo?.professions?.find(p => p.name === targetDept)?.alertness ?? 0) >= 0.30;
 
     // 应用后端返回的游戏状态快照
     const applyGameState = useCallback((state: any) => {
@@ -664,6 +669,11 @@ function App() {
                                                 <Box p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
                                                     <Text fontSize="sm" color="gray.600">{selectedActionMeta.description}</Text>
                                                     <Text fontSize="xs" color="gray.500" mt={1}>AP {selectedActionMeta.ap_cost} · 本地耗时 {selectedActionMeta.duration_months} 月</Text>
+                                                    {alertFrictionApplies && (
+                                                        <Text fontSize="xs" color="orange.600" mt={1}>
+                                                            目标部门戒备 ≥ 0.30：本次消耗 {selectedActionMeta.ap_cost + 1} AP（流通摩擦）
+                                                        </Text>
+                                                    )}
                                                 </Box>
                                             )}
 
@@ -674,7 +684,9 @@ function App() {
                                                         <NativeSelect.Field value={targetDept} onChange={(e) => setTargetDept(e.target.value)}>
                                                             <option value="" disabled>选择部门…</option>
                                                             {silo?.professions?.map(p => (
-                                                                <option key={p.id} value={p.name}>{p.name}</option>
+                                                                <option key={p.id} value={p.name}>
+                                                                    {p.name}{(p.alertness ?? 0) >= 0.30 ? '（戒备：+1 AP）' : ''}
+                                                                </option>
                                                             ))}
                                                         </NativeSelect.Field>
                                                         <NativeSelect.Indicator />

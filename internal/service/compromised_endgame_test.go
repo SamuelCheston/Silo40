@@ -81,8 +81,13 @@ func TestCompromisedEndingPlayableFromNewGame(t *testing.T) {
 			}
 		} else {
 			build := actionByID(actions, "action_build_connection")
-			if build != nil && build.Enabled && svc.agent.ActionPoints >= float64(build.APCost) {
-				execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Mayor"})
+			buildAction := model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Mayor"}
+			if err := svc.resolveActionCost(&buildAction); err != nil {
+				t.Fatalf("resolve build cost: %v", err)
+			}
+			// 戒备 ≥ 0.30 时服务端按流通摩擦加收 1 AP，不能用 meta 的基价判断。
+			if build != nil && build.Enabled && svc.agent.ActionPoints >= buildAction.Cost {
+				execute(buildAction)
 				suspicionBuilds++
 				if suspicionBuilds%10 == 0 {
 					t.Logf("connection build %d at %d-%02d: suspicion=%.3f AP=%.1f",

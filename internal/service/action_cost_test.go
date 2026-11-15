@@ -126,6 +126,52 @@ func TestBeginActionStoresServerCost(t *testing.T) {
 	}
 }
 
+// 20 分册 T1-2 流通摩擦：目标部门戒备 ≥ 0.30 时 Share/Build 的 AP 成本按
+// ceil(base·(1+0.5·0.5)) 上浮（Share 3→4，Build 4→5）；门槛以下与无目标不变。
+func TestResolveActionCostAddsAlertFriction(t *testing.T) {
+	svc := newActionCostTestService(t, "Mechanical")
+	mayor := findProfessionByName(svc.silo, "Mayor")
+	if mayor == nil {
+		t.Fatal("Mayor profession missing from initial silo")
+	}
+	mayor.Alertness = 0.35
+	for _, tc := range []struct {
+		actionType model.AgentActionType
+		want       float64
+	}{
+		{model.ActionShareInfo, 4},
+		{model.ActionBuildConnection, 5},
+	} {
+		action := model.AgentAction{Type: tc.actionType, TargetDept: "Mayor"}
+		if err := svc.resolveActionCost(&action); err != nil {
+			t.Fatalf("resolveActionCost(%s): %v", tc.actionType, err)
+		}
+		if action.Cost != tc.want {
+			t.Errorf("%s under alert friction = %v, want %v", tc.actionType, action.Cost, tc.want)
+		}
+	}
+
+	mayor.Alertness = 0.29
+	for _, actionType := range []model.AgentActionType{model.ActionShareInfo, model.ActionBuildConnection} {
+		action := model.AgentAction{Type: actionType, TargetDept: "Mayor"}
+		if err := svc.resolveActionCost(&action); err != nil {
+			t.Fatalf("resolveActionCost(%s): %v", actionType, err)
+		}
+		if want := model.ACTION_COSTS[actionType]; action.Cost != want {
+			t.Errorf("%s below threshold = %v, want base %v", actionType, action.Cost, want)
+		}
+	}
+
+	mayor.Alertness = 0.9
+	action := model.AgentAction{Type: model.ActionShareInfo}
+	if err := svc.resolveActionCost(&action); err != nil {
+		t.Fatalf("resolveActionCost(no target): %v", err)
+	}
+	if want := model.ACTION_COSTS[model.ActionShareInfo]; action.Cost != want {
+		t.Errorf("targetless share = %v, want base %v", action.Cost, want)
+	}
+}
+
 func findProfessionByName(silo *model.Silo, name string) *model.Profession {
 	for i := range silo.Professions {
 		if silo.Professions[i].Name == name {

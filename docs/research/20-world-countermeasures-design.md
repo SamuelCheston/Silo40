@@ -93,7 +93,7 @@
 | 编号 | 反制 | 触发输入 | 效果形态 | 现状 |
 | --- | --- | --- | --- | --- |
 | T1-1 | 戒备收紧 | IT 月度回合选中 `counter_seize_materials`（威胁可见时）；玩家失败探查自喂 | 目标部门 `Alertness +0.15`（反击）/+0.10（失败探查）→ 探查成功率 `×(1−0.60·alert_d)` | **既有**（[it_authority.go](../../internal/engine/it_authority.go)、[common_actions.js](../../events/mechanics/common_actions.js)） |
-| T1-2 | 流通摩擦 | 目标部门 `Alertness ≥` 门槛（起点 0.30，【推导，TODO(balance)】） | 对该部门的 Share/Build AP 成本按既有 mismatch 公式上浮：`ceil(base·(1+0.5·mismatch_alert))`，`mismatch_alert` 起点 0.5（即 Share 3→4 AP）；**吸收效果不变，只贵不堵** | 【项目外推】公式既有（10 §8.1），新增的是把戒备接成 mismatch 项 |
+| T1-2 | 流通摩擦 | 目标部门 `Alertness ≥` 门槛（起点 0.30，【推导，TODO(balance)】） | 对该部门的 Share/Build AP 成本按既有 mismatch 公式上浮：`ceil(base·(1+0.5·mismatch_alert))`，`mismatch_alert` 起点 0.5（即 Share 3→4 AP）；**吸收效果不变，只贵不堵** | **已落地**（[game_service.go](../../internal/service/game_service.go) `resolveActionCost`；UI 在选定目标后显示差价） |
 | T1-3 | 关系冷却 | 部门对泄漏事实 `B ≥` 门槛（起点 0.45，【推导，TODO(balance)】） | 该部门关系增长减半、持续 N 月（起点 12 月，§6.3 推导）；Build Network 回执措辞变化 | 【项目外推】 |
 | T1-4 | 恐慌收拢 | 反制事件附带小量恐慌增量（单次 0.02–0.04，同构既有征兆事件量级） | 恐慌经**既有漂移**漂向忠诚（17 §3 修复 D）→ 全堡接收性自然变差 | 漂移通道**既有**，增量走既有月度通道 |
 
