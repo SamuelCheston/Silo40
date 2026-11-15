@@ -219,13 +219,16 @@ func TestTimeEndingNarrativeAndOverlap(t *testing.T) {
 
 	// Overlap: the same station also holds the INFORMATION gate facts — both
 	// candidates share one pool; neither qualification substitutes the other.
+	// The gate reads maturity: mature the seeded beliefs through the real
+	// monthly dispatch (forgetting + permeation).
 	svc2, station2 := newTimeStation()
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.Beliefs = []model.FactBelief{
-			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+			{FactID: "a", B: permeationSeedB}, {FactID: "b", B: permeationSeedB}, {FactID: "c", B: permeationSeedB},
 		}
 		station2.Professions = append(station2.Professions, prof)
 	}
+	matureStationBeliefsThroughRealMonths(station2)
 	decision2 := svc2.resolveWeightedEnding(station2, svc2.agent)
 	if decision2 == nil {
 		t.Fatal("no decision")

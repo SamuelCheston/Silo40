@@ -1306,6 +1306,19 @@ type InformationChainNode struct {
 type DepartmentFactCoverage struct {
 	Name       string `json:"name"`
 	AboveFloor int    `json:"above_floor"`
+	// Matured 已完成渗透 (成熟) 的事实数——结局资格门读取的量
+	// (18-time-permeation §3.1)。AboveFloor ≥ 3 但 Matured 不足时，
+	// 界面必须解释"还差多少个月成熟"，不能让玩家以为门槛已达成。
+	Matured int `json:"matured"`
+	// Permeating 正在渗透 (已过地板、尚未成熟) 的事实剩余月数，
+	// 按剩余月数升序；跌破地板的事实计数清零，不在此列。
+	Permeating []PermeationProgress `json:"permeating,omitempty"`
+}
+
+// PermeationProgress 一条部门信念的渗透进度 (18-time-permeation §7.2 反馈面)。
+type PermeationProgress struct {
+	FactID     string `json:"fact_id"`
+	MonthsLeft int    `json:"months_left"`
 }
 
 // InformationProgress 汇总《共证》线进度。信念层原始值已在
@@ -1317,6 +1330,9 @@ type InformationProgress struct {
 	Departments   []DepartmentFactCoverage `json:"departments"`
 	GateFactCount int                      `json:"gate_fact_count"`
 	BeliefFloor   float64                  `json:"belief_floor"`
+	// PermeationMonths 门槛读取的渗透月数 (18-time-permeation §4)：
+	// 事实 B 连续过地板满该月数才成熟。前端用它解释"还差多少个月"。
+	PermeationMonths int `json:"permeation_months"`
 	// 终止链读数 (开局自解释)：任务判据三要求驻地不再受 Silo 1 单方
 	// 终止链支配。先兆出现与反制成立都是内容状态里既有的事实，这里只读
 	// 下发，让目标卡能回答"终止链现在怎样"。

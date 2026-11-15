@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"silo40/internal/engine"
 	"silo40/internal/model"
 )
 
@@ -21,6 +22,26 @@ func weightedEndingFixture(trigger string) (*GameService, *model.Silo, *model.Ag
 	return svc, station, agent
 }
 
+// permeationSeedB is the fixture seed for beliefs that must survive a full
+// real permeation window: B ≥ floor + PermeationMonths·ForgetRateMonthly
+// (0.30 + 30·0.01 = 0.60), with margin so the post-window coverage readings
+// (B ≥ floor) that weighting consumes stay intact.
+const permeationSeedB = 0.8
+
+// matureStationBeliefsThroughRealMonths produces permeation maturity the way
+// the game does: it runs the real monthly dispatch pair (constant forgetting
+// then permeation, the exact EVENT_METRICS_UPDATE hook order) over the station
+// for a full permeation window. Fair-retune discipline (18-time-permeation
+// §7.2 判据 2): tests never write Matured / PermeationCounter directly —
+// maturity is what the real mechanism produces from the seeded beliefs.
+func matureStationBeliefsThroughRealMonths(station *model.Silo) {
+	cfg := engine.DefaultInformationConfig()
+	for i := 0; i < cfg.PermeationMonths; i++ {
+		engine.ApplyBeliefForgetting(station, cfg)
+		engine.ApplyPermeation(station, cfg)
+	}
+}
+
 func TestWeightedEndingRecordsAllEntityKinds(t *testing.T) {
 	svc, station, _ := weightedEndingFixture("TIME")
 	// Qualify several candidates so every entity kind can score: destruction
@@ -32,12 +53,14 @@ func TestWeightedEndingRecordsAllEntityKinds(t *testing.T) {
 	station.EscapedGroup = model.EscapeGroup{Initialized: true, Population: 120, Surviving: true}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = []string{"a", "b", "c", "d", "e"}
-		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		// Gate reads permeation maturity: seed strong beliefs, then let the
+		// real monthly dispatch (forgetting + permeation) mature them.
 		prof.Beliefs = []model.FactBelief{
-			{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+			{FactID: "a", B: permeationSeedB}, {FactID: "b", B: permeationSeedB}, {FactID: "c", B: permeationSeedB},
 		}
 		station.Professions = append(station.Professions, prof)
 	}
+	matureStationBeliefsThroughRealMonths(station)
 	station.Factions = []model.Faction{{
 		ID: 2, Name: "Open Circle", Signature: "pro_foreign:High", Influence: 1, Cohesion: 1,
 	}}
@@ -86,14 +109,17 @@ func TestWeightedEndingFactionsAndNamedResidentsCanOverridePlayer(t *testing.T) 
 	beliefFacts := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = beliefFacts
-		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		// Gate reads permeation maturity: seed strong beliefs (they must stay
+		// above the floor after the real window so the coverage term in the
+		// weighting arithmetic is unchanged), then mature through real months.
 		beliefs := make([]model.FactBelief, 0, len(beliefFacts))
 		for _, fact := range beliefFacts {
-			beliefs = append(beliefs, model.FactBelief{FactID: fact, B: 0.5})
+			beliefs = append(beliefs, model.FactBelief{FactID: fact, B: permeationSeedB})
 		}
 		prof.Beliefs = beliefs
 		station.Professions = append(station.Professions, prof)
 	}
+	matureStationBeliefsThroughRealMonths(station)
 	baseline := svc.resolveWeightedEnding(station, svc.agent)
 	if baseline.Selected != "INFORMATION" {
 		t.Fatalf("baseline with qualified public facts should stay INFORMATION: %+v", baseline)
@@ -158,14 +184,17 @@ func TestWeightedEndingTieBreaksInFixedOrder(t *testing.T) {
 	beliefFacts := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}
 	for _, prof := range []model.Profession{{ID: 1, Name: "IT"}, {ID: 2, Name: "Judicial"}} {
 		prof.KnownFragments = beliefFacts
-		// Re-anchored gate (belief layer): seed facts above the sharing floor.
+		// Gate reads permeation maturity: seed strong beliefs (they must stay
+		// above the floor after the real window so the coverage term in the
+		// weighting arithmetic is unchanged), then mature through real months.
 		beliefs := make([]model.FactBelief, 0, len(beliefFacts))
 		for _, fact := range beliefFacts {
-			beliefs = append(beliefs, model.FactBelief{FactID: fact, B: 0.5})
+			beliefs = append(beliefs, model.FactBelief{FactID: fact, B: permeationSeedB})
 		}
 		prof.Beliefs = beliefs
 		station.Professions = append(station.Professions, prof)
 	}
+	matureStationBeliefsThroughRealMonths(station)
 	station.Factions = []model.Faction{{ID: 7, Name: "Charter Circle", Influence: 20, Cohesion: 1}}
 	station.Residents = []model.Resident{{
 		ID: 8, Name: "Ambitious Balancer", Alive: true, Influence: 0.75, Ambition: 0.5,
@@ -205,10 +234,11 @@ func TestCompletedBeliefGateOutweighsLivingSilo1Exclusionist(t *testing.T) {
 			ID:   uint(i + 1),
 			Name: name,
 			Beliefs: []model.FactBelief{
-				{FactID: "a", B: 0.5}, {FactID: "b", B: 0.5}, {FactID: "c", B: 0.5},
+				{FactID: "a", B: permeationSeedB}, {FactID: "b", B: permeationSeedB}, {FactID: "c", B: permeationSeedB},
 			},
 		})
 	}
+	matureStationBeliefsThroughRealMonths(station)
 	// Closed order still dominates: EXCLUSIONIST qualifies, and Silo 1 alive
 	// gives it its standing base+cohesion contribution.
 	station.Cohorts = []model.PopulationCohort{{

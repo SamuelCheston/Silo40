@@ -413,20 +413,20 @@ defineMechanics([
       }
 
       if ((silo.professions || []).length > 0) {
-        // INFORMATION 结构桥 (重锚定到信念层，与仲裁侧
+        // INFORMATION 结构桥 (改读渗透成熟态，与仲裁侧
         // allDepartmentsHoldFragments 对齐)：每个部门须持有至少 3 个
-        // B >= 0.30 (qual_rumor) 的事实。常量须与
-        // weighted_endings.go informationGateFactCount / QualRumor 同步。
-        // 部门信念按恒定淡忘系数衰减，桥只在流通跑赢淡忘时为真。
+        // 已成熟事实 (B 连续 >= 0.30 (qual_rumor) 满渗透月数)。常量须与
+        // weighted_endings.go informationGateFactCount / QualRumor /
+        // PermeationMonths 同步。成熟粘性不回退：B 可以淡忘，证据不收回。
         let beliefGate = true;
         for (const profession of silo.professions) {
-          let aboveFloor = 0;
+          let matured = 0;
           for (const belief of profession.beliefs || []) {
-            if ((belief.b || 0) >= 0.30) {
-              aboveFloor += 1;
+            if (belief.matured) {
+              matured += 1;
             }
           }
-          if (aboveFloor < 3) {
+          if (matured < 3) {
             beliefGate = false;
             break;
           }
