@@ -584,9 +584,9 @@ func TestOutsideSustenanceAfterDeparture(t *testing.T) {
 // clock runs out first; the 58-run acceptance batch measured every sparse
 // route departing through the forced channel and dying on the road or in
 // month 1. The full-preparation route is the demonstrated playable line
-// (acceptance batch seed 2426: departed in the 40s, landed in the 30s,
-// survived pursuit months outside, REBELLION settled pyrrhic while the silo
-// fractured in the group's absence).
+// (acceptance batch seed 2402: departed 28, landed 22, survived 5 pursuit
+// months outside, REBELLION settled pyrrhic while the silo fractured in the
+// group's absence).
 //
 // Strict settlement semantics (the reason this test exists): the monthly
 // pipeline runs outside sustenance BEFORE the victory check
@@ -597,7 +597,7 @@ func TestOutsideSustenanceAfterDeparture(t *testing.T) {
 // action itself. A departure that settles before any outside month is a
 // false green, whatever the headcount.
 func TestRebellionLinePlayableFromNewGame(t *testing.T) {
-	rec := runEscapeLine(t, "rebellion-strict", 2426, "full")
+	rec := runEscapeLine(t, "rebellion-strict", 2402, "full")
 
 	t.Logf("strict rebellion route: seed=%d prep=%s ending=%s won=%v departed=%d survivors=%d months_out=%d demise=%q group_at_settlement=%d surviving=%v stance_at_launch=%s",
 		rec.Seed, rec.PrepLevel, rec.Ending, rec.Won, rec.Departed, rec.Survivors,
