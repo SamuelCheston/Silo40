@@ -102,6 +102,11 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV10ToOutsideSave(a.db, dbFileName); err != nil {
 		log.Fatalf("v10 outside upgrade failed: %v", err)
 	}
+	// v11 outside saves gain the line information architecture state
+	// (main line + reroute log); zero values are re-derived from facts.
+	if _, err := service.UpgradeV11ToLineShiftsSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v11 line-shift upgrade failed: %v", err)
+	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)

@@ -48,7 +48,11 @@ const (
 //     补给余量/防护服完整性/路线安全/追踪四档/群体组合与覆没原因。
 //     零值 = 未激活 = 旧档行为逐位不变 (月度结算只作用于 Active 群体)；
 //     v10 存档经备份+单事务+回读校验升级，不回填任何推测状态。
-const CurrentSaveVersion = 11
+//   - v12: 线信息架构。World 携带当下主线 (MainLine) 与改道日志
+//     (LineShifts)——一局只有一条主线，改道是玩家可见的事实。
+//     新字段零值即旧档语义 (主线未定、无改道记录)，由当前事实确定性
+//     重推；v11 存档经备份+单事务+回读校验升级，不回填任何推测状态。
+const CurrentSaveVersion = 12
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -322,8 +326,22 @@ type World struct {
 	// LastEndingAudit 最近一次终局仲裁记录 (含"继续模拟"的空池裁决)，
 	// 供结局体系 12 §9 的解释性审计；不影响任何模拟状态。
 	LastEndingAudit *EndingDecision `gorm:"type:text;serializer:json" json:"last_ending_audit,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	// MainLine 当下主线 (线信息架构)：玩家实际在走的那条结局线。由里程碑
+	// 事实确定性推出 (最深者胜，平层取最近推进)，不参与任何结算；空 = 未定。
+	MainLine string `json:"main_line,omitempty"`
+	// LineShifts 改道日志：主线每次变化记一条 (含首次确立，From 为空)。
+	// 改道是玩家可见的事实——从《共证》改道《公议》不该是"某个数字悄悄不涨"。
+	LineShifts []LineShift `gorm:"type:text;serializer:json" json:"line_shifts,omitempty"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+}
+
+// LineShift 一次主线变化：From 为空表示首次确立主线。
+type LineShift struct {
+	Year  int    `json:"year"`
+	Month int    `json:"month"`
+	From  string `json:"from,omitempty"`
+	To    string `json:"to"`
 }
 
 // OutboundSignal records one delivered cross-silo signal for spillover
@@ -1143,6 +1161,7 @@ type GameState struct {
 	AvailableActions    []PlayerActionMeta     `json:"available_actions,omitempty"`
 	World               *WorldView             `json:"world,omitempty"`
 	InformationProgress *InformationProgress   `json:"information_progress,omitempty"`
+	LinesProgress       *LinesProgress         `json:"lines_progress,omitempty"`
 }
 
 // InformationChainNode 是《共证》链上单个节点的点亮状态。链的推进只存在于
@@ -1176,6 +1195,65 @@ type InformationProgress struct {
 	// 下发，让目标卡能回答"终止链现在怎样"。
 	ResetOmenSeen           bool `json:"reset_omen_seen"`
 	ResetCountermeasureDone bool `json:"reset_countermeasure_done"`
+}
+
+// 线信息架构：一局只有一条主线，其余是"还开着的路"。五条可玩结局线各由
+// 里程碑事实键定义；主线由里程碑深度确定性推出，改道持久化为日志。
+// 跨线共享的事实 (信念覆盖、登记簿、W、警察服从……) 不在线卡里重复，
+// 由呈现端从既有快照单点读取。
+const (
+	LineInformation  = "information"  // 《共证》
+	LineRebellion    = "rebellion"    // 《越岭》
+	LineRuleOfLaw    = "rule_of_law"  // 《公议》
+	LinePersonalRule = "personal_rule" // 《人治》
+	LineTime         = "time"         // 《无人裁决》
+)
+
+// LineMilestone 单条线上的一个里程碑事实键的点亮状态。
+type LineMilestone struct {
+	Key   string `json:"key"`
+	Title string `json:"title"`
+	Lit   bool   `json:"lit"`
+	Count int    `json:"count,omitempty"`
+}
+
+// LineProgress 单条结局线的玩家可见进度。
+//
+// 状态语义：
+//   - Depth>0：线上已有里程碑事实，玩家在这条路上留下了脚印。
+//   - Qualified：线的硬资格当前成立 (与仲裁读同一组事实)。
+//   - Regressed：里程碑已亮但当前资格不成立——《人治》回摆即此态：
+//     路没有消失，是秩序摆回去了。
+//   - Closed：线被事实关闭 (如《公议》开窗期已过而未锁定)。
+type LineProgress struct {
+	Line         string          `json:"line"`
+	Title        string          `json:"title"`
+	Depth        int             `json:"depth"`
+	LastAdvanced int             `json:"last_advanced,omitempty"` // 最近一次里程碑点亮的世界时刻 (天)
+	Qualified    bool            `json:"qualified"`
+	QualNote     string          `json:"qual_note,omitempty"` // 资格未成立时的具体原因 (与仲裁同一口径)
+	Regressed    bool            `json:"regressed,omitempty"`
+	Closed       bool            `json:"closed,omitempty"`
+	CloseNote    string          `json:"close_note,omitempty"`
+	Milestones   []LineMilestone `json:"milestones"`
+}
+
+// OmenFact 一个已发生的失败线征兆。征兆只报告已经发生的事实，不点名
+// 结局、不预测概率——提示的分寸止于"事实已被看见"。
+type OmenFact struct {
+	Key   string `json:"key"`
+	Title string `json:"title"`
+	Count int    `json:"count,omitempty"`
+	Year  int    `json:"year,omitempty"`
+	Month int    `json:"month,omitempty"`
+}
+
+// LinesProgress 五条结局线的统一进度快照 (只读下发，不参与结算)。
+type LinesProgress struct {
+	MainLine string         `json:"main_line,omitempty"` // 空 = 主线未定 (尚无里程碑)
+	Lines    []LineProgress `json:"lines"`
+	Shifts   []LineShift    `json:"shifts,omitempty"`
+	Omens    []OmenFact     `json:"omens,omitempty"`
 }
 
 // AgentStats 后端下发的 Agent 派生指标，用于前端展示，避免 UI 复算引擎公式
@@ -1235,6 +1313,7 @@ type EventQueueState struct {
 	PendingEvents       int                  `json:"pending_events"`
 	PendingOperation    string               `json:"pending_operation,omitempty"`
 	InformationProgress *InformationProgress `json:"information_progress,omitempty"`
+	LinesProgress       *LinesProgress       `json:"lines_progress,omitempty"`
 }
 
 // EventStepResult 单步处理一个事件后的完整结果。
@@ -1256,6 +1335,7 @@ type EventStepResult struct {
 	ActionResult       *ActionResult      `json:"action_result,omitempty"`
 
 	InformationProgress *InformationProgress `json:"information_progress,omitempty"`
+	LinesProgress       *LinesProgress       `json:"lines_progress,omitempty"`
 }
 
 // EventHistoryResult 事件历史查询结果

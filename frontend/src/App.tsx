@@ -10,8 +10,7 @@ import { BunkerMap } from './components/BunkerMap';
 import { FactionView } from './components/FactionView';
 import { HeaderStats } from './components/HeaderStats';
 import { WorldPanel } from './components/WorldPanel';
-import { InformationProgressPanel } from './components/InformationProgressPanel';
-import { MissionPanel } from './components/MissionPanel';
+import { LinesPanel } from './components/LinesPanel';
 import { Silo, Agent, AgentAction, AgentActionType, GameState, AgentStats, PlayerActionMeta, StoryEventLog } from './logic/models';
 import { LayoutGrid, Users } from 'lucide-react';
 
@@ -65,12 +64,15 @@ function App() {
     const [world, setWorld] = useState<any>(null);
     const [busy, setBusy] = useState(false);
     const [infoProgress, setInfoProgress] = useState<any>(null);
+    const [linesProgress, setLinesProgress] = useState<any>(null);
     const [moments, setMoments] = useState<{ title: string; body: string }[]>([]);
     const prevStageRef = useRef<string | null>(null);
     const prevAbsorbedRef = useRef<number | null>(null);
+    const prevMainLineRef = useRef<string | null>(null);
+    const prevRegressedRef = useRef<Record<string, boolean>>({});
 
-    // 从状态快照里检测"关键时刻"：阶段跃迁、第一次吸收。只在已有前值
-    // （即非首次加载）时比较，开局与读档不会误报。
+    // 从状态快照里检测"关键时刻"：阶段跃迁、第一次吸收、主线确立与改道、
+    // 线回摆。只在已有前值（即非首次加载）时比较，开局与读档不会误报。
     const detectMoments = useCallback((state: any) => {
         const fresh: { title: string; body: string }[] = [];
         const stage = state?.world?.progress_stage || null;
@@ -85,6 +87,41 @@ function App() {
             fresh.push(absorptionMoment);
         }
         prevAbsorbedRef.current = absorbed;
+
+        // 主线确立与改道：路变了要看得见，不能是"某个数字悄悄不涨"。
+        const lp = state?.lines_progress;
+        if (lp) {
+            const mainLine = lp.main_line || "";
+            const titleOf = (id: string) => (lp.lines || []).find((l: any) => l.line === id)?.title || id;
+            if (prevMainLineRef.current !== null && mainLine !== prevMainLineRef.current && mainLine) {
+                if (prevMainLineRef.current) {
+                    fresh.push({
+                        title: `路改了：${titleOf(prevMainLineRef.current)} → ${titleOf(mainLine)}`,
+                        body: "你脚下的路变了——新主线的里程碑是你最近留下的脚印。旧路没有关闭，它还开着，只是不再是你正在走的那条。",
+                    });
+                } else {
+                    fresh.push({
+                        title: `主线确立：${titleOf(mainLine)}`,
+                        body: "第一个里程碑点亮：这条路上有了你的脚印。其余的路仍然开着——主线由脚印决定，不由宣言决定。",
+                    });
+                }
+            }
+            prevMainLineRef.current = mainLine;
+
+            // 回摆：里程碑仍亮而成立条件不再成立（如《人治》的 W 回升）。
+            const regressedNow: Record<string, boolean> = {};
+            for (const line of lp.lines || []) {
+                regressedNow[line.line] = !!line.regressed;
+                if (line.regressed && prevRegressedRef.current[line.line] === false) {
+                    fresh.push({
+                        title: `${line.title}回摆`,
+                        body: `${line.qual_note ? line.qual_note + "。" : ""}里程碑仍然亮着——路没有消失，是秩序摆回去了，要重新推。`,
+                    });
+                }
+            }
+            prevRegressedRef.current = regressedNow;
+        }
+
         if (fresh.length > 0) setMoments(fresh);
     }, []);
 
@@ -137,6 +174,7 @@ function App() {
         setAvailableActions(state.available_actions || []);
         setWorld(state.world || null);
         setInfoProgress(state.information_progress || null);
+        setLinesProgress(state.lines_progress || null);
         setPendingEvents(0);
         setPendingOperation('');
         setGameStarted(true);
@@ -151,6 +189,7 @@ function App() {
         setAvailableActions(state.available_actions || []);
         setWorld(state.world || null);
         setInfoProgress(state.information_progress || null);
+        setLinesProgress(state.lines_progress || null);
         setPendingEvents(state.pending_events || 0);
         setPendingOperation(state.pending_operation || '');
         setGameStarted(true);
@@ -231,8 +270,11 @@ function App() {
         setWorld(null);
         setEventHistory([]);
         setMoments([]);
+        setLinesProgress(null);
         prevStageRef.current = null;
         prevAbsorbedRef.current = null;
+        prevMainLineRef.current = null;
+        prevRegressedRef.current = {};
         setResultText('Start a new Silo 40 operation. Your previous save remains until the new game is created.');
     }, []);
 
@@ -510,14 +552,13 @@ function App() {
                                             <Text fontSize="sm" color="gray.700" mt={1}>{moment.body}</Text>
                                         </Box>
                                     ))}
-                                    <MissionPanel world={world} agent={agent} progress={infoProgress} />
+                                    <LinesPanel lines={linesProgress} progress={infoProgress} silo={silo} world={world} agent={agent} />
                                     <WorldPanel world={world} agent={agent} />
                                     {activeView === 'map' ? (
                                         silo && <BunkerMap silo={silo} agent={agent} />
                                     ) : (
                                         silo && <FactionView silo={silo} />
                                     )}
-                                    <InformationProgressPanel progress={infoProgress} silo={silo} />
                                 </VStack>
 
                                 {/* Right Side: Operations */}

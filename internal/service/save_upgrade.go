@@ -729,6 +729,78 @@ func upgradeV10ToOutside(tx *gorm.DB) error {
 	return nil
 }
 
+const lineShiftSaveVersion = 12
+
+// UpgradeV11ToLineShiftsSave adds the line information architecture state:
+// World.MainLine (the line the player is actually walking) and
+// World.LineShifts (the reroute log). Both are derived deterministically
+// from milestone facts, so the upgrade injects nothing — the zero values
+// (main line undetermined, no recorded shifts) are re-derived on the first
+// snapshot read after load. Same safety contract as v10→v11: backup + one
+// transaction + readback verification.
+func UpgradeV11ToLineShiftsSave(db *gorm.DB, dbPath string) (bool, error) {
+	var meta model.SaveMeta
+	err := db.First(&meta, "`key` = ?", saveMetaKey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("v12 line-shift upgrade: read save meta: %w", err)
+	}
+	if meta.SaveVersion != 11 {
+		return false, nil
+	}
+	backupPath := fmt.Sprintf("%s.bak-%s-v12lineshift", dbPath, time.Now().Format("20060102-150405"))
+	if err := backupSaveFile(db, backupPath); err != nil {
+		return false, fmt.Errorf("v12 line-shift upgrade: backup to %s failed: %w（数据库未改动）", backupPath, err)
+	}
+	if err := db.Transaction(upgradeV11ToLineShifts); err != nil {
+		return false, fmt.Errorf("v12 line-shift upgrade: %w（数据库未改动，备份保留在 %s，可用它还原）", err, backupPath)
+	}
+	log.Printf("v11 save upgraded to v12 line-shift model (backup: %s)——主线空起步，由当前事实确定性重推，不回填推测状态", backupPath)
+	return true, nil
+}
+
+func upgradeV11ToLineShifts(tx *gorm.DB) error {
+	var worlds []model.World
+	if err := tx.Order("id ASC").Find(&worlds).Error; err != nil {
+		return fmt.Errorf("load worlds: %w", err)
+	}
+	for i := range worlds {
+		world := &worlds[i]
+		// Re-save so the new serialized field exists explicitly; the zero
+		// values are the documented v11 semantics (undetermined, no log).
+		if err := tx.Save(world).Error; err != nil {
+			return fmt.Errorf("resave world %d: %w", world.ID, err)
+		}
+	}
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: lineShiftSaveVersion}).Error; err != nil {
+		return fmt.Errorf("bump save meta: %w", err)
+	}
+
+	var checkWorlds []model.World
+	if err := tx.Order("id ASC").Find(&checkWorlds).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload worlds: %w", err)
+	}
+	if len(checkWorlds) != len(worlds) {
+		return fmt.Errorf("post-write verification failed: world count changed")
+	}
+	for i := range checkWorlds {
+		world := &checkWorlds[i]
+		if world.MainLine != "" || len(world.LineShifts) != 0 {
+			return fmt.Errorf("post-write verification failed: world %d gained line-shift state during migration", world.ID)
+		}
+	}
+	var checkMeta model.SaveMeta
+	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
+	}
+	if checkMeta.SaveVersion != lineShiftSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, lineShiftSaveVersion)
+	}
+	return nil
+}
+
 // legacyUnaffiliatedSignature 与 engine.unaffiliatedSignature 一致 (跨包不导出，
 // 升级器按字面值对齐)。
 const legacyUnaffiliatedSignature = "special:unaffiliated"

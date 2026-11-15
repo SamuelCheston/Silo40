@@ -658,20 +658,24 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v10 → v11，Resume 才接受存档。
+	// 启动链继续 v10 → v11 → v12，Resume 才接受存档。
 	upgradedV11, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || !upgradedV11 {
 		t.Fatalf("v10 outside upgrade failed: upgraded=%v err=%v", upgradedV11, err)
 	}
+	upgradedV12, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
+	if err != nil || !upgradedV12 {
+		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v11 save: %v", err)
+		t.Fatalf("resume migrated v12 save: %v", err)
 	}
 
 	again, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v11 save must skip v9 migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v12 save must skip v9 migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -707,13 +711,60 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 		}
 	}
 
+	// 启动链继续 v11 → v12，Resume 才接受存档。
+	upgradedV12, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
+	if err != nil || !upgradedV12 {
+		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
+	}
+
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v11 save: %v", err)
+		t.Fatalf("resume migrated v12 save: %v", err)
 	}
 
 	again, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v11 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v12 save must skip migration: upgraded=%v err=%v", again, err)
+	}
+}
+
+// v11 → v12：线信息架构空起步。主线与改道日志由当前里程碑事实确定性重推，
+// 升级不回填推测状态；回读校验 World 主线为空、改道日志为零，升级后行为逐位不变。
+func TestUpgradeV11ToLineShiftsSave(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "v12lineshift.db")
+	svc := newVersionTestService(t, dbPath)
+	createVersionTestGame(t, svc)
+	// 模拟 v11 存档：只回退版本标记 (新字段零值即 v11 语义)。
+	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 11}).Error; err != nil {
+		t.Fatalf("downgrade meta: %v", err)
+	}
+
+	upgraded, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
+	if err != nil || !upgraded {
+		t.Fatalf("v12 line-shift upgrade failed: upgraded=%v err=%v", upgraded, err)
+	}
+	backups, _ := filepath.Glob(dbPath + ".bak-*-v12lineshift")
+	if len(backups) != 1 {
+		t.Fatalf("expected one line-shift backup, got %v", backups)
+	}
+
+	var worlds []model.World
+	if err := svc.db.Order("id ASC").Find(&worlds).Error; err != nil {
+		t.Fatalf("reload worlds: %v", err)
+	}
+	for i := range worlds {
+		if worlds[i].MainLine != "" || len(worlds[i].LineShifts) != 0 {
+			t.Fatalf("world %d gained line-shift state during migration: %+v", worlds[i].ID, worlds[i])
+		}
+	}
+
+	fresh := newVersionTestService(t, dbPath)
+	if err := fresh.Resume(); err != nil {
+		t.Fatalf("resume migrated v12 save: %v", err)
+	}
+
+	again, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
+	if err != nil || again {
+		t.Fatalf("v12 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }
