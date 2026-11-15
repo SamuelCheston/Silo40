@@ -38,9 +38,11 @@ func (s *GameService) initSilo1Stewardship() {
 	st.Experiment.Scheduled = map[uint]int{}
 	st.Experiment.Cleared = map[uint]int{}
 	st.Experiment.Missed = map[uint]bool{}
+	st.Experiment.Ledger = map[string]int{}
 	st.Lifespan.Initialized = true
 	st.Lifespan.AvgLifespan = stewardshipLifespanStart
 	st.Lifespan.Postures = map[uint]string{}
+	st.Lifespan.Ledger = map[string]int{}
 	st.Assignments = map[uint]model.Silo1AssignmentState{}
 	for _, silo := range s.silos {
 		if siloEnded(silo) {
