@@ -412,8 +412,15 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 		w.Silo1.Attention = map[uint]float64{}
 	}
 	// 观测信号：各堡叛乱值 (阶段 1 后状态) 作为威胁评估。
+	// 00 卷裁决 6：功能开启时 Attention=Rebellion 特权直读 (无噪无延迟、且对
+	// 中段 Θ 结构性失明) 替换为 22-02 §3.7 分档翻转噪声观测 (稳定报告)；
+	// 功能关闭保持现状，逐位不变。逐堡按 SiloID 升序消耗 RNG (确定性纪律)。
 	for _, silo := range s.silos {
-		w.Silo1.Attention[silo.ID] = silo.Rebellion
+		if w.Silo1BlackBoxEnabled {
+			w.Silo1.Attention[silo.ID] = blackBoxAttentionReading(silo)
+		} else {
+			w.Silo1.Attention[silo.ID] = silo.Rebellion
+		}
 	}
 	// 一次性通牒：首个秩序压力越线的堡 (按 SiloID 升序)。仅在观察相位触发
 	// (WATCHING = 遗留脚本模式；LOCAL_SIM = 全模拟模式——两种模式下反应链都
@@ -545,6 +552,53 @@ func rebellionBand(v float64) string {
 		return "mid"
 	default:
 		return "low"
+	}
+}
+
+// stabilityReportFlipProb 稳定报告分档翻转概率 p_flip (22-02 §3.7)。
+// TODO(balance)：初值取 p_g0=0.15；φ 依赖项 (p_gφ·φ) 待 22-02 §4 伪装模型
+// 实现后补齐。
+const stabilityReportFlipProb = 0.15
+
+// blackBoxAttentionReading 00 卷裁决 6 的替换读数：叛乱分档 + 翻转噪声
+// (22-02 §3.7 稳定报告)。恰好消耗 1 次 DrawFloat64；调用方按 SiloID 升序
+// 逐堡调用 (确定性纪律)。
+func blackBoxAttentionReading(silo *model.Silo) float64 {
+	return attentionBandValue(blackBoxBandFlip(rebellionBand(silo.Rebellion), stabilityReportFlipProb))
+}
+
+// blackBoxBandFlip 分档翻转噪声：以概率 pFlip 落入相邻档，翻转概率均分给
+// 相邻档 (22-02 §3.7)。恰好消耗 1 次 DrawFloat64：u ≥ pFlip 同档；
+// u < pFlip 翻转——low/high 仅一个相邻档，mid 两个相邻档按 u 在翻转区间内
+// 的位置均分。
+func blackBoxBandFlip(trueBand string, pFlip float64) string {
+	u := engine.DrawFloat64()
+	if u >= pFlip {
+		return trueBand
+	}
+	switch trueBand {
+	case "low":
+		return "mid"
+	case "high":
+		return "mid"
+	default: // mid：相邻档 low/high 均分
+		if u < pFlip/2 {
+			return "low"
+		}
+		return "high"
+	}
+}
+
+// attentionBandValue 稳定报告档位代表值。TODO(balance)：档位中心
+// (rebellionBand 阈值 0.3/0.6 的区间中心)。
+func attentionBandValue(band string) float64 {
+	switch band {
+	case "high":
+		return 0.80
+	case "mid":
+		return 0.45
+	default:
+		return 0.15
 	}
 }
 
