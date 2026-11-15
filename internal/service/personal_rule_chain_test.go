@@ -246,143 +246,48 @@ func TestSuccessionSeedOpensCharterContact(t *testing.T) {
 	}
 }
 
-// TestPersonalRuleLinePlayableFromNewGame drives the line from a real new
-// game through the real gates: the survey unlocks through the Mayor
-// relation, the accept choice opens the feeding heartbeat, and the crisis
-// stage arrives with real unrest. The stand and the police shift depend on
-// natural legitimacy/obedience levels, so they are asserted only if the run
-// reaches their bars (the W <= 30 qualification side shares the RULE_OF_LAW
-// line's shock-channel dependency and is logged, not asserted).
+// TestPersonalRuleLinePlayableFromNewGame requires the real action policy to
+// settle PERSONAL_RULE from a fresh game. The policy uses only CreateGame,
+// ExecuteAction and PassTime to change the simulation; in particular it never
+// seeds authority, evidence, content completion or victory state.
 func TestPersonalRuleLinePlayableFromNewGame(t *testing.T) {
-	svc := newGatedService(t, filepath.Join(t.TempDir(), "personal-rule-playable.db"))
-	req := threeSiloRequest(3201)
-	req.Profession = "Supply"
-	if _, err := svc.CreateGame(req); err != nil {
-		t.Fatalf("create game: %v", err)
+	runner := playPersonalRuleAcceptance(t, 2401)
+	svc := runner.svc
+	status := svc.silo.VictoryStatus
+	if status == nil {
+		t.Fatal("PERSONAL_RULE line did not settle from the real new-game policy")
 	}
-	execute := func(action model.AgentAction) {
-		t.Helper()
-		outcome, err := svc.ExecuteAction(action)
-		if err != nil {
-			t.Fatalf("execute %+v: %v (AP=%v)", action, err, svc.agent.ActionPoints)
-		}
-		if !outcome.Result.Executed {
-			t.Fatalf("execute %+v rejected: %+v (AP=%v)", action, outcome.Result, svc.agent.ActionPoints)
-		}
+	if status.Decision == nil {
+		t.Fatalf("PERSONAL_RULE settlement has no arbitration decision: %+v", status)
 	}
-
-	execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
-	execute(model.AgentAction{
-		Type: model.ActionShareInfo, TargetDept: "Mayor",
-		FragmentIds: []string{svc.agent.KnownFragments[0]},
-	})
-
-	// Build the Mayor relation until the survey contact unlocks (real gates).
-	var survey *model.PlayerActionMeta
-	for i := 0; i < 12; i++ {
-		survey = actionByID(svc.availablePlayerActions(), "LEGITIMACY_SURVEY")
-		if survey != nil && survey.Enabled {
-			break
-		}
-		build := actionByID(svc.availablePlayerActions(), "action_build_connection")
-		if build != nil && build.Enabled {
-			execute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Mayor"})
-			continue
-		}
-		if _, err := svc.PassTime(1); err != nil {
-			t.Fatalf("advance for survey contact: %v", err)
-		}
+	if status.Decision.Selected != endingPersonalRule {
+		t.Fatalf("selected ending = %s, want %s; status=%+v decision=%+v",
+			status.Decision.Selected, endingPersonalRule, status, status.Decision)
 	}
-	if survey == nil || !survey.Enabled {
-		t.Fatalf("legitimacy survey never unlocked through real gates: %+v", survey)
+	if svc.silo.Authority.Judicial.PactLocked {
+		t.Fatal("pure PERSONAL_RULE line must not lock the public pact")
 	}
-	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "LEGITIMACY_SURVEY"})
-	accept := actionByID(svc.availablePlayerActions(), "MAYOR_ALLY_ACCEPT")
-	if accept == nil || !accept.Enabled {
-		t.Fatalf("ally accept choice not available after the survey: %+v", accept)
-	}
-	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "MAYOR_ALLY_ACCEPT"})
-
-	// Sustained circulation drives the feeding heartbeat. Deterministic
-	// policy, no policy RNG.
-	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
-	legitimacyPeak := 0.0
-	obediencePeak := 0.0
-	wMin := 100.0
-	for month := 1; month <= 100 && !svc.gameOver(); month++ {
-		if _, err := svc.PassTime(1); err != nil {
-			t.Fatalf("advance PERSONAL_RULE line at month %d: %v", month, err)
-		}
-		if svc.gameOver() {
-			break
-		}
-		if l := svc.silo.MayorLegitimacy(); l > legitimacyPeak {
-			legitimacyPeak = l
-		}
-		if o := svc.silo.Authority.PoliceObedience; o > obediencePeak {
-			obediencePeak = o
-		}
-		if w := svc.silo.Authority.W; w < wMin {
-			wMin = w
-		}
-
-		ap := svc.agent.ActionPoints
-		shareCost := model.ACTION_COSTS[model.ActionShareInfo]
-		gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
-		gatherFrom := rotation[month%len(rotation)]
-		switch {
-		case svc.silo.Rebellion >= 0.7:
-			// Lie low while rebellion runs hot.
-		case resourceAmount(svc.silo, "Supplies") < 2500 && ap >= 15:
-			svc.ExecuteAction(model.AgentAction{
-				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Supplies",
-			})
-		case ap >= shareCost:
-			dept := neediestDepartment(svc.silo)
-			fragment, ok := strongestShareableFactFor(svc.agent, departmentByAddress(svc.silo, dept))
-			if ok {
-				if outcome, err := svc.ExecuteAction(model.AgentAction{
-					Type: model.ActionShareInfo, TargetDept: dept, FragmentIds: []string{fragment},
-				}); err != nil || !outcome.Result.Executed {
-					svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
-				}
-			} else {
-				svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
-			}
-		case ap >= gatherCost:
-			svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
-		}
-	}
-
 	for _, key := range []string{
 		"player_actions:legitimacy_survey",
 		"player_actions:mayor_ally_accept",
 		"special:mayor_evidence_step",
 		"special:mayor_crisis_stage",
+		"special:mayor_public_stand",
+		"special:police_obedience_shift",
 	} {
 		if !contentTriggered(svc, key) {
-			t.Errorf("%s did not fire in the playable line (legitimacy_peak=%.2f obedience_peak=%.2f)",
-				key, legitimacyPeak, obediencePeak)
+			t.Errorf("%s did not fire in the real PERSONAL_RULE line", key)
 		}
 	}
-	// The stand is asserted only if legitimacy actually reached the bar.
-	if legitimacyPeak >= 0.5 && !contentTriggered(svc, "special:mayor_public_stand") {
-		t.Errorf("legitimacy peaked at %.2f but mayor_public_stand never fired", legitimacyPeak)
+
+	_, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
+	if err == nil || !strings.Contains(err.Error(), "the game has ended") {
+		t.Fatalf("post-terminal action must be rejected, got %v", err)
 	}
-	// The police shift is asserted only if obedience reached the bar after a stand.
-	if contentTriggered(svc, "special:mayor_public_stand") && obediencePeak >= 0.60 &&
-		!contentTriggered(svc, "special:police_obedience_shift") {
-		t.Errorf("obedience peaked at %.2f after a stand but the police shift never fired", obediencePeak)
-	}
-	if status := svc.silo.VictoryStatus; status != nil {
-		selected := ""
-		if status.Decision != nil {
-			selected = status.Decision.Selected
-		}
-		t.Logf("PERSONAL_RULE playable settled: ending=%s selected=%s legitimacy_peak=%.2f obedience_peak=%.2f w_min=%.1f regime=%s",
-			status.Type, selected, legitimacyPeak, obediencePeak, wMin, svc.silo.Authority.Judicial.Regime)
-	} else {
-		t.Logf("PERSONAL_RULE playable: no settlement within the window; legitimacy_peak=%.2f obedience_peak=%.2f w_min=%.1f regime=%s",
-			legitimacyPeak, obediencePeak, wMin, svc.silo.Authority.Judicial.Regime)
-	}
+
+	t.Logf("PERSONAL_RULE real new-game settlement: cal=%s ending=%s selected=%s pact_locked=%v W=%.2f legitimacy=%.2f obedience=%.2f regime=%s pool=%v",
+		runner.cal(), status.Type, status.Decision.Selected, svc.silo.Authority.Judicial.PactLocked,
+		svc.silo.Authority.W, svc.silo.MayorLegitimacy(), svc.silo.Authority.PoliceObedience,
+		svc.silo.Authority.Judicial.Regime, status.Decision.Pool)
+	t.Logf("PERSONAL_RULE terminal guard: subsequent ExecuteAction rejected: %v", err)
 }

@@ -560,7 +560,7 @@ func runRuleOfLawFamily(t *testing.T, line string, seed int64, withMayorRoute bo
 	return r.rec
 }
 
-func runPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRecord {
+func playPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRunner {
 	t.Helper()
 	// Judicial profession: the single-RNG stream means the profession choice
 	// shifts every downstream draw; this seed+profession station keeps its
@@ -716,7 +716,12 @@ func runPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRecord {
 		}
 	}
 	r.settle()
-	return r.rec
+	return r
+}
+
+func runPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRecord {
+	t.Helper()
+	return playPersonalRuleAcceptance(t, seed).rec
 }
 
 func TestEndingAcceptanceDump(t *testing.T) {

@@ -581,6 +581,7 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			"total_population": ctx.Silo.TotalPopulation,
 			"safeguard_risk":   ctx.Silo.SafeguardRisk,
 			"silo1_destroyed":  ctx.Silo.Silo1Destroyed,
+			"pact_locked":      ctx.Silo.Authority.Judicial.PactLocked,
 			"traits":           append([]string(nil), ctx.Silo.Traits...),
 			// G5: victory_check reads the escape group to apply the DEATH exception.
 			"escaped_population": ctx.Silo.EscapedGroup.Population,
@@ -1212,7 +1213,9 @@ func (e *GameEngine) applyVictoryStatusSet(silo *model.Silo, mutation MechanicMu
 		silo.VictoryStatus = nil
 		return
 	}
-	statusType := mutation.Field
+	// Mechanic fields are normalized to lowercase for metric names; ending IDs
+	// are enum values and must retain the canonical uppercase used by Go.
+	statusType := strings.ToUpper(mutation.Field)
 	silo.VictoryStatus = &model.VictoryStatus{
 		IsWon:       mutation.BoolValue,
 		Type:        statusType,
