@@ -1244,6 +1244,8 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 		Flags:           map[string]bool{},
 		ProgressStage:   s.initialProgressStage(),
 		UnlockedActions: []string{},
+		// 22 黑箱学习系列：权衡层功能开关持久化 (默认关闭 = 旧行为逐位一致)。
+		Silo1BlackBoxEnabled: req.Silo1BlackBox,
 	}
 
 	silos := []*model.Silo{silo}
@@ -3370,7 +3372,7 @@ func (s *GameService) publicWorldView() *model.WorldView {
 			{ID: s.silo.ID, Name: s.silo.Name, IsPlayer: s.silo.ID == s.world.PlayerSiloID},
 		}
 	}
-	view := &model.WorldView{
+	return &model.WorldView{
 		ID:                       s.world.ID,
 		Seed:                     s.world.Seed,
 		CurrentYear:              s.world.CurrentYear,
@@ -3392,9 +3394,8 @@ func (s *GameService) publicWorldView() *model.WorldView {
 		StationOperations:        append([]model.Silo1Operation(nil), s.world.StationOps.Operations...),
 		Silos:                    siloRefs,
 		Neighbors:                s.buildRumorViews(),
+		StewardshipEnabled:       s.world.Silo1BlackBoxEnabled,
 	}
-	s.populateStewardshipView(view)
-	return view
 }
 
 func (s *GameService) pendingOperationName() string {

@@ -314,24 +314,32 @@ type OperationTrack struct {
 	Operations          []Silo1Operation `json:"operations"`
 }
 
-// ============ 1 号权衡层 (22 设计卷、ADR-0015/0016) ============
+// ============ 1 号权衡层 (22 设计卷、22 黑箱学习系列、ADR-0016) ============
 //
 // 语义锚点：
 //   - 指标一 (Experiment)：实验履约与保留多样性——只影响"最终可保留地堡的
 //     多样性"，不判负、不处刑、不进玩家结局资格。
 //   - 指标二 (Lifespan)：剩余人员平均寿命——必然消耗的预算 (时间自然衰减 +
 //     行动档位扣减)，耗尽导致能力退化而非判负。
-//   - 指标三 (Assignments)：safeguard 风险度由 1 号指派 (无上限)，指派是黑箱
-//     下的带权随机决策；执行层的 selfPreservation 动力学在物理层 (engine 包)，
-//     决策层不得读其参数与真值，只能消费带延迟与噪声的观测。
+//   - 指标三 (每堡 BlackBox)：safeguard 风险度由 1 号在黑箱回合指派；隐藏量
+//     self_preservation (Θ) 与 20 箱后验信念 (b) 真值/信念分离存放
+//     (22 黑箱学习系列 01 卷 §8 权威)。
 //
-// 零值语义 = 未启用：调度器对零值状态早退，单堡与旧档行为逐位不变。
+// 零值语义 = 未启用：World.Silo1BlackBoxEnabled 为 false 时全部步骤跳过，
+// 零 RNG 消耗，单堡与旧档行为逐位不变。
 
 // 监控档位 (指标二的行动成本分档)。
 const (
 	Silo1PostureHigh       = "HIGH"        // 高度监控：成本最高
 	Silo1PostureNormal     = "NORMAL"      // 正常监控
 	Silo1PostureReportOnly = "REPORT_ONLY" // 只听取 IT 主任汇报：成本极低
+)
+
+// 黑箱观测信号类型 (22 黑箱学习系列 01 卷 §5.2)。堡内按类型升序产生与抽干。
+const (
+	BlackBoxSignalReceiptDelay = "receipt_delay" // Order 指令回执/执行回报时延，δ=1
+	BlackBoxSignalExecutionGap = "execution_gap" // 复核结果与本地呈报差异，δ=2
+	BlackBoxSignalLineTone     = "line_tone"     // IT 主任例行汇报态度，δ=2
 )
 
 // ExperimentMissRecord 一次"该清除而未清除"的履约缺口记录。
@@ -373,67 +381,66 @@ type LifespanStewardship struct {
 	Ledger map[string]int `json:"ledger,omitempty"`
 }
 
-// Silo1ObservationBatch 一份观测包 (物理层生成、决策层唯一输入，22 §6.3)。
-// 黑箱纪律：不得包含 selfPreservation 真值、执行强度或曲线参数；只含带延迟
-// 与噪声的可观测计数/读数。
-type Silo1ObservationBatch struct {
-	Year                int     `json:"year"`
-	Month               int     `json:"month"`
-	ReportedAnomalies   int     `json:"reported_anomalies"`   // IT 上报的异常数
-	DetectedPlayerOps   int     `json:"detected_player_ops"`  // 玩家动作被举报数
-	ReportGaps          int     `json:"report_gaps"`          // 应报未报的缺口 (阳奉阴违迹象)
-	DefianceSigns       int     `json:"defiance_signs"`       // 抗命/怠工征兆计数
-	UltimatumCompliance float64 `json:"ultimatum_compliance"` // 通牒后压力回落幅度 (观测到的服从效果)
-}
-
-// Silo1AssignmentState 1 号对单个地堡的指派与信念状态 (指标三)。
-//
-// 黑箱纪律：Belief* 字段是 1 号自己的猜测 (估计数值 + 不确定性)，不是物理层
-// 真值；决策层代码不得读 Silo.SelfPreservation 与曲线参数。
-type Silo1AssignmentState struct {
-	// AssignedRisk 1 号指派的风险度 (无上限)。与 Silo.SafeguardRisk 同值，
-	// 此处为决策层自持副本，便于日志与信念对照。
-	AssignedRisk float64 `json:"assigned_risk"`
-	// Posture 监控档位 (Silo1Posture*)。
-	Posture string `json:"posture,omitempty"`
-	// BeliefEffect 1 号对"指派能有效驱动执行"的估计 ± 不确定性 (猜的)。
-	BeliefEffect    float64 `json:"belief_effect"`
-	BeliefEffectUnc float64 `json:"belief_effect_unc"`
-	// BeliefDisaffection 1 号对底下自保倾向的估计 ± 不确定性 (猜的)。
-	BeliefDisaffection    float64 `json:"belief_disaffection"`
-	BeliefDisaffectionUnc float64 `json:"belief_disaffection_unc"`
-	// Incidents 自上次决策以来登记的后果事件计数 (原累加点改为决策输入，
-	// ADR-0016)：ignore/cover_collapse/deviation/it_overreach。
-	Incidents map[string]int `json:"incidents,omitempty"`
-	// ObsBuffer 观测包缓冲 (延迟队列，物理层追加、决策层消费后裁剪)。
-	ObsBuffer []Silo1ObservationBatch `json:"obs_buffer,omitempty"`
-	// LastDecisionYear/Month 上次指派决策时间 (冷却用)。
-	LastDecisionYear  int `json:"last_decision_year,omitempty"`
-	LastDecisionMonth int `json:"last_decision_month,omitempty"`
-}
-
-// Silo1DecisionRecord 一次指派决策的留痕 (归因 + "它在猜")。
-type Silo1DecisionRecord struct {
-	Year    int     `json:"year"`
-	Month   int     `json:"month"`
-	SiloID  uint    `json:"silo_id"`
-	Kind    string  `json:"kind"` // risk / posture
-	Chosen  string  `json:"chosen"`
-	Risk    float64 `json:"risk"`
-	Factors string  `json:"factors"` // 因子读数摘要 (可归因)
-	Belief  string  `json:"belief"`  // 信念估计 ± 不确定性 ("它在猜")
-	Weights string  `json:"weights"` // 候选权重表
-}
-
-// Silo1StewardshipState 1 号权衡层总状态 (World 级)。
+// Silo1StewardshipState 1 号权衡层世界侧状态 (指标一/二)。指标三的每堡状态
+// 在 Silo.BlackBox (真值与信念分离，22 黑箱学习系列 01 卷 §8)。
 type Silo1StewardshipState struct {
 	// Initialized 区分"零值旧档"与"已启用"。
-	Initialized bool                          `json:"initialized,omitempty"`
-	Experiment  ExperimentStewardship         `json:"experiment"`
-	Lifespan    LifespanStewardship           `json:"lifespan"`
-	Assignments map[uint]Silo1AssignmentState `json:"assignments,omitempty"`
-	// Decisions 决策日志 (环形保留最近 N 条，N 见实现常量)。
-	Decisions []Silo1DecisionRecord `json:"decisions,omitempty"`
+	Initialized bool                  `json:"initialized,omitempty"`
+	Experiment  ExperimentStewardship `json:"experiment"`
+	Lifespan    LifespanStewardship   `json:"lifespan"`
+}
+
+// BlackBoxPendingObservation 在途延迟观测信号 (22 黑箱学习系列 01 卷 §8)。
+// 世界侧 4.65 产生、1 号侧黑箱回合按到达月抽干；排序键 (到达月, 信号类型, Seq)。
+type BlackBoxPendingObservation struct {
+	ArriveYear     int     `json:"arrive_year"`
+	ArriveMonth    int     `json:"arrive_month"`
+	ReflectedYear  int     `json:"reflected_year"` // 反映月 (归因记录，审计用)
+	ReflectedMonth int     `json:"reflected_month"`
+	SignalType     string  `json:"signal_type"` // BlackBoxSignal*
+	Value          float64 `json:"value"`       // y ∈ [0,1]
+	Seq            int     `json:"seq"`         // 堡内单调序号 (排序第三键)
+}
+
+// BlackBoxLogEntry 一次黑箱指派决策的审计留痕 (22 黑箱学习系列 04 卷 §2)。
+// 审计渠道：不进玩家界面。
+type BlackBoxLogEntry struct {
+	Year     int     `json:"year"`
+	Month    int     `json:"month"`
+	ThetaHat float64 `json:"theta_hat"` // 决策时刻后验均值 (1 号自己的估计)
+	Lo       float64 `json:"lo"`        // 90% 质量最短区间下界
+	Hi       float64 `json:"hi"`        // 90% 质量最短区间上界
+	PDanger  float64 `json:"p_danger"`  // 危险区概率
+	ChosenR  float64 `json:"chosen_r"`
+	Utility  float64 `json:"utility"`
+	Reason   string  `json:"reason,omitempty"` // 理由码 exploit/explore/event (04 卷 §2.3)
+	Factors  string  `json:"factors"`          // 因子读数摘要 (可复盘依据)
+}
+
+// Silo1BlackBoxState 每堡黑箱状态 (22 黑箱学习系列 01 卷 §8)。
+// 真值 (Theta) 与信念 (Belief) 分字段存放：世界侧结算读 Theta，1 号决策侧
+// 只读 Belief 与观测——任何让决策读到 Theta 真值或 E 曲线参数的路径都是违规。
+type Silo1BlackBoxState struct {
+	// Initialized 零值 false → 功能未启用 = 旧档语义。
+	Initialized bool `json:"initialized,omitempty"`
+	// Theta 世界侧真实隐藏量 Θ (self_preservation)；0 = 完全按 Order 办事。
+	Theta float64 `json:"theta"`
+	// Belief N=20 箱后验 (长度 N)；nil → 首次启用时按先验初始化 (运行时，
+	// 不经升级器)。
+	Belief []float64 `json:"belief,omitempty"`
+	// LastAssignedRisk 上月 2b 指派、本月生效的 r；零值 → 首次启用月以当前
+	// SafeguardRisk 为生效 r (连续性)。
+	LastAssignedRisk float64 `json:"last_assigned_risk"`
+	// CurrentExecution 本月 E 生效槽 (4.55 写入，供 4.6 消费与审计回放)。
+	CurrentExecution float64 `json:"current_execution"`
+	// PendingObservations 在途延迟信号；零值 = 无在途。
+	PendingObservations []BlackBoxPendingObservation `json:"pending_observations,omitempty"`
+	// ObsSeq 堡内观测单调序号计数器。
+	ObsSeq int `json:"obs_seq,omitempty"`
+	// ProbeCooldown 探索冷却计数 (01 卷 §6.4 接口预留)；零值 = 可用。
+	ProbeCooldown int `json:"probe_cooldown,omitempty"`
+	// Log 决策审计日志，环形上限 24 (每堡独立)。
+	Log []BlackBoxLogEntry `json:"log,omitempty"`
 }
 
 // World 一局游戏的顶层聚合 (多堡研究 §2)。P0.5 起可挂两个完整模拟堡：
@@ -471,11 +478,14 @@ type World struct {
 	// LineShifts 改道日志：主线每次变化记一条 (含首次确立，From 为空)。
 	// 改道是玩家可见的事实——从《共证》改道《公议》不该是"某个数字悄悄不涨"。
 	LineShifts []LineShift `gorm:"type:text;serializer:json" json:"line_shifts,omitempty"`
-	// Silo1Stewardship 1 号权衡层 (22 设计卷)：指标一/二/三。零值 = 未启用，
-	// 调度器早退，单堡与旧档行为逐位不变。
+	// Silo1Stewardship 1 号权衡层 (22 设计卷)：指标一/二。零值 = 未启用。
 	Silo1Stewardship Silo1StewardshipState `gorm:"type:text;serializer:json" json:"silo1_stewardship"`
-	CreatedAt        time.Time             `json:"created_at"`
-	UpdatedAt        time.Time             `json:"updated_at"`
+	// Silo1BlackBoxEnabled 权衡层功能开关 (建档请求 Silo1BlackBox 持久化)：
+	// false (默认/旧档) → 黑箱回合、4.55/4.65、指标一/二全部跳过，零 RNG 消耗，
+	// 与既有 parity 基线逐位一致。
+	Silo1BlackBoxEnabled bool      `gorm:"default:false" json:"silo1_black_box_enabled"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // LineShift 一次主线变化：From 为空表示首次确立主线。
@@ -604,13 +614,12 @@ type Silo struct {
 	Name          string   `gorm:"size:100" json:"name"`
 	Traits        []string `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
 	SafeguardRisk float64  `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
-	// SelfPreservation 执行层自保倾向隐藏指标 (22 设计卷 §6.1，占位名，正式命名
-	// 待研究轨候选)。物理层真值：0 = 完全按 order 办事，→1 = 公开叫板。
-	// 黑箱纪律：1 号决策层代码禁止读取本字段，只能消费观测包。
-	SelfPreservation float64 `gorm:"default:0.0" json:"self_preservation"`
+	// BlackBox 每堡黑箱状态 (22 黑箱学习系列 01 卷 §8)：真值 Theta 与信念 Belief
+	// 分字段存放。零值 = 功能未启用 = 旧档语义。
+	BlackBox Silo1BlackBoxState `gorm:"type:text;serializer:json" json:"black_box"`
 	// SafeguardIncidents 引擎侧后果事件登记簿 (ADR-0016)：原直接累加风险度的各
-	// 累加点改为在此登记 (kind -> 计数)，由 1 号决策层月度消费并清零。引擎包
-	// 写入 (协议偏离/IT 过度干预/不作为/蒙蔽崩塌)，服务包读取。
+	// 累加点改为在此登记 (kind -> 计数)，经观测管线进入 1 号信念。引擎包写入
+	// (协议偏离/IT 过度干预/不作为/蒙蔽崩塌)，观测管线消费。
 	SafeguardIncidents map[string]int          `gorm:"type:text;serializer:json" json:"safeguard_incidents,omitempty"`
 	TotalPopulation    int                     `gorm:"default:10000" json:"total_population"`
 	Legitimacy         float64                 `gorm:"default:1.0" json:"legitimacy"`                      // Compatibility mirror of Mayor.Legitimacy.
@@ -1403,6 +1412,9 @@ type CreateGameRequest struct {
 	Pacing       *WorldPacing        `json:"pacing,omitempty"`        // 可选：节奏定制 (缺省 = 全 1.0，行为与历史逐位一致)
 	Neighbor     *NeighborSiloConfig `json:"neighbor,omitempty"`      // Optional Silo 18; nil preserves the legacy path.
 	IncludeSilo1 bool                `json:"include_silo1,omitempty"` // Opt in to a fully simulated peer Silo 1.
+	// Silo1BlackBox 权衡层功能开关 (22 黑箱学习系列)：开启后 1 号黑箱回合、
+	// 4.55/4.65 步骤与指标一/二启用；关闭 (默认) 时行为与既有基线逐位一致。
+	Silo1BlackBox bool `json:"silo1_black_box,omitempty"`
 }
 
 // NeighborSiloConfig 双地堡模式的启用开关。第二堡固定为 18 号地堡并跑
@@ -1459,27 +1471,10 @@ type WorldView struct {
 	StationOperations        []Silo1Operation `json:"station_operations,omitempty"`
 	Silos                    []WorldSiloRef   `json:"silos"`
 	Neighbors                []RumorView      `json:"neighbors,omitempty"` // 非玩家堡的迷雾视图 (P0.5)
-	// 1 号权衡层最小可读呈现 (22 设计卷 §8)：两个指标 + 指派决策依据。
-	// 未启用 (单堡/旧档) 时 StewardshipEnabled 为 false，其余字段不下发。
-	StewardshipEnabled   bool                       `json:"stewardship_enabled,omitempty"`
-	Silo1Experiment      *ExperimentStewardshipView `json:"silo1_experiment,omitempty"`
-	Silo1Lifespan        *LifespanStewardshipView   `json:"silo1_lifespan,omitempty"`
-	Silo1RecentDecisions []Silo1DecisionRecord      `json:"silo1_recent_decisions,omitempty"`
-}
-
-// ExperimentStewardshipView 指标一的玩家可见视图 (情报口径)。
-type ExperimentStewardshipView struct {
-	FulfillmentDeficit float64 `json:"fulfillment_deficit"`
-	DiversityLoss      float64 `json:"diversity_loss"`
-	ScheduledCount     int     `json:"scheduled_count"`
-	ClearedCount       int     `json:"cleared_count"`
-	MissedCount        int     `json:"missed_count"`
-}
-
-// LifespanStewardshipView 指标二的玩家可见视图 (情报口径)。
-type LifespanStewardshipView struct {
-	AvgLifespan float64         `json:"avg_lifespan"`
-	Postures    map[uint]string `json:"postures,omitempty"`
+	// 1 号权衡层对玩家是黑箱 (22 黑箱学习系列 04 卷)：Θ、信念与决策日志一律不进
+	// 玩家界面，玩家经 Order 渠道感知 r 档位变化 (故事事件)。这里只下发"功能是
+	// 否启用"供呈现端决定要不要渲染既有的 1 号动向骨架。
+	StewardshipEnabled bool `json:"stewardship_enabled,omitempty"`
 }
 
 // GameState 后端权威游戏状态快照 (返回给前端)

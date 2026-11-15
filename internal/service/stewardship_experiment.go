@@ -8,9 +8,6 @@ package service
 
 import "silo40/internal/model"
 
-// stewardshipLifespanStart 平均寿命初始值 (年)。TODO(balance)
-const stewardshipLifespanStart = 20.0
-
 // stewardshipExperimentMonth 指标一月度回合 (格一实现)。
 // 职责：清除义务登记 (通牒签发)、清除成立检测 (DEATH)、miss 结算、双指标衰减。
 func (s *GameService) stewardshipExperimentMonth(logs *[]string, stories *[]model.StoryEvent) {

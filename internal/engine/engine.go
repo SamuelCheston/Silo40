@@ -343,8 +343,16 @@ func (e *GameEngine) RunLocalPhase(silo *model.Silo, agent *model.Agent, deltaYe
 	// 4.5 Order 条款结算：三类偏离、J 与介入链 (确定性，无 RNG)。
 	e.AdvanceProtocolMonthly(silo)
 
+	// 4.55 黑箱 Θ/E 结算 (22 黑箱学习系列 01 卷 §2.2)：读上月指派 LastAssignedRisk，
+	// 结算 Θ 并计算本月执行强度 E 写入生效槽。功能关闭时跳过，零 RNG。
+	UpdateBlackBoxMonthly(silo)
+
 	// 4.6 IT 权威回合：二元联盟维护与隐蔽动作 (§5)。
 	e.RunITAuthorityMonthly(silo, agent)
+
+	// 4.65 黑箱观测产生 (22 黑箱学习系列 01 卷 §2.2)：反映结算后的 Θ，按延迟入队。
+	// 唯一 RNG 消耗点 (门控：功能关闭或信号当月不产生则零消耗)。
+	GenerateBlackBoxObservations(silo)
 
 	// 4.7 部门戒备月度冷却：严查会过去 (20 分册 §4.4)，T2-3/T1-2 的
 	// 拒绝与摩擦随回落自动解除。
