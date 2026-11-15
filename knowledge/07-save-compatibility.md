@@ -2,7 +2,7 @@
 
 ## 1. 当前版本与保存对象
 
-当前 `model.CurrentSaveVersion = 7`。一个存档是单活跃 World 的完整对象图：驻地、Silo 1、Silo 18、各堡 Agent、事件历史、内容状态，以及 World 中的跨堡队列、operation、历史影响、ProgressStage、UnlockedActions 和结局 Decision。
+当前 `model.CurrentSaveVersion = 14`。一个存档是单活跃 World 的完整对象图：驻地、Silo 1、Silo 18、各堡 Agent、事件历史、内容状态，以及 World 中的跨堡队列、operation、历史影响、ProgressStage、UnlockedActions、线信息架构和结局 Decision。
 
 普通开局必须满足驻地身份不变量：玩家、Agent.SiloID、Agent.StationSiloID 指向同一驻地；Silo 40 不得出现在 silo 表中；驻地不能带 Silo 1/Silo 18 特质。
 
@@ -17,9 +17,16 @@
 | v4 | 派系持久身份 | 升级 v5，初始化 playable operation/历史字段 |
 | v5 | 旧可试玩多堡 | **显式拒绝**：旧身份模型不能续玩 |
 | v6 | 外派驻地三堡 | **显式拒绝**：缺行动门控和多实体结局状态 |
-| v7 | 门控、永久解锁、加权仲裁 | 当前唯一可正常 Resume 的持久化版本 |
+| v7 | 门控、永久解锁、加权仲裁 | 升级 v8，回填独立 Mayor/IT/Judicial 权威状态 |
+| v8 | 权威状态 | 升级 v9，初始化结局链机制底座 |
+| v9 | 结局链机制底座 | 升级 v10，逃出准备账本与顶层立场零值起步 |
+| v10 | 逃出准备 | 升级 v11，堡外维持状态零值起步 |
+| v11 | 堡外维持 | 升级 v12，主线与改道日志由既有事实重推 |
+| v12 | 线信息架构 | 升级 v13，谈判状态零值起步 |
+| v13 | 谈判/妥协层 | 升级 v14，部门信念渗透计数与成熟标记零值起步 |
+| v14 | 时间渗透与当前完整对象图 | 当前可正常 Resume 的持久化版本 |
 
-所谓 legacy 升级链是 `legacy → v1 → v2 → v3 → v4 → v5`，**不会把旧档伪迁移成可玩的 v7**。到 v5 后，Resume 按身份语义断裂拒绝；v6 也没有伪造 v7 迁移。高于 v7 或其他异常版本同样拒绝。
+所谓 legacy 升级链是 `legacy → v1 → v2 → v3 → v4 → v5`，**不会把旧档伪迁移成可玩的 v14**。到 v5 后，Resume 按身份语义断裂拒绝；v6 也没有伪造后续版本迁移。v7–v13 则按上表逐级升级到 v14；高于 v14 或其他异常版本同样拒绝。
 
 ## 3. 升级安全语义
 
@@ -62,7 +69,7 @@ SQLite Resume 会：
 - 验证驻地身份与 40 号不存在。
 - 重建引擎、内容 handler、receivedSignals、LLM 回放状态。
 
-v7 能恢复三堡、阶段、永久解锁、operation、历史影响和结局仲裁记录。以下内容仍不是完整续跑状态：
+v14 能恢复三堡、阶段、永久解锁、operation、历史影响、结局仲裁、逃出准备与堡外维持、线信息架构、谈判状态和部门信念渗透进度。以下内容仍不是完整续跑状态：
 
 - `delayTasks/delayCounter` 重建为空，未到期普通延迟任务会丢失。
 - `pendingOperation` 清空，未完成的 UI 操作不会续跑。
@@ -82,6 +89,6 @@ ContentEventDefinition 启动时从当前 events 同步，删除的定义禁用�
 1. 破坏性模型/语义变化提升 CurrentSaveVersion 并写版本历史。
 2. 明确选择“真实迁移”或“显式拒绝”，不伪造兼容。
 3. 真实迁移保留备份、事务、回读和失败回滚。
-4. 覆盖三堡对象图、ID 偏移、operation、门控、Decision 与正典状态。
-5. 测试空档、v7、v5/v6、高版本、缺 World、身份错误、迁移失败。
+4. 覆盖三堡对象图、ID 偏移、operation、门控、Decision、正典状态及当前版本的逃出、谈判和渗透字段。
+5. 测试空档、v7–v13 逐级迁移、v5/v6、高版本、缺 World、身份错误、迁移失败。
 6. 做存读档与同 seed 对照，同时披露 RNG/延迟任务仍未完整恢复的事实。
