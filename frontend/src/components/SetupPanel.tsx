@@ -21,13 +21,15 @@ export const AVAILABLE_TRAITS: TraitOption[] = [
 export const AVAILABLE_DEPARTMENTS = [
     { id: 'Mayor', name: 'Mayor', description: '行动增加3倍怀疑度。开局极高威望，获得全阶层人脉。' },
     { id: 'Judicial', name: 'Judicial', description: '有司法审判权。开局极低威望，获得全阶层人脉。' },
-    { id: 'IT', name: 'IT', description: '行动不增加怀疑度，但会增加Safeguard风险。开局极低威望，掌握全碎片，司法部满人脉。' },
+    // 描述必须与实际开局一致：玩家知识上限由 limitPlayerKnowledge 统一为
+    // 本部门 2 份碎片，"掌握全碎片"是旧文案，会误导职业选择。
+    { id: 'IT', name: 'IT', description: '行动不增加怀疑度，但会增加Safeguard风险。开局极低威望，与司法部满人脉、本部门 40% 人脉。' },
     { id: 'Police', name: 'Police', description: '行动随机获得5-9折怀疑度减免。与市长互满人脉，其余精英15%、平民10%人脉。' },
     { id: 'Medical', name: 'Medical', description: '开局极低威望，获得精英15%、平民10%人脉。随时间推移会随机获得信息碎片。' },
     { id: 'Supply', name: 'Supply', description: '在清洁刑罚危机中可以保护目标免死。开局与其他平民互有15%人脉。' },
     { id: 'Mechanical', name: 'Mechanical', description: '最高技术平民，组织平民时获得极高额外增益。开局与其他平民互有15%人脉。' },
     { id: 'Mines', name: 'Mines', description: '极低威望，但行动怀疑度打0.05折。开局与其他平民互有15%人脉。' },
-    { id: 'Agricultural', name: 'Agricultural', description: '暂无特殊效果（待更新）。开局与其他平民互有15%人脉。' },
+    { id: 'Agricultural', name: 'Agricultural', description: '标准平民部门，无特殊效果。开局与其他平民互有15%人脉。' },
 ];
 
 interface SetupPanelProps {
@@ -65,12 +67,15 @@ export const SetupPanel: React.FC<SetupPanelProps> = ({ onComplete }) => {
             <Heading size="md" color="blue.700">定制你的 Silo 40 特工</Heading>
             <HStack w="full" justify="space-between" bg="blue.50" p={4} borderRadius="md" border="1px solid" borderColor="blue.100">
                 <Text fontSize="lg" fontWeight="bold" color="blue.800">
-                    可用选择点数 (Selection Points): 
+                    可用选择点数 (Selection Points):
                 </Text>
                 <Badge colorPalette={remainingPoints > 0 ? "blue" : "red"} fontSize="xl" px={3} py={1} borderRadius="full">
                     {remainingPoints} / {MAX_POINTS}
                 </Badge>
             </HStack>
+            <Text fontSize="xs" color="gray.500" w="full" mt={-3}>
+                点数用于购买特质；未花完的点数开局即作废，不会转化为其他优势。
+            </Text>
 
             <Box w="full">
                 <Heading size="sm" mb={4} color="gray.700" borderBottom="2px solid" borderColor="gray.100" pb={2}>
