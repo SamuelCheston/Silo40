@@ -14,6 +14,7 @@ import (
 type actionCondition struct {
 	All            []actionCondition `json:"all,omitempty"`
 	Any            []actionCondition `json:"any,omitempty"`
+	Not            *actionCondition  `json:"not,omitempty"`
 	EventCompleted string            `json:"event_completed,omitempty"`
 	StageAtLeast   string            `json:"stage_at_least,omitempty"`
 	Metric         string            `json:"metric,omitempty"`
@@ -28,11 +29,12 @@ type actionStage struct {
 }
 
 type actionGate struct {
-	ID         string          `json:"id,omitempty"`
-	ActionType string          `json:"action_type,omitempty"`
-	Unlock     actionCondition `json:"unlock"`
-	Available  actionCondition `json:"available"`
-	Reason     string          `json:"reason,omitempty"`
+	ID                  string          `json:"id,omitempty"`
+	ActionType          string          `json:"action_type,omitempty"`
+	Unlock              actionCondition `json:"unlock"`
+	Available           actionCondition `json:"available"`
+	HideWhenUnavailable bool            `json:"hide_when_unavailable,omitempty"`
+	Reason              string          `json:"reason,omitempty"`
 }
 
 type actionGateFile struct {
@@ -149,6 +151,11 @@ func validateActionCondition(condition actionCondition) error {
 			return err
 		}
 	}
+	if condition.Not != nil {
+		if err := validateActionCondition(*condition.Not); err != nil {
+			return err
+		}
+	}
 	if condition.Metric != "" && !supportedActionMetric(condition.Metric) {
 		return fmt.Errorf("unsupported metric %q", condition.Metric)
 	}
@@ -216,6 +223,9 @@ func (s *GameService) refreshActionProgress() {
 }
 
 func (s *GameService) evaluateActionCondition(condition actionCondition) bool {
+	if condition.Not != nil && s.evaluateActionCondition(*condition.Not) {
+		return false
+	}
 	for _, child := range condition.All {
 		if !s.evaluateActionCondition(child) {
 			return false
@@ -374,6 +384,9 @@ func (s *GameService) applyActionGate(meta model.PlayerActionMeta) (model.Player
 		return meta, false
 	}
 	if !s.evaluateActionCondition(gate.Available) {
+		if gate.HideWhenUnavailable {
+			return meta, false
+		}
 		meta.Enabled = false
 		meta.Visibility = model.ActionUnlocked
 		meta.DisabledReason = gate.Reason

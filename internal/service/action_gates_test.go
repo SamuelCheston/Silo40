@@ -55,6 +55,102 @@ func actionByID(actions []model.PlayerActionMeta, id string) *model.PlayerAction
 	return nil
 }
 
+// TestActionChoiceGroupsAreExclusive is a gate unit test: it seeds completion
+// facts instead of claiming to drive each story chain as a playable run.
+func TestActionChoiceGroupsAreExclusive(t *testing.T) {
+	type choice struct {
+		id       string
+		eventKey string
+	}
+	groups := []struct {
+		name        string
+		unlockEvent string
+		choices     []choice
+	}{
+		{
+			name: "charter_contact", unlockEvent: "player_actions:charter_contact_offer",
+			choices: []choice{
+				{id: "CHARTER_CONTACT_ACCEPT", eventKey: "player_actions:charter_contact_accept"},
+				{id: "CHARTER_CONTACT_DECLINE", eventKey: "player_actions:charter_contact_decline"},
+				{id: "CHARTER_CONTACT_DEFER", eventKey: "player_actions:charter_contact_defer"},
+			},
+		},
+		{
+			name: "mayor_ally", unlockEvent: "player_actions:legitimacy_survey",
+			choices: []choice{
+				{id: "MAYOR_ALLY_ACCEPT", eventKey: "player_actions:mayor_ally_accept"},
+				{id: "MAYOR_ALLY_BYPASS", eventKey: "player_actions:mayor_ally_bypass"},
+			},
+		},
+		{
+			name: "succession", unlockEvent: "special:mayor_public_stand",
+			choices: []choice{
+				{id: "SUCCESSION_PURE_RULE", eventKey: "player_actions:succession_pure_rule"},
+				{id: "SUCCESSION_SEED_PROCEDURE", eventKey: "player_actions:succession_seed_procedure"},
+			},
+		},
+		{
+			name: "pre_fall", unlockEvent: "special:pre_fall_choice",
+			choices: []choice{
+				{id: "PRE_FALL_LOYALTY_MOBILIZATION", eventKey: "player_actions:pre_fall_loyalty_mobilization"},
+				{id: "PRE_FALL_TOTAL_RIOT", eventKey: "player_actions:pre_fall_total_riot"},
+				{id: "PRE_FALL_OPEN_INQUIRY", eventKey: "player_actions:pre_fall_open_inquiry"},
+			},
+		},
+		{
+			name: "route_survey", unlockEvent: "player_actions:route_survey_offer",
+			choices: []choice{
+				{id: "ROUTE_SURVEY_ACCEPT", eventKey: "player_actions:route_survey_accept"},
+				{id: "ROUTE_SURVEY_DECLINE", eventKey: "player_actions:route_survey_decline"},
+				{id: "ROUTE_SURVEY_DEFER", eventKey: "player_actions:route_survey_defer"},
+			},
+		},
+		{
+			name: "escape_window", unlockEvent: "special:escape_window_open",
+			choices: []choice{
+				{id: "ESCAPE_WINDOW_ORDERLY", eventKey: "player_actions:escape_window_orderly"},
+				{id: "ESCAPE_WINDOW_RIOT", eventKey: "player_actions:escape_window_riot"},
+			},
+		},
+	}
+
+	for _, group := range groups {
+		for _, selected := range group.choices {
+			t.Run(group.name+"/"+selected.id, func(t *testing.T) {
+				svc := newGatedService(t, filepath.Join(t.TempDir(), "choice-exclusive.db"))
+				if _, err := svc.CreateGame(threeSiloRequest(7001)); err != nil {
+					t.Fatalf("create game: %v", err)
+				}
+				completeGateEvent(svc, group.unlockEvent)
+				for _, option := range group.choices {
+					meta := actionByID(svc.availablePlayerActions(), option.id)
+					if meta == nil || !meta.Enabled || meta.Visibility != model.ActionAvailable {
+						t.Fatalf("%s must initially be available: %+v", option.id, meta)
+					}
+				}
+
+				completeGateEvent(svc, selected.eventKey)
+				actions := svc.availablePlayerActions()
+				for _, option := range group.choices {
+					if !svc.actionUnlocked(option.id) {
+						t.Fatalf("%s lost its permanent unlock after %s", option.id, selected.id)
+					}
+					if option.id == selected.id {
+						continue
+					}
+					if meta := actionByID(actions, option.id); meta != nil {
+						t.Fatalf("%s remains visible after %s was selected: %+v", option.id, selected.id, meta)
+					}
+					_, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: option.id})
+					if err == nil || !strings.Contains(err.Error(), "同一组抉择已选定其他项") {
+						t.Fatalf("%s bypass after %s was not rejected by its gate: %v", option.id, selected.id, err)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestActionGatesStartNarrowAndUnlockFromStoryStage(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "gates-story.db")
 	svc := newGatedService(t, dbPath)
