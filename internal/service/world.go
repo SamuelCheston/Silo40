@@ -68,6 +68,12 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 		phaseDeref := derefStories(phaseStories)
 		stampSilo(phaseDeref, silo)
 		stories = append(stories, phaseDeref...)
+		// 18 设计卷：谈判层月度低强度通气 (各堡本地结算后、时钟推进前)。
+		// 仅当该堡信道畅通时执行回合并消耗 RNG；未开信道的堡逐位不变。
+		negotiationLogs, negotiationStories := s.runNegotiationMonth(silo)
+		logs = append(logs, negotiationLogs...)
+		stampSilo(negotiationStories, silo)
+		stories = append(stories, negotiationStories...)
 	}
 
 	// 阶段 2a：跨堡队列派发 (各堡本地结算后、时钟推进前)。

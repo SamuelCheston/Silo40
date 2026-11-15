@@ -79,6 +79,28 @@ func ApplyRebellionLegitimacyErosion(silo *model.Silo, deltaYears float64) {
 	silo.SetMayorLegitimacy(silo.MayorLegitimacy() - rebellionLegitimacyErosion*silo.Rebellion*deltaYears)
 }
 
+// AddTopStanceGuarantee 服务层写入保障可信度的导出入口 (夹 [0,1])。
+// 与内容效果 top_stance_guarantee 走同一实现。
+func AddTopStanceGuarantee(silo *model.Silo, delta float64) {
+	addTopStanceGuarantee(silo, delta)
+}
+
+// ReevalTopStanceAfterTakeover 叛乱方接管市长职位后重估市长立场 (18 §3.7)。
+// 顶层改由叛乱方主导：权重输入显著偏向配合，但仍是带权取样而非写死——
+// 接管不保证配合，只改变权重。随机源走引擎单一 RNG 流。TODO(balance)
+func ReevalTopStanceAfterTakeover(silo *model.Silo, world *model.World) {
+	if silo == nil {
+		return
+	}
+	silo.TopStance.Initialized = true
+	w := mayorStanceWeights(silo, world)
+	w.block -= 0.40     // TODO(balance)
+	w.nonblock += 0.20  // TODO(balance)
+	w.cooperate += 0.50 // TODO(balance)
+	silo.TopStance.Mayor = drawStance(w)
+	silo.TopStance.Reevaluations++
+}
+
 // mayorPathWeights 市长三条路的未归一权重。
 type mayorPathWeights struct {
 	suppress float64
@@ -446,6 +468,260 @@ func NegotiationFactorSummary(silo *model.Silo) string {
 	return fmt.Sprintf("正统性 %.2f、叛乱 %.2f、W %.0f、警察服从 %.2f、保障可信度 %.2f、秩序压力 %.2f、性情 %s、拖延 %d 回合",
 		silo.MayorLegitimacy(), silo.Rebellion, silo.Authority.W, silo.Authority.PoliceObedience,
 		silo.TopStance.Guarantee, OrderPressure(silo), silo.Negotiation.MayorDisposition, silo.Negotiation.StalledRounds)
+}
+
+// NegotiationRoundResult 一个谈判回合的结构化结果 (服务层转叙事)。
+// 指针字段为 nil 表示本回合没有发生对应决策。
+type NegotiationRoundResult struct {
+	Kind                 string
+	MayorPath            string
+	MayorWeights         map[string]float64
+	MayorFactors         string
+	SuppressBrokeChannel bool   // 镇压打断了信道
+	ConcedeOfferMade     bool   // 市长开出了妥协提案
+	RebelAccept          *bool  // 叛乱方接受决策 (仅市长主动让步时发生)
+	RebelWeights         map[string]float64
+	RebelPosture         string // 叛乱方姿态 (仅市长路径为谈判时抽取)
+	RebelPostureWeights  map[string]float64
+	CompromiseEstablished bool
+	ITReaction           string
+	ITWeights            map[string]float64
+	ITExposedChannel     bool // IT 破坏导致信道曝光
+}
+
+// NegotiationRound 执行一个完整回合并施加状态改变。
+//
+// 固定取样顺序 (确定性纪律)：
+//
+//	市长路径 → [镇压: 信道断裂抽取 | 妥协: 叛乱方接受抽取 | 谈判: 叛乱方姿态抽取]
+//	          → IT 反应 → [破坏: 信道曝光抽取]
+//
+// 未激活 (信道未开/已崩塌/已妥协) 的堡不进入本函数——调用方负责守卫，
+// 保证未开信道的运行不消耗任何 RNG。
+func NegotiationRound(silo *model.Silo, world *model.World, kind string) *NegotiationRoundResult {
+	if silo == nil || !silo.Negotiation.NegotiationActive() {
+		return nil
+	}
+	negotiation := &silo.Negotiation
+	result := &NegotiationRoundResult{Kind: kind}
+	year, month := silo.CurrentYear, silo.CurrentMonth
+
+	// ---- 1) 市长路径决策 ----
+	factors := NegotiationFactorSummary(silo)
+	pathWeights := MayorPathWeights(silo, world, kind)
+	path := DrawMayorPath(pathWeights)
+	negotiation.MayorPath = path
+	negotiation.Rounds++
+	result.MayorPath = path
+	result.MayorWeights = NormalizeMayorPath(pathWeights)
+	result.MayorFactors = factors
+
+	pathOutcome := ""
+	switch path {
+	case model.NegotiationPathSuppress:
+		silo.Rebellion = clampUnit(silo.Rebellion + negotiationSuppressRebellionDelta)
+		addPanicAllProfessions(silo, negotiationSuppressPanicDelta)
+		silo.SetMayorLegitimacy(silo.MayorLegitimacy() + negotiationSuppressLegitimacyDelta)
+		addTopStanceGuarantee(silo, negotiationSuppressGuaranteeDelta)
+		negotiation.SuppressRounds++
+		negotiation.StalledRounds = 0
+		negotiation.MayorLean = clampUnit(negotiation.MayorLean + negotiationLeanSuppress)
+		// 镇压背信：叛乱方在桌条款撤回。
+		if negotiation.OfferOnTable && negotiation.OfferedBy == "rebels" {
+			negotiation.OfferOnTable = false
+			negotiation.OfferedBy = ""
+			negotiation.OfferTerms = ""
+		}
+		if DrawFloat64() < negotiationSuppressBreakChance {
+			negotiation.ChannelOpen = false
+			negotiation.Closed = true
+			negotiation.CloseReason = model.NegotiationClosedCrackdown
+			result.SuppressBrokeChannel = true
+			pathOutcome = "镇压打断了信道"
+		} else {
+			pathOutcome = "镇压后信道勉强维持"
+		}
+	case model.NegotiationPathTalk:
+		negotiation.StalledRounds++
+		negotiation.MayorLean = clampUnit(negotiation.MayorLean + negotiationLeanDrift(negotiation.MayorDisposition))
+		pathOutcome = "保持通气，无决议"
+	case model.NegotiationPathConcede:
+		negotiation.MayorLean = clampUnit(negotiation.MayorLean + negotiationLeanConcede)
+		if negotiation.OfferOnTable && negotiation.OfferedBy == "rebels" {
+			// 市长接受叛乱方已在桌上的条款：提议方不否决自己的提案，
+			// 妥协直接成立。
+			establishCompromise(silo, world)
+			result.CompromiseEstablished = true
+			pathOutcome = "市长接受了叛乱方的条款，妥协成立"
+		} else {
+			// 市长主动让步：开出提案，随后由叛乱方带权决定是否接受。
+			negotiation.OfferOnTable = true
+			negotiation.OfferedBy = "mayor"
+			negotiation.OfferTerms = "赦免名单、职能保留、不清算求生者"
+			result.ConcedeOfferMade = true
+			acceptWeights := RebelAcceptWeights(silo)
+			accepted := DrawRebelAccept(acceptWeights)
+			result.RebelAccept = &accepted
+			result.RebelWeights = NormalizeRebelAccept(acceptWeights)
+			if accepted {
+				establishCompromise(silo, world)
+				result.CompromiseEstablished = true
+				pathOutcome = "市长开出提案，叛乱方接受，妥协成立"
+				negotiation.AppendLogEntry(model.NegotiationLogEntry{
+					Year: year, Month: month, Decider: "rebels", Decision: "accept",
+					Weights: result.RebelWeights, Factors: factors,
+					Outcome: "接受市长妥协提案",
+				})
+			} else {
+				negotiation.OfferOnTable = false
+				negotiation.OfferedBy = ""
+				negotiation.OfferTerms = ""
+				pathOutcome = "市长开出提案，叛乱方拒绝，提案作废"
+				negotiation.AppendLogEntry(model.NegotiationLogEntry{
+					Year: year, Month: month, Decider: "rebels", Decision: "reject",
+					Weights: result.RebelWeights, Factors: factors,
+					Outcome: "拒绝市长妥协提案",
+				})
+			}
+		}
+	}
+	negotiation.AppendLogEntry(model.NegotiationLogEntry{
+		Year: year, Month: month, Decider: "mayor", Decision: path,
+		Weights: result.MayorWeights, Factors: factors, Outcome: pathOutcome,
+	})
+
+	// ---- 2) 叛乱方姿态 (市长路径为谈判且回合仍活跃时) ----
+	if path == model.NegotiationPathTalk && negotiation.NegotiationActive() {
+		postureWeights := RebelPostureWeights(silo)
+		posture := DrawRebelPosture(postureWeights)
+		negotiation.RebelPosture = posture
+		result.RebelPosture = posture
+		result.RebelPostureWeights = NormalizeRebelPosture(postureWeights)
+		postureOutcome := ""
+		switch posture {
+		case model.NegotiationPosturePress:
+			silo.Rebellion = clampUnit(silo.Rebellion + negotiationPressRebellionDelta)
+			postureOutcome = "叛乱方施压"
+		case model.NegotiationPostureProbe:
+			negotiation.MayorLean = clampUnit(negotiation.MayorLean + negotiationProbeLeanDelta)
+			postureOutcome = "叛乱方试探市长倾向"
+		default:
+			postureOutcome = "叛乱方酝酿递出条款"
+		}
+		negotiation.AppendLogEntry(model.NegotiationLogEntry{
+			Year: year, Month: month, Decider: "rebels", Decision: posture,
+			Weights: result.RebelPostureWeights, Factors: factors, Outcome: postureOutcome,
+		})
+	}
+
+	// ---- 3) IT 反应 (回合仍活跃时) ----
+	if negotiation.NegotiationActive() {
+		itWeights := ITReactionWeights(silo, world)
+		reaction := DrawITReaction(itWeights)
+		result.ITReaction = reaction
+		result.ITWeights = NormalizeITReaction(itWeights)
+		itOutcome := ""
+		switch reaction {
+		case model.NegotiationITUndermine:
+			addTopStanceGuarantee(silo, negotiationUndermineGuaranteeDelta)
+			if DrawFloat64() < negotiationExposureChance {
+				negotiation.ChannelOpen = false
+				negotiation.Closed = true
+				negotiation.CloseReason = model.NegotiationClosedITExposure
+				addPanicAllProfessions(silo, negotiationExposurePanicDelta)
+				silo.Rebellion = clampUnit(silo.Rebellion + negotiationExposureRebellionDelta)
+				result.ITExposedChannel = true
+				itOutcome = "IT 破坏导致信道曝光"
+			} else {
+				itOutcome = "IT 暗中破坏，保障可信度受损"
+			}
+		case model.NegotiationITStandAside:
+			itOutcome = "IT 不干涉"
+		default:
+			itOutcome = "IT 观望"
+		}
+		negotiation.AppendLogEntry(model.NegotiationLogEntry{
+			Year: year, Month: month, Decider: "it", Decision: reaction,
+			Weights: result.ITWeights, Factors: factors, Outcome: itOutcome,
+		})
+	}
+
+	return result
+}
+
+// establishCompromise 妥协成立的即时效果 (18 §3.6)：保障可信度增量、
+// 诉求部分兑现 (叛乱回落但组织能力不受损)、立场重估 (保障输入已抬升)。
+// 妥协不发放胜利：只改变立场权重输入。
+func establishCompromise(silo *model.Silo, world *model.World) {
+	negotiation := &silo.Negotiation
+	negotiation.CompromiseEstablished = true
+	negotiation.CompromiseYear = silo.CurrentYear
+	negotiation.CompromiseMonth = silo.CurrentMonth
+	addTopStanceGuarantee(silo, negotiationCompromiseGuaranteeDelta)
+	silo.Rebellion = clampUnit(silo.Rebellion + negotiationCompromiseRebellionDelta)
+	ReevalTopStance(silo, world, "both")
+}
+
+// PlaceRebelTerms 叛乱方把妥协条款摆上桌面 (18 §3.2：递条款回合的前置)。
+// 条款在桌时市长可以一直不表态 (拖延是合法结果)；市长让步即接受条款。
+// 信道不活跃或已有提案在桌时幂等返回 false。
+func PlaceRebelTerms(silo *model.Silo) bool {
+	if silo == nil || !silo.Negotiation.NegotiationActive() {
+		return false
+	}
+	negotiation := &silo.Negotiation
+	if negotiation.OfferOnTable {
+		return false
+	}
+	negotiation.OfferOnTable = true
+	negotiation.OfferedBy = "rebels"
+	negotiation.OfferTerms = "赦免名单、职能保留、不清算求生者"
+	negotiation.AppendLogEntry(model.NegotiationLogEntry{
+		Year: silo.CurrentYear, Month: silo.CurrentMonth, Decider: "rebels", Decision: "offer_terms",
+		Factors: NegotiationFactorSummary(silo),
+		Outcome: "叛乱方条款摆上桌面：" + negotiation.OfferTerms,
+	})
+	return true
+}
+
+// NegotiationOpenResult 开信道的结构化结果。
+type NegotiationOpenResult struct {
+	Disposition string
+	AlreadyOpen bool
+}
+
+// OpenNegotiationChannel 开通谈判信道并一次性抽取市长性情 (18 §2)。
+// 已开通或已崩塌的信道不重复开通 (幂等)。性情抽取走引擎单一 RNG 流。
+func OpenNegotiationChannel(silo *model.Silo) *NegotiationOpenResult {
+	if silo == nil {
+		return nil
+	}
+	negotiation := &silo.Negotiation
+	if negotiation.ChannelOpen || negotiation.Closed {
+		return &NegotiationOpenResult{AlreadyOpen: true, Disposition: negotiation.MayorDisposition}
+	}
+	negotiation.Initialized = true
+	negotiation.ChannelOpen = true
+	negotiation.OpenedYear = silo.CurrentYear
+	negotiation.OpenedMonth = silo.CurrentMonth
+	negotiation.MayorDisposition = DrawMayorDisposition()
+	negotiation.MayorLean = initialNegotiationLean(negotiation.MayorDisposition)
+	negotiation.AppendLogEntry(model.NegotiationLogEntry{
+		Year: silo.CurrentYear, Month: silo.CurrentMonth, Decider: "channel", Decision: "opened",
+		Factors: NegotiationFactorSummary(silo),
+		Outcome: fmt.Sprintf("信道建立，市长性情：%s", negotiation.MayorDisposition),
+	})
+	return &NegotiationOpenResult{Disposition: negotiation.MayorDisposition}
+}
+
+// addPanicAllProfessions 全部门恐慌值增量 (夹 [0,1])。
+func addPanicAllProfessions(silo *model.Silo, delta float64) {
+	if silo == nil {
+		return
+	}
+	for i := range silo.Professions {
+		silo.Professions[i].PanicValue = clampUnit(silo.Professions[i].PanicValue + delta)
+	}
 }
 
 // negotiationLeanDrift 谈判拖延期间市长倾向的性情漂移 (确定性，不抽签)。
