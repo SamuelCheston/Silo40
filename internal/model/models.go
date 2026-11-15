@@ -62,7 +62,16 @@ const (
 //     地板满渗透月数后事实成熟，《共证》资格门改读成熟计数。零值 = 未渗透
 //     = 旧档"信念门未达成"的状态一致，不回填任何推测进度；v13 存档经
 //     备份+单事务+回读校验升级 (v12 旧档先经 v13 谈判层升级接力)。
-const CurrentSaveVersion = 14
+//   - v15: 黑箱学习层 + 盲区经营 (22 黑箱学习系列、23 盲区经营系列)。World
+//     携带权衡层世界侧台账 (Silo1Stewardship) 与功能开关 (Silo1BlackBoxEnabled)，
+//     Silo 携带每堡黑箱状态 (BlackBox：真值与信念分离)、盲区经营累积
+//     (BlindSpot) 与后果事件登记簿 (SafeguardIncidents)。新字段零值 = 未启用
+//     = 旧档逐位不变 (开关关闭 → 黑箱回合跳过、零 RNG 消耗；盲区零覆盖 →
+//     观测注入恒等映射)，不回填任何推测状态 (先验初始化在运行时首次启用)；
+//     旧档 Silo.SafeguardRisk 数值自此语义为「1 号指派基线 + 内容增量」
+//     (数值不动)；v14 存档经备份+单事务+回读校验升级 (v12 旧档先经谈判层→
+//     渗透两跳接力)。
+const CurrentSaveVersion = 15
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {

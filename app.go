@@ -117,6 +117,15 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV13ToPermeationSave(a.db, dbFileName); err != nil {
 		log.Fatalf("v13 permeation upgrade failed: %v", err)
 	}
+	// v14 permeation saves gain the Silo 1 black-box learning layer (22 系列)
+	// and blind-spot cultivation (23 系列): per-silo black-box/blind-spot
+	// state, incident ledger, world-side stewardship ledger and switch;
+	// zero state = disabled = behaviour unchanged. SafeguardRisk keeps its
+	// value; only its semantics becomes the Silo 1 assignment baseline plus
+	// content increments.
+	if _, err := service.UpgradeV14ToBlackBoxSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v14 black-box upgrade failed: %v", err)
+	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)
