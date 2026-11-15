@@ -314,7 +314,7 @@ type OperationTrack struct {
 	Operations          []Silo1Operation `json:"operations"`
 }
 
-// ============ 1 号权衡层 (22 设计卷、22 黑箱学习系列、ADR-0016) ============
+// ============ 1 号权衡层 (22 设计卷、22 黑箱学习系列、ADR-0017) ============
 //
 // 语义锚点：
 //   - 指标一 (Experiment)：实验履约与保留多样性——只影响"最终可保留地堡的
@@ -617,7 +617,7 @@ type Silo struct {
 	// BlackBox 每堡黑箱状态 (22 黑箱学习系列 01 卷 §8)：真值 Theta 与信念 Belief
 	// 分字段存放。零值 = 功能未启用 = 旧档语义。
 	BlackBox Silo1BlackBoxState `gorm:"type:text;serializer:json" json:"black_box"`
-	// SafeguardIncidents 引擎侧后果事件登记簿 (ADR-0016)：原直接累加风险度的各
+	// SafeguardIncidents 引擎侧后果事件登记簿 (ADR-0017)：原直接累加风险度的各
 	// 累加点改为在此登记 (kind -> 计数)，经观测管线进入 1 号信念。引擎包写入
 	// (协议偏离/IT 过度干预/不作为/蒙蔽崩塌)，观测管线消费。
 	SafeguardIncidents map[string]int          `gorm:"type:text;serializer:json" json:"safeguard_incidents,omitempty"`
