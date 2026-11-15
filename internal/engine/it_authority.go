@@ -316,11 +316,12 @@ func (e *GameEngine) executeItAction(silo *model.Silo, agent *model.Agent, actio
 		}
 	case "protocol_disposal":
 		// 恢复一项 Protocol 目标：关闭最早一条未达成偏离 (条款 ID 升序)。
+		// 保护性篡改风险度改登记 IT 过度干预事件 (ADR-0017)，不再直接写。
 		closeEarliestUnmet(silo)
-		silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+action.RSDelta)
+		registerSafeguardIncident(silo, SafeguardIncidentITOverreach, 1)
 	case "suppress_signal":
 		if hasPendingReporting(silo) {
-			silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+action.RSDelta)
+			registerSafeguardIncident(silo, SafeguardIncidentITOverreach, 1)
 		}
 	case "quiet_disappearance":
 		// Protocol 未授权即属违反 (隐蔽执行，联盟不完全知悉)。

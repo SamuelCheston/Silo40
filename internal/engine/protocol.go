@@ -186,13 +186,14 @@ func findDeviation(state *model.ProtocolState, clauseID, kind string) *model.Pro
 }
 
 // recordDeviation 记录或延长一条偏离 (§6.2：每条款每类只记一次)。
-// W 惩罚只在关键联盟知悉时发生；R_s/J 是权威系统结果，不依赖舆论。
+// W 惩罚只在关键联盟知悉时发生；J 是权威系统结果，不依赖舆论。偏离不再
+// 直接累加风险度，改按期数登记事件 (ADR-0017)，经观测管线进入 1 号信念。
 func recordDeviation(silo *model.Silo, clause model.ProtocolClause, kind string, acknowledged bool, periods int) {
 	state := &silo.Protocol
 	if periods <= 0 {
 		periods = 1
 	}
-	rS, wPenalty, _ := deviationPenalties(kind, clause.Severity)
+	_, wPenalty, _ := deviationPenalties(kind, clause.Severity)
 	dev := findDeviation(state, clause.ID, kind)
 	if dev == nil {
 		state.Deviations = append(state.Deviations, model.ProtocolDeviation{
@@ -212,7 +213,7 @@ func recordDeviation(silo *model.Silo, clause model.ProtocolClause, kind string,
 			dev.Acknowledged = true
 		}
 	}
-	silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+rS*float64(periods))
+	registerSafeguardIncident(silo, SafeguardIncidentDeviation, periods)
 	if acknowledged && wPenalty > 0 {
 		QueueAuthorityShock(silo, -wPenalty*float64(periods))
 	}

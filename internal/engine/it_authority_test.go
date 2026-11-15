@@ -167,9 +167,11 @@ func TestDispatchIsTheOnlyDirectLeak(t *testing.T) {
 	}
 }
 
-// TestProtocolDisposalProtectsAndRestores locks the §5.5 same-direction case:
-// protocol disposal lowers safeguard risk and closes the earliest unmet target.
-func TestProtocolDisposalProtectsAndRestores(t *testing.T) {
+// TestProtocolDisposalRestoresAndRegistersOverreach locks the §5.5
+// same-direction case under ADR-0017: protocol disposal closes the earliest
+// unmet target; the protective risk tampering no longer lowers safeguard risk
+// directly — it registers an it_overreach incident instead.
+func TestProtocolDisposalRestoresAndRegistersOverreach(t *testing.T) {
 	e := NewGameEngine()
 	silo := CreateInitialSilo("Disposal Fixture", 122, nil)
 	silo.SafeguardRisk = 0.2
@@ -178,8 +180,11 @@ func TestProtocolDisposalProtectsAndRestores(t *testing.T) {
 		{ClauseID: "O-01", Kind: DeviationUnmet, Open: true},
 	}
 	e.executeItAction(silo, nil, ItAction{ID: "protocol_disposal", BaseCost: 7, WShock: 2, RSDelta: -0.04})
-	if math.Abs(silo.SafeguardRisk-0.16) > 1e-12 {
-		t.Fatalf("safeguard after protective disposal = %v, want 0.16", silo.SafeguardRisk)
+	if silo.SafeguardRisk != 0.2 {
+		t.Fatalf("disposal must not write safeguard risk directly: %v", silo.SafeguardRisk)
+	}
+	if silo.SafeguardIncidents[SafeguardIncidentITOverreach] != 1 {
+		t.Fatalf("protective disposal must register one it_overreach incident: %+v", silo.SafeguardIncidents)
 	}
 	for _, dev := range silo.Protocol.Deviations {
 		if dev.ClauseID == "O-01" && dev.Open {
