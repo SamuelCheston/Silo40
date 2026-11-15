@@ -604,6 +604,11 @@ func UpgradeV9ToPreparationSave(db *gorm.DB, dbPath string) (bool, error) {
 	return true, nil
 }
 
+// preparationSaveVersion 是 v9→v10 升级的目标版本。升级器必须写固定目标
+// 版本而不是 model.CurrentSaveVersion——后续版本 (v11+) 各自有自己的升级步，
+// 不能由更早的升级步越级顶替。
+const preparationSaveVersion = 10
+
 func upgradeV9ToPreparation(tx *gorm.DB) error {
 	var silos []model.Silo
 	if err := tx.Order("id ASC").Find(&silos).Error; err != nil {
@@ -617,7 +622,7 @@ func upgradeV9ToPreparation(tx *gorm.DB) error {
 			return fmt.Errorf("resave silo %d: %w", silo.ID, err)
 		}
 	}
-	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: model.CurrentSaveVersion}).Error; err != nil {
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: preparationSaveVersion}).Error; err != nil {
 		return fmt.Errorf("bump save meta: %w", err)
 	}
 
@@ -647,8 +652,79 @@ func upgradeV9ToPreparation(tx *gorm.DB) error {
 	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
 		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
 	}
-	if checkMeta.SaveVersion != model.CurrentSaveVersion {
-		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, model.CurrentSaveVersion)
+	if checkMeta.SaveVersion != preparationSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, preparationSaveVersion)
+	}
+	return nil
+}
+
+const outsideSaveVersion = 11
+
+// UpgradeV10ToOutsideSave adds the out-of-silo sustenance state (16 Layer 2):
+// EscapeGroup.Outside (supplies left, suit integrity, route safety, tracking
+// tier, group composition, demise cause). Zero OutsideState = inactive, so
+// upgraded saves keep their exact pre-upgrade behaviour — the monthly
+// sustenance loop only touches groups initialized after this version. Same
+// safety contract as v9→v10: backup + one transaction + readback verification.
+func UpgradeV10ToOutsideSave(db *gorm.DB, dbPath string) (bool, error) {
+	var meta model.SaveMeta
+	err := db.First(&meta, "`key` = ?", saveMetaKey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("v11 outside upgrade: read save meta: %w", err)
+	}
+	if meta.SaveVersion != 10 {
+		return false, nil
+	}
+	backupPath := fmt.Sprintf("%s.bak-%s-v11outside", dbPath, time.Now().Format("20060102-150405"))
+	if err := backupSaveFile(db, backupPath); err != nil {
+		return false, fmt.Errorf("v11 outside upgrade: backup to %s failed: %w（数据库未改动）", backupPath, err)
+	}
+	if err := db.Transaction(upgradeV10ToOutside); err != nil {
+		return false, fmt.Errorf("v11 outside upgrade: %w（数据库未改动，备份保留在 %s，可用它还原）", err, backupPath)
+	}
+	log.Printf("v10 save upgraded to v11 outside-sustenance model (backup: %s)——堡外维持状态空起步 (未激活)，不回填推测状态", backupPath)
+	return true, nil
+}
+
+func upgradeV10ToOutside(tx *gorm.DB) error {
+	var silos []model.Silo
+	if err := tx.Order("id ASC").Find(&silos).Error; err != nil {
+		return fmt.Errorf("load silos: %w", err)
+	}
+	for i := range silos {
+		silo := &silos[i]
+		// Re-save so the new serialized field exists explicitly; the zero
+		// OutsideState is the documented v10 semantics (inactive).
+		if err := tx.Save(silo).Error; err != nil {
+			return fmt.Errorf("resave silo %d: %w", silo.ID, err)
+		}
+	}
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: outsideSaveVersion}).Error; err != nil {
+		return fmt.Errorf("bump save meta: %w", err)
+	}
+
+	var checkSilos []model.Silo
+	if err := tx.Order("id ASC").Find(&checkSilos).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload silos: %w", err)
+	}
+	if len(checkSilos) != len(silos) {
+		return fmt.Errorf("post-write verification failed: silo count changed")
+	}
+	for i := range checkSilos {
+		outside := checkSilos[i].EscapedGroup.Outside
+		if outside.Active || outside.MonthsOut != 0 || outside.SuppliesLeft != 0 || outside.DemiseCause != "" {
+			return fmt.Errorf("post-write verification failed: silo %d gained outside sustenance state during migration", checkSilos[i].ID)
+		}
+	}
+	var checkMeta model.SaveMeta
+	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
+	}
+	if checkMeta.SaveVersion != outsideSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, outsideSaveVersion)
 	}
 	return nil
 }

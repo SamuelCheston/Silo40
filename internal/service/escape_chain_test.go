@@ -456,6 +456,66 @@ func TestRebellionEndingNarrative(t *testing.T) {
 	}
 }
 
+// TestOutsideSustenanceAfterDeparture drives the Layer 2 loop from a real
+// departure: the settlement activates the outside state, and every month
+// afterwards the player reads a sustenance line (population, supplies
+// forecast, suit integrity, route safety, tracking tier).
+func TestOutsideSustenanceAfterDeparture(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "outside-playable.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(4301)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("settle opening month: %v", err)
+	}
+
+	// 直接构造一次存续的出发结算 (立场设为不阻挠双方，避开随机重估)。
+	station := svc.silo
+	station.Rebellion = 0.8
+	station.EscapePrep = model.EscapePreparation{
+		Initialized: true, SuitsFunctional: 200, SuppliesPacked: 600,
+		MaterialsPacked: 80, PlanCompleteness: 4.0 / 6.0,
+		PlanRoles: []string{"agricultural", "mechanical", "medical", "supply"},
+		DrillLevel: 0.6, CareReady: 0.5, ProductionStart: true,
+		ReceptionStage: model.ReceptionConfirmed,
+	}
+	station.TopStance = model.TopStanceState{Initialized: true, Mayor: model.TopStanceNonBlock, IT: model.TopStanceNonBlock}
+	svc.settleEscapeDeparture(station, nil)
+	if !station.EscapedGroup.SurvivingEscapeGroup() {
+		t.Fatalf("prepared nonblock departure must survive: %+v", station.EscapedGroup)
+	}
+	if !station.EscapedGroup.Outside.Active {
+		t.Fatalf("surviving departure must activate outside sustenance: %+v", station.EscapedGroup.Outside)
+	}
+	if station.EscapedGroup.Outside.SuppliesLeft != 600 {
+		t.Fatalf("outside supplies must start from the sealed ledger: %+v", station.EscapedGroup.Outside)
+	}
+
+	// 从出发那个月起，逐月读维持行。
+	result, err := svc.PassTime(6)
+	if err != nil {
+		t.Fatalf("advance six outside months: %v", err)
+	}
+	if got := station.EscapedGroup.Outside.MonthsOut; got != 6 {
+		t.Fatalf("months out = %d, want 6", got)
+	}
+	outsideLines := 0
+	for _, line := range result.Logs {
+		if strings.Contains(line, "[Outside]") && strings.Contains(line, "堡外第") {
+			outsideLines++
+		}
+	}
+	if outsideLines != 6 {
+		t.Fatalf("expected one outside sustenance line per month, got %d of 6", outsideLines)
+	}
+	if !station.EscapedGroup.Surviving {
+		t.Fatalf("a prepared group must still survive after six months: %+v", station.EscapedGroup)
+	}
+	if station.EscapedGroup.Outside.SuppliesLeft >= 600 {
+		t.Fatal("outside months must consume the sealed supplies")
+	}
+}
+
 // deterministicTestRNG 为引擎单一 RNG 流注入固定种子。
 func deterministicTestRNG(seed int64) *rand.Rand {
 	return rand.New(rand.NewSource(seed))

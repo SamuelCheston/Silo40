@@ -131,11 +131,10 @@ func (s *GameService) settleEscapeDeparture(silo *model.Silo, event *engine.Game
 	// ---- 存活率 S ----
 	survivors := 0
 	fragile := false
+	suitCoverage := 0.0 // 出发时的防护服覆盖：堡外维持的初始完整性
 	if departed > 0 {
-		coverage := 0.0
-		if departed > 0 {
-			coverage = clampUnit(suitCap / float64(departed))
-		}
+		coverage := clampUnit(suitCap / float64(departed))
+		suitCoverage = coverage
 		suitFactor := escapeSuitFactorFloor + (1-escapeSuitFactorFloor)*coverage // TODO(balance)
 		drillFactor := escapeDrillBase + (1-escapeDrillBase)*prep.DrillLevel     // TODO(balance)
 		orderFactor := escapeOrderFactorDefault
@@ -201,6 +200,15 @@ func (s *GameService) settleEscapeDeparture(silo *model.Silo, event *engine.Game
 	// ---- 写回：堡内人口移出，逃出群体事实成立 ----
 	if departed > silo.TotalPopulation {
 		departed = silo.TotalPopulation
+	}
+	// 堡外维持状态初始化 (Layer 2)：在人口移出前调用——出发清点占比读的是
+	// 出发时刻的堡内人口。只有存续群体才进入堡外月度结算。
+	if survivors > 0 && surviving {
+		attention := 0.0
+		if s.world != nil {
+			attention = s.world.Silo1.Attention[silo.ID]
+		}
+		initOutsideState(silo, prep, suitCoverage, departed, survivors, attention)
 	}
 	silo.TotalPopulation -= departed
 	group := &silo.EscapedGroup
