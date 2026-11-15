@@ -45,6 +45,7 @@
 | [14-faction-power-design.md](./14-faction-power-design.md) | 群星派系机制拆解、无代议机构的影响形态、本作派系生成规则与七个权力挂载节点 | 派系生成、满意/积怨计量、议程与街头压力设计 |
 | [16-preparation-outcome-design.md](./16-preparation-outcome-design.md) | 逃跑与外溢的准备度账本、容量门＋侧面结算换算、失败与部分成功分级、与仲裁的接口和分层落地 | 逃离模型与外溢模型的准备侧输入、防护服/补给/信道等准备状态设计 |
 | [17-information-economy-design.md](./17-information-economy-design.md) | 《共证》线"玩家推不动"的量化与修复：恒定淡忘、INFORMATION 门重锚信念层、AP 经济与流通成本、恐慌漂移方向，含三策略前后实测对比 | 情报经济数值（淡忘系数/门槛深度/AP 恢复/流通成本）的推导与 TODO(balance) 汇总 |
+| [18-time-permeation-design.md](./18-time-permeation-design.md) | 时间渗透：事实需要时间才能变成可用的证据——部门层渗透成熟度、渗透月数推导、与 B/π 和淡忘的叠加、每个结局的最早成立月、验收与可玩路线测试的公平重调判据 | 解决"一局太短"（结算压缩、正典节点被跳过）；渗透参数标定与测试重调账 |
 
 ## 同类机制对照
 
