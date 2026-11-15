@@ -67,6 +67,10 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 	if err != nil || !upgradedV14 {
 		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
 	}
+	upgradedV15, err := UpgradeV14ToBlackBoxSave(svc.db, dbPath)
+	if err != nil || !upgradedV15 {
+		t.Fatalf("v14 black-box upgrade failed: upgraded=%v err=%v", upgradedV15, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {

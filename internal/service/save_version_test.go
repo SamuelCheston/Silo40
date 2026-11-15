@@ -130,4 +130,7 @@ func TestResumeRejectsWrongVersion(t *testing.T) {
 	if !errors.Is(err, ErrIncompatibleSave) {
 		t.Fatalf("expected ErrIncompatibleSave for wrong version, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "当前要求=15") {
+		t.Fatalf("wrong-version rejection must state the current requirement, got: %v", err)
+	}
 }
