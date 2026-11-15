@@ -511,7 +511,23 @@ func (r *escapeRunner) routeActions() {
 	// departure falls to the forced channel (capacity 30) and the survival
 	// rate to its floor — preparation must be visible in the headcount.
 	if r.rec.PrepLevel != "sparse" && r.cardEnabled("ADVANCE_PARTY_DISPATCH") && svc.agent.ActionPoints >= 6 {
-		r.execute("advance_party_dispatch", r.playerEvent("ADVANCE_PARTY_DISPATCH"))
+		// Famine retune (19 §6.3 荒年局): the vanguard report confirms the
+		// route only when no lower-deck collapse lands between dispatch and
+		// report (+4 months). The famine crisis cadence renews
+		// cannibalization-driven collapses every few months, so the dispatch
+		// waits for the quiet window right after a collapse instead of
+		// marching the vanguard into a route that is damaged before the
+		// report returns (a damaged report keeps reception at surveyed and the
+		// departure on the survival-floor channel). The damaged reading
+		// compares timestamps inclusively, so the dispatch must land strictly
+		// after the collapse month and before the next one is due.
+		collapse := svc.contentStates[svc.silo.ID]["crisis:lower_deck_collapse"]
+		sinceCollapse := gameTimestamp(svc.silo.CurrentYear, svc.silo.CurrentMonth) - collapse.LastTriggeredTimestamp
+		quiet := !collapse.Triggered ||
+			(sinceCollapse >= daysPerMonth && sinceCollapse <= 3*daysPerMonth)
+		if quiet {
+			r.execute("advance_party_dispatch", r.playerEvent("ADVANCE_PARTY_DISPATCH"))
+		}
 	}
 }
 
@@ -611,17 +627,21 @@ func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeR
 
 		if !r.launched {
 			// Window choices and the guarantee (once each) — both shape the
-			// launch draw, so they outrank the launch itself.
-			if r.window && !r.orderlyDone && r.cardEnabled("ESCAPE_WINDOW_ORDERLY") {
-				if r.execute("window_orderly", r.playerEvent("ESCAPE_WINDOW_ORDERLY")) {
-					r.orderlyDone = true
-				}
-			}
+			// launch draw, so they outrank the launch itself. Famine retune
+			// (19 §6.3 荒年局): the guarantee is secured first — the famine
+			// silo has no months to spend on the window itself, so the
+			// negotiation that shapes the stances goes before the orderly
+			// choice, and the departure rides the same month the window opens.
 			if r.window && !r.guaranteeDone && r.cardEnabled("ESCAPE_NEGOTIATION_GUARANTEE") &&
 				svc.agent.ActionPoints >= 6 {
 				r.stanceTrigger = "guarantee"
 				if r.execute("negotiation_guarantee", r.playerEvent("ESCAPE_NEGOTIATION_GUARANTEE")) {
 					r.guaranteeDone = true
+				}
+			}
+			if r.window && !r.orderlyDone && r.cardEnabled("ESCAPE_WINDOW_ORDERLY") {
+				if r.execute("window_orderly", r.playerEvent("ESCAPE_WINDOW_ORDERLY")) {
+					r.orderlyDone = true
 				}
 			}
 			// IT cooperation opens the suit warehouse: draw it down while it
@@ -651,7 +671,13 @@ func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeR
 				switch {
 				case itCoop && (prep.SuitsFunctional >= 18 || sinceWindow >= 3):
 					ready = true // two warehouse months at most: 20+ survivors vs months outside
-				case !itCoop && sinceWindow >= 1:
+				case !itCoop:
+					// Famine retune (19 §6.3 荒年局): the famine silo is already
+					// inside the fracture band when the window opens, so the
+					// route departs the same month the guarantee and the orderly
+					// choice land — every hoarded month is a month the fracture
+					// point of no return can preempt, and the group needs a full
+					// outside month before the terminal evaluation.
 					ready = true
 				case r.calIndex() >= 128*12+9:
 					ready = true
