@@ -217,6 +217,17 @@ func (s *GameService) buildLineProgress(def lineDef, station *model.Silo) model.
 	return progress
 }
 
+// lineRank 是 lineDefs 固定序里的位次 (与仲裁 P3 同分序一致)，仅作主线
+// 推导的最终平局兜底——保证推导与输入顺序无关、完全确定。
+func lineRank(line string) int {
+	for i, def := range lineDefs {
+		if def.Line == line {
+			return i
+		}
+	}
+	return len(lineDefs)
+}
+
 // deriveMainLine 从五条线的进度推出当下主线：最深者胜；平层取最近推进；
 // 再平按 lineDefs 固定序。全部里程碑层为 0 时主线未定 (返回空)。
 func deriveMainLine(lines []model.LineProgress) string {
@@ -234,6 +245,8 @@ func deriveMainLine(lines []model.LineProgress) string {
 		case line.Depth > bestDepth:
 			better = true
 		case line.Depth == bestDepth && line.LastAdvanced > bestTS:
+			better = true
+		case line.Depth == bestDepth && line.LastAdvanced == bestTS && lineRank(line.Line) < lineRank(best):
 			better = true
 		}
 		if better {
@@ -311,9 +324,10 @@ func (s *GameService) syncMainLine(lines []model.LineProgress) {
 }
 
 // decodeGameTimestamp 是 gameTimestamp 的逆运算：把世界时刻 (天) 还原为
-// 年/月，供征兆与里程碑的展示使用。
+// 年/月，供征兆与里程碑的展示使用。负值非法 (返回零日期)；0 是合法时刻
+// (Y100 M1)，只是在本游戏的时间范围内不会出现。
 func decodeGameTimestamp(ts int) (year, month int) {
-	if ts <= 0 {
+	if ts < 0 {
 		return 0, 0
 	}
 	totalMonths := ts / daysPerMonth

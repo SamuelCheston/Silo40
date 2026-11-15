@@ -249,8 +249,8 @@ func TestDecodeGameTimestamp(t *testing.T) {
 			t.Fatalf("decode(encode(Y%d M%d)) = Y%d M%d", pair.year, pair.month, year, month)
 		}
 	}
-	if year, month := decodeGameTimestamp(0); year != 0 || month != 0 {
-		t.Fatalf("zero timestamp must decode to zero date, got Y%d M%d", year, month)
+	if year, month := decodeGameTimestamp(-1); year != 0 || month != 0 {
+		t.Fatalf("negative timestamp must decode to zero date, got Y%d M%d", year, month)
 	}
 }
 

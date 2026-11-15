@@ -55,6 +55,10 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 	if len(backupsV11) != 1 {
 		t.Fatalf("expected one outside backup, got %v", backupsV11)
 	}
+	upgradedV12, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
+	if err != nil || !upgradedV12 {
+		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
