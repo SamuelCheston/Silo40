@@ -16,9 +16,9 @@
 | 世界锚点二 | `neighbor_silo_silence` → `network_data_cache` | Y2M1；缓存节点经 `event_triggered` 跟随 | 既有 |
 | 世界锚点三 | `silo1_ultimatum` → `ultimatum_aftermath`（+3 月） | Y4M1 | 既有 |
 | 清洗拉锯 | `archive_purge_order` → `purge_backlash`（+4 月） | `history_burden ≥ 0.12` | 既有 |
-| 结算触发器 | `silo1_destroyed_signal` | 窗口走完（Y8M1）或结算条件满足；置 `silo1_destroyed` flag 即进仲裁 | 既有；**降级为结算触发器，不再是剧情节点** |
+| 结算触发器 | `silo1_destroyed_signal` | 覆灭锚点到达（Y8M1）或结算条件满足；置 `silo1_destroyed` flag 即进仲裁 | 既有；**降级为结算触发器，不再是剧情节点** |
 
-窗口节奏由三个剧情锚点标定（用户裁决）：**朱丽叶当上警长是中期事件，当选市长是末期事件，覆灭是结算事件**。锚点取 18 号正典链进度；覆灭结算后不留内容窗口，仲裁紧随结算。
+锚点节奏由三个剧情锚点标定（用户裁决）：**朱丽叶当上警长是中期事件，当选市长是末期事件，覆灭是结算事件**。锚点取 18 号正典链进度；覆灭结算后不留内容环节，仲裁紧随结算。锚点不是窗口长度，整局时长以几十年计（ADR-0018）。
 
 ## 2. 主干上的第一次分岔
 
