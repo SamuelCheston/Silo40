@@ -430,6 +430,11 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 	if w.Flags[model.WorldFlagNetworkJammed] {
 		return
 	}
+	// 22 §4.3 耗尽守卫：权衡层启用且寿命耗尽时反应链入口关闭——不再签发新通牒，
+	// 已点火阶梯不受影响。未启用 (零值状态) 恒 false，既有行为逐位不变。
+	if s.stewardshipLifespanExhausted() {
+		return
+	}
 	for _, silo := range s.silos {
 		// 复合压力 + 有组织煽动 (宣传等级) 双条件：背景漂移推起的街头热度
 		// 不足以招致通牒，玩家把不满组织化才算"对秩序的推动"。
@@ -447,6 +452,7 @@ func (s *GameService) runSilo1StateMachine(logs *[]string, stories *[]model.Stor
 		})
 		*logs = append(*logs, fmt.Sprintf("[Silo1] Ultimatum issued to silo %d", silo.ID))
 		s.stewardshipRegisterClearingObligation(silo.ID)
+		s.stewardshipChargeLifespan("ultimatum")
 		break
 	}
 }
