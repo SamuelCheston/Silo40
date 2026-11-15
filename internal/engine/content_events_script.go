@@ -156,6 +156,11 @@ function preparationTransfer(resource, amount) {
 function spilloverChannelAdd(kind, targetSilo, reliability) {
   return { type: "spillover_channel_add", flag: kind, count: targetSilo, value: reliability || 0 };
 }
+function spilloverSend(kind) {
+  // 16 §3.5 (Layer 3)：请求经一条已建立的受限信道投递外溢包裹。
+  // 目标堡、可靠度与暴露代价读建立侧账本；结算在服务层执行。
+  return { type: "spillover_send", flag: kind };
+}
 function orgSuspicionDelta(value) {
   // 20 修订/ADR-0014：组织行为 (动员/通信) 累积组织怀疑度；囤积类动作禁用。
   return { type: "escape_org_suspicion_delta", value: value || 0 };

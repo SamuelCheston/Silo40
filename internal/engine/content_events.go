@@ -644,6 +644,13 @@ func validateEffect(effect ContentEffect) error {
 		if effect.Count <= 0 {
 			return fmt.Errorf("spillover_channel_add requires positive count (target silo id)")
 		}
+	case "spillover_send":
+		// 16 §3.5 (Layer 3 投递侧)：请求经一条已建立的受限信道投递外溢包裹。
+		// flag = 信道种类；目标堡与可靠度读建立侧账本。投递结算 (可靠度抽取、
+		// 暴露记账、跨堡入队) 由服务层在全部效果施加后执行。
+		if _, ok := spilloverChannelKinds[effect.Flag]; !ok {
+			return fmt.Errorf("spillover_send flag must be it_line|cross_signal|physical_handoff")
+		}
 	case "escape_org_suspicion_delta":
 		// 20 修订/ADR-0014：组织行为累积组织怀疑度。只增不减 (衰减走月度
 		// 回合)；囤积类动作永不声明本效果。
@@ -1096,6 +1103,10 @@ type ScopeContext struct {
 	// 请求 (16 §3.4 第一段结算的最小形态)。服务层在全部效果施加后执行结算
 	// (结算读立场与账本，产出逃出群体；仲裁只读群体事实)。nil = 无处投递。
 	EscapeDepartureSettle *bool
+	// SpilloverSendKinds 收集 spillover_send 效果 (16 §3.5 Layer 3)：请求投递
+	// 的信道种类按效果施加顺序排列。服务层在全部效果施加后逐条结算 (读信道
+	// 账本、可靠度抽取、暴露记账、跨堡入队)。nil = 无处投递。
+	SpilloverSendKinds *[]string
 	// NegotiationOpenRequested 收集 negotiation_open 效果 (21 设计卷)：
 	// 开信道请求，服务层在全部效果施加后执行 (含性情抽取与叙事)。
 	// nil = 无处投递。
@@ -1143,6 +1154,11 @@ type CrossSignalRequest struct {
 	EventID     string
 	DelayMonths int
 }
+
+// SpilloverPackageEvent 外溢包裹投递的保留跨堡事件 ID (16 §3.5 Layer 3)。
+// 它不是内容事件定义：派发阶段识别该 ID 后转交服务层做接收结算
+// (独立核验与再复制)，不走内容效果路径。
+const SpilloverPackageEvent = "spillover_package"
 
 // ApplyContentEffects 单堡兼容入口：语义等价于 ScopeContext{Self: silo}。
 func ApplyContentEffects(effects []ContentEffect, silo *model.Silo) []ContentScheduledEvent {
@@ -1219,6 +1235,12 @@ func ApplyContentEffectsScoped(effects []ContentEffect, sc *ScopeContext) []Cont
 			// 施加完毕后由服务层执行一次。
 			if sc != nil && sc.EscapeDepartureSettle != nil {
 				*sc.EscapeDepartureSettle = true
+			}
+			continue
+		case "spillover_send":
+			// 16 §3.5 (Layer 3)：投递请求按效果顺序收集，服务层结算。
+			if sc != nil && sc.SpilloverSendKinds != nil {
+				*sc.SpilloverSendKinds = append(*sc.SpilloverSendKinds, effect.Flag)
 			}
 			continue
 		case "negotiation_open":

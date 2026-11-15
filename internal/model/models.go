@@ -363,6 +363,11 @@ type LineShift struct {
 
 // OutboundSignal records one delivered cross-silo signal for spillover
 // settlement (G7). SourceSilo = 0 marks Silo 1 / world origin.
+//
+// Layer 3 (16 §3.5 外溢投递侧) 扩展字段全部零值即旧档语义：Spillover=false
+// 的记录是通用跨堡信号，计数口径与 G7 逐位一致；Spillover=true 的记录是
+// 外溢包裹投递，口径收紧为"到达且独立接收"才进触达计数 (Spillover=false
+// 的旧记录不受影响)。
 type OutboundSignal struct {
 	Seq        int    `json:"seq"`
 	SourceSilo uint   `json:"source_silo"`
@@ -370,6 +375,18 @@ type OutboundSignal struct {
 	EventID    string `json:"event_id"`
 	Year       int    `json:"year"`
 	Month      int    `json:"month"`
+	// Spillover 该记录是外溢包裹投递 (区别于通用跨堡信号)。
+	Spillover bool `json:"spillover,omitempty"`
+	// Received 目标堡按自身模拟状态独立完成核验 (接收结算)。到达而未独立
+	// 接收的包裹不进触达计数，只留到达记录。
+	Received bool `json:"received,omitempty"`
+	// Generation 链代次：1 = 驻地发出的第一代；>1 = 接收方再复制的下一代。
+	Generation int `json:"generation,omitempty"`
+	// Quality 到达时的包裹质量 (信道容量与路上损耗结算后的值)。
+	Quality float64 `json:"quality,omitempty"`
+	// RootSilo 链的起源堡 (玩家驻地)：再复制代的 SourceSilo 是接收堡，
+	// 计数按 RootSilo 归属整条链。0 = 非外溢记录。
+	RootSilo uint `json:"root_silo,omitempty"`
 }
 
 // CrossEvent 跨堡事件：某个堡 (或 Silo 1 / 世界) 向目标域投递的延迟消息。
@@ -829,6 +846,11 @@ type SpilloverChannel struct {
 	ExposureCost float64 `json:"exposure_cost"` // TODO(balance)
 	Year         int     `json:"year"`
 	Month        int     `json:"month"`
+	// Uses 已使用次数 (Layer 3 投递侧)：T2-2 信道审计读它——使用次数到达
+	// 档位门槛后可靠度降档，跌破地板则信道中断。零值 = 未使用。
+	Uses int `json:"uses,omitempty"`
+	// Broken 信道被审计中断 (不可再投递)；建立记录保留供审计追溯。
+	Broken bool `json:"broken,omitempty"`
 }
 
 // SpilloverPreparation 外溢准备账本 (16 §2.3/§6.1)。外溢是逃跑失败后的
@@ -836,6 +858,21 @@ type SpilloverChannel struct {
 type SpilloverPreparation struct {
 	Channels       []SpilloverChannel `json:"channels,omitempty"`
 	PackageQuality float64            `json:"package_quality"` // 五种能力完备度 (0-1)
+	// Deliveries 投递尝试账本 (Layer 3 发送侧)：每次投递动作记一条，含
+	// 是否到达 (可靠度结算)。到达后的独立接收记录在 World.OutboundSignals。
+	Deliveries []SpilloverDelivery `json:"deliveries,omitempty"`
+}
+
+// SpilloverDelivery 一次外溢投递尝试 (发送侧事实，玩家可审计)。
+type SpilloverDelivery struct {
+	Kind        string  `json:"kind"`
+	TargetSilo  uint    `json:"target_silo"`
+	Year        int     `json:"year"`
+	Month       int     `json:"month"`
+	ArriveYear  int     `json:"arrive_year"`
+	ArriveMonth int     `json:"arrive_month"`
+	Quality     float64 `json:"quality"`   // 发出时的包裹质量 (信道容量与路上损耗结算后)
+	Delivered   bool    `json:"delivered"` // 可靠度结算：是否送达 (失败 = 路上丢失)
 }
 
 // 追踪四档 (16 §3.3 追踪 T 的 Layer 2 形态)：从"没人注意"到"正在追捕"。
