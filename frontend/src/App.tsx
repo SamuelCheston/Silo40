@@ -80,6 +80,7 @@ function App() {
     const [busy, setBusy] = useState(false);
     const [infoProgress, setInfoProgress] = useState<any>(null);
     const [linesProgress, setLinesProgress] = useState<any>(null);
+    const [witnessTree, setWitnessTree] = useState<any>(null);
     const [moments, setMoments] = useState<{ title: string; body: string }[]>([]);
     const prevStageRef = useRef<string | null>(null);
     const prevAbsorbedRef = useRef<number | null>(null);
@@ -224,6 +225,7 @@ function App() {
         setWorld(state.world || null);
         setInfoProgress(state.information_progress || null);
         setLinesProgress(state.lines_progress || null);
+        setWitnessTree(state.witness_tree || null);
         setPendingEvents(0);
         setPendingOperation('');
         setGameStarted(true);
@@ -239,6 +241,7 @@ function App() {
         setWorld(state.world || null);
         setInfoProgress(state.information_progress || null);
         setLinesProgress(state.lines_progress || null);
+        setWitnessTree(state.witness_tree || null);
         setPendingEvents(state.pending_events || 0);
         setPendingOperation(state.pending_operation || '');
         setGameStarted(true);
@@ -320,6 +323,7 @@ function App() {
         setEventHistory([]);
         setMoments([]);
         setLinesProgress(null);
+        setWitnessTree(null);
         prevStageRef.current = null;
         prevAbsorbedRef.current = null;
         prevMainLineRef.current = null;
@@ -619,7 +623,7 @@ function App() {
                                             <Text fontSize="sm" color="gray.700" mt={1}>{moment.body}</Text>
                                         </Box>
                                     ))}
-                                    <LinesPanel lines={linesProgress} progress={infoProgress} silo={silo} world={world} agent={agent} />
+                                    <LinesPanel lines={linesProgress} progress={infoProgress} silo={silo} world={world} agent={agent} tree={witnessTree} />
                                     <WorldPanel world={world} agent={agent} />
                                     {activeView === 'map' ? (
                                         silo && <BunkerMap silo={silo} agent={agent} />
