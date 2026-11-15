@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"math"
 	"math/rand"
 	"testing"
 
@@ -14,6 +15,22 @@ func stanceTestSilo() *model.Silo {
 	silo.Authority.W = 50 // W is 0-100 in the live game
 	silo.Authority.PoliceObedience = 0.7
 	return silo
+}
+
+// TestITStanceWeightsNormalizeHundredPointW 精确锁定 W 的归一化贡献：
+// W=50 在 0-100 刻度下必须折算为 0.5 残余力量——block 恰好 +0.35*0.5、
+// nonblock 恰好 -0.15*0.5。若权重直接读 0-100 原值 (归一化回退)，残余
+// 力量 50 会把其它全部输入压过，这里的精确值会立刻失守。
+func TestITStanceWeightsNormalizeHundredPointW(t *testing.T) {
+	silo := stanceTestSilo()
+	silo.Rebellion = 0
+	silo.Authority.PoliceObedience = 1
+	weights := itStanceWeights(silo, &model.World{Flags: map[string]bool{}})
+	if math.Abs(weights.block-0.725) > 1e-12 ||
+		math.Abs(weights.nonblock-0.205) > 1e-12 ||
+		math.Abs(weights.cooperate-0.17) > 1e-12 {
+		t.Fatalf("W=50 must contribute 0.5 residual strength, got %+v", weights)
+	}
 }
 
 // 零值 = 阻挠：未初始化的立场读出来就是阻挠 (16 §6.1 升级语义)。

@@ -112,6 +112,11 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV12ToNegotiationSave(a.db, dbFileName); err != nil {
 		log.Fatalf("v12 negotiation upgrade failed: %v", err)
 	}
+	// v13 negotiation saves gain the time-permeation state on department
+	// beliefs (permeation counter + matured flag); zero = not permeated.
+	if _, err := service.UpgradeV13ToPermeationSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v13 permeation upgrade failed: %v", err)
+	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
 	a.gameService = service.NewGameService(db)

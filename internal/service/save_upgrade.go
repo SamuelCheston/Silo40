@@ -875,6 +875,84 @@ func upgradeV12ToNegotiation(tx *gorm.DB) error {
 	return nil
 }
 
+const permeationSaveVersion = 14
+
+// UpgradeV13ToPermeationSave adds the time-permeation state on the department
+// belief layer (18-time-permeation §3.1): FactBelief.PermeationCounter /
+// FactBelief.Matured, serialized inside the professions.beliefs column. The
+// INFORMATION qualification gate starts reading matured facts at this version.
+// Zero permeation state = not permeated = the old save's "belief gate not met"
+// posture, so the upgrade backfills no guessed progress (players must
+// re-circulate for maturity — the documented cost of the time dimension).
+// Chains on top of the v13 negotiation upgrade: v12 saves reach v14 via
+// UpgradeV12ToNegotiationSave then this step; v13 saves come straight here.
+// Same safety contract as v12→v13: backup + one transaction + readback
+// verification.
+func UpgradeV13ToPermeationSave(db *gorm.DB, dbPath string) (bool, error) {
+	var meta model.SaveMeta
+	err := db.First(&meta, "`key` = ?", saveMetaKey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("v14 permeation upgrade: read save meta: %w", err)
+	}
+	if meta.SaveVersion != 13 {
+		return false, nil
+	}
+	backupPath := fmt.Sprintf("%s.bak-%s-v14permeation", dbPath, time.Now().Format("20060102-150405"))
+	if err := backupSaveFile(db, backupPath); err != nil {
+		return false, fmt.Errorf("v14 permeation upgrade: backup to %s failed: %w（数据库未改动）", backupPath, err)
+	}
+	if err := db.Transaction(upgradeV13ToPermeation); err != nil {
+		return false, fmt.Errorf("v14 permeation upgrade: %w（数据库未改动，备份保留在 %s，可用它还原）", err, backupPath)
+	}
+	log.Printf("v13 save upgraded to v14 permeation model (backup: %s)——渗透计数与成熟标记零值起步 (未渗透)，不回填推测进度", backupPath)
+	return true, nil
+}
+
+func upgradeV13ToPermeation(tx *gorm.DB) error {
+	var professions []model.Profession
+	if err := tx.Order("silo_id ASC, id ASC").Find(&professions).Error; err != nil {
+		return fmt.Errorf("load professions: %w", err)
+	}
+	for i := range professions {
+		// Re-save so the serialized beliefs column round-trips with the new
+		// fields explicitly; zero values are the documented v13 semantics
+		// (not permeated), so the JSON content carries no guessed progress.
+		if err := tx.Save(&professions[i]).Error; err != nil {
+			return fmt.Errorf("resave profession %d: %w", professions[i].ID, err)
+		}
+	}
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: permeationSaveVersion}).Error; err != nil {
+		return fmt.Errorf("bump save meta: %w", err)
+	}
+
+	var checkProfessions []model.Profession
+	if err := tx.Order("silo_id ASC, id ASC").Find(&checkProfessions).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload professions: %w", err)
+	}
+	if len(checkProfessions) != len(professions) {
+		return fmt.Errorf("post-write verification failed: profession count changed")
+	}
+	for i := range checkProfessions {
+		for _, belief := range checkProfessions[i].Beliefs {
+			if belief.PermeationCounter != 0 || belief.Matured {
+				return fmt.Errorf("post-write verification failed: profession %d fact %s gained permeation state during migration",
+					checkProfessions[i].ID, belief.FactID)
+			}
+		}
+	}
+	var checkMeta model.SaveMeta
+	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
+	}
+	if checkMeta.SaveVersion != permeationSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, permeationSaveVersion)
+	}
+	return nil
+}
+
 // legacyUnaffiliatedSignature 与 engine.unaffiliatedSignature 一致 (跨包不导出，
 // 升级器按字面值对齐)。
 const legacyUnaffiliatedSignature = "special:unaffiliated"

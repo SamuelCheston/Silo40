@@ -21,6 +21,10 @@ defineEvent({
   trigger: playerActionIs("ESCAPE_PREP_SUIT_REPAIR"),
   effects: [
     preparationDelta("suits_functional", 1),   // TODO(balance)
-    preparationDelta("prep_exposure", 0.08),   // TODO(balance)
+    // 修服是筹备暴露的主要来源：胶带缺口越大越显眼。
+    // 0.04/次 (16 §4.2-3)：全程约 16 次修复累积 0.64，配合 IT 配合系数
+    // (×0.4) 后追踪基数约 0.20，留给 Silo 1 注意力推升到 aware/trailing；
+    // 原值 0.08 会让任何认真筹备直接锁死 pursuit 档，与设计意图矛盾。
+    preparationDelta("prep_exposure", 0.04),   // TODO(balance)
   ],
 });

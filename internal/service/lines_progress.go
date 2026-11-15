@@ -143,7 +143,7 @@ func (s *GameService) lineQualification(line string, station *model.Silo) (bool,
 		if allDepartmentsHoldFragments(station) {
 			return true, ""
 		}
-		return false, "跨部门公共事实未成立（部门碎片覆盖不足）"
+		return false, "跨部门公共事实未成立（部门成熟证据不足）"
 	case model.LineRebellion:
 		if station.EscapedGroup.SurvivingEscapeGroup() {
 			return true, ""
