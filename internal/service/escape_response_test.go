@@ -110,3 +110,132 @@ func TestOrgSuspicionDecaysWithQuietMonths(t *testing.T) {
 		t.Fatalf("suspicion after 3 quiet months = %v, want in (0, %v)", got, peak)
 	}
 }
+
+// TestEscapeResponseDecisionFiresAndLogs 怀疑度到门槛后 IT 必须做选择：
+// 决策日志带归一化权重与因子摘要，叙事走月度故事通道。
+func TestEscapeResponseDecisionFiresAndLogs(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "escape-response-decide.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(4203)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("settle opening month: %v", err)
+	}
+	svc.queueSystemContentEvents("TEST")
+	svc.drainQueuedEvents()
+
+	completeGateEvent(svc, "special:departure_willingness")
+	svc.agent.ActionPoints = 200
+	svc.refreshActionProgress()
+
+	// 真实演练把怀疑度推过门槛 (0.34 白盒垫底 + 演练 +0.06)。
+	svc.silo.EscapeResponse.OrgSuspicion = 0.34
+	outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "ESCAPE_DRILL"})
+	if err != nil || !outcome.Result.Executed {
+		t.Fatalf("drill must execute: %v", err)
+	}
+
+	result, err := svc.PassTime(1)
+	if err != nil {
+		t.Fatalf("pass time: %v", err)
+	}
+
+	state := svc.silo.EscapeResponse
+	if len(state.Decisions) != 1 {
+		t.Fatalf("expected exactly one decision log entry, got %+v", state.Decisions)
+	}
+	entry := state.Decisions[0]
+	switch entry.Decision {
+	case model.EscapeResponseSuppress, model.EscapeResponseConceal, model.EscapeResponseIgnore:
+	default:
+		t.Fatalf("unknown decision %q", entry.Decision)
+	}
+	sum := entry.Weights[model.EscapeResponseSuppress] + entry.Weights[model.EscapeResponseConceal] + entry.Weights[model.EscapeResponseIgnore]
+	if sum < 0.999 || sum > 1.001 {
+		t.Fatalf("decision weights must normalize: %+v", entry.Weights)
+	}
+	if entry.Factors == "" {
+		t.Fatal("decision log must carry the factor summary (attribution)")
+	}
+
+	// 叙事走月度故事通道：当月反馈里有一条响应层故事。
+	found := false
+	for _, story := range result.Stories {
+		if len(story.ID) > 16 && story.ID[:16] == "escape_response:" {
+			found = true
+			if story.Title == "" || story.Description == "" {
+				t.Fatalf("response story must carry narrative: %+v", story)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("decision must surface through the monthly story channel: %+v", result.Stories)
+	}
+}
+
+// TestEscapeResponseCoverCollapseViaMonthlyTick 蒙蔽付不起月费时崩塌：
+// safeguard 风险上浮，决策日志记录结果。
+func TestEscapeResponseCoverCollapseViaMonthlyTick(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "escape-response-cover.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(4204)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("settle opening month: %v", err)
+	}
+
+	state := &svc.silo.EscapeResponse
+	state.Initialized = true
+	state.OrgSuspicion = 0.5
+	state.CoverActive = true
+	state.Decisions = []model.EscapeResponseLogEntry{{Decision: model.EscapeResponseConceal}}
+	// 月度 IT 回合会把 0 的 R_op 回收到 8；W=20 时蒙蔽月成本 ≥12，付不起
+	// (W 单月漂移不改变量级)。
+	svc.silo.ItAuthority.ROp = 0
+	svc.silo.Authority.W = 20
+	rsBefore := svc.silo.SafeguardRisk
+
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("pass time: %v", err)
+	}
+	if state.CoverActive {
+		t.Fatal("unaffordable cover must collapse during the monthly tick")
+	}
+	if svc.silo.SafeguardRisk <= rsBefore {
+		t.Fatalf("collapse must raise safeguard risk: %v -> %v", rsBefore, svc.silo.SafeguardRisk)
+	}
+	if state.Decisions[len(state.Decisions)-1].Outcome == "" {
+		t.Fatal("collapse must be recorded in the decision log outcome")
+	}
+}
+
+// TestEscapeResponseWindowOpenEndsLayer 开窗后筹备期结束：响应层停摆，
+// 进行中的蒙蔽收尾，不再产生新决策。
+func TestEscapeResponseWindowOpenEndsLayer(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "escape-response-window.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(4205)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("settle opening month: %v", err)
+	}
+
+	state := &svc.silo.EscapeResponse
+	state.Initialized = true
+	state.OrgSuspicion = 0.8 // 远超门槛：若层未停摆必然点火
+	state.CoverActive = true
+	states := svc.statesMapFor(svc.silo.ID)
+	states["special:escape_window_open"] = model.ContentEventState{
+		SiloID: svc.silo.ID, EventKey: "special:escape_window_open", Triggered: true,
+	}
+
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("pass time: %v", err)
+	}
+	if state.CoverActive {
+		t.Fatal("window opening must end the active cover")
+	}
+	if len(state.Decisions) != 0 {
+		t.Fatalf("no decision may fire after the window opens: %+v", state.Decisions)
+	}
+}
