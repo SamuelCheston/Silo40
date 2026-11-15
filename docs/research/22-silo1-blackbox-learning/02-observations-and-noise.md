@@ -292,7 +292,7 @@ M(Θ) = 4·Θ·(1-Θ)        // 峰值在 Θ=0.5，M=1；M(0.1)=M(0.9)=0.36
 
 ### 4.4 确定性：伪装是现有 IT 权威回合的候选扩展
 
-- 伪装动作作为新候选类进入 `ItActionCatalog` 的 utility 选择（设计层面；实现归实现轨）：选择规则沿用现状——`utility>0` 最高分、同分按 action ID 升序（`it_authority.go` L220-248），**决策本身无随机**。
+- 伪装动作作为新候选类进入 `ItActionCatalog` 的 utility 选择（设计层面；实现归实现轨）：选择规则沿用现状——`utility>0` 最高分、同分按 action ID 升序（`it_authority.go` L220-248），**决策本身无随机**。**注**：本条「伪装手段选择」已被 [23-03 决策模型](../23-it-blindspot-cultivation/03-decision-model-and-log.md)的带权重随机抽取取代（[23-00 裁决 1](../23-it-blindspot-cultivation/00-index.md)，ADR-0007 延伸）；抽样位置与确定性纪律部分继续有效。
 - 随机只出现在既有模式的两个位置：失控骰（`LossOfControlProb`，L320-324）与暴露骰（`exposeJudicialDispatch` 型，L333-350）。伪装动作的失控 = 伪装穿帮（生成可被 1 号捕捉的一次性破绽事件，走 `perception.go` 危机/一次性转折通道）。
 - 抽样位置：各堡本地相位、Protocol 结算之后（与 `RunITAuthorityMonthly` 现位置一致），逐堡 SiloID 升序——满足 knowledge/08 §2 的固定顺序与 §7 的纪律（不新增私有随机源、不影响既有消费位点；新增消费位点需重建 parity 基线）。
 
