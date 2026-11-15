@@ -2209,6 +2209,16 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 	}
 
 	if result.Executed {
+		// 订阅型节点 (13 分册 §1：订阅既有职务动作的节点放 special/，不拦截宿主
+		// 动作)：带 player_action_is 触发器的非动作组事件在宿主动作执行成功后
+		// 挂车点火——接触链勘察步骤 (route_survey_step) 就挂在机械/矿业职务动作
+		// 上。动作组本身由 queuePlayerActionEvents 处理，不在此重复。
+		passengerLogs, passengerStories := s.fireActionSubscriberContent(action)
+		allLogs = append(allLogs, passengerLogs...)
+		allStories = append(allStories, passengerStories...)
+	}
+
+	if result.Executed {
 		s.completePlayerAction(action)
 		// 完成键会发布总线事件唤醒 event_triggered 后续链；同步 API 内就地排空，
 		// 让后续节点的效果与故事并入本次结果，而不是滞留到下一次 Step。
@@ -2709,6 +2719,27 @@ func (s *GameService) executePlayerActionEvents(action model.AgentAction) (bool,
 	}
 	logs, stories := s.drainQueuedEvents()
 	return true, result, logs, stories
+}
+
+// fireActionSubscriberContent 点火订阅了本次动作的非动作组内容节点 (带
+// player_action_is 触发器的 special/ 等节点)。宿主动作已经执行成功，这里只
+// 挂车不拦截：动作组 (player_actions) 由 queuePlayerActionEvents 专管，不在
+// 本路径重复评估。点火后就地排空，让 event_triggered 后续链 (如勘察步骤 →
+// 路线成形) 并入本次动作结果。
+func (s *GameService) fireActionSubscriberContent(action model.AgentAction) ([]string, []model.StoryEvent) {
+	if !s.hasSession() {
+		return nil, nil
+	}
+	count, _, _, _ := s.queueContentEvents("ACTION:"+string(action.Type)+":SUBSCRIBER", &action, func(def engine.ContentEventDefinition) bool {
+		if def.SourceGroup == "player_actions" || def.SourceGroup == "player_action" {
+			return false
+		}
+		return engine.HasPlayerActionTrigger(def)
+	})
+	if count == 0 {
+		return nil, nil
+	}
+	return s.drainQueuedEvents()
 }
 
 // queueContentEvents 把本可触发的内容事件入队。第四个返回值是命中事件的

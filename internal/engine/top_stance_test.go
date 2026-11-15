@@ -11,7 +11,7 @@ func stanceTestSilo() *model.Silo {
 	silo := &model.Silo{}
 	silo.SetMayorLegitimacy(0.6)
 	silo.Rebellion = 0.3
-	silo.Authority.W = 0.5
+	silo.Authority.W = 50 // W is 0-100 in the live game
 	silo.Authority.PoliceObedience = 0.7
 	return silo
 }
@@ -73,7 +73,7 @@ func TestTopStanceWeightShaping(t *testing.T) {
 
 	hostile := counts(func(s *model.Silo, w *model.World) {
 		s.Rebellion = 0.1
-		s.Authority.W = 0.9
+		s.Authority.W = 90
 	})
 	if hostile[model.TopStanceBlock] <= hostile[model.TopStanceNonBlock]+hostile[model.TopStanceCooperate] {
 		t.Fatalf("high W + low rebellion should stay block-dominant, got %v", hostile)
@@ -81,7 +81,7 @@ func TestTopStanceWeightShaping(t *testing.T) {
 
 	drifted := counts(func(s *model.Silo, w *model.World) {
 		s.Rebellion = 0.85
-		s.Authority.W = 0.15
+		s.Authority.W = 15
 		s.Authority.PoliceObedience = 0.3
 		s.TopStance.Guarantee = 0.8
 		s.Silo1Destroyed = true

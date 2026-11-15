@@ -119,6 +119,54 @@ func TestEscapeWillingnessAndWindowFire(t *testing.T) {
 	}
 }
 
+// TestRouteSurveyStepRidesProfessionAction locks the subscriber wiring
+// (13 分册 §1): the survey step node lives in special/ and fires FROM a real
+// Mechanical profession action after the accept key — riding the host action
+// without intercepting it. Before the passenger path existed the node could
+// never light under real gates (the action-group filter never evaluated it).
+func TestRouteSurveyStepRidesProfessionAction(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "route-step.db"))
+	req := threeSiloRequest(4401)
+	req.Profession = "Mechanical"
+	if _, err := svc.CreateGame(req); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("settle opening month: %v", err)
+	}
+	svc.queueSystemContentEvents("TEST")
+	svc.drainQueuedEvents()
+
+	completeGateEvent(svc, "player_actions:route_survey_accept")
+	// Profession actions gate on stage first_signal: open the stage ladder the
+	// way real play does (observation + one share).
+	if _, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"}); err != nil {
+		t.Fatalf("opening gather: %v", err)
+	}
+	if _, err := svc.ExecuteAction(model.AgentAction{
+		Type: model.ActionShareInfo, TargetDept: "Mayor",
+		FragmentIds: []string{svc.agent.KnownFragments[0]},
+	}); err != nil {
+		t.Fatalf("opening share: %v", err)
+	}
+	svc.agent.ActionPoints = 30
+	svc.refreshActionProgress()
+
+	outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionProfession, ProfessionAction: "MECHANICAL_OVERHAUL"})
+	if err != nil || outcome == nil || !outcome.Result.Executed {
+		t.Fatalf("overhaul rejected: %+v %v", outcome, err)
+	}
+	if !contentTriggered(svc, "special:route_survey_step") {
+		t.Fatal("route_survey_step must fire from the host profession action")
+	}
+	if !contentTriggered(svc, "special:route_confirmed") {
+		t.Fatal("route_confirmed must follow the survey step")
+	}
+	if svc.silo.EscapePrep.ReceptionStage != model.ReceptionSurveyed {
+		t.Fatalf("reception stage = %q, want surveyed", svc.silo.EscapePrep.ReceptionStage)
+	}
+}
+
 // TestEscapePreparationActionsCosts locks Layer 1 discipline on a real gated
 // service: every ledger record has a producer, transfers deduct immediately,
 // and insufficient balance fails explicitly (no partial transfer).
