@@ -58,8 +58,7 @@ func TestGenerateBlackBoxObservationsSequence(t *testing.T) {
 		if obs.SignalType != wantOrder[i] {
 			t.Fatalf("信号 %d 类型 %s 不在升序位 %s", i, obs.SignalType, wantOrder[i])
 		}
-		base, produced := blackBoxSignalBase(silo, spec.signalType)
-		if !produced {
+		if !blackBoxSignalProduced(silo, spec.signalType) {
 			t.Fatalf("信号 %s 当月应产生", spec.signalType)
 		}
 		pDisg, dEff, sigmaEff := blackboxInjectionParams(silo, spec, silo.BlackBox.Theta)
@@ -69,7 +68,7 @@ func TestGenerateBlackBoxObservationsSequence(t *testing.T) {
 			bias = -dEff
 		}
 		eta := boxMuller(ref.Float64(), ref.Float64())
-		want := clamp01(base + bias + sigmaEff*eta)
+		want := clamp01(silo.BlackBox.Theta + bias + sigmaEff*eta)
 		if obs.Value != want {
 			t.Fatalf("信号 %s 观测值 %v != 参考重放 %v", spec.signalType, obs.Value, want)
 		}
@@ -164,28 +163,37 @@ func TestInjectionNonZeroAmplifiesWithinCaps(t *testing.T) {
 	}
 }
 
-// TestSignalProxyBaselines 三信号代理口径 (22-02 §6 短期替代)：
-// receipt_delay = 常量基线；execution_gap = OrderPressure；line_tone = IT 恐慌。
-func TestSignalProxyBaselines(t *testing.T) {
-	silo := bbTestSilo(0.4)
+// TestObservationBaseIsTheta 22-01 §7.1 权威形式：观测基值是结算后的 Θ'，
+// 「测到的是服从不是自保」由伪装混合与噪声产生 (22-02 §5)，不改基值。
+// 三信号均每月产生。
+func TestObservationBaseIsTheta(t *testing.T) {
+	for _, signal := range []string{
+		model.BlackBoxSignalReceiptDelay,
+		model.BlackBoxSignalExecutionGap,
+		model.BlackBoxSignalLineTone,
+	} {
+		if !blackBoxSignalProduced(bbTestSilo(0.4), signal) {
+			t.Fatalf("信号 %s 应每月产生", signal)
+		}
+	}
 
-	base, produced := blackBoxSignalBase(silo, model.BlackBoxSignalReceiptDelay)
-	if !produced || base != bbReceiptDelayBaseline {
-		t.Fatalf("receipt_delay 代理 = (%v,%v)，想要 (%v,true)", base, produced, bbReceiptDelayBaseline)
+	// 同种子下 Θ 高的堡观测均值必须显著高于 Θ 低的堡 (基值 = Θ' 的直接证据)。
+	mean := func(theta float64) float64 {
+		total := 0.0
+		n := 0
+		for i := 0; i < 60; i++ {
+			silo := bbTestSilo(theta)
+			GenerateBlackBoxObservations(silo)
+			for _, obs := range silo.BlackBox.PendingObservations {
+				total += obs.Value
+				n++
+			}
+		}
+		return total / float64(n)
 	}
-	base, produced = blackBoxSignalBase(silo, model.BlackBoxSignalExecutionGap)
-	if want := clamp01(OrderPressure(silo)); !produced || base != want {
-		t.Fatalf("execution_gap 代理 = (%v,%v)，想要 (%v,true)", base, produced, want)
-	}
-	base, produced = blackBoxSignalBase(silo, model.BlackBoxSignalLineTone)
-	if !produced || base != 0.25 { // IT 部门 PanicValue
-		t.Fatalf("line_tone 代理 = (%v,%v)，想要 (0.25,true)", base, produced)
-	}
-	// 无 IT 部门时退化为全部门恐慌均值。
-	silo.Professions = silo.Professions[1:]
-	base, produced = blackBoxSignalBase(silo, model.BlackBoxSignalLineTone)
-	if !produced || base != 0.15 {
-		t.Fatalf("line_tone 无 IT 部门代理 = (%v,%v)，想要 (0.15,true)", base, produced)
+	hi, lo := mean(0.8), mean(0.2)
+	if hi-lo < 0.3 {
+		t.Fatalf("观测均值差 %v 过小 (高 Θ %v / 低 Θ %v)：基值未跟随 Θ'", hi-lo, hi, lo)
 	}
 }
 

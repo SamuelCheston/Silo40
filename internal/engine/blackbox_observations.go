@@ -69,8 +69,7 @@ func GenerateBlackBoxObservations(silo *model.Silo) {
 	theta := silo.BlackBox.Theta // Θ' = 4.55 结算后的真值 (4.65 合法输入，22-01 §5.2)
 	now := GameTime{Year: silo.CurrentYear, Month: silo.CurrentMonth}
 	for _, spec := range bbSignalSpecs {
-		base, produced := blackBoxSignalBase(silo, spec.signalType)
-		if !produced {
+		if !blackBoxSignalProduced(silo, spec.signalType) {
 			continue // 当月不产生 → 零 RNG (22-01 §7.3 双重门控)
 		}
 		pDisgEff, dEff, sigmaEff := blackboxInjectionParams(silo, spec, theta)
@@ -80,7 +79,9 @@ func GenerateBlackBoxObservations(silo *model.Silo) {
 			bias = -dEff // 把报告粉饰得更平静 (22-01 §5.2)
 		}
 		eta := boxMuller(DrawFloat64(), DrawFloat64()) // RNG 消耗 2+3：噪声取样
-		y := clamp01(base + bias + sigmaEff*eta)
+		// 22-01 §7.1 权威形式：观测是对结算后 Θ' 的带噪读数；「测到的是服从不是
+		// 自保」由伪装混合 (p_disg/d_k) 与噪声产生 (22-02 §5)，不改基值。
+		y := clamp01(theta + bias + sigmaEff*eta)
 		arrive := AdvanceTime(now, spec.delayMonths)
 		silo.BlackBox.PendingObservations = append(silo.BlackBox.PendingObservations, model.BlackBoxPendingObservation{
 			ArriveYear:     arrive.Year,
@@ -95,57 +96,15 @@ func GenerateBlackBoxObservations(silo *model.Silo) {
 	}
 }
 
-// blackBoxSignalBase 信号 k 的载体侧代理读数 (base) 与当月是否产生
-// (22-02 §6 缺口清单的短期替代口径)。除物理层 Θ 外不引用任何黑箱真值；
-// 代理只读堡面既有量 (OrderPressure、部门恐慌) 与常量。
-//
-// W2 口径：三信号均每月产生。
-//
-//   - receipt_delay：回执常态 → 每月产生。载体 (Order 例行指令账本) 缺失
-//     (22-02 §6 G3)：读数为常量基线 + 噪声——G3 落地前为基线代理。
-//     TODO(balance)：G3 落地后改读真实回执时延归一化。
-//   - execution_gap：代理 = OrderPressure 的归一化读数 (22-02 §6 G3 短期替代：
-//     以 OrderPressure 反向变化作执行质量代理)。信号极性是「差异/坏度」
-//     (越高越坏)，故直接取 OrderPressure 本身 (叛乱与平均恐慌的加权和，
-//     已在 [0,1])：压力越高 = 执行缺口越大。首版以当月水位代替「变化」
-//     (无上月水位存档字段)。TODO(balance)：G3 落地后改读真实复核差异。
-//   - line_tone：代理 = IT 部门恐慌的归一化读数——IT 主任部门恐慌越高，
-//     例行汇报的态度信号越差。TODO(balance)：例行汇报载体落地后改读真实
-//     态度观测。
-func blackBoxSignalBase(silo *model.Silo, signalType string) (base float64, produced bool) {
+// blackBoxSignalProduced 信号 k 当月是否产生。三信号均为例行报告载体，
+// 每月产生 (22-01 §5.2)；保留函数作后续载体条件扩展点 (22-02 §6 缺口通道
+// 落地后按通道补充产生条件)。
+func blackBoxSignalProduced(silo *model.Silo, signalType string) bool {
 	switch signalType {
-	case model.BlackBoxSignalReceiptDelay:
-		return bbReceiptDelayBaseline, true
-	case model.BlackBoxSignalExecutionGap:
-		return blackBoxExecutionGapProxy(silo), true
-	case model.BlackBoxSignalLineTone:
-		return blackBoxLineToneProxy(silo), true
+	case model.BlackBoxSignalReceiptDelay, model.BlackBoxSignalExecutionGap, model.BlackBoxSignalLineTone:
+		return true
 	}
-	return 0, false
-}
-
-// blackBoxExecutionGapProxy execution_gap 载体代理：OrderPressure 归一化读数。
-// 只读堡面既有量，不引用黑箱真值。
-func blackBoxExecutionGapProxy(silo *model.Silo) float64 {
-	return clamp01(OrderPressure(silo))
-}
-
-// blackBoxLineToneProxy line_tone 载体代理：IT 部门恐慌归一化读数。
-// 无 IT 部门时退化为全部门恐慌均值 (切片序累加，确定性)；无部门时为 0。
-func blackBoxLineToneProxy(silo *model.Silo) float64 {
-	for _, profession := range silo.Professions {
-		if profession.Name == "IT" {
-			return clamp01(profession.PanicValue)
-		}
-	}
-	if len(silo.Professions) == 0 {
-		return 0
-	}
-	total := 0.0
-	for _, profession := range silo.Professions {
-		total += profession.PanicValue
-	}
-	return clamp01(total / float64(len(silo.Professions)))
+	return false
 }
 
 // blackboxInjectionParams 23-05 §3.1 注入映射 (零 RNG，确定性)：由堡盲区经营
