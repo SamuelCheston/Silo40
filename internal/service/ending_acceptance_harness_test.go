@@ -654,9 +654,20 @@ func playPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRunner {
 					// ~2 months out lands W under 30 and the post-shock drift
 					// keeps it there through settlement (W_eq ~43 drifts back
 					// only ~2 points over the last 2 months).
+					// Rift retune (19 §6.3): the top-up cap carries the same
+					// hunt margin as the cover cycle below, and the cover
+					// cycle itself keeps running until the top-up window
+					// opens — year 129 without cover lets the hunt compound
+					// straight into 除名 before the settlement date. The
+					// window opens earlier and carries one extra burst than
+					// baseline: with the amplified volatility calmed, exposure
+					// forgets faster late-game, W_eq climbs, and the final
+					// top-up must land on the settlement tick itself or the
+					// last-month drift carries W back over the 30 bar.
 					cal := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth
-					if 130*12+1-cal <= 8 {
-						r.exposeBurst(m, &exposes, &lastExpose, 14, 0.6)
+					if 130*12+1-cal <= 12 ||
+						(m-lastExpose >= 8 && svc.agent.SuspicionLevel < 0.88) {
+						r.exposeBurst(m, &exposes, &lastExpose, 15, 0.88)
 					}
 				}
 				if resourceAmount(svc.silo, "Supplies") < 500 && svc.agent.ActionPoints >= 15 {
@@ -678,12 +689,25 @@ func playPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRunner {
 				// every AP before the top-up fund reaches 20. But the cover
 				// expose outranks the supply buffer: when an expose is due,
 				// hoard for it unless supplies are already critical.
-				exposeDueWindow := m-lastExpose >= 9 && svc.agent.SuspicionLevel < 0.6 &&
+				// Rift retune (19 §6.3): the cover cycle must outlast hunt
+				// hits — capping it at 0.6 lets counter-investigate strikes
+				// shut the cycle forever (decay is 0.05/year, a hunt hit is
+				// +0.08), after which the hoard phase compounds to 除名. The
+				// expose itself carries no suspicion, so the cap can sit one
+				// hunt hit under the 1.0 hard line and keep eroding the
+				// alliance while the suspicion decays back down. The cycle
+				// runs one month tighter than baseline so the horizon top-ups
+				// start from a lower W.
+				exposeDueWindow := m-lastExpose >= 8 && svc.agent.SuspicionLevel < 0.88 &&
 					svc.silo.CurrentYear < 129 // keep the last interval slot for the horizon top-ups
 				supplies := resourceAmount(svc.silo, "Supplies")
 				switch {
 				case exposeDueWindow && svc.agent.ActionPoints >= 25:
-					r.exposeBurst(m, &exposes, &lastExpose, 10, 0.6)
+					// Rift retune (19 §6.3): two extra window-phase exposures
+					// grind W further before the horizon — the settlement bar
+					// (W ≤ 30) is held against the post-shock drift only when
+					// the top-ups start from a lower W.
+					r.exposeBurst(m, &exposes, &lastExpose, 12, 0.88)
 				case supplies < 1000 && svc.agent.ActionPoints >= 15:
 					r.execute("supply_ration", model.AgentAction{
 						Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Supplies",
