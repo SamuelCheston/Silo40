@@ -350,10 +350,11 @@ func clampUnitIdeology(v float64) float64 {
 // department must hold at least this many MATURED facts in its belief layer.
 // TODO(balance): 5 → 3. Derivation (17-information-economy §5): one share
 // absorbs B_player·transmit·receptivity ≈ 0.22–0.34, so a fact needs ~2 shares
-// to cross the 0.30 floor and stay there against forgetting; 3 facts ×
-// 9 departments × ~2 shares ≈ 54 shares ≈ 162 AP, reachable inside the ~410 AP
-// lifetime income while 5 facts (≈270 AP + upkeep) is not. Permeation adds the
-// time dimension on top without changing this depth (18-time-permeation §2).
+// to cross the 0.30 floor; 3 facts × 9 departments keeps the fill cost inside
+// the ~410 AP lifetime income while 5 facts does not. With constant forgetting
+// live, staying above the floor is governed by the deep-fill/coast economy
+// (fill to B₀ = 0.30 + 30·r, then coast the permeation window); the depth is
+// unchanged. Permeation adds the time dimension without changing this depth.
 const informationGateFactCount = 3
 
 // allDepartmentsHoldFragments is the local public-fact structural bridge,

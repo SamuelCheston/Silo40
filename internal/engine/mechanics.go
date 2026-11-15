@@ -1299,21 +1299,19 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 	e.applyWeightedEnding(eventType, silo, agent)
 }
 
-// runMonthlyBeliefDispatch 月度信念层结算：时间渗透 (18-time-permeation §3.1)，
-// 每月恰好一次 (确定性)。渗透只读 B 与日历，不改 B/π、不耗 RNG。
+// runMonthlyBeliefDispatch 月度信念层结算：恒定淡忘 + 时间渗透
+// (25-information-economy §修复A、18-time-permeation §3.1)，确定性。
 //
-// 挂钩点修正：旧实现把信念层结算放在 runEventMechanic 的 Go 兜底分支里，但
-// JS metrics_update 机制总会先成功处理 METRICS_UPDATE，兜底分支不可达——挂在
-// 那里的逻辑从未在真实月度流程里执行。渗透没有 JS 对应物，无论 JS 机制是否
-// 处理该事件都必须在这里执行；deltaYears <= 0 的零月路径不结算 (与 JS 侧守卫
-// 一致)。
+// 每月每部门恰好一次：RunLocalPhase 每个 tick 只在步骤 6 发一次
+// EVENT_METRICS_UPDATE；runEventMechanic 的 JS 成功路与 Go 兜底路各调用本
+// 函数一次，但两路互斥 (成功路结算后直接 return)，故每个事件恰好一次。
 //
-// 关于恒定淡忘 (ApplyBeliefForgetting)：设计文档 (17/18 分册) 把它当作生效中
-// 的【现状】，但实测它同样只存在于上述不可达的兜底分支，真实流程里 B 从不
-// 衰减。启用它会改变所有依赖部门信念长期保持高位的结局线 (《公议》的合格
-// 事实读 Judicial 实时 B≥0.85，启用淡忘后既有验收全部掉出)，属于超出本任务
-// 边界的全局行为变更，故此处不启用、保持既有行为逐位不变，仅落地渗透时间
-// 门。该差异已作为发现项上报，是否补淡忘由后续单独评审决定。
+// 时序裁决 (显式)：先淡忘、再计数、再判成熟。B 恰好卡在分享地板的部门当月
+// 先被衰减到地板下、不计渗透数；只有被持续流通托住 (衰减后仍 ≥ 地板) 的
+// 部门才累计。淡忘与渗透都只按既有持久化顺序遍历部门层，不耗 RNG。
+//
+// deltaYears <= 0 的零月路径不结算 (与 JS 侧守卫一致)。JS metrics_update
+// 不写部门信念层，淡忘与渗透都没有 JS 对应物，只在这里执行，不会双跑。
 func (e *GameEngine) runMonthlyBeliefDispatch(eventType string, event *GameEvent, silo *model.Silo) {
 	if eventType != EVENT_METRICS_UPDATE || silo == nil {
 		return
@@ -1322,7 +1320,9 @@ func (e *GameEngine) runMonthlyBeliefDispatch(eventType string, event *GameEvent
 	if deltaYears <= 0 {
 		return
 	}
-	ApplyPermeation(silo, DefaultInformationConfig())
+	cfg := DefaultInformationConfig()
+	ApplyBeliefForgetting(silo, cfg)
+	ApplyPermeation(silo, cfg)
 }
 
 // applyWeightedEnding lets the service arbitrate the terminal evaluation

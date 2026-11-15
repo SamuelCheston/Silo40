@@ -698,9 +698,16 @@ func playPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRunner {
 				// erosion + W shocks), survival rationing second, investigate
 				// third. No circulation here — at 3 AP/month it would stretch
 				// the expose cycle past the horizon; department beliefs for E
-				// come from the publication broadcast and the exposes.
+				// come from the publication broadcast and the exposes. Once the
+				// first fact is verified, finish its publish-floor investigation
+				// before another expose so its alliance erosion delays IT's hunt.
 				exposeDue := exposes < 6 && m-lastExpose >= 3 && svc.agent.SuspicionLevel < 0.6
+				firstBelief := engine.BeliefFor(svc.agent, "Judicial_1")
+				finishFirstPublication := factVerified(svc.silo, "Judicial_1") && !factPublished(svc.silo, "Judicial_1") &&
+					firstBelief != nil && firstBelief.B < engine.DefaultInformationConfig().QualPublish
 				switch {
+				case finishFirstPublication && svc.agent.ActionPoints >= 15:
+					r.investigateLagging()
 				case exposeDue && svc.agent.ActionPoints >= 20:
 					r.exposeBurst(m, &exposes, &lastExpose, 6, 0.6)
 				case resourceAmount(svc.silo, "Supplies") < 2500 && svc.agent.ActionPoints >= 15:
