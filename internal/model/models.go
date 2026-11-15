@@ -357,6 +357,8 @@ type ExperimentStewardship struct {
 	Missed map[uint]bool `json:"missed,omitempty"`
 	// Misses 缺口审计记录。
 	Misses []ExperimentMissRecord `json:"misses,omitempty"`
+	// Ledger 杂项台账 (防重复计费的已结算标记等)，键由实现定义。
+	Ledger map[string]int `json:"ledger,omitempty"`
 }
 
 // LifespanStewardship 指标二：剩余人员平均寿命 (1 号人员轮流休眠)。
@@ -367,6 +369,21 @@ type LifespanStewardship struct {
 	Initialized bool `json:"initialized,omitempty"`
 	// Postures 每堡监控档位 (siloID -> Silo1Posture*)。
 	Postures map[uint]string `json:"postures,omitempty"`
+	// Ledger 杂项台账 (一次性行动成本的已计费标记等)，键由实现定义。
+	Ledger map[string]int `json:"ledger,omitempty"`
+}
+
+// Silo1ObservationBatch 一份观测包 (物理层生成、决策层唯一输入，22 §6.3)。
+// 黑箱纪律：不得包含 selfPreservation 真值、执行强度或曲线参数；只含带延迟
+// 与噪声的可观测计数/读数。
+type Silo1ObservationBatch struct {
+	Year                int     `json:"year"`
+	Month               int     `json:"month"`
+	ReportedAnomalies   int     `json:"reported_anomalies"`   // IT 上报的异常数
+	DetectedPlayerOps   int     `json:"detected_player_ops"`  // 玩家动作被举报数
+	ReportGaps          int     `json:"report_gaps"`          // 应报未报的缺口 (阳奉阴违迹象)
+	DefianceSigns       int     `json:"defiance_signs"`       // 抗命/怠工征兆计数
+	UltimatumCompliance float64 `json:"ultimatum_compliance"` // 通牒后压力回落幅度 (观测到的服从效果)
 }
 
 // Silo1AssignmentState 1 号对单个地堡的指派与信念状态 (指标三)。
@@ -388,6 +405,8 @@ type Silo1AssignmentState struct {
 	// Incidents 自上次决策以来登记的后果事件计数 (原累加点改为决策输入，
 	// ADR-0016)：ignore/cover_collapse/deviation/it_overreach。
 	Incidents map[string]int `json:"incidents,omitempty"`
+	// ObsBuffer 观测包缓冲 (延迟队列，物理层追加、决策层消费后裁剪)。
+	ObsBuffer []Silo1ObservationBatch `json:"obs_buffer,omitempty"`
 	// LastDecisionYear/Month 上次指派决策时间 (冷却用)。
 	LastDecisionYear  int `json:"last_decision_year,omitempty"`
 	LastDecisionMonth int `json:"last_decision_month,omitempty"`
@@ -588,18 +607,22 @@ type Silo struct {
 	// SelfPreservation 执行层自保倾向隐藏指标 (22 设计卷 §6.1，占位名，正式命名
 	// 待研究轨候选)。物理层真值：0 = 完全按 order 办事，→1 = 公开叫板。
 	// 黑箱纪律：1 号决策层代码禁止读取本字段，只能消费观测包。
-	SelfPreservation float64                 `gorm:"default:0.0" json:"self_preservation"`
-	TotalPopulation  int                     `gorm:"default:10000" json:"total_population"`
-	Legitimacy       float64                 `gorm:"default:1.0" json:"legitimacy"`                      // Compatibility mirror of Mayor.Legitimacy.
-	Mayor            MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`             // 现任 Mayor 个人正统性
-	Authority        ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`         // IT 幕后威势与 Judicial 附着
-	EscapedGroup     EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`     // 已离开且可能存续的堡外群体 (G5)
-	TopStance        TopStanceState          `gorm:"type:text;serializer:json" json:"top_stance"`        // 顶层立场 (16 §3.2)：内部状态，仲裁不读
-	Negotiation      NegotiationState        `gorm:"type:text;serializer:json" json:"negotiation"`       // 市长与叛乱方谈判/妥协层 (21 设计卷)：只改变谁在阻碍谁，不发放胜利
-	EscapePrep       EscapePreparation       `gorm:"type:text;serializer:json" json:"escape_prep"`       // 逃跑准备账本 (16 §2)：事实账本，仲裁不读
-	SpilloverPrep    SpilloverPreparation    `gorm:"type:text;serializer:json" json:"spillover_prep"`    // 外溢准备账本 (16 §2.3)：信道建立侧
-	EscapeResponse   EscapeResponseState     `gorm:"type:text;serializer:json" json:"escape_response"`   // 筹备反制层 (20 修订/ADR-0014)：组织怀疑度与 IT 带权响应
-	PreFallSnapshot  PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
+	SelfPreservation float64 `gorm:"default:0.0" json:"self_preservation"`
+	// SafeguardIncidents 引擎侧后果事件登记簿 (ADR-0016)：原直接累加风险度的各
+	// 累加点改为在此登记 (kind -> 计数)，由 1 号决策层月度消费并清零。引擎包
+	// 写入 (协议偏离/IT 过度干预/不作为/蒙蔽崩塌)，服务包读取。
+	SafeguardIncidents map[string]int          `gorm:"type:text;serializer:json" json:"safeguard_incidents,omitempty"`
+	TotalPopulation    int                     `gorm:"default:10000" json:"total_population"`
+	Legitimacy         float64                 `gorm:"default:1.0" json:"legitimacy"`                      // Compatibility mirror of Mayor.Legitimacy.
+	Mayor              MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`             // 现任 Mayor 个人正统性
+	Authority          ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`         // IT 幕后威势与 Judicial 附着
+	EscapedGroup       EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`     // 已离开且可能存续的堡外群体 (G5)
+	TopStance          TopStanceState          `gorm:"type:text;serializer:json" json:"top_stance"`        // 顶层立场 (16 §3.2)：内部状态，仲裁不读
+	Negotiation        NegotiationState        `gorm:"type:text;serializer:json" json:"negotiation"`       // 市长与叛乱方谈判/妥协层 (21 设计卷)：只改变谁在阻碍谁，不发放胜利
+	EscapePrep         EscapePreparation       `gorm:"type:text;serializer:json" json:"escape_prep"`       // 逃跑准备账本 (16 §2)：事实账本，仲裁不读
+	SpilloverPrep      SpilloverPreparation    `gorm:"type:text;serializer:json" json:"spillover_prep"`    // 外溢准备账本 (16 §2.3)：信道建立侧
+	EscapeResponse     EscapeResponseState     `gorm:"type:text;serializer:json" json:"escape_response"`   // 筹备反制层 (20 修订/ADR-0014)：组织怀疑度与 IT 带权响应
+	PreFallSnapshot    PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
 	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
 	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
 	PublicEvidence []PublicEvidenceRecord `gorm:"type:text;serializer:json" json:"public_evidence,omitempty"`
