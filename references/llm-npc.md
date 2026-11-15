@@ -5,8 +5,9 @@
 
 ## 状态
 
-- 已实现：`shadow` 模式（只记录不生效）、参与度四档、双通道输出（候选打分 + 意愿系数）、
-  决策日志与回放、中途切换、审计端点、无 key 离线链路（确定性 fake client）。
+- 已实现：`shadow` 模式（只记录不生效）、参与度四档、上下文档位（与参与度正交）、
+  双通道输出（候选打分 + 意愿系数）、决策日志与回放、中途切换、审计端点、
+  无 key 离线链路（确定性 fake client）。
 - `on` 模式**已放行**（2026-11-13，作者批准）：默认参与度 `key`、超时 8s；
   v3 软锚点提示词 + 修订后规避口径（见"放行门槛"）。验证：影子门槛 288 点 ×3 轮、
   真实对局 10 off + 10 on 种子配对（结局逐种子同型）、key 档日志回放逐位一致。
@@ -19,6 +20,11 @@
 | --- | --- | --- |
 | `SILO40_LLM_MODE` | `off` | `off` / `shadow` / `on`。shadow=记录不生效；on=按参与度生效 |
 | `SILO40_LLM_PARTICIPATION` | `key` | 参与度档位：`off` / `events` / `key` / `full`（见下）。缺省 `key` 为 2026-11-13 放行决定；显式 `off` 可恢复"启用但不介入" |
+| `SILO40_LLM_CONTEXT` | `standard` | 上下文档位：`minimal` / `standard` / `rich` / `world`（见下）。决定"问的时候给多少料"，与参与度正交 |
+| `SILO40_LLM_CTX_MEMORY` | 开 | 个人记忆开关：NPC 的特质、已知碎片与人脉是否进 prompt |
+| `SILO40_LLM_CTX_PROTOCOL` | **关** | 条文法规开关：Order 条款清单是否进 prompt |
+| `SILO40_LLM_CTX_EVENT_LIMIT` | `5` | 事件摘要条数（standard 档及以上的近期事件摘要上限；0=不带）。TODO(balance) |
+| `SILO40_LLM_CTX_PEER_INTEL` | **关** | 其他地堡情报开关：谣言档邻堡动态是否进 prompt（§3.4 白名单的唯一用户自选例外，只给档位不给精确值） |
 | `SILO40_LLM_BASE_URL` | OpenAI 官方 | 任何 OpenAI 兼容 `/v1` 端点（Ollama/vLLM/llama.cpp） |
 | `SILO40_LLM_API_KEY` | 空 | 只从环境/密钥文件读取；不入库、不入日志正文 |
 | `SILO40_LLM_KEY_FILE` | 空 | 可选密钥文件路径 |
@@ -78,6 +84,33 @@
 
 切换：`POST /debug/game/llm/participation {"level":"key"}` 或 Wails `SetLlmParticipation`。
 切换以 `kind=config` 条目记入决策日志；回放按日志还原切换点，中途改档不导致回放分叉。
+
+## 上下文档位（玩家可调、可中途切换，与参与度正交）
+
+参与度决定"什么时候问"，上下文档位决定"问的时候给多少料"。档位单调嵌套
+`minimal ⊂ standard ⊂ rich ⊂ world`，低档是整节省除而非标记，真省 token：
+
+| 档位 | prompt 内容 |
+| --- | --- |
+| minimal | 仅当前 NPC（身份+经济字段）、候选动作、输出契约（system 提示词） |
+| standard | 极简 + 地堡大局指标、各部门公开统计、公开派系、近期事件摘要 |
+| rich | 标准 + 本堡主线经过（history 类事件，旧→新） |
+| world | 丰富 + silo 设定简述、其他地堡关系（拓扑+谣言档状态）、长期剧情线（各结局线已点亮里程碑） |
+
+档位之外的独立开关（任意档位下生效）：
+
+- **个人记忆**（默认开）：该 NPC 的特质、已知碎片、人脉。关闭后各档只给基础状态。
+- **条文法规**（默认关）：Order 条款清单（真实副本，id/类别/严重度/描述）。
+- **事件摘要条数**（默认 5，TODO(balance)）：standard 档及以上近期事件摘要的条数上限；0 = 不带。
+- **其他地堡情报**（默认关）：邻堡谣言档动态（状态/来源/叛乱档/人口档，只给档位不给精确值）+ 1 号最近通报。这是 §3.4 提示词白名单（不含迷雾数据）的唯一用户自选例外。
+
+富上下文段落由服务层经 `ContextProvider` 在 prompt 组装时注入（同
+`SetEventFilter` 模式；游戏线程持锁调用，纯读状态、不碰 rng）；minimal 档
+不调用 provider。切换：`POST /debug/game/llm/context` 或 Wails `SetLlmContext`，
+以 `kind=context_config` 条目记入决策日志，读档恢复；上下文配置只影响 prompt
+文本，回放仍只读 `final_choice`，不影响复现。默认 `standard`＋个人记忆开，
+与历史 payload 形状一致（新增近期事件摘要）；`SILO40_LLM_MODE=off` 时整条
+链路零代码路径变化。界面在开局设置区（SetupPanel「LLM 顾问上下文」）。
 
 ## 双通道输出
 
@@ -149,10 +182,11 @@
 
 ## Debug 端点
 
-- `GET /debug/game/llm/status` — 模式/档位/日志条数/模型/错误
+- `GET /debug/game/llm/status` — 模式/档位/上下文配置/日志条数/模型/错误
 - `GET /debug/game/llm/decisions?limit=N` — 审计日志（新→旧）
-- `POST /debug/game/llm/participation {"level":"..."}` — 中途切换
-- 未启用 LLM 时三者返回 503。
+- `POST /debug/game/llm/participation {"level":"..."}` — 中途切换参与度
+- `POST /debug/game/llm/context {"level":"...","personal_memory":...,"protocol_clauses":...,"peer_silo_intel":...,"event_summary_limit":N}` — 中途切换上下文档位与开关
+- 未启用 LLM 时四者返回 503。
 
 ## 代码落点
 
@@ -161,5 +195,8 @@
 | `internal/engine/npc.go` | `NpcPolicy` 接口、`NpcAdvice`（双通道 + Force）、clamp |
 | `internal/engine/engine.go` | `GameEngine.NpcPolicy` 注入位（`RunNpcTurn`） |
 | `internal/llm/` | 档位/模式解析、响应校验、HTTP/fake 客户端、日志表、Advisor |
+| `internal/llm/context_level.go` | 上下文档位/独立开关解析、`ContextData`/`ContextProvider`、日志载荷编解码 |
 | `internal/service/game_service.go` | env 装配、tick 观测、Resume 回放、切换 API |
+| `internal/service/llm_context.go` | 富上下文段落组装（事件/条款/设定/邻堡/剧情线）、`SetLlmContext` |
 | `internal/api/debug_http.go` | `/debug/game/llm/*`（可选 `LlmAPI` 面） |
+| `frontend/src/components/SetupPanel.tsx` | 开局设置区「LLM 顾问上下文」（四档 + 四开关） |

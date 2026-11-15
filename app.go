@@ -265,6 +265,11 @@ func (a *App) SetLlmParticipation(level string) (string, error) {
 	return a.gameService.SetLlmParticipation(level)
 }
 
+// SetLlmContext 中途切换上下文档位与独立开关 (与参与度正交)，切换记入日志。
+func (a *App) SetLlmContext(cfg service.LlmContextConfig) (service.LlmContextConfig, error) {
+	return a.gameService.SetLlmContext(cfg)
+}
+
 // llmAPIAdapter exposes the LLM surface on the debug HTTP server without
 // extending the GameAPI interface.
 type llmAPIAdapter struct{ app *App }
@@ -275,6 +280,13 @@ func (l llmAPIAdapter) LlmDecisions(limit int) (any, error) {
 }
 func (l llmAPIAdapter) SetLlmParticipation(level string) (string, error) {
 	return l.app.SetLlmParticipation(level)
+}
+func (l llmAPIAdapter) SetLlmContext(body []byte) (any, error) {
+	var cfg service.LlmContextConfig
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		return nil, err
+	}
+	return l.app.SetLlmContext(cfg)
 }
 
 // agentAPIAdapter exposes the agent-operator surface on the debug HTTP

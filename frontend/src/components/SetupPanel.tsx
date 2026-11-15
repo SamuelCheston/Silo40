@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Box, Button, Text, VStack, HStack, Heading, SimpleGrid, Badge } from '@chakra-ui/react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Box, Button, Text, VStack, HStack, Heading, SimpleGrid, Badge, Input } from '@chakra-ui/react';
+import { GetLlmStatus, SetLlmContext } from "../../wailsjs/go/main/App";
 
 export interface TraitOption {
     id: string;
@@ -35,6 +36,169 @@ export const AVAILABLE_DEPARTMENTS = [
 interface SetupPanelProps {
     onComplete: (selectedTraitIds: string[], profession: string) => void;
 }
+
+// ============ LLM 顾问上下文（可选） ============
+// 参与度决定"什么时候问模型"，上下文档位决定"问的时候给多少料"，两者正交。
+// 未启用 LLM（SILO40_LLM_MODE=off，默认）时整区只读：设置只在启用后生效。
+
+const CONTEXT_LEVELS = [
+    { id: 'minimal', name: '极简', desc: '仅当前 NPC、候选动作、输出契约。最省 token。' },
+    { id: 'standard', name: '标准', desc: '极简 + 地堡大局指标、相关派系人物、近期事件摘要。' },
+    { id: 'rich', name: '丰富', desc: '标准 + 本堡主线经过（已发生的主线事件）。' },
+    { id: 'world', name: '世界观', desc: '丰富 + silo 设定、其他地堡关系、长期剧情线。' },
+];
+
+const CONTEXT_SWITCHES = [
+    { id: 'personal_memory', name: '个人记忆', desc: '该 NPC 的特质、已知信息碎片与人脉。关闭后各档都只给基础状态。' },
+    { id: 'protocol_clauses', name: '条文法规', desc: 'Order 条款清单。关闭时模型看不到条款原文。' },
+    { id: 'peer_silo_intel', name: '其他地堡情报', desc: '邻堡的谣言档动态（只给档位不给精确值）。默认关闭。' },
+];
+
+const LlmContextSection: React.FC = () => {
+    const [enabled, setEnabled] = useState(false);
+    const [mode, setMode] = useState('off');
+    const [participation, setParticipation] = useState('off');
+    const [level, setLevel] = useState('standard');
+    const [personalMemory, setPersonalMemory] = useState(true);
+    const [protocolClauses, setProtocolClauses] = useState(false);
+    const [peerIntel, setPeerIntel] = useState(false);
+    const [eventLimit, setEventLimit] = useState(5);
+    const [feedback, setFeedback] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    useEffect(() => {
+        GetLlmStatus().then(st => {
+            setEnabled(st.enabled);
+            setMode(st.mode || 'off');
+            setParticipation(st.level || 'off');
+            const ctx = st.context;
+            if (ctx) {
+                setLevel(ctx.level || 'standard');
+                setPersonalMemory(!!ctx.personal_memory);
+                setProtocolClauses(!!ctx.protocol_clauses);
+                setPeerIntel(!!ctx.peer_silo_intel);
+                setEventLimit(typeof ctx.event_summary_limit === 'number' ? ctx.event_summary_limit : 5);
+            }
+        }).catch(() => setFeedback('LLM 状态读取失败。'));
+    }, []);
+
+    const apply = useCallback(async () => {
+        setBusy(true);
+        try {
+            const applied = await SetLlmContext({
+                level,
+                personal_memory: personalMemory,
+                protocol_clauses: protocolClauses,
+                peer_silo_intel: peerIntel,
+                event_summary_limit: eventLimit,
+            });
+            setFeedback(`已应用：${CONTEXT_LEVELS.find(l => l.id === applied.level)?.name || applied.level} 档。`);
+        } catch (err) {
+            setFeedback(`应用失败：${err}`);
+        } finally {
+            setBusy(false);
+        }
+    }, [level, personalMemory, protocolClauses, peerIntel, eventLimit]);
+
+    const switchOf = (id: string): [boolean, (v: boolean) => void] => {
+        if (id === 'personal_memory') return [personalMemory, setPersonalMemory];
+        if (id === 'protocol_clauses') return [protocolClauses, setProtocolClauses];
+        return [peerIntel, setPeerIntel];
+    };
+
+    return (
+        <Box w="full" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+            <HStack justify="space-between" w="full" mb={2}>
+                <Heading size="sm" color="gray.700">LLM 顾问上下文（可选）</Heading>
+                <Badge colorPalette={enabled ? "green" : "gray"}>
+                    {enabled ? `已启用 · 模式 ${mode} · 参与度 ${participation}` : '未启用'}
+                </Badge>
+            </HStack>
+            <Text fontSize="xs" color="gray.500" mb={3}>
+                参与度决定「什么时候问模型」，上下文档位决定「问的时候给多少料」，两者互不影响。
+                {!enabled && ' 当前未启用 LLM（环境变量 SILO40_LLM_MODE=off）：以下设置仅在启用后生效。'}
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" color="gray.700" mb={2}>上下文档位</Text>
+            <SimpleGrid columns={{ base: 1, md: 2 }} gap={3} w="full" mb={4}>
+                {CONTEXT_LEVELS.map(lv => {
+                    const isSelected = level === lv.id;
+                    return (
+                        <Box
+                            key={lv.id}
+                            p={3}
+                            borderWidth="2px"
+                            borderRadius="md"
+                            cursor={enabled ? "pointer" : "not-allowed"}
+                            borderColor={isSelected ? "purple.500" : "gray.200"}
+                            bg={isSelected ? "purple.50" : "white"}
+                            opacity={enabled ? 1 : 0.6}
+                            onClick={() => enabled && setLevel(lv.id)}
+                            transition="all 0.2s"
+                            _hover={enabled ? { borderColor: "purple.300" } : {}}
+                        >
+                            <Text fontWeight="bold" color={isSelected ? "purple.800" : "gray.700"} fontSize="sm">{lv.name}</Text>
+                            <Text fontSize="xs" color="gray.500">{lv.desc}</Text>
+                        </Box>
+                    );
+                })}
+            </SimpleGrid>
+
+            <Text fontSize="sm" fontWeight="bold" color="gray.700" mb={2}>独立开关（与档位正交）</Text>
+            <VStack align="stretch" gap={2} w="full">
+                {CONTEXT_SWITCHES.map(sw => {
+                    const [on, setOn] = switchOf(sw.id);
+                    return (
+                        <HStack
+                            key={sw.id}
+                            justify="space-between"
+                            p={3}
+                            bg="white"
+                            borderRadius="md"
+                            border="1px solid"
+                            borderColor="gray.200"
+                            cursor={enabled ? "pointer" : "not-allowed"}
+                            opacity={enabled ? 1 : 0.6}
+                            onClick={() => enabled && setOn(!on)}
+                        >
+                            <Box flex={1}>
+                                <Text fontWeight="bold" fontSize="sm" color="gray.700">{sw.name}</Text>
+                                <Text fontSize="xs" color="gray.500">{sw.desc}</Text>
+                            </Box>
+                            <Badge colorPalette={on ? "green" : "gray"}>{on ? '开' : '关'}</Badge>
+                        </HStack>
+                    );
+                })}
+                <HStack justify="space-between" p={3} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200">
+                    <Box flex={1}>
+                        <Text fontWeight="bold" fontSize="sm" color="gray.700">事件摘要条数</Text>
+                        <Text fontSize="xs" color="gray.500">标准档及以上携带的近期事件摘要条数；0 表示不带事件摘要。</Text>
+                    </Box>
+                    <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        w="80px"
+                        size="sm"
+                        value={eventLimit}
+                        disabled={!enabled}
+                        onChange={e => {
+                            const v = parseInt(e.target.value, 10);
+                            setEventLimit(Number.isFinite(v) ? Math.max(0, Math.min(50, v)) : 0);
+                        }}
+                    />
+                </HStack>
+            </VStack>
+
+            <HStack w="full" mt={3} gap={3}>
+                <Button size="sm" colorPalette="purple" variant="outline" bg="white" onClick={apply} disabled={!enabled || busy}>
+                    {busy ? '应用中…' : '应用上下文设置'}
+                </Button>
+                {feedback && <Text fontSize="xs" color={feedback.startsWith('应用失败') ? "red.600" : "green.600"}>{feedback}</Text>}
+            </HStack>
+        </Box>
+    );
+};
 
 export const SetupPanel: React.FC<SetupPanelProps> = ({ onComplete }) => {
     const [selected, setSelected] = useState<string[]>([]);
@@ -178,6 +342,8 @@ export const SetupPanel: React.FC<SetupPanelProps> = ({ onComplete }) => {
                     })}
                 </SimpleGrid>
             </Box>
+
+            <LlmContextSection />
 
             <Button 
                 colorPalette="blue" 
