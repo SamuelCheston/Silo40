@@ -60,7 +60,7 @@ const trackingLabel: Record<string, string> = {
     hunting: "正在追捕",
 };
 
-// 谈判层口径 (18 设计卷)：三方带权决策，只改变谁在阻碍谁，不发放胜利。
+// 谈判层口径 (21 设计卷)：三方带权决策，只改变谁在阻碍谁，不发放胜利。
 const negotiationDispositionLabel: Record<string, string> = {
     hardliner: "强硬派",
     pragmatist: "务实派",
