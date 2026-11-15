@@ -601,7 +601,11 @@ func TestOutsideSustenanceAfterDeparture(t *testing.T) {
 // action itself. A departure that settles before any outside month is a
 // false green, whatever the headcount.
 func TestRebellionLinePlayableFromNewGame(t *testing.T) {
-	rec := runEscapeLine(t, "rebellion-strict", 2402, "full")
+	runPlayableArchetypeMatrix(t, testRebellionLinePlayableFromNewGame)
+}
+
+func testRebellionLinePlayableFromNewGame(t *testing.T, archetype string) {
+	rec := runEscapeLine(t, "rebellion-strict", 2402, "full", archetype)
 
 	t.Logf("strict rebellion route: seed=%d prep=%s ending=%s won=%v departed=%d survivors=%d months_out=%d demise=%q group_at_settlement=%d surviving=%v stance_at_launch=%s",
 		rec.Seed, rec.PrepLevel, rec.Ending, rec.Won, rec.Departed, rec.Survivors,

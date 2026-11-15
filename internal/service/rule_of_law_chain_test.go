@@ -335,8 +335,12 @@ func TestRuleOfLawGuardBranches(t *testing.T) {
 // also performs the real RESET countermeasure and must settle through weighted
 // arbitration as RULE_OF_LAW, after which further actions are rejected.
 func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testRuleOfLawLinePlayableFromNewGame)
+}
+
+func testRuleOfLawLinePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "rule-of-law-playable.db"))
-	req := threeSiloRequest(2401)
+	req := threeSiloArchetypeRequest(2401, archetype)
 	req.Profession = "Mines"
 	// Start before the fixed archive broadcast so real tunnel actions have time
 	// to build the resident support needed by weighted arbitration.

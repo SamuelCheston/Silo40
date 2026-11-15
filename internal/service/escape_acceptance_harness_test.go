@@ -126,10 +126,10 @@ type escapeRunner struct {
 	lastRepair    int
 }
 
-func newEscapeRunner(t *testing.T, line string, seed int64, prepLevel string) *escapeRunner {
+func newEscapeRunner(t *testing.T, line string, seed int64, prepLevel string, archetype string) *escapeRunner {
 	t.Helper()
 	svc := newGatedService(t, filepath.Join(t.TempDir(), line+"-escape.db"))
-	req := threeSiloRequest(seed)
+	req := threeSiloArchetypeRequest(seed, archetype)
 	req.Profession = "Mechanical"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game %s seed %d: %v", line, seed, err)
@@ -587,9 +587,9 @@ func (r *escapeRunner) settle() {
 	}
 }
 
-func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeRecord {
+func runEscapeLine(t *testing.T, line string, seed int64, level string, archetype string) *escapeRecord {
 	t.Helper()
-	r := newEscapeRunner(t, line, seed, level)
+	r := newEscapeRunner(t, line, seed, level, archetype)
 	svc := r.svc
 	r.beat("game created (profession=Mechanical, prep=" + level + ")")
 
@@ -758,11 +758,11 @@ func TestEscapeAcceptanceDump(t *testing.T) {
 	// Full vs sparse pairs share the seed (not the RNG path: the strategies
 	// diverge it), so preparation must show against each pair's own draws.
 	var records []*escapeRecord
-	records = append(records, runEscapeLine(t, "escapefull", 2401, "full"))
-	records = append(records, runEscapeLine(t, "escapesparse", 2401, "sparse"))
+	records = append(records, runEscapeLine(t, "escapefull", 2401, "full", ""))
+	records = append(records, runEscapeLine(t, "escapesparse", 2401, "sparse", ""))
 	for _, seed := range []int64{2402, 2403, 2404, 2405, 2406, 2407, 2408, 2409, 2411, 2412, 2413, 2414, 2415, 2416, 2417, 2418, 2419, 2420, 2421, 2422, 2423, 2424, 2425, 2426, 2427, 2428, 2429, 2430} {
-		records = append(records, runEscapeLine(t, fmt.Sprintf("sweep-%d", seed), seed, "full"))
-		records = append(records, runEscapeLine(t, fmt.Sprintf("sparse-%d", seed), seed, "sparse"))
+		records = append(records, runEscapeLine(t, fmt.Sprintf("sweep-%d", seed), seed, "full", ""))
+		records = append(records, runEscapeLine(t, fmt.Sprintf("sparse-%d", seed), seed, "sparse", ""))
 	}
 
 	for _, rec := range records {

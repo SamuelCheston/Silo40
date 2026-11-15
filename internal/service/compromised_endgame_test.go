@@ -9,8 +9,12 @@ import (
 )
 
 func TestCompromisedEndingPlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testCompromisedEndingPlayableFromNewGame)
+}
+
+func testCompromisedEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "compromised-playable.db"))
-	req := threeSiloRequest(2801)
+	req := threeSiloArchetypeRequest(2801, archetype)
 	req.Profession = "Mayor"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)

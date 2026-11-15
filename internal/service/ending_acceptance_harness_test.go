@@ -83,10 +83,10 @@ type acceptanceRunner struct {
 	actions map[string]int
 }
 
-func newAcceptanceRunner(t *testing.T, line string, seed int64, profession string) *acceptanceRunner {
+func newAcceptanceRunner(t *testing.T, line string, seed int64, profession string, archetype string) *acceptanceRunner {
 	t.Helper()
 	svc := newGatedService(t, filepath.Join(t.TempDir(), line+"-acceptance.db"))
-	req := threeSiloRequest(seed)
+	req := threeSiloArchetypeRequest(seed, archetype)
 	req.Profession = profession
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game %s seed %d: %v", line, seed, err)
@@ -475,7 +475,7 @@ func runContentionAcceptance(t *testing.T, seed int64) *acceptanceRecord {
 
 func runRuleOfLawFamily(t *testing.T, line string, seed int64, withMayorRoute bool) *acceptanceRecord {
 	t.Helper()
-	r := newAcceptanceRunner(t, line, seed, "Judicial")
+	r := newAcceptanceRunner(t, line, seed, "Judicial", "")
 	svc := r.svc
 	r.beat("game created (profession=Judicial)")
 
@@ -562,13 +562,13 @@ func runRuleOfLawFamily(t *testing.T, line string, seed int64, withMayorRoute bo
 	return r.rec
 }
 
-func playPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRunner {
+func playPersonalRuleAcceptance(t *testing.T, seed int64, archetype string) *acceptanceRunner {
 	t.Helper()
 	// Judicial profession: the single-RNG stream means the profession choice
 	// shifts every downstream draw; this seed+profession station keeps its
 	// supplies healthy (no rationing spiral) while the evidence route stays
 	// the line's pressure engine.
-	r := newAcceptanceRunner(t, "personalrule", seed, "Judicial")
+	r := newAcceptanceRunner(t, "personalrule", seed, "Judicial", archetype)
 	svc := r.svc
 	r.beat("game created (profession=Judicial)")
 
@@ -747,7 +747,7 @@ func playPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRunner {
 
 func runPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRecord {
 	t.Helper()
-	return playPersonalRuleAcceptance(t, seed).rec
+	return playPersonalRuleAcceptance(t, seed, "").rec
 }
 
 func TestEndingAcceptanceDump(t *testing.T) {

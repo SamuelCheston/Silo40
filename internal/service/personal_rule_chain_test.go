@@ -251,7 +251,11 @@ func TestSuccessionSeedOpensCharterContact(t *testing.T) {
 // ExecuteAction and PassTime to change the simulation; in particular it never
 // seeds authority, evidence, content completion or victory state.
 func TestPersonalRuleLinePlayableFromNewGame(t *testing.T) {
-	runner := playPersonalRuleAcceptance(t, 2401)
+	runPlayableArchetypeMatrix(t, testPersonalRuleLinePlayableFromNewGame)
+}
+
+func testPersonalRuleLinePlayableFromNewGame(t *testing.T, archetype string) {
+	runner := playPersonalRuleAcceptance(t, 2401, archetype)
 	svc := runner.svc
 	status := svc.silo.VictoryStatus
 	if status == nil {

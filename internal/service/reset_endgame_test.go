@@ -41,8 +41,12 @@ func progressResetCountermeasureForRoute(t *testing.T, svc *GameService, execute
 }
 
 func TestResetEndingPlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testResetEndingPlayableFromNewGame)
+}
+
+func testResetEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "reset-playable.db"))
-	if _, err := svc.CreateGame(threeSiloRequest(2701)); err != nil {
+	if _, err := svc.CreateGame(threeSiloArchetypeRequest(2701, archetype)); err != nil {
 		t.Fatalf("create game: %v", err)
 	}
 	execute := func(action model.AgentAction) {
@@ -90,8 +94,12 @@ func TestResetEndingPlayableFromNewGame(t *testing.T) {
 }
 
 func TestResetCountermeasurePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testResetCountermeasurePlayableFromNewGame)
+}
+
+func testResetCountermeasurePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "reset-countermeasure.db"))
-	if _, err := svc.CreateGame(threeSiloRequest(2702)); err != nil {
+	if _, err := svc.CreateGame(threeSiloArchetypeRequest(2702, archetype)); err != nil {
 		t.Fatalf("create game: %v", err)
 	}
 	execute := func(action model.AgentAction) {

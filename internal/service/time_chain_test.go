@@ -270,8 +270,12 @@ func TestTimeEndingNarrativeAndOverlap(t *testing.T) {
 // chain through its real countermeasure and holds the pre-fall public inquiry;
 // no world fact, resource, ideology, snapshot, or ending state is pre-written.
 func TestTimeLinePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testTimeLinePlayableFromNewGame)
+}
+
+func testTimeLinePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "time-playable.db"))
-	req := threeSiloRequest(3401)
+	req := threeSiloArchetypeRequest(3401, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)

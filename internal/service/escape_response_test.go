@@ -282,8 +282,8 @@ func TestEscapeResponseSafeguardBudget(t *testing.T) {
 // 审计没收时代该对比可能反转 (准备越重被没收越多)；囤积不再被没收、
 // 怀疑度只由组织行为驱动后，梯度必须单调。
 func TestEscapePreparationGradientNotReversed(t *testing.T) {
-	full := runEscapeLine(t, "escapefull", 2401, "full")
-	sparse := runEscapeLine(t, "escapesparse", 2401, "sparse")
+	full := runEscapeLine(t, "escapefull", 2401, "full", "")
+	sparse := runEscapeLine(t, "escapesparse", 2401, "sparse", "")
 
 	t.Logf("full:   ending=%s launch=%s departed=%d survivors=%d months_out=%d demise=%s",
 		full.Ending, full.StanceAtLaunch, full.Departed, full.Survivors, full.MonthsOut, full.Demise)

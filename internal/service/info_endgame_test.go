@@ -247,8 +247,12 @@ func TestInformationProgressExposedInState(t *testing.T) {
 }
 
 func TestInformationEndingPlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testInformationEndingPlayableFromNewGame)
+}
+
+func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "information-playable.db"))
-	req := threeSiloRequest(2401)
+	req := threeSiloArchetypeRequest(2401, archetype)
 	req.Profession = "Judicial"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
