@@ -96,7 +96,7 @@
 
 | 账本字段 | 生产者 | 成本 |
 | --- | --- | --- |
-| 可用防护服 `suits_functional` | `escape_prep_suit_repair`（暗中换胶带，可重复）；`escape_prep_suit_warehouse`（IT 配合时开库，可得性由立场塑形） | 暴露累积；**可被反制**：`escape_prep_audit_seizure`（暴露达阈值且 IT 仍阻挠时没收已修服，16 §4.2-3） |
+| 可用防护服 `suits_functional` | `escape_prep_suit_repair`（暗中换胶带，可重复）；`escape_prep_suit_warehouse`（IT 配合时开库，可得性由立场塑形） | 暴露累积（喂出发追踪）；**囤积不被没收**（审计没收已移除，20 分册修订、ADR-0014：反制只抬成本与风险，不没收囤积、不困死玩家） |
 | 便携补给 `supplies_packed` | `escape_prep_transfer_supplies`（Supply 关系门控） | **划拨即扣减**：堡内补给立即减少（喂大 `supplies_shortage`）；市长非配合时暗中划拨计暴露 |
 | 装备材料 `materials_packed` | `escape_prep_transfer_materials` | 同上：挤压维修与生产 |
 | 预案完备度 `plan_completeness` | 六个功能位对接（`escape_plan_{mechanical,mines,supply,medical,agricultural,order}`，各挂对应部门关系门控） | 暴露小量累积。**完备度 = 功能位覆盖率**（R-2 清单，等权基线 `TODO(balance)`），UI 可显示"还缺哪个位" |

@@ -631,9 +631,9 @@ func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeR
 			// window, and the terminal evaluation then settles the game.
 			// Every month hoarded before launch is a month the group does
 			// not live outside. Under IT cooperation the warehouse months
-			// (+4 suits each) are the only path to a group of 20+ survivors
-			// — the repair campaign alone nets ~6-10 suits after audit
-			// seizures — so at most two warehouse months are worth it;
+			// (+4 suits each) are the fastest path to a group of 20+
+			// survivors — the repair campaign is cooldown-limited (one suit
+			// per 2 months) — so at most two warehouse months are worth it;
 			// without cooperation waiting only feeds fracture.
 			if r.window && r.orderlyDone && r.guaranteeDone && r.cardEnabled("ESCAPE_DEPARTURE_LAUNCH") {
 				prep := svc.silo.EscapePrep

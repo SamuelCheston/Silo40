@@ -37,7 +37,7 @@ func TestPreparationDeltaClamps(t *testing.T) {
 	sc := &ScopeContext{Self: silo, Errors: &[]string{}}
 	ApplyContentEffectsScoped([]ContentEffect{
 		{Type: "preparation_delta", Metric: "suits_functional", Value: 3},
-		{Type: "preparation_delta", Metric: "suits_functional", Value: -10}, // 审计没收不可为负
+		{Type: "preparation_delta", Metric: "suits_functional", Value: -10}, // 囤积账本不可为负
 		{Type: "preparation_delta", Metric: "drill_level", Value: 1.7},
 		{Type: "preparation_delta", Metric: "prep_exposure", Value: -2},
 	}, sc)

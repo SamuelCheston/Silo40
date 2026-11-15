@@ -1,7 +1,7 @@
 defineEvent({
   id: "escape_prep_suit_warehouse",
   title: "防护服库开启",
-  description: "IT 把清洁服库的钥匙交出来的那天，没有仪式。库里的服体按完好率清点入库，不再需要逐套暗中修复，也不再担心审计没收——破坏者停止了破坏。这是'配合'两个字的实物形态。",
+  description: "IT 把清洁服库的钥匙交出来的那天，没有仪式。库里的服体按完好率清点入库，不再需要逐套暗中修复——破坏者停止了破坏。这是'配合'两个字的实物形态。",
   type: "TECHNICAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 1, // TODO(balance)
