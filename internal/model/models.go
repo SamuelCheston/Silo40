@@ -57,7 +57,12 @@ const (
 //     妥协后二选一与决策日志。新字段零值即旧档语义 (无谈判信道)，
 //     未开信道的运行不消耗任何新 RNG；v12 存档经备份+单事务+回读校验
 //     升级，不回填任何推测状态。
-const CurrentSaveVersion = 13
+//   - v14: 时间渗透 (18-time-permeation)。部门信念条目 (FactBelief) 携带
+//     渗透计数 (PermeationCounter) 与成熟标记 (Matured)：B 连续不低于分享
+//     地板满渗透月数后事实成熟，《共证》资格门改读成熟计数。零值 = 未渗透
+//     = 旧档"信念门未达成"的状态一致，不回填任何推测进度；v13 存档经
+//     备份+单事务+回读校验升级 (v12 旧档先经 v13 谈判层升级接力)。
+const CurrentSaveVersion = 14
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {

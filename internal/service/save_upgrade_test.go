@@ -658,7 +658,7 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v10 → v11 → v12 → v13，Resume 才接受存档。
+	// 启动链继续 v10 → v11 → v12 → v13 → v14，Resume 才接受存档。
 	upgradedV11, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || !upgradedV11 {
 		t.Fatalf("v10 outside upgrade failed: upgraded=%v err=%v", upgradedV11, err)
@@ -671,15 +671,19 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 	if err != nil || !upgradedV13 {
 		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
 	}
+	upgradedV14, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
+	if err != nil || !upgradedV14 {
+		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v13 save: %v", err)
+		t.Fatalf("resume migrated v14 save: %v", err)
 	}
 
 	again, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v13 save must skip v9 migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v14 save must skip v9 migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -715,7 +719,7 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v11 → v12 → v13，Resume 才接受存档。
+	// 启动链继续 v11 → v12 → v13 → v14，Resume 才接受存档。
 	upgradedV12, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || !upgradedV12 {
 		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
@@ -724,15 +728,19 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 	if err != nil || !upgradedV13 {
 		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
 	}
+	upgradedV14, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
+	if err != nil || !upgradedV14 {
+		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v13 save: %v", err)
+		t.Fatalf("resume migrated v14 save: %v", err)
 	}
 
 	again, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v13 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v14 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -766,20 +774,24 @@ func TestUpgradeV11ToLineShiftsSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v12 → v13，Resume 才接受存档。
+	// 启动链继续 v12 → v13 → v14，Resume 才接受存档。
 	upgradedV13, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
 	if err != nil || !upgradedV13 {
 		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
 	}
+	upgradedV14, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
+	if err != nil || !upgradedV14 {
+		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
+	}
 
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v13 save: %v", err)
+		t.Fatalf("resume migrated v14 save: %v", err)
 	}
 
 	again, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v13 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v14 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }
 
@@ -821,13 +833,80 @@ func TestUpgradeV12ToNegotiationSave(t *testing.T) {
 		}
 	}
 
+	// 启动链继续 v13 → v14，Resume 才接受存档。
+	upgradedV14, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
+	if err != nil || !upgradedV14 {
+		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
+	}
+
 	fresh := newVersionTestService(t, dbPath)
 	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v13 save: %v", err)
+		t.Fatalf("resume migrated v14 save: %v", err)
 	}
 
 	again, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
 	if err != nil || again {
-		t.Fatalf("v13 save must skip migration: upgraded=%v err=%v", again, err)
+		t.Fatalf("v14 save must skip v12 migration: upgraded=%v err=%v", again, err)
+	}
+}
+
+// v13 → v14：时间渗透状态零值起步 (18-time-permeation §3.1)。渗透计数与成熟
+// 标记在 v13 时代没有任何写入方，升级不回填推测进度——零值 = 未渗透 = 旧档
+// "信念门未达成"的口径；回读校验部门信念未获得任何渗透状态，部门数不变。
+func TestUpgradeV13ToPermeationSave(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "v14permeation.db")
+	svc := newVersionTestService(t, dbPath)
+	createVersionTestGame(t, svc)
+	// 给玩家堡的一个部门种一条过地板信念：升级必须原样保留 B，只让渗透
+	// 字段以零值落盘 (不回填推测进度)。
+	if err := svc.db.Model(&model.Profession{}).Where("id = ?", svc.silo.Professions[0].ID).
+		Update("beliefs", `[{"fact_id":"IT_1","b":0.55,"obs_count":1}]`).Error; err != nil {
+		t.Fatalf("seed department belief: %v", err)
+	}
+	// 模拟 v13 存档：只回退版本标记 (新字段零值即 v13 语义)。
+	if err := svc.db.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: 13}).Error; err != nil {
+		t.Fatalf("downgrade meta: %v", err)
+	}
+
+	upgraded, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
+	if err != nil || !upgraded {
+		t.Fatalf("v14 permeation upgrade failed: upgraded=%v err=%v", upgraded, err)
+	}
+	backups, _ := filepath.Glob(dbPath + ".bak-*-v14permeation")
+	if len(backups) != 1 {
+		t.Fatalf("expected one permeation backup, got %v", backups)
+	}
+
+	var professions []model.Profession
+	if err := svc.db.Order("silo_id ASC, id ASC").Find(&professions).Error; err != nil {
+		t.Fatalf("reload professions: %v", err)
+	}
+	seeded := 0
+	for i := range professions {
+		for _, belief := range professions[i].Beliefs {
+			if belief.PermeationCounter != 0 || belief.Matured {
+				t.Fatalf("profession %d fact %s gained permeation state during migration: %+v",
+					professions[i].ID, belief.FactID, belief)
+			}
+			if belief.FactID == "IT_1" {
+				seeded++
+				if belief.B != 0.55 || belief.ObsCount != 1 {
+					t.Fatalf("seeded belief content changed during migration: %+v", belief)
+				}
+			}
+		}
+	}
+	if seeded != 1 {
+		t.Fatalf("seeded belief lost during migration: found %d", seeded)
+	}
+
+	fresh := newVersionTestService(t, dbPath)
+	if err := fresh.Resume(); err != nil {
+		t.Fatalf("resume migrated v14 save: %v", err)
+	}
+
+	again, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
+	if err != nil || again {
+		t.Fatalf("v14 save must skip migration: upgraded=%v err=%v", again, err)
 	}
 }
