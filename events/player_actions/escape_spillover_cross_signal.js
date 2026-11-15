@@ -20,5 +20,7 @@ defineEvent({
   trigger: playerActionIs("ESCAPE_SPILLOVER_CROSS_SIGNAL"),
   effects: [
     spilloverChannelAdd("cross_signal", 3, 0.55), // TODO(balance)
+    // 通信规模驱动组织怀疑度（20 修订/ADR-0014）。
+    orgSuspicionDelta(0.05), // TODO(balance)
   ],
 });

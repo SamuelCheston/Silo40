@@ -20,5 +20,7 @@ defineEvent({
   effects: [
     preparationDelta("care_ready", 0.4),    // TODO(balance)
     preparationDelta("prep_exposure", 0.03), // TODO(balance)
+    // 动员范围驱动组织怀疑度：把医护编入照护网是组织行为（20 修订/ADR-0014）。
+    orgSuspicionDelta(0.03), // TODO(balance)
   ],
 });

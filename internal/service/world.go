@@ -74,6 +74,12 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 		logs = append(logs, negotiationLogs...)
 		stampSilo(negotiationStories, silo)
 		stories = append(stories, negotiationStories...)
+		// 20 修订/ADR-0014：筹备反制层月度回合 (组织怀疑度衰减与 IT 响应)。
+		// 仅当该堡已产生组织怀疑度时结算；未做组织动作的堡逐位不变。
+		responseLogs, responseStories := s.runEscapeResponseMonth(silo)
+		logs = append(logs, responseLogs...)
+		stampSilo(responseStories, silo)
+		stories = append(stories, responseStories...)
 	}
 
 	// 阶段 2a：跨堡队列派发 (各堡本地结算后、时钟推进前)。
