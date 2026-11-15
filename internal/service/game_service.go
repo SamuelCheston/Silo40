@@ -3050,6 +3050,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	decisiveShocks := []engine.DecisiveShockRequest{}
 	allianceDeltas := []engine.AllianceLoyaltyDelta{}
 	escapeSettleRequested := false
+	spilloverSendKinds := []string{}
 	negotiationOpenRequested := false
 	negotiationRoundRequested := ""
 	negotiationResolveRequested := ""
@@ -3062,6 +3063,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scopeCtx.DecisiveShocks = &decisiveShocks
 	scopeCtx.AllianceDeltas = &allianceDeltas
 	scopeCtx.EscapeDepartureSettle = &escapeSettleRequested
+	scopeCtx.SpilloverSendKinds = &spilloverSendKinds
 	scopeCtx.NegotiationOpenRequested = &negotiationOpenRequested
 	scopeCtx.NegotiationRoundKind = &negotiationRoundRequested
 	scopeCtx.NegotiationResolveKind = &negotiationResolveRequested
@@ -3118,6 +3120,12 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 		escapeSettleRequested = false
 	}
 
+	// 16 §3.5 (Layer 3)：外溢投递请求在全部结构化效果施加后逐条结算。
+	if len(spilloverSendKinds) > 0 {
+		s.settleSpilloverSends(simSilo, event, spilloverSendKinds)
+		spilloverSendKinds = nil
+	}
+
 	// 21 设计卷：谈判层请求 (开信道/高强度回合/妥协后二选一) 在全部结构化
 	// 效果施加后由服务层执行，叙事并入当前事件的故事汇点。
 	s.applyNegotiationRequests(simSilo, event, negotiationOpenRequested, negotiationRoundRequested, negotiationResolveRequested)
@@ -3153,6 +3161,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptDecisiveShocks := []engine.DecisiveShockRequest{}
 	scriptAllianceDeltas := []engine.AllianceLoyaltyDelta{}
 	scriptEscapeSettle := false
+	scriptSpilloverSendKinds := []string{}
 	scriptNegotiationOpen := false
 	scriptNegotiationRound := ""
 	scriptNegotiationResolve := ""
@@ -3165,6 +3174,7 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	scriptScopeCtx.DecisiveShocks = &scriptDecisiveShocks
 	scriptScopeCtx.AllianceDeltas = &scriptAllianceDeltas
 	scriptScopeCtx.EscapeDepartureSettle = &scriptEscapeSettle
+	scriptScopeCtx.SpilloverSendKinds = &scriptSpilloverSendKinds
 	scriptScopeCtx.NegotiationOpenRequested = &scriptNegotiationOpen
 	scriptScopeCtx.NegotiationRoundKind = &scriptNegotiationRound
 	scriptScopeCtx.NegotiationResolveKind = &scriptNegotiationResolve
@@ -3190,6 +3200,12 @@ func (s *GameService) handleContentEvent(def engine.ContentEventDefinition, even
 	// (出发事件用结构化或脚本之一声明结算，只执行一次)。
 	if escapeSettleRequested || scriptEscapeSettle {
 		s.settleEscapeDeparture(simSilo, event)
+	}
+
+	// 16 §3.5 (Layer 3)：脚本效果请求的外溢投递 (与结构化路径同一口径，
+	// 结构化请求已在上方结算，此处只结算脚本侧剩余请求)。
+	if len(spilloverSendKinds) > 0 || len(scriptSpilloverSendKinds) > 0 {
+		s.settleSpilloverSends(simSilo, event, append(spilloverSendKinds, scriptSpilloverSendKinds...))
 	}
 
 	// 21 设计卷：脚本效果请求的谈判层动作 (与结构化路径同一口径)。

@@ -294,6 +294,12 @@ func crossEventLess(a, b model.CrossEvent) bool {
 // fireCrossEvent 在当前世界时钟下把一个跨堡事件施加到其目标域的所有堡。
 // 目标堡按 SiloID 升序处理；每个目标堡记录"收到信号"并执行事件定义的内容效果。
 func (s *GameService) fireCrossEvent(entry model.CrossEvent, logs *[]string, stories *[]model.StoryEvent) {
+	// 16 §3.5 (Layer 3)：外溢包裹不是内容事件——到达时转交接收结算
+	// (目标堡独立核验与再复制)，不走内容定义路径。
+	if entry.EventID == engine.SpilloverPackageEvent {
+		s.settleSpilloverArrival(entry, logs, stories)
+		return
+	}
 	targets := s.resolveCrossTargets(entry)
 	for _, target := range targets {
 		if siloEnded(target) {
