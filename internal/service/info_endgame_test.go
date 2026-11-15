@@ -304,6 +304,17 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		}
 		return out
 	}
+	// Verify/publish carry their own cooldowns (1/2 months): a rejected attempt
+	// is part of the route's timing, not a failure — the attempt helper lets
+	// the loop wait the cooldown out instead of forcing an unavailable action.
+	attempt := func(actionID string, cost float64) bool {
+		t.Helper()
+		if svc.agent.ActionPoints < cost {
+			return false
+		}
+		outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: actionID})
+		return err == nil && outcome.Result.Executed
+	}
 	for i := 0; i < 14; i++ {
 		published := publishedFacts()
 		if published["Judicial_1"] && published["Judicial_2"] {
@@ -328,11 +339,11 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 				publishable = true
 			}
 		}
-		if verifiable && svc.agent.ActionPoints >= 15 {
-			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "verify_evidence"})
+		if verifiable {
+			attempt("verify_evidence", 15)
 		}
-		if publishable && svc.agent.ActionPoints >= 20 {
-			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "publish_evidence"})
+		if publishable {
+			attempt("publish_evidence", 20)
 		}
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance publication at step %d: %v", i, err)
