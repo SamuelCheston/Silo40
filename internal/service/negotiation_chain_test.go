@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -128,7 +129,7 @@ func TestNegotiationMonthlyRoundRuns(t *testing.T) {
 func TestNegotiationCompromiseReachable(t *testing.T) {
 	var found *GameService
 	for seed := int64(1); seed <= 80 && found == nil; seed++ {
-		svc := newNegotiationGame(t, "neg-reach.db", seed)
+		svc := newNegotiationGame(t, fmt.Sprintf("neg-reach-%d.db", seed), seed)
 		svc.silo.Rebellion = 0.75
 		executePlayerEventAction(t, svc, "NEGOTIATION_OPEN_CHANNEL")
 		executePlayerEventAction(t, svc, "NEGOTIATION_OFFER_TERMS")
@@ -260,6 +261,116 @@ func TestNegotiationHandsOffBonusInSettlement(t *testing.T) {
 	if settleTakeover.Capacity != settleBase.Capacity {
 		t.Fatalf("takeover must not read the hands_off bonus: %d vs %d", settleTakeover.Capacity, settleBase.Capacity)
 	}
+}
+
+// TestNegotiationAcceptancePlaythrough 无头宿主、固定种子、真实内容与真实
+// 门控下的完整对局：叛乱成形 → 开信道 → 试探 → 递条款 → 月度通气 →
+// 妥协成立 → 不接管 → 出发结算。谈判只改变"谁在阻碍谁"：结算仍只看
+// 逃出去多少人。同种子重跑逐位一致。
+func TestNegotiationAcceptancePlaythrough(t *testing.T) {
+	run := func(seed int64, name string) (model.EscapeGroup, string) {
+		svc := newNegotiationGame(t, name, seed)
+		// 叛乱成形＋路线与组织事实齐备 (与出发验收同一夹具口径)：
+		// 谈判层接在叛乱链的中后段，前面的里程碑以完成键事实表达。
+		svc.silo.Rebellion = 0.75
+		completeGateEvent(svc, "special:route_confirmed")
+		completeGateEvent(svc, "special:underground_coordination")
+		completeGateEvent(svc, "special:escape_window_open")
+		completeGateEvent(svc, "player_actions:escape_window_orderly")
+		svc.silo.EscapePrep = model.EscapePreparation{
+			Initialized: true, SuitsFunctional: 150, SuppliesPacked: 400,
+			PlanCompleteness: 0.5, DrillLevel: 0.5, CareReady: 0.4,
+			ProductionStart: true, ReceptionStage: model.ReceptionConfirmed,
+		}
+		svc.agent.ActionPoints = 50
+
+		softExecute := func(actionID string) bool {
+			if svc.gameOver() {
+				return false
+			}
+			outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: actionID})
+			return err == nil && outcome.Result.Executed
+		}
+
+		// 1) 开信道 (真实门控：叛乱 ≥ 0.30)。
+		if !softExecute("NEGOTIATION_OPEN_CHANNEL") {
+			return model.EscapeGroup{}, ""
+		}
+		// 2) 试探一轮：通气不逼表态。
+		if !softExecute("NEGOTIATION_PROBE") {
+			return model.EscapeGroup{}, ""
+		}
+		// 3) 递出条款：保障可信度上升，条款在桌。
+		if !softExecute("NEGOTIATION_OFFER_TERMS") {
+			return model.EscapeGroup{}, ""
+		}
+		// 4) 月度通气，直到妥协成立或信道崩塌 (两者都是合法结局)。
+		for i := 0; i < 12 && svc.silo.Negotiation.NegotiationActive(); i++ {
+			if _, err := svc.PassTime(1); err != nil {
+				return model.EscapeGroup{}, ""
+			}
+			if svc.silo.Negotiation.CompromiseEstablished || svc.gameOver() {
+				break
+			}
+		}
+		if !svc.silo.Negotiation.CompromiseEstablished {
+			return model.EscapeGroup{}, ""
+		}
+		// 5) 不接管市长职位：带组织转向离开。
+		if !softExecute("NEGOTIATION_HANDS_OFF") {
+			return model.EscapeGroup{}, ""
+		}
+		// 6) 出发：终局立场重估 + 出发结算 (真实动作路径)。
+		svc.agent.ActionPoints = 50
+		if !softExecute("ESCAPE_DEPARTURE_LAUNCH") {
+			return model.EscapeGroup{}, ""
+		}
+		raw, err := json.Marshal(svc.silo.Negotiation)
+		if err != nil {
+			t.Fatalf("marshal negotiation: %v", err)
+		}
+		return svc.silo.EscapedGroup, string(raw)
+	}
+
+	// 扫描种子：要求真的有人逃出去 (存续群体)。妥协只改变阻碍关系，
+	// 阻挠下人数自然为 0 是合法输出，但验收要证明这条线能走通到有人离开。
+	var foundSeed int64
+	var group model.EscapeGroup
+	var negotiationJSON string
+	launched, escaped := 0, 0
+	for seed := int64(1); seed <= 200 && foundSeed == 0; seed++ {
+		g, nj := run(seed, fmt.Sprintf("neg-playthrough-%d.db", seed))
+		if nj == "" {
+			continue
+		}
+		launched++
+		if g.Departed > 0 && g.Surviving {
+			escaped++
+			foundSeed, group, negotiationJSON = seed, g, nj
+		}
+	}
+	t.Logf("playthrough seeds: %d reached departure, %d escaped with a surviving group", launched, escaped)
+	if foundSeed == 0 {
+		t.Fatal("no seed produced a surviving escape group through the negotiation line in 200 tries: the line is unreachable and must be fixed, not loosened")
+	}
+
+	// 结算一致性：存续群体与人数口径自洽 (资格只读群体事实)。
+	if group.Departed == 0 && group.Surviving {
+		t.Fatalf("zero headcount cannot yield a surviving group: %+v", group)
+	}
+	if group.Departed > 0 && !group.Initialized {
+		t.Fatalf("a departure with people must initialize the group: %+v", group)
+	}
+
+	// 确定性：同种子重跑，逃出群体与谈判轨迹逐位一致。
+	group2, negotiationJSON2 := run(foundSeed, "neg-playthrough-replay.db")
+	if group2 != group {
+		t.Fatalf("same seed must reproduce the escape outcome: %+v vs %+v", group, group2)
+	}
+	if negotiationJSON2 != negotiationJSON {
+		t.Fatalf("same seed must reproduce the negotiation trajectory:\n%s\nvs\n%s", negotiationJSON, negotiationJSON2)
+	}
+	t.Logf("playthrough settled under seed %d: %+v", foundSeed, group)
 }
 
 // 非回归核心保证：未开信道的运行不消耗任何新 RNG。
