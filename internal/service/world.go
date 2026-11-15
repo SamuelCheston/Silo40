@@ -86,6 +86,9 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 	s.dispatchCrossQueue(&logs, &stories)
 	// 阶段 2b：一号地堡裁决 (跨堡派发后，读取全部堡阶段 1 后状态)。
 	s.runSilo1StateMachine(&logs, &stories)
+	// 阶段 2b'：一号地堡权衡层 (22 设计卷)：指标一/二/三月度回合。仅多堡且
+	// 1 号存活时运行；零值状态早退，单堡逐位不变。
+	s.runSilo1StewardshipMonth(&logs, &stories)
 	// 阶段 2c：堡外逃出群体月度维持 (16 §6.4，Layer 2)。读 1 号注意力现值，
 	// 用当月日历算天气；只对激活的存续群体生效，零值状态逐位不变。
 	s.runOutsideSustenance(&logs, &stories)
