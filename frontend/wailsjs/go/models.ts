@@ -904,6 +904,30 @@ export namespace model {
 	        this.scores = source["scores"];
 	    }
 	}
+	export class EndingRecapEntry {
+	    year: number;
+	    month: number;
+	    line?: string;
+	    key: string;
+	    title: string;
+	    description?: string;
+	    consequence?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new EndingRecapEntry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.year = source["year"];
+	        this.month = source["month"];
+	        this.line = source["line"];
+	        this.key = source["key"];
+	        this.title = source["title"];
+	        this.description = source["description"];
+	        this.consequence = source["consequence"];
+	    }
+	}
 	export class EndingDecision {
 	    config_version: number;
 	    selected: string;
@@ -913,6 +937,7 @@ export namespace model {
 	    reason?: string;
 	    pool?: string[];
 	    excluded?: Record<string, string>;
+	    recap?: EndingRecapEntry[];
 
 	    static createFrom(source: any = {}) {
 	        return new EndingDecision(source);
@@ -928,6 +953,7 @@ export namespace model {
 	        this.reason = source["reason"];
 	        this.pool = source["pool"];
 	        this.excluded = source["excluded"];
+	        this.recap = this.convertValues(source["recap"], EndingRecapEntry);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

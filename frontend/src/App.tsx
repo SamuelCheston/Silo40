@@ -62,6 +62,16 @@ const endingTitle: Record<string, string> = {
     AGENT_COMPROMISED: '《除名》',
 };
 
+// 结局回读的线名：与 endingTitle 同一套正典书名，键是服务端下发的线 ID。
+// Line 为空的条目（失败征兆、跨线反制）不显示线徽章。
+const recapLineTitle: Record<string, string> = {
+    information: '《共证》',
+    rebellion: '《越岭》',
+    rule_of_law: '《公议》',
+    time: '《无人裁决》',
+    personal_rule: '《人治》',
+};
+
 function App() {
     const [resultText, setResultText] = useState("在下方输入特工代号 👇");
     const [name, setName] = useState('');
@@ -545,6 +555,32 @@ function App() {
                                     结局：{endingTitle[silo.victory_status.type] || silo.victory_status.type} · {silo.victory_status.is_won ? '任务成功' : '任务失败'}
                                 </Heading>
                                 <Text mt={2}>{silo.victory_status.description}</Text>
+                                {/* 本局关键抉择回读：服务端投影的 3–6 条因果条目（何时/哪条线/
+                                    哪一支/后果）。缺料时 recap 为空，整块不渲染，退化为既有结算行。 */}
+                                {silo.victory_status.decision?.recap && silo.victory_status.decision.recap.length > 0 && (
+                                    <Box mt={3} p={3} bg="white" borderRadius="md">
+                                        <Text fontSize="sm" fontWeight="bold">本局关键抉择回读</Text>
+                                        <VStack align="stretch" gap={2} mt={2}>
+                                            {silo.victory_status.decision.recap.map((entry: any, idx: number) => (
+                                                <Box key={`${entry.key}-${idx}`} p={2} bg="gray.50" borderRadius="md">
+                                                    <HStack gap={2} wrap="wrap">
+                                                        <Badge colorPalette="gray">{entry.year} 年 {entry.month} 月</Badge>
+                                                        {entry.line && (
+                                                            <Badge colorPalette="purple">{recapLineTitle[entry.line] || entry.line}</Badge>
+                                                        )}
+                                                        <Text fontSize="sm" fontWeight="bold">{entry.title}</Text>
+                                                    </HStack>
+                                                    {entry.description && (
+                                                        <Text fontSize="sm" color="gray.600" mt={1}>{entry.description}</Text>
+                                                    )}
+                                                    {entry.consequence && (
+                                                        <Text fontSize="sm" color="gray.800" mt={1}>{entry.consequence}</Text>
+                                                    )}
+                                                </Box>
+                                            ))}
+                                        </VStack>
+                                    </Box>
+                                )}
                                 {silo.victory_status.score && (
                                     <Box mt={2}>
                                         <Text fontWeight="bold">总分：{silo.victory_status.score.total}（含历史引导 +{silo.victory_status.score.history_influence?.total || 0}）</Text>
