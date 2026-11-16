@@ -8,8 +8,8 @@ import { Tooltip } from "./ui/tooltip";
 const RESOURCE_ORDER = ["Energy", "Materials", "Supplies"];
 
 const RESOURCE_META: Record<string, { label: string; icon: typeof BatteryCharging; note: string }> = {
-    Energy: { label: "能源", icon: BatteryCharging, note: "机械部门产出，人口与农业、补给生产都要消耗它。" },
-    Materials: { label: "材料", icon: Boxes, note: "矿业部门产出，人口与补给生产都要消耗它。" },
+    Energy: { label: "能源", icon: BatteryCharging, note: "机械部门产出，供居民生活与农业转化为补给。" },
+    Materials: { label: "材料", icon: Boxes, note: "矿业部门产出，供居民生活与供应部门转化为补给。" },
     Supplies: { label: "补给", icon: Wheat, note: "农业与补给部门产出，养活全体人口。" },
 };
 
@@ -22,7 +22,7 @@ function resourceState(res: Resource): { color: string; hint: string } {
     if (res.net_balance < 0) {
         return { color: "orange.600", hint: "入不敷出：库存正在被消耗。" };
     }
-    return { color: "green.600", hint: "库存健康。" };
+    return { color: "green.600", hint: "本月结算有盈余或持平。" };
 }
 
 interface ResourcePanelProps {

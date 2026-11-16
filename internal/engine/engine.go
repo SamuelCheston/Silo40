@@ -825,7 +825,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 			silo.VictoryStatus = &model.VictoryStatus{
 				IsWon:       false,
 				Type:        "AGENT_COMPROMISED",
-				Description: "由于传播过多掺杂了个人意图的虚假信息，你的特工身份彻底暴露。司法部已经下达了逮捕令。",
+				Description: "一次次行动留下的痕迹终于被串了起来。你的特工身份彻底暴露，司法部已经下达逮捕令。",
 			}
 			return
 		}
@@ -1000,10 +1000,9 @@ func (e *GameEngine) updateResources(silo *model.Silo, deltaYears float64) {
 		if prof == nil {
 			return 0
 		}
-		// 效率默认 1.0
-		eff := 1.0
+		eff := clampUnit(prof.Productivity)
 		if isRebelling {
-			eff = 0.3
+			eff *= 0.3
 		}
 		return eff * float64(prof.Population)
 	}

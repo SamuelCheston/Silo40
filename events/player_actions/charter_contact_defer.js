@@ -1,7 +1,7 @@
 defineEvent({
   id: "charter_contact_defer",
   title: "暂缓：先不回应",
-  description: "你没有接，也没有拒。他把两份调度单收回去，抄本留在你这里：'想清楚再来找我。规程不等人，但也不记仇。'断点材料暂时压在你手里，起草会没有开起来，这扇门还留着一条缝。",
+  description: "你没有接，也没有拒。他把两份调度单收回去，抄本留在你这里：'那今天就谈到这里。'断点材料留在你手里，这次接触到此结束，起草会没有开起来。",
   type: "SOCIAL",
   fire_mode: "ONCE",
   // T-2 defer (26-nodes §2, 27-spec §1): the line does not start; the offer
@@ -10,7 +10,7 @@ defineEvent({
   player_action: {
     id: "CHARTER_CONTACT_DEFER",
     label: "暂缓回应",
-    description: "暂不回应程序派联系人；本线不启动。",
+    description: "结束本次接触，暂不启动约章起草。",
     scope: "common",
     action_type: "PLAYER_EVENT",
     target_type: "NONE",
