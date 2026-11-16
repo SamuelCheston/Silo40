@@ -3288,6 +3288,7 @@ func (s *GameService) applyNegotiationRequests(silo *model.Silo, event *engine.G
 		}
 		result := engine.NegotiationRound(silo, s.world, roundKind)
 		if result != nil {
+			s.recordNegotiationOutcomeKeys(silo.ID, result)
 			stories = append(stories, s.negotiationRoundStories(silo, result)...)
 		}
 	}
