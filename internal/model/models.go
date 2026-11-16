@@ -979,6 +979,22 @@ type EndingDecision struct {
 	Excluded map[string]string `json:"excluded,omitempty"`
 	// Explanations 候选结局的四维审计解释 (10 §9：动机/介入/证据/附着)。
 	Explanations map[string]string `json:"explanations,omitempty"`
+	// Recap 本局关键抉择回读：按时序投影 3–6 条因果相关条目 (何时/哪条线/
+	// 哪一支/后果)。文案取自既有事件定义与完成键事实；缺料时为空，呈现端
+	// 退化为既有结算行。纯增量字段，旧档反序列化为 nil，不升存档版本。
+	Recap []EndingRecapEntry `json:"recap,omitempty"`
+}
+
+// EndingRecapEntry 结局回读的一条关键抉择。Line 为空表示不隶属五条可玩线
+// (如失败征兆、跨线反制)；Title/Description 复用内容事件的既有文案。
+type EndingRecapEntry struct {
+	Year        int    `json:"year"`
+	Month       int    `json:"month"`
+	Line        string `json:"line,omitempty"`
+	Key         string `json:"key"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Consequence string `json:"consequence,omitempty"`
 }
 
 // VictoryStatus 胜利状态
