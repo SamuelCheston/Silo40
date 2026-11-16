@@ -238,9 +238,28 @@ func TestEscapePreparationActionsCosts(t *testing.T) {
 		}
 	}
 	packedBefore := svc.silo.EscapePrep.SuppliesPacked
-	exec("ESCAPE_PREP_TRANSFER_SUPPLIES")
-	if resourceAmount(svc.silo, "Supplies") != 50 || svc.silo.EscapePrep.SuppliesPacked != packedBefore {
-		t.Fatal("insufficient balance must fail explicitly without partial transfer")
+	if exec("ESCAPE_PREP_TRANSFER_SUPPLIES") {
+		t.Fatal("insufficient balance must not report a successful transfer")
+	}
+	completeGateEvent(svc, "player_actions:advance_party_dispatch")
+	svc.silo.EscapePrep.ReceptionStage = "confirmed"
+	apBefore, exposureBefore := svc.agent.ActionPoints, svc.silo.EscapePrep.PrepExposure
+	if exec("ESCAPE_RECEPTION_STOCKING") {
+		t.Fatal("insufficient balance must not report a stocked reception point")
+	}
+	if resourceAmount(svc.silo, "Supplies") != 50 || svc.silo.EscapePrep.SuppliesPacked != packedBefore ||
+		svc.silo.EscapePrep.ReceptionStage != "confirmed" || svc.agent.ActionPoints != apBefore ||
+		svc.silo.EscapePrep.PrepExposure != exposureBefore {
+		t.Fatal("failed transfer must leave stock, preparation, and AP unchanged")
+	}
+	for i := range svc.silo.Resources {
+		if svc.silo.Resources[i].Type == "Supplies" {
+			svc.silo.Resources[i].Amount = 150
+		}
+	}
+	if !exec("ESCAPE_RECEPTION_STOCKING") || resourceAmount(svc.silo, "Supplies") != 0 ||
+		svc.silo.EscapePrep.SuppliesPacked != packedBefore+150 || svc.silo.EscapePrep.ReceptionStage != "stocked" {
+		t.Fatal("stocking at the exact threshold must transfer supplies and update the reception stage")
 	}
 
 	// 预案功能位：完备度 = 覆盖率。
@@ -533,7 +552,7 @@ func TestOutsideSustenanceAfterDeparture(t *testing.T) {
 	station.EscapePrep = model.EscapePreparation{
 		Initialized: true, SuitsFunctional: 200, SuppliesPacked: 600,
 		MaterialsPacked: 80, PlanCompleteness: 4.0 / 6.0,
-		PlanRoles: []string{"agricultural", "mechanical", "medical", "supply"},
+		PlanRoles:  []string{"agricultural", "mechanical", "medical", "supply"},
 		DrillLevel: 0.6, CareReady: 0.5, ProductionStart: true,
 		ReceptionStage: model.ReceptionConfirmed,
 	}

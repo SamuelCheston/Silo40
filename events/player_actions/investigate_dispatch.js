@@ -1,7 +1,7 @@
 defineEvent({
   id: "investigate_dispatch",
   title: "定向调查：法警调度",
-  description: "顺着调令、出勤簿与目击者的缝隙往下查：谁被调走、以谁的名义、去了哪里。定向调查需要已有相当确信的材料打底，也会惊动司法系统。",
+  description: "顺着调令、出勤簿与目击者的缝隙往下查：谁被调走、以谁的名义、去了哪里。定向调查需要已有相当确信的材料打底。这一轮，先沿你掌握得较少的那条调度线继续核对。",
   type: "SOCIAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 1,

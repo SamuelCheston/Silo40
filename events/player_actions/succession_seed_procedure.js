@@ -1,7 +1,7 @@
 defineEvent({
   id: "succession_seed_procedure",
   title: "继承抉择：埋程序种子",
-  description: "你决定在人治里埋一颗程序的种子：最低限度的继承安排、几份可以被引用的规则。这已经是《公议》的起点——司法侧的程序派会注意到这些种子。这一局可能不再以《人治》收束，但下一局的路已经铺好了。",
+  description: "你决定在人治里埋一颗程序的种子：最低限度的继承安排、几份可以被引用的规则。这已经是《公议》的起点——司法侧的程序派会注意到这些种子。司法侧程序派愿意接触你，本局可以从接触开始重新走约章起草这条路。",
   type: "SOCIAL",
   fire_mode: "ONCE",
   // H-1 seed branch (30-nodes §4, §6, 31-spec §1): reroutes into the charter

@@ -11,26 +11,26 @@ export interface TraitOption {
 }
 
 export const AVAILABLE_TRAITS: TraitOption[] = [
-    { id: 'shadowy', name: '隐秘行事 (Shadowy)', description: '行动产生的怀疑度降低 20%。', cost: 3, type: 'AGENT' },
-    { id: 'charismatic', name: '魅力非凡 (Charismatic)', description: '增加初始威望和人脉建立速度，并在建立组织化力量时获得额外增益。', cost: 4, type: 'AGENT' },
-    { id: 'native', name: '地堡土著 (Silo Native)', description: '开局获得自己所在阶层各部门随机 10-15% 的人脉值。', cost: 3, type: 'AGENT' },
+    { id: 'shadowy', name: '隐秘行事 (Shadowy)', description: '适用身份可见度的行动产生的怀疑度降低 20%。', cost: 3, type: 'AGENT' },
+    { id: 'charismatic', name: '魅力非凡 (Charismatic)', description: '增加初始威望，建立人脉时获得额外增益。', cost: 4, type: 'AGENT' },
+    { id: 'native', name: '地堡土著 (Silo Native)', description: '开局与同阶层的其他部门建立 10–15% 的人脉。', cost: 3, type: 'AGENT' },
     { id: 'abundant', name: '资源充沛 (Abundant Resources)', description: '初始地堡食物与能源资源翻倍。', cost: 3, type: 'SILO' },
     { id: 'leak', name: '信息泄漏 (Information Leak)', description: '平民阶层初始亲外度 (Pro-Foreign) 增加。', cost: 2, type: 'SILO' },
     { id: 'psychoactive_meds', name: '精神药物常态化投放 (Psychoactive Meds)', description: '所有部门的思潮会随时间推移缓慢偏向 IT 部门的思潮。', cost: 3, type: 'SILO' },
 ];
 
 export const AVAILABLE_DEPARTMENTS = [
-    { id: 'Mayor', name: 'Mayor', description: '行动增加3倍怀疑度。开局极高威望，获得全阶层人脉。' },
-    { id: 'Judicial', name: 'Judicial', description: '有司法审判权。开局极低威望，获得全阶层人脉。' },
+    { id: 'Mayor', name: 'Mayor', description: '身份醒目，部分行动更容易积累怀疑度。开局威望高，具备各阶层人脉。' },
+    { id: 'Judicial', name: 'Judicial', description: '可签发搜查令和执行逮捕。开局威望低，具备各阶层人脉。' },
     // 描述必须与实际开局一致：玩家知识上限由 limitPlayerKnowledge 统一为
     // 本部门 2 份碎片，"掌握全碎片"是旧文案，会误导职业选择。
-    { id: 'IT', name: 'IT', description: '行动不增加怀疑度，但会增加Safeguard风险。开局极低威望，与司法部满人脉、本部门 40% 人脉。' },
-    { id: 'Police', name: 'Police', description: '行动随机获得5-9折怀疑度减免。与市长互满人脉，其余精英15%、平民10%人脉。' },
+    { id: 'IT', name: 'IT', description: '部分行动留下的怀疑度较低。掩盖记录会增加 Safeguard 风险。开局与司法部满人脉，与本部门有 40% 人脉。' },
+    { id: 'Police', name: 'Police', description: '部分行动留下的怀疑度较低。开局与市长和本部门满人脉，其余精英 15%、平民 10%。' },
     { id: 'Medical', name: 'Medical', description: '开局极低威望，获得精英15%、平民10%人脉。随时间推移会随机获得信息碎片。' },
-    { id: 'Supply', name: 'Supply', description: '在清洁刑罚危机中可以保护目标免死。开局与其他平民互有15%人脉。' },
-    { id: 'Mechanical', name: 'Mechanical', description: '最高技术平民，组织平民时获得极高额外增益。开局与其他平民互有15%人脉。' },
-    { id: 'Mines', name: 'Mines', description: '极低威望，但行动怀疑度打0.05折。开局与其他平民互有15%人脉。' },
-    { id: 'Agricultural', name: 'Agricultural', description: '标准平民部门，无特殊效果。开局与其他平民互有15%人脉。' },
+    { id: 'Supply', name: 'Supply', description: '可调拨库存，或利用供应网络安抚部门并建立人脉。开局与其他平民部门有 15% 人脉。' },
+    { id: 'Mechanical', name: 'Mechanical', description: '可检修设备、补充能源与材料，也能通过管道打听消息。开局与其他平民部门有 15% 人脉。' },
+    { id: 'Mines', name: 'Mines', description: '开局威望低。常规行动可避开身份采样，与其他平民部门有 15% 人脉。' },
+    { id: 'Agricultural', name: 'Agricultural', description: '可组织集中收割补充库存，也能在田间打听消息。开局与其他平民部门有 15% 人脉。' },
 ];
 
 interface SetupPanelProps {

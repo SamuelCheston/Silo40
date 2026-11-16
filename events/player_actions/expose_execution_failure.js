@@ -1,7 +1,7 @@
 defineEvent({
   id: "expose_execution_failure",
   title: "公开执行失败",
-  description: "把一次有目共睹的执行失败摆到台面上：命令是谁下的、现场发生了什么、为什么没有人出来认领。这是对幕后威势的公开能力检验——成功加速崩塌，失手会引来反噬。",
+  description: "把一次有目共睹的执行失败摆到台面上：命令是谁下的、现场发生了什么、为什么没有人出来认领。这份公开记录削弱了幕后权威，也让司法部与 IT 部门紧张起来。",
   type: "SOCIAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 3,

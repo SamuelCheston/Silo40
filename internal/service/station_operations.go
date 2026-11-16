@@ -23,17 +23,17 @@ var stationOperationDefinitions = []silo1OperationDef{
 	},
 	{
 		ActionID: StationOpInfiltrate, Label: "策反驻地机工线人", APCost: 25, DelayMonths: 2,
-		Description: "2 个月后驻地合法性 -0.12、凝聚力 -0.08，并持续提高部门紧张。暴露 +14%，结算时怀疑度 +0.05。",
+		Description: "2 个月后驻地合法性最多降低 0.12、凝聚力最多降低 0.08，部门紧张最多增加 0.08。暴露 +14%，结算时怀疑度 +0.05。",
 		Effect:      "削弱驻地合法性与凝聚力", Exposure: 0.14, OpeningSuspicion: 0.008, TraceSuspicion: 0.05,
 	},
 	{
 		ActionID: StationOpDeceive, Label: "在驻地投放伪造档案", APCost: 20, DelayMonths: 2,
-		Description: "2 个月后驻地叛乱 +0.15，各部门恐慌 +0.06、亲外思潮 +0.04。暴露 +12%，结算时怀疑度 +0.05。",
+		Description: "2 个月后驻地叛乱最多增加 0.15，各部门恐慌最多增加 0.06、亲外思潮最多增加 0.04。暴露 +12%，结算时怀疑度 +0.05。",
 		Effect:      "推动驻地叛乱与亲外思潮", Exposure: 0.12, OpeningSuspicion: 0.006, TraceSuspicion: 0.05,
 	},
 	{
 		ActionID: StationOpTrade, Label: "驻地内部黑市交易", APCost: 15, DelayMonths: 1,
-		Description: "1 个月后驻地消耗 100 Supplies，合法性与凝聚力上升，特工威望 +3；不向 40 号转移资源。暴露 +6%，结算时怀疑度 +0.02。",
+		Description: "1 个月后驻地消耗最多 100 补给，合法性与凝聚力可上升，特工威望 +3。暴露 +6%，结算时怀疑度 +0.02。",
 		Effect:      "以驻地物资换取稳定与威望", Exposure: 0.06, OpeningSuspicion: 0.004, TraceSuspicion: 0.02,
 	},
 }
@@ -147,7 +147,7 @@ func (s *GameService) applyStationOperation(def silo1OperationDef, operationID i
 		s.recordHistoryImpact(target, operationID, def, historyBefore, resolution)
 		return resolution
 	case StationOpInfiltrate:
-		beforeLegitimacy, beforeCohesion := target.MayorLegitimacy(), target.Cohesion
+		beforeLegitimacy, beforeCohesion, beforeTension := target.MayorLegitimacy(), target.Cohesion, target.DeptTension
 		target.SetMayorLegitimacy(target.MayorLegitimacy() - 0.12)
 		target.Cohesion = clampSilo1Unit(target.Cohesion - 0.08)
 		target.DeptTension = clampSilo1Unit(target.DeptTension + 0.08)
@@ -159,12 +159,11 @@ func (s *GameService) applyStationOperation(def silo1OperationDef, operationID i
 				target.Professions[i].PanicValue = clampSilo1Unit(target.Professions[i].PanicValue + 0.08)
 			}
 		}
-		resolution := fmt.Sprintf("合法性 %.2f→%.2f，凝聚力 %.2f→%.2f，部门紧张升至 %.2f。",
-			beforeLegitimacy, target.MayorLegitimacy(), beforeCohesion, target.Cohesion, target.DeptTension)
+		resolution := fmt.Sprintf("合法性 %.2f→%.2f，凝聚力 %.2f→%.2f，部门紧张 %.2f→%.2f。",
+			beforeLegitimacy, target.MayorLegitimacy(), beforeCohesion, target.Cohesion, beforeTension, target.DeptTension)
 		s.recordHistoryImpact(target, operationID, def, historyBefore, resolution)
 		return resolution
 	case StationOpDeceive:
-		before := target.Rebellion
 		target.Rebellion = clampSilo1Unit(target.Rebellion + 0.15)
 		target.HistoryBurden = clampSilo1Unit(target.HistoryBurden + 0.02)
 		for i := range target.Professions {
@@ -174,7 +173,8 @@ func (s *GameService) applyStationOperation(def silo1OperationDef, operationID i
 		for i := range target.Cohorts {
 			target.Cohorts[i].Ideologies[model.IdeologyProForeign] = clampSilo1Unit(target.Cohorts[i].Ideologies[model.IdeologyProForeign] + 0.04)
 		}
-		resolution := fmt.Sprintf("叛乱 %.2f→%.2f；全部部门恐慌 +0.06、亲外思潮 +0.04。", before, target.Rebellion)
+		resolution := fmt.Sprintf("叛乱 %.2f→%.2f；部门平均亲外思潮 %.2f→%.2f。",
+			historyBefore.rebellion, target.Rebellion, historyBefore.proForeign, averageSiloProForeign(target))
 		s.recordHistoryImpact(target, operationID, def, historyBefore, resolution)
 		return resolution
 	case StationOpTrade:
