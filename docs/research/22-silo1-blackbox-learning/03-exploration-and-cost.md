@@ -235,7 +235,7 @@
 | 恐慌与人人自危：高压姿态常态化，恐慌分量持续上升 | 宵禁时段延长、楼层检查站增多、例行集会被取消；部门间串门需要报备（具体措施都是已发生事实） | `overestimate_omen_tightening` |
 | Θ 加速累积：高压喂养抵触，消极拖延可见 | 工作以「严格按规程」的方式变慢：每张工单都合规，但完成周期拉长一倍；请示件激增，没有人敢签字（程序性服从的表演本身成为征兆） | `overestimate_omen_work_to_rule` |
 | 离心行为：执行层开始静默准备 | 档案室深夜搬运（目击事实）；跨堡通报内容变短、套话变多；IT 人员私人备份增加（可被情报行动读到的痕迹） | `overestimate_omen_silent_packing` |
-| 保障机制升温：本地 `safeguard_risk` 因高频核查的偏离发现与处置压力累积 | 复用既有征兆 `safeguard_protocol_warming`（`safeguard_risk ≥ 0.6`，29 号文档已落地口径），不新造 | 既有 |
+| 保障机制升温：本地 `safeguard_risk` 因高频核查的偏离发现与处置压力累积 | 复用既有征兆 `last_interlock_warming`（`safeguard_risk ≥ 0.6`，29 号文档已落地口径），不新造 | 既有 |
 | 走向「下一个 40 号」：离心走到尽头是断联与干扰 | 专线杂音变多、跨堡呼叫开始丢失（`network_jammed` 的前兆呈现）；随后 1 号的物理手段进入既有反应链口径（终止/投送，[33 时间线节点](../../story/endings/33-time-nodes.md) 致死来路表） | 既有通道，不新造 |
 
 **因果链回指**：这是 §4.2 探索过头的玩家侧投影，终点接入既有硬口径——`safeguard_risk ≥ 1.0` →《寂堡》「过度干预把保障风险推到封顶」（[29](../../story/endings/29-failure-endings.md) §1、[33](../../story/endings/33-time-nodes.md) §2 引擎内爆行）。40 号堡的历史原型（断联、干扰终止信号、被轰炸，[开局前史 §2.2](../../story/silo40-backstory/03-crisis-bombing-and-window.md)）是这条链的叙事原型：玩家在自己的堡上重走一遍「过度施压 → 离心 → 断联 → 物理处置」，而不需要任何文案点名这段历史。
@@ -367,7 +367,7 @@
 | `l_waste` / `l_credit` | 问责量 L 的浪费增项 / 处置减项 | 权重待定 |
 | `L_wary` / `L_contract` | 收缩 I / 收缩 II 阈值 | 待定 |
 | `N_audit` | 收缩 II 自我审计期长度 | 量级：3–6 月 |
-| `R_danger` | `safeguard_risk` 安全停探警戒线 | 低于既有硬失败线 1.0（既有 `safeguard_protocol_warming` 用 0.6） |
+| `R_danger` | `safeguard_risk` 安全停探警戒线 | 低于既有硬失败线 1.0（既有 `last_interlock_warming` 用 0.6） |
 | `ΔΘ_burst` | 反应链爆发对 Θ 的反喂增量 | 已裁决不设独立增量，经「爆发 → r 高位 → growth(r)」间接链表达（[23-00 裁决 7](../23-it-blindspot-cultivation/00-index.md)） |
 | `g(r)` / `τ` | Θ 增长率 / 回落时间常数 | 重算定稿：`g(R5)=0.12/月`（满压约 5 月到危险区 0.60、约 6 月到叫板档 0.70）；`τ_decay=15` 月（[01 卷 §9](01-dynamics-and-pseudocode.md)、[00 卷 §3](00-index.md)、00 卷裁决 13） |
 | Θ 分箱边界 | B0–B4 切分 | 0.10 / 0.30 / 0.50 / 0.70（§2.1，可调） |

@@ -89,18 +89,18 @@ var lineDefs = []lineDef{
 // failureOmenKeys 五条失败线的既有事前征兆 (29-failure-endings §2)。
 // 全部是已实现的内容事件键；快照只读其点亮状态，不新造预警机制。
 var failureOmenKeys = []string{
-	"special:normalcy_hardens",        // 《深闭》：又一年没有改变
-	"special:reset_omen_census",       // 《遗忘》：异常普查
-	"crisis:reset_omen_requisition",   // 《遗忘》：异常请领
-	"special:silo1_purge_omen",        // 《遗忘》并行路径：本地整肃准备
-	"special:archive_purge_order",     // 《遗忘》并行路径：缓慢绞杀
-	"crisis:fracture_infrastructure",  // 《断层》：破坏落到维生基础
+	"special:normalcy_hardens",           // 《深闭》：又一年没有改变
+	"special:reset_omen_census",          // 《遗忘》：异常普查
+	"crisis:reset_omen_requisition",      // 《遗忘》：异常请领
+	"special:silo1_purge_omen",           // 《遗忘》并行路径：本地整肃准备
+	"special:archive_purge_order",        // 《遗忘》并行路径：缓慢绞杀
+	"crisis:fracture_infrastructure",     // 《断层》：破坏落到维生基础
 	"special:identity_trace_accumulates", // 《除名》：纸面接缝
-	"special:archive_review_opened",   // 《除名》：档案复查
-	"special:agent_erasure_staged",    // 《除名》：抹除准备
-	"special:termination_channel_test", // 《寂堡》：远程终止通道
-	"special:strike_reconnaissance",   // 《寂堡》：物理打击侦察
-	"special:safeguard_protocol_warming", // 《寂堡》：保障机制升温
+	"special:archive_review_opened",      // 《除名》：档案复查
+	"special:agent_erasure_staged",       // 《除名》：抹除准备
+	"special:termination_channel_test",   // 《寂堡》：远程终止通道
+	"special:strike_reconnaissance",      // 《寂堡》：物理打击侦察
+	"special:last_interlock_warming",     // 《寂堡》：保障机制升温
 }
 
 // lineMilestoneState 读取一格里程碑的点亮、计数与最近点亮时刻。
