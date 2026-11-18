@@ -66,11 +66,11 @@
 
 ### 22 号 · Silo 1 黑箱学习
 
-**状态：仅设计，代码未实现。** 五卷系列 [22-silo1-blackbox-learning](research/22-silo1-blackbox-learning/00-index.md) 与 [ADR-0015](../knowledge/adr/0015-silo1-blackbox-learning.md) 已定稿：风险度驱动隐藏量自保（`self_preservation`）、执行强度单峰、1 号分箱后验信念、观测噪声与伪装、探索代价与决策日志；裁决 13「反应快暴露慢」已重算定稿（g_max=0.12/τ=15/θ_defy=0.70），主防线押观测伪装（q_fc=0.75）。代码中无黑箱/后验信念/分箱对应实现。1 号侧独立，不碰玩家侧结算。
+**状态：已实现（候选分支 `feat/stewardship-integration`，未合 main）。** 五卷系列 [22-silo1-blackbox-learning](research/22-silo1-blackbox-learning/00-index.md) 与 [ADR-0015](../knowledge/adr/0015-silo1-blackbox-learning.md) 已定稿：风险度驱动隐藏量自保（`self_preservation`）、执行强度单峰、1 号分箱后验信念、观测噪声与伪装、探索代价与决策日志；裁决 13「反应快暴露慢」已重算定稿（g_max=0.12/τ=15/θ_defy=0.70），主防线押观测伪装（q_fc=0.75）。落地为 [blackbox_physics.go](../internal/engine/blackbox_physics.go)/[blackbox_observations.go](../internal/engine/blackbox_observations.go)（物理与观测管线）与 [silo1_blackbox.go](../internal/service/silo1_blackbox.go)（零 RNG 决策、指派与审计日志）；[blackbox_channels.go](../internal/service/blackbox_channels.go) 提供 G1/G2/G3/G5/G7/G9 缺口通道最小真实版。功能由 `Silo.BlackBox.Initialized` 门控，关闭时行为与旧版逐位一致（三堡 parity 基线比对 0 差异）。门控验收 A2–A9 全绿；主动稽查的玩家动作与 parent-only 扩展仍按 22-03 待做。
 
 ### 23 号 · 底下 IT 盲区经营
 
-**状态：仅设计，代码未实现。** 六卷系列 [23-it-blindspot-cultivation](research/23-it-blindspot-cultivation/00-index.md) 与 [ADR-0016](../knowledge/adr/0016-it-blindspot-cultivation.md) 已定稿：监控设备/报表回执六通道手段谱系、带权重随机决策模型与审计日志、盲区厚度与被经营偏置的累积与慢累积拆穿。**依赖 22 号**：被经营偏置必须注入 22 的观测管线（23-05 卷接口规格），须待 22 号落地后排期。
+**状态：已实现最小真实版（候选分支 `feat/stewardship-integration`，未合 main）。** 六卷系列 [23-it-blindspot-cultivation](research/23-it-blindspot-cultivation/00-index.md) 与 [ADR-0016](../knowledge/adr/0016-it-blindspot-cultivation.md) 已定稿：监控设备/报表回执六通道手段谱系、带权重随机决策模型与审计日志、盲区厚度与被经营偏置的累积与慢累积拆穿。**依赖 22 号**已满足：被经营偏置经 [blindspot_cultivation.go](../internal/engine/blindspot_cultivation.go) 注入 22 的观测管线（23-05 卷接口），G1/G2/G3/G5/G7/G9 以事实计数最小版落地。玩家主动经营动作与界面尚未开放，按设计卷后续项排期。
 
 ### 开局可变性剩余（19 号）
 
