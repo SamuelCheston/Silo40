@@ -391,7 +391,7 @@ defineMechanics([
             type: "victory_status_set",
             field: "DEATH",
             bool_value: false,
-            text: "Safeguard 协议被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
+            text: "保障程序被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
           }],
         };
       }

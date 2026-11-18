@@ -803,7 +803,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       false,
 			Type:        "DEATH",
-			Description: "Safeguard 协议被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
+			Description: "保障程序被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
 		}
 		return
 	}
