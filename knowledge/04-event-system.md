@@ -1,6 +1,6 @@
 # 内容事件与跨堡信号
 
-## 1. 三种内容配置各司其职
+## 1. 内容配置各司其职
 
 | 形态 | 位置 | 职责 |
 | --- | --- | --- |
@@ -8,6 +8,7 @@
 | `defineMechanics` | `events/mechanics/` | 月度公式、通用/职业行动、stats 和评分 |
 | action gate JSON | `events/action_gates.json` | 阶段与行动可见/可用，不定义效果 |
 | relic catalog JSON | `events/relics.json` | 遗物定义与位置词表，开局实例化，不定义事件 |
+| Order 条款 JSON | `events/protocol/` | Order 条款定义（类别/严重度/动作），服务层 `LoadProtocolDir` 单独加载，不是内容事件、不进存档 |
 
 Silo 18 N1–N9 不是普通 `defineEvent`，而是 Go 中的强制正典节点表；跨堡 operation 也是 Go 固定定义。不要用新增 JS 事件冒充这两类能力。
 
@@ -21,11 +22,13 @@ Silo 18 N1–N9 不是普通 `defineEvent`，而是 Go 中的强制正典节点�
 
 ## 3. 事件定义与运行名
 
-一个事件文件包含唯一 `defineEvent({...})`，核心字段为 id/title/type/fire_mode/trigger/effects，可选 cooldown、player_action 和 script hooks。推荐 snake_case 且文件名与 ID 一致。
+一个事件文件包含唯一 `defineEvent({...})`，核心字段为 id/title/type/fire_mode/trigger/effects，可选 cooldown_months、deadline_year/deadline_month、player_action 和 script hooks。推荐 snake_case 且文件名与 ID 一致。
 
-运行时名为 `category:event_id`。结构化 trigger/effects 优先；`script.canTrigger` 只增加判断，`script.apply` 返回额外 effects/emit，不能直接改 Go 状态。
+运行时名为 `category:event_id`。结构化 trigger/effects 优先；`script.canTrigger` 只增加判断，`script.apply` 返回额外 effects/emit/schedule，不能直接改 Go 状态。
 
-基础 trigger 包括时间、Silo 指标、资源、人口、flag、event_triggered、player_action_is、部门计数和 all/any。基础 effects 包括指标/资源/人口 delta、部门 panic/productivity/思潮、碎片、楼层稳定度和延迟事件。
+触发器封闭集（`validateTrigger`）：`all`/`any`、`timestamp_at_or_after`、`silo_metric_gte/lte`、`silo_resource_gte/lte`、`silo_population_gte/lte`、`preparation_gte`、`silo_flag_true/false`、`world_flag_true/false/not_set`、`signal_received`、`event_triggered`、`months_since_event_gte`、`actor_metric_gte`、`player_action_is`、`profession_metric_gte_count`、`profession_ideology_gte_count`。
+
+效果封闭集（`validateEffect`）：指标/资源/人口 delta、部门 `profession_metric_delta(_all)`/`profession_ideology_delta_all`、`silo_flag_set`、`profession_fragment_add/remove`、`floor_stability_delta`、`schedule_event`、`cohort_ideology_delta`、`cross_signal`、`world_flag_set`、权威系（`authority_evidence_delta`、`authority_public_fact`、`authority_pact_qualify`、`authority_w_shock`、`decisive_shock`、`alliance_loyalty_delta`）、逃出系（`escape_group_depart`、`escape_group_status`、`escape_org_suspicion_delta`、`escape_departure_settle`）、筹备系（`preparation_delta`、`preparation_transfer`、`spillover_channel_add`、`spillover_send`）、立场与谈判（`top_stance_reeval`、`top_stance_guarantee`、`negotiation_open`、`negotiation_round`、`negotiation_resolve`）、完成键与信念（`player_action_complete`、`belief_observe`、`public_evidence_register`、`evidence_verify`）。完整字段以 `internal/engine/content_events.go` 的校验器为准。
 
 Cohort 是思潮真源，所以 `profession_ideology_delta_all` 不是长期改写 cohort 的替代品；部门宏观指标也可能在下一本地相被派生公式重算。
 
@@ -36,7 +39,8 @@ Cohort 是思潮真源，所以 `profession_ideology_delta_all` 不是长期改�
 - `cross_signal`：把事件投递到 World.CrossQueue。
 - `world_flag_set`：修改白名单世界事实。
 - `world_flag_true/false`：读取世界事实。
-- `signal_received`：检查本堡本月收到的信号。
+- `world_flag_not_set`：守卫型读取——世界事实未成立即通过；无世界上下文（单堡模式）时按"未设立"处理，不会永久封死依赖它的分支。
+- `signal_received`：检查本堡本月收到的信号（event_id 可选，限定具体信号）。
 
 当前世界 flag 白名单为 `silo1_destroyed` 和 `network_jammed`；`silo1_destroyed` 与 `!World.Silo1.Alive` 同步，旧 silo flag 读写保留兼容别名。未声明的新 flag 会在加载时失败。
 
@@ -45,7 +49,8 @@ CrossEvent 包含 SourceSilo、TargetScope、EventID、DueYear/DueMonth 和单�
 ## 5. 延迟、冷却与正典时间的区别
 
 - ONCE/REPEATABLE 和 cooldown 使用每堡 ContentEventState。
-- `schedule_event` 创建 service delayTask，到期后不再检查目标 trigger；纯调度事件常用恒假 canTrigger 防月度提前触发。
+- `schedule_event` 创建 service delayTask，到期后不再检查目标 trigger；**入队后不可取消**——没有取消接口，任务只沿 scheduled→triggered→completed 前进，调度即承诺。纯调度事件常用恒假 canTrigger 防月度提前触发。
+- `deadline_year`/`deadline_month` 是到点强制拉起兜底：声明了 deadline 且尚未触发的事件，月度评估过该时点后无条件点火一次（绕过 trigger 与 canTrigger），只用于剧情上必须发生的窗口内事件。
 - 普通 delayTask 按创建序号稳定排序，多堡时先按目标堡 staging，再在该堡本地相前发布。
 - CrossQueue 是堡间消息，不等同于普通 delayTask。
 - Silo 18 节点按世界绝对时间在阶段 0c 强制生效，不评估普通条件，不消耗 RNG。
@@ -54,7 +59,7 @@ N1 从 Y122 M2 开始，N8 在 Y128 M6 终止 18 号，N9 在 Y130 M1 设置 Sil
 
 ## 6. 行动完成节点如何连接门控
 
-普通机制行动成功后，service 写入 `player_action:<id>` 内容状态。action_gates.json 的 `event_completed` 再读取这些状态推进阶段或解锁行动。
+普通机制行动成功后，service 写入 `player_action:<id>` 内容状态；内容事件也可用 `player_action_complete` 效果写入同样的完成键（服务层落状态并发同名总线事件）。action_gates.json 的 `event_completed` 再读取这些状态推进阶段或解锁行动。
 
 因此：
 

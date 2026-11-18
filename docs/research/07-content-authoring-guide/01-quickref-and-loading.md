@@ -9,7 +9,7 @@
 | 加一个条件触发的剧情/危机事件 | 写内容 | `events/special/` 或 `events/crisis/` 新增 `.js` |
 | 加一个按时间推进的里程碑 | 写内容 | `events/histories/`，`timestampAtOrAfter(year, month)` |
 | 加一个常驻状态规则（恐慌→暴乱这类） | 写内容 | `events/rules/`，`script.canTrigger` + `script.apply` |
-| 加一个玩家按钮动作 | 写内容 | `events/player_actions/`（目录未建，建了即生效） |
+| 加一个玩家按钮动作 | 写内容 | `events/player_actions/` 新增 `.js`（`player_action` 元数据声明 UI 与提交，见 `events/README.md`） |
 | 改每回合结算公式（资源/思潮/指标/胜负） | 写内容 | `events/mechanics/*.js`（mechanic 定义，不是内容事件） |
 | 发/收信息碎片、改楼层稳定度 | 写内容 | 封闭集效果 `profession_fragment_add/remove`、`floor_stability_delta`（§4） |
 | 加新的效果类型/触发器类型/变异类型/flag/结局 | **必须动引擎** | 见 §10，先立项 |
@@ -22,8 +22,9 @@
 | `events/special/` | 条件性特殊事件 | 内容加载（白名单） |
 | `events/crisis/` | special/histories 的后续升级或延迟代价 | 内容加载（白名单） |
 | `events/rules/` | 常驻规则（带冷却，脚本判定） | 内容加载（白名单，`8eec461` 起） |
-| `events/player_actions/` | 文件驱动玩家动作（尚未建目录） | 内容加载（白名单） |
+| `events/player_actions/` | 文件驱动玩家动作（约章接触、逃出筹备/外溢、谈判、证据发布等按钮动作） | 内容加载（白名单） |
 | `events/mechanics/` | 每回合核心公式与动作定义（`defineMechanics`） | **MechanicEngine 单独加载**，不走内容白名单 |
+| `events/protocol/` | Order 条款定义（类别/严重度/动作，JSON） | **服务层 `LoadProtocolDir` 单独加载**，不走内容白名单、不进存档 |
 
 加载链路：启动 `BootstrapContent` → `resolveContentDirectories`（优先二进制同目录
 `events/`，缺失时从内嵌 FS 释放）→ `contentEventDirectories` **白名单过滤**
