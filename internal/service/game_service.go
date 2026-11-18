@@ -884,8 +884,13 @@ func offsetFactions(in []model.Faction, siloID, base uint) []model.Faction {
 	for i, f := range in {
 		f.ID += base
 		f.SiloID = siloID
-		if f.RepresentativeResidentID != 0 {
-			f.RepresentativeResidentID += base
+		// Actor 化代表/创始人：只有 RESIDENT 引用随居民 ID 平移，
+		// PLAYER 引用指向特工，不参与堡内 ID 重映射。
+		if f.RepresentativeKind == "RESIDENT" && f.RepresentativeID != 0 {
+			f.RepresentativeID += base
+		}
+		if f.FounderKind == "RESIDENT" && f.FounderID != 0 {
+			f.FounderID += base
 		}
 		if f.RepresentativeCohortID != nil && *f.RepresentativeCohortID != 0 {
 			cid := *f.RepresentativeCohortID + base
@@ -1126,8 +1131,11 @@ func unoffsetSiloSubIDs(silo *model.Silo, base uint) {
 		if f.ID >= base {
 			f.ID -= base
 		}
-		if f.RepresentativeResidentID >= base {
-			f.RepresentativeResidentID -= base
+		if f.RepresentativeKind == "RESIDENT" && f.RepresentativeID >= base {
+			f.RepresentativeID -= base
+		}
+		if f.FounderKind == "RESIDENT" && f.FounderID >= base {
+			f.FounderID -= base
 		}
 		if f.RepresentativeCohortID != nil && *f.RepresentativeCohortID >= base {
 			cid := *f.RepresentativeCohortID - base

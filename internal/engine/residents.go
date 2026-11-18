@@ -873,6 +873,10 @@ func RebuildImplicitFactions(silo *model.Silo) {
 			faction.Prestige = g.prev.Prestige
 			faction.Stance = g.prev.Stance
 			faction.Memory = append([]string(nil), g.prev.Memory...)
+			faction.FounderKind = g.prev.FounderKind
+			faction.FounderID = g.prev.FounderID
+			faction.FoundedYear = g.prev.FoundedYear
+			faction.FoundedMonth = g.prev.FoundedMonth
 		} else {
 			newSigIndex[g.signature]++
 			name := factionNameFromSignature(tags)
@@ -893,6 +897,8 @@ func RebuildImplicitFactions(silo *model.Silo) {
 				faction.Stance = "status_quo"
 			}
 			faction.Memory = []string{fmt.Sprintf("founded:Y%dM%d", silo.CurrentYear, silo.CurrentMonth)}
+			faction.FoundedYear = silo.CurrentYear
+			faction.FoundedMonth = silo.CurrentMonth
 		}
 
 		// Demands re-derive every tick from the dominant member cohort's drive.
@@ -943,7 +949,8 @@ func RebuildImplicitFactions(silo *model.Silo) {
 				if prof := getProfessionByID(silo, rep.ProfessionID); prof != nil {
 					rep.Tags = buildResidentTags(rep, prof, silo)
 				}
-				faction.RepresentativeResidentID = rep.ID
+				faction.RepresentativeKind = string(ActorResident)
+				faction.RepresentativeID = rep.ID
 				faction.RepresentativeName = rep.Name
 				leader = rep
 			} else {
@@ -1169,12 +1176,12 @@ func getFactionRepresentatives(silo *model.Silo) []*model.Resident {
 	}
 	reps := make([]*model.Resident, 0, len(silo.Factions))
 	for i := range silo.Factions {
-		repID := silo.Factions[i].RepresentativeResidentID
-		if repID == 0 {
+		f := &silo.Factions[i]
+		if f.RepresentativeKind != string(ActorResident) || f.RepresentativeID == 0 {
 			continue
 		}
 		for j := range silo.Residents {
-			if silo.Residents[j].ID == repID && silo.Residents[j].Alive {
+			if silo.Residents[j].ID == f.RepresentativeID && silo.Residents[j].Alive {
 				reps = append(reps, &silo.Residents[j])
 				break
 			}
@@ -1287,7 +1294,7 @@ func factionFormationBias(f *model.Faction) float64 {
 		base = FactionConfig.FormationBiasMedium
 	default:
 		// 检查是否有领袖觉醒 (对应 "双向奔赴" 逻辑)
-		if f.RepresentativeResidentID > 0 {
+		if f.RepresentativeID > 0 {
 			base = FactionConfig.FormationBiasLeader // 领袖触发的初始组织力稍低
 		}
 	}

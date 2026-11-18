@@ -518,7 +518,7 @@ func (a *Advisor) ObserveMonth(silo *model.Silo, agent *model.Agent, newLogs []m
 		PublicizePending: func() bool {
 			for i := range silo.Factions {
 				f := &silo.Factions[i]
-				if !f.IsPublic && f.RepresentativeResidentID > 0 && f.Signature != "special:unaffiliated" {
+				if !f.IsPublic && f.RepresentativeID > 0 && f.Signature != "special:unaffiliated" {
 					return true
 				}
 			}

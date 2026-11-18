@@ -38,7 +38,7 @@ func TestEngineSmoke(t *testing.T) {
 		t.Fatalf("expected implicit factions to be generated")
 	}
 	for _, faction := range silo.Factions {
-		if faction.RepresentativeResidentID == 0 {
+		if faction.RepresentativeID == 0 {
 			t.Fatalf("faction %s has no representative", faction.Name)
 		}
 		if faction.RepresentativeCohortID == nil {

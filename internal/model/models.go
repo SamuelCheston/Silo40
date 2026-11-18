@@ -1451,9 +1451,18 @@ type Faction struct {
 	Tags                     []string       `gorm:"type:text;serializer:json" json:"tags"`
 	TagStats                 map[string]int `gorm:"type:text;serializer:json" json:"tag_stats,omitempty"` // 阵营内部标签分布统计
 	MemberCount              int            `gorm:"default:0" json:"member_count"`
-	RepresentativeResidentID uint           `gorm:"default:0" json:"representative_resident_id"`
+	// 代表 Actor 化 (24 篇 §3, ADR-0018)：代表可以是居民或玩家特工，
+	// Kind 取 ActorKind 词表 (PLAYER/RESIDENT)，空 = 无代表。
+	RepresentativeKind       string         `gorm:"size:16" json:"representative_kind,omitempty"`
+	RepresentativeID         uint           `gorm:"default:0" json:"representative_id"`
 	RepresentativeCohortID   *uint          `gorm:"index" json:"representative_cohort_id,omitempty"`
 	RepresentativeName       string         `gorm:"size:80" json:"representative_name"`
+	// 创始人与成立年月：FOUND_FACTION (C6) 写入；筹备期计时与
+	// 死亡接任 (C7) 读 FoundedYear/Month。亲缘继承随持久 ID 传递。
+	FounderKind              string         `gorm:"size:16" json:"founder_kind,omitempty"`
+	FounderID                uint           `gorm:"default:0" json:"founder_id"`
+	FoundedYear              int            `gorm:"default:0" json:"founded_year"`
+	FoundedMonth             int            `gorm:"default:0" json:"founded_month"`
 	Influence                float64        `gorm:"default:0.0" json:"influence"`
 	Cohesion                 float64        `gorm:"default:0.0" json:"cohesion"`
 	Prestige                 float64        `gorm:"default:0.0" json:"prestige"`    // 阵营威望

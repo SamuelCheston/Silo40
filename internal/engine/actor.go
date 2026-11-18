@@ -325,16 +325,36 @@ func (v *ActorView) IsRepresentative() bool {
 	if v.resident != nil {
 		return v.resident.IsRepresentative
 	}
-	return false
+	// ADR-0018：玩家与 NPC 同构——玩家任代表的派系 (含零成员派系)
+	// 通过 RepresentativeKind=PLAYER 引用判定，不另设特殊分支。
+	return v.playerRepresentedFaction() != nil
 }
 
 func (v *ActorView) FactionID() *uint {
 	if v.resident != nil {
 		return v.resident.FactionID
 	}
+	if f := v.playerRepresentedFaction(); f != nil {
+		id := f.ID
+		return &id
+	}
 	if v.prof != nil {
 		// 部门层面不直接持有 FactionID，但我们可以从其人口单元推导 (这里简化处理)
 		return nil
+	}
+	return nil
+}
+
+// playerRepresentedFaction 玩家任代表的派系 (RepresentativeKind=PLAYER)。
+func (v *ActorView) playerRepresentedFaction() *model.Faction {
+	if v.agent == nil || v.silo == nil {
+		return nil
+	}
+	for i := range v.silo.Factions {
+		f := &v.silo.Factions[i]
+		if f.RepresentativeKind == string(ActorPlayer) && f.RepresentativeID == v.agent.ID {
+			return f
+		}
 	}
 	return nil
 }
