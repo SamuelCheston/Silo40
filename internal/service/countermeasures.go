@@ -33,6 +33,11 @@ func (s *GameService) runCountermeasureMonth(silo *model.Silo) ([]string, []mode
 	stories := make([]model.StoryEvent, 0, len(signals))
 	for _, signal := range signals {
 		switch signal.Kind {
+		case engine.CounterSignalContact:
+			logs = append(logs, fmt.Sprintf("[Countermeasure] %d-%02d T3-2 部门=%s 联系人调离/问话，关系下降且接触收紧",
+				silo.CurrentYear, silo.CurrentMonth, signal.Dept))
+			stories = append(stories, s.countermeasureStory(silo, "contact:"+signal.Dept, "夜班调动",
+				signal.Dept+" 那边你常找的那个人调去了夜班。接替她的人礼貌、客气，问你有没有登记过的预约。"))
 		case engine.CounterSignalGuarantee:
 			logs = append(logs, fmt.Sprintf("[Countermeasure] %d-%02d T2-4 prep_exposure=%.2f 保障可信度被侵蚀",
 				silo.CurrentYear, silo.CurrentMonth, silo.EscapePrep.PrepExposure))

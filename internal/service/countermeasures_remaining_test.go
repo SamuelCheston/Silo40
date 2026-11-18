@@ -190,7 +190,6 @@ func TestT24GuaranteeErosionOnce(t *testing.T) {
 	}
 }
 
-
 // T3-1b：复核期次月灰置地点动作；复查期灰置职务动作；抹除准备期灰置
 // 秘密行动 (suspicion ≥ 0.7)。三级绑定都走既有门控与 DisabledReason。
 func TestT31bIdentityBindingsGateActions(t *testing.T) {
@@ -252,3 +251,57 @@ func TestT31bIdentityBindingsGateActions(t *testing.T) {
 	}
 }
 
+// T3-2：部门泄漏 B ≥ 0.60 → 关系 −0.10、怀疑度 +0.03、接触动作 3 月
+// 不可用、月度故事；窗口到期恢复，同一部门不再二次触发。
+func TestT32ContactWatchCostsAndExpires(t *testing.T) {
+	svc := counterTestService(t)
+	mayor := counterProfession(t, svc, "IT")
+	setBelief(svc, mayor, "leak:Mayor_archive", 0.60)
+	setConnection(t, svc, mayor.ID, 0.5)
+	svc.agent.SuspicionLevel = 0.10
+
+	logs, stories := svc.runCountermeasureMonth(svc.silo)
+	if got := counterConnection(t, svc, mayor.ID); got < 0.3999 || got > 0.4001 {
+		t.Fatalf("connection = %.4f, want 0.40 after T3-2", got)
+	}
+	if got := svc.agent.SuspicionLevel; got < 0.1299 || got > 0.1301 {
+		t.Fatalf("suspicion = %.4f, want 0.13 after T3-2", got)
+	}
+	if got := svc.silo.Countermeasure.ContactWatch["IT"]; got != 3 {
+		t.Fatalf("contact watch = %d months, want 3", got)
+	}
+	if len(logs) != 1 || len(stories) != 1 {
+		t.Fatalf("T3-2 signals = %d logs / %d stories, want 1/1", len(logs), len(stories))
+	}
+	if !strings.Contains(stories[0].Description, "夜班") {
+		t.Errorf("T3-2 story = %q, want night-shift transfer", stories[0].Description)
+	}
+	if stories[0].SiloID != svc.silo.ID || stories[0].SiloName != svc.silo.Name {
+		t.Errorf("story attribution = (%d,%q), want (%d,%q)", stories[0].SiloID, stories[0].SiloName, svc.silo.ID, svc.silo.Name)
+	}
+
+	if err := svc.resolveActionCost(&model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "IT"}); err == nil ||
+		!strings.Contains(err.Error(), "没有回应") {
+		t.Fatalf("build during contact watch = %v, want refusal", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		svc.runCountermeasureMonth(svc.silo)
+	}
+	if got := svc.silo.Countermeasure.ContactWatch["IT"]; got != 0 {
+		t.Fatalf("contact watch after 3 months = %d, want 0", got)
+	}
+	if err := svc.resolveActionCost(&model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "IT"}); err != nil {
+		t.Fatalf("build still refused after window: %v", err)
+	}
+
+	// 同源一次性：B 仍在门槛上也不再扣关系/加怀疑。
+	before := counterConnection(t, svc, mayor.ID)
+	svc.agent.SuspicionLevel = 0.10
+	if logs, _ := svc.runCountermeasureMonth(svc.silo); len(logs) != 0 {
+		t.Fatalf("T3-2 re-fired for the same department: %v", logs)
+	}
+	if got := counterConnection(t, svc, mayor.ID); got != before {
+		t.Errorf("connection changed on repeated watch: %.4f -> %.4f", before, got)
+	}
+}

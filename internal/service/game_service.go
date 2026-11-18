@@ -2686,6 +2686,12 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 		}
 		action.Cost = engine.APCostWithMismatch(cfg, base, mismatch)
 	case model.ActionShareInfo, model.ActionBuildConnection:
+		// T3-2 联系人监视：目标部门的联系人被调离/问话期间，接触类动作
+		// 暂时不可用 (3 月窗口，到期自动恢复)。叙事口径见 20 分册 §5.1。
+		if silo := s.playerActionSilo(); silo != nil && action.TargetDept != "" &&
+			engine.ContactUnderWatch(silo, action.TargetDept) {
+			return fmt.Errorf("该部门没有回应你的接触。")
+		}
 		// 20 分册流通摩擦，只贵不堵（效果、吸收、路径都不变）：
 		//   T2-3 交接收紧（Share）：戒备 ≥ 0.50 → ×2（3→6）
 		//   T1-2 建联摩擦（Build）：戒备 ≥ 0.30 → ceil(base·1.25)（4→5）

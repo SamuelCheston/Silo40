@@ -25,10 +25,18 @@ const (
 
 	// T3-1b 身份线日常绑定：每级节点附带一个月的动作灰置。
 	counterIdentityLockMonths = 1 // TODO(balance)
+
+	// T3-2 联系人监视：部门对泄漏事实 B ≥ 0.60 → 关系 −0.10、
+	// 接触类动作 3 月不可用、怀疑度 +0.03 (6.2 预算)。
+	counterContactThreshold = 0.60 // TODO(balance)
+	counterContactMonths    = 3    // TODO(balance)
+	counterContactRelation  = 0.10 // TODO(balance)
+	counterContactSuspicion = 0.03 // TODO(balance)
 )
 
 // 反制信号：服务层据此生成月度故事 (内容层，不指认玩家)。
 const (
+	CounterSignalContact   = "contact_surveillance"
 	CounterSignalGuarantee = "guarantee_erosion"
 )
 
@@ -46,7 +54,7 @@ type CountermeasureTriggers struct {
 
 // AdvanceCountermeasures 反制账本的月度回合：先让既有窗口递减一格，再结算
 // 本月新触发。返回需要叙事的新信号 (可能为空)。
-func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent, triggers CountermeasureTriggers) []CountermeasureSignal {
+func AdvanceCountermeasures(silo *model.Silo, agent *model.Agent, triggers CountermeasureTriggers) []CountermeasureSignal {
 	if silo == nil {
 		return nil
 	}
@@ -68,6 +76,26 @@ func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent, triggers Counterme
 			state.RelationCooldown = map[string]int{}
 		}
 		state.RelationCooldown[prof.Name] = counterRelationMonths
+	}
+
+	// T3-2：联系人被调离/问话——同源每部门只发生一次。
+	for i := range silo.Professions {
+		prof := &silo.Professions[i]
+		if departmentLeakBelief(prof) < counterContactThreshold {
+			continue
+		}
+		if _, seen := state.ContactWatch[prof.Name]; seen {
+			continue
+		}
+		if state.ContactWatch == nil {
+			state.ContactWatch = map[string]int{}
+		}
+		state.ContactWatch[prof.Name] = counterContactMonths
+		if agent != nil {
+			drainAgentConnection(agent, prof.ID, counterContactRelation)
+			agent.SuspicionLevel = clampUnit(agent.SuspicionLevel + counterContactSuspicion)
+		}
+		signals = append(signals, CountermeasureSignal{Kind: CounterSignalContact, Dept: prof.Name})
 	}
 
 	// T2-4：筹备活动可见度越线，承诺听上去不再可信 (只侵蚀一次)。
@@ -97,6 +125,11 @@ func tickCountermeasureWindows(state *model.CountermeasureState) {
 			state.RelationCooldown[name] = months - 1
 		}
 	}
+	for name, months := range state.ContactWatch {
+		if months > 0 {
+			state.ContactWatch[name] = months - 1
+		}
+	}
 	if state.LocationLockMonths > 0 {
 		state.LocationLockMonths--
 	}
@@ -118,6 +151,29 @@ func departmentLeakBelief(prof *model.Profession) float64 {
 		}
 	}
 	return max
+}
+
+// drainAgentConnection 关系下降 (夹到 0)；没有该部门的连接时视为 0。
+func drainAgentConnection(agent *model.Agent, professionID uint, delta float64) {
+	for i := range agent.Connections {
+		if agent.Connections[i].ProfessionID != professionID {
+			continue
+		}
+		v := agent.Connections[i].Value - delta
+		if v < 0 {
+			v = 0
+		}
+		agent.Connections[i].Value = v
+		return
+	}
+}
+
+// ContactUnderWatch 报告该部门的联系人当前是否不可接触 (T3-2)。
+func ContactUnderWatch(silo *model.Silo, dept string) bool {
+	if silo == nil || dept == "" {
+		return false
+	}
+	return silo.Countermeasure.ContactWatch[dept] > 0
 }
 
 // RelationCooling 报告该部门的关系增长是否仍在 T1-3 冷却期。
