@@ -1254,6 +1254,8 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 		Flags:           map[string]bool{},
 		ProgressStage:   s.initialProgressStage(),
 		UnlockedActions: []string{},
+		// 22 黑箱学习系列：权衡层功能开关持久化 (默认关闭 = 旧行为逐位一致)。
+		Silo1BlackBoxEnabled: req.Silo1BlackBox,
 	}
 
 	silos := []*model.Silo{silo}
@@ -1303,6 +1305,15 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 
 	// The station already occupies ActiveSiloID; no fourth silo and no Silo 40
 	// entity are added. Silo 18 remains isolated from direct player action.
+
+	// 22/23 系列：功能开关开启时逐堡启用黑箱与盲区状态 (确定性，不消耗 RNG)。
+	// 关闭时零值 = 未启用，4.55/4.62/4.65 与黑箱回合全部早退。
+	if req.Silo1BlackBox {
+		for _, sl := range silos {
+			sl.BlackBox.Initialized = true
+			sl.BlindSpot.Initialized = true
+		}
+	}
 
 	// 初始化引擎 (清空旧调度器状态)
 	s.engine = engine.NewGameEngine()
@@ -3413,7 +3424,7 @@ func (s *GameService) publicWorldView() *model.WorldView {
 			{ID: s.silo.ID, Name: s.silo.Name, IsPlayer: s.silo.ID == s.world.PlayerSiloID},
 		}
 	}
-	return &model.WorldView{
+	view := &model.WorldView{
 		ID:                       s.world.ID,
 		Seed:                     s.world.Seed,
 		CurrentYear:              s.world.CurrentYear,
@@ -3435,7 +3446,9 @@ func (s *GameService) publicWorldView() *model.WorldView {
 		StationOperations:        append([]model.Silo1Operation(nil), s.world.StationOps.Operations...),
 		Silos:                    siloRefs,
 		Neighbors:                s.buildRumorViews(),
+		StewardshipEnabled:       s.world.Silo1BlackBoxEnabled,
 	}
+	return view
 }
 
 func (s *GameService) pendingOperationName() string {

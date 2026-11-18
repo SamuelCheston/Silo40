@@ -1,16 +1,24 @@
-# 25 — v15 硬切断与派生威望的测试欠账
+# 25 — v16 硬切断与派生威望的测试欠账
 
 > 状态：待收拾（快速扩充期，agents.md §四：编译通过即提交，测试问题留档）。
-> 来源：C4「威望全层派生」（24 篇实现方案的第 4 个原子提交）。
+> 来源：C4「威望全层派生」（24 篇实现方案的第 4 个原子提交）及其与
+> 22/23 黑箱系列的合并。
 > 日期：2026-11-18。
 
 C4 落地后 `go build ./...`、`go vet ./...`、`go test ./internal/engine/` 全绿；
 `go test ./internal/service/` 有 10 个失败，全部落在两个**预期内**的类别，
 不是实现缺陷。本文记录现象与处理思路，留待日后统一收拾。
 
-## 一、存档升级链测试（6 个，硬切断的直接后果）
+**版本顺延**：C4 原拟 CurrentSaveVersion 15 硬切断；合并 origin/main 时
+发现 22/23 黑箱系列已占 v15（含 UpgradeV14ToBlackBoxSave 升级步）。裁决：
+黑箱 v15 语义与升级链保留不动，威望派生硬切断顺延为 **v16**，拒载 v15
+及更早存档。下文失败现象按合并前 (要求=15) 记录；合并后升级链终点 v15
+同样被 v16 闸拒绝，黑箱侧的 resume 类测试（TestUpgradeV14ToBlackBoxSave
+及 v12→v15 迁移链连续性测试等）并入同一欠账类别。
 
-失败清单：
+## 一、存档升级链测试（硬切断的直接后果）
+
+合并前失败清单（6 个）：
 
 - TestUpgradeV7ToAuthoritySaveReadbackAndResume
 - TestUpgradeV9ToPreparationSave
@@ -21,18 +29,20 @@ C4 落地后 `go build ./...`、`go vet ./...`、`go test ./internal/engine/` �
 
 现象：升级链把旧档一路升到 v14，随后 resume 被
 `game_service.go` 的版本闸拒绝：「存档=14，当前要求=15」。
+合并后黑箱接力步把档升到 v15，仍被拒：「存档=15，当前要求=16」。
 
-原因：C4 按 ADR-0017 把 CurrentSaveVersion 14→15 硬切断，**不写 v14→v15
-迁移**。升级链的终点 v14 现在永远无法入局——整条 v1→v14 升级机器
-（save_upgrade.go）与其测试实质上已是死代码。
+原因：C4 按 ADR-0017 硬切断，**不写威望层迁移**。升级链的终点现在
+永远无法入局——整条 v1→v15 升级机器（save_upgrade.go）与其测试
+实质上已是死代码。
 
 处理思路（二选一，倾向前者）：
 
-1. **整体删除**升级链与这 6 个测试（ADR-0017：上线前无兼容义务）。
-   顺带清理 save_upgrade.go 的 isV1Save…isV13Save 与备份逻辑。
-   注意 permeationSaveVersion 等版本常量若仍被读档侧引用需一并核对。
+1. **整体删除**升级链与这些测试（ADR-0017：上线前无兼容义务）。
+   顺带清理 save_upgrade.go 的 isV1Save…isV14Save 与备份逻辑。
+   注意 permeationSaveVersion / blackBoxSaveVersion 等版本常量
+   若仍被读档侧引用需一并核对。
 2. 保留升级链做「考古」，把测试的 resume 断言改为**断言硬切断拒绝**
-   （v14 档必须被拒），升级步骤本身只验 DB 状态。
+   （终点档必须被拒），升级步骤本身只验 DB 状态。
 
 ## 二、种子调优可玩性测试（4 个，动力学漂移）
 

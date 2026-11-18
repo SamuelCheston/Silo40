@@ -65,7 +65,7 @@
 - **居民开局 ambition**：AmbitionBase + min(PowerLevel,10)/10×AmbitionPowerWeight +
   ideologicalIntensity×AmbitionIntensityWeight + rng×AmbitionNoise（公式结构不变，输入换轴）。
 
-## 3. 数据模型变更（存档硬切断 v14 → v15）
+## 3. 数据模型变更（存档硬切断 v15 → v16）
 
 - Agent：+Ambition、+Influence；−PoliticalPrestige。
 - Profession：+Ambition、+Influence；−PoliticalPrestige。
@@ -79,7 +79,9 @@
   玩家作为领袖时以 AgentID 编码进同一 map，约定键空间：居民 ID 与 Agent ID 不冲突需校验，
   实现时改用 `map[string]float64`，键 `res:<id>` / `agent:<id>`，与部门关系键隔离）。
 - 信念层：`faction:<id>:founded` 事实（无新字段，复用 FactBelief）。
-- CurrentSaveVersion = 15；旧档拒载（现有校验逻辑天然硬切断，不写迁移）。
+- CurrentSaveVersion = 16；旧档拒载（现有校验逻辑天然硬切断，不写迁移）。
+  原拟 v15，与 22/23 黑箱系列合并时顺延：v15 已被黑箱学习层占用
+  （含 v14→v15 升级步），威望派生硬切断改占 v16，黑箱升级链保留不动。
 
 ## 4. 参数表（FactionConfig 新增/变更）
 
@@ -115,7 +117,7 @@
 | C1 | docs(adr) | ADR-0018 + 索引 | knowledge/adr/ |
 | C2 | docs | 本方案 | docs/research/24 |
 | C3 | feat(model) | Agent/Profession 补 Ambition/Influence + 开局赋值 + ActorView 访问器 + ambition mutation 通路（增量，不破坏） | models.go、initializer.go、actor.go、mechanics.go、residents.go |
-| C4 | refactor(prestige) | 威望全层派生：删独立字段与两段动力学、拆循环依赖、重锚全部消费点（Go/JS/门控/结局/展示）、prestige mutation 折算 influence、存档 v15 | models.go、actor.go、engine.go、residents.go、mechanics.go、agent_stats.go、initializer.go、action_gates.go、weighted_endings.go、station_operations.go、content_events.go、core_systems.js、formulas.js、save 相关测试 |
+| C4 | refactor(prestige) | 威望全层派生：删独立字段与两段动力学、拆循环依赖、重锚全部消费点（Go/JS/门控/结局/展示）、prestige mutation 折算 influence、存档 v16（原 v15，黑箱层合并顺延） | models.go、actor.go、engine.go、residents.go、mechanics.go、agent_stats.go、initializer.go、action_gates.go、weighted_endings.go、station_operations.go、content_events.go、core_systems.js、formulas.js、save 相关测试 |
 | C5 | feat(factions) | Faction 代表 Actor 化 + Founder/成立年月 + 全部消费点适配 | models.go、residents.go、faction_explain.go、mechanics.go、common_actions.js、npc.go、service 快照 |
 | C6 | feat(factions) | FOUND_FACTION 动作 + 资格门 + NPC 发起候选（此时自动聚类仍在，C7 切换） | common_actions.js、action_gates.json、npc.go、faction_config.go |
 | C7 | refactor(factions) | 事件驱动成员资格：废除每 tick 聚类建派系；RebuildImplicitFactions → 维护管线；亲缘场；筹备期解散；领袖死亡接任；解释接口改新语义；审计测试重建 | residents.go、faction_cluster.go、faction_explain.go、engine.go、faction_test.go、faction_audit_test.go |
@@ -138,7 +140,7 @@
 - C3：ambition mutation 通路单测（事件改 ambition、模拟不改）。
 - C4：派生威望单测（四层同构）；prestige→influence 折算单测；既有结局/门控测试重锚
   （PoliticalPrestige=100 → Ambition=1/Influence=1）。存档升级链测试与 4 个种子调优
-  可玩性测试的预期内失败留档 [25-v15-test-debt.md](25-v15-test-debt.md)，
+  可玩性测试的预期内失败留档 [25-v16-test-debt.md](25-v16-test-debt.md)，
   种子重调建议等 C7/C9 落地后一次完成。
 - C5：玩家任代表/创始人的序列化与快照单测。
 - C6：发起资格门单测（威望/强度/AP 三闸、零成员派系合法）。

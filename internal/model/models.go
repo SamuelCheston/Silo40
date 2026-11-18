@@ -62,11 +62,21 @@ const (
 //     地板满渗透月数后事实成熟，《共证》资格门改读成熟计数。零值 = 未渗透
 //     = 旧档"信念门未达成"的状态一致，不回填任何推测进度；v13 存档经
 //     备份+单事务+回读校验升级 (v12 旧档先经 v13 谈判层升级接力)。
-//   - v15: 政治威望全层派生 (24-faction-event-algorithm-plan)。Agent/Profession/
+//   - v15: 黑箱学习层 + 盲区经营 (22 黑箱学习系列、23 盲区经营系列)。World
+//     携带权衡层世界侧台账 (Silo1Stewardship) 与功能开关 (Silo1BlackBoxEnabled)，
+//     Silo 携带每堡黑箱状态 (BlackBox：真值与信念分离)、盲区经营累积
+//     (BlindSpot) 与后果事件登记簿 (SafeguardIncidents)。新字段零值 = 未启用
+//     = 旧档逐位不变 (开关关闭 → 黑箱回合跳过、零 RNG 消耗；盲区零覆盖 →
+//     观测注入恒等映射)，不回填任何推测状态 (先验初始化在运行时首次启用)；
+//     旧档 Silo.SafeguardRisk 数值自此语义为「1 号指派基线 + 内容增量」
+//     (数值不动)；v14 存档经备份+单事务+回读校验升级 (v12 旧档先经谈判层→
+//     渗透两跳接力)。
+//   - v16: 政治威望全层派生 (24-faction-event-algorithm-plan)。Agent/Profession/
 //     Resident/PopulationCohort 删除独立 PoliticalPrestige 字段，威望改由
 //     50×(Ambition+Influence) 派生；Agent/Profession 补齐 Ambition/Influence。
-//     破坏性语义变更，无升级步：v14 及更早存档拒载 (ADR-0017 硬切断)。
-const CurrentSaveVersion = 15
+//     破坏性语义变更，无升级步：v15 及更早存档拒载 (ADR-0017 硬切断)。
+//     与 v15 黑箱层合并时顺延编号：黑箱升级链终点 v15 保留不动。
+const CurrentSaveVersion = 16
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -319,6 +329,219 @@ type OperationTrack struct {
 	Operations          []Silo1Operation `json:"operations"`
 }
 
+// ============ 1 号权衡层 (22 设计卷、22 黑箱学习系列、ADR-0019) ============
+//
+// 语义锚点：
+//   - 指标一 (Experiment)：实验履约与保留多样性——只影响"最终可保留地堡的
+//     多样性"，不判负、不处刑、不进玩家结局资格。
+//   - 指标二 (Lifespan)：剩余人员平均寿命——必然消耗的预算 (时间自然衰减 +
+//     行动档位扣减)，耗尽导致能力退化而非判负。
+//   - 指标三 (每堡 BlackBox)：safeguard 风险度由 1 号在黑箱回合指派；隐藏量
+//     self_preservation (Θ) 与 20 箱后验信念 (b) 真值/信念分离存放
+//     (22 黑箱学习系列 01 卷 §8 权威)。
+//
+// 零值语义 = 未启用：World.Silo1BlackBoxEnabled 为 false 时全部步骤跳过，
+// 零 RNG 消耗，单堡与旧档行为逐位不变。
+
+// 监控档位 (指标二的行动成本分档)。
+const (
+	Silo1PostureHigh       = "HIGH"        // 高度监控：成本最高
+	Silo1PostureNormal     = "NORMAL"      // 正常监控
+	Silo1PostureReportOnly = "REPORT_ONLY" // 只听取 IT 主任汇报：成本极低
+)
+
+// 黑箱观测信号类型 (22 黑箱学习系列 01 卷 §5.2)。堡内按类型升序产生与抽干。
+const (
+	BlackBoxSignalReceiptDelay = "receipt_delay" // Order 指令回执/执行回报时延，δ=1
+	BlackBoxSignalExecutionGap = "execution_gap" // 复核结果与本地呈报差异，δ=2
+	BlackBoxSignalLineTone     = "line_tone"     // IT 主任例行汇报态度，δ=2
+)
+
+// ExperimentMissRecord 一次"该清除而未清除"的履约缺口记录。
+type ExperimentMissRecord struct {
+	SiloID uint `json:"silo_id"`
+	Year   int  `json:"year"`
+	Month  int  `json:"month"`
+}
+
+// ExperimentStewardship 指标一：实验履约与保留多样性。
+type ExperimentStewardship struct {
+	// FulfillmentDeficit 履约缺口：该按要求清除的叛乱地堡没被清除的累积恶化
+	// (随时间衰减)。
+	FulfillmentDeficit float64 `json:"fulfillment_deficit"`
+	// DiversityLoss 多样性损耗：每清除一个地堡的累积恶化 (随时间衰减，且越
+	// 接近实验结束清除带来的损耗越轻)。
+	DiversityLoss float64 `json:"diversity_loss"`
+	// Scheduled 清除义务登记：通牒签发时登记 (siloID -> 登记月份)。
+	Scheduled map[uint]int `json:"scheduled,omitempty"`
+	// Cleared 清除成立事实 (siloID -> 覆灭月份)。
+	Cleared map[uint]int `json:"cleared,omitempty"`
+	// Missed 已结算过缺口的登记 (防重复计费)。
+	Missed map[uint]bool `json:"missed,omitempty"`
+	// Misses 缺口审计记录。
+	Misses []ExperimentMissRecord `json:"misses,omitempty"`
+	// Ledger 杂项台账 (防重复计费的已结算标记等)，键由实现定义。
+	Ledger map[string]int `json:"ledger,omitempty"`
+}
+
+// LifespanStewardship 指标二：剩余人员平均寿命 (1 号人员轮流休眠)。
+type LifespanStewardship struct {
+	// AvgLifespan 平均寿命 (年)。时间本身必然使其下降；行动按档位额外扣减。
+	AvgLifespan float64 `json:"avg_lifespan"`
+	// Initialized 区分"零值旧档"与"已启用"。
+	Initialized bool `json:"initialized,omitempty"`
+	// Postures 每堡监控档位 (siloID -> Silo1Posture*)。
+	Postures map[uint]string `json:"postures,omitempty"`
+	// Ledger 杂项台账 (一次性行动成本的已计费标记等)，键由实现定义。
+	Ledger map[string]int `json:"ledger,omitempty"`
+}
+
+// Silo1StewardshipState 1 号权衡层世界侧状态 (指标一/二)。指标三的每堡状态
+// 在 Silo.BlackBox (真值与信念分离，22 黑箱学习系列 01 卷 §8)。
+type Silo1StewardshipState struct {
+	// Initialized 区分"零值旧档"与"已启用"。
+	Initialized bool                  `json:"initialized,omitempty"`
+	Experiment  ExperimentStewardship `json:"experiment"`
+	Lifespan    LifespanStewardship   `json:"lifespan"`
+}
+
+// BlackBoxPendingObservation 在途延迟观测信号 (22 黑箱学习系列 01 卷 §8)。
+// 世界侧 4.65 产生、1 号侧黑箱回合按到达月抽干；排序键 (到达月, 信号类型, Seq)。
+type BlackBoxPendingObservation struct {
+	ArriveYear     int     `json:"arrive_year"`
+	ArriveMonth    int     `json:"arrive_month"`
+	ReflectedYear  int     `json:"reflected_year"` // 反映月 (归因记录，审计用)
+	ReflectedMonth int     `json:"reflected_month"`
+	SignalType     string  `json:"signal_type"` // BlackBoxSignal*
+	Value          float64 `json:"value"`       // y ∈ [0,1]
+	Seq            int     `json:"seq"`         // 堡内单调序号 (排序第三键)
+}
+
+// BlackBoxLogEntry 一次黑箱指派决策的审计留痕 (22 黑箱学习系列 04 卷 §2)。
+// 审计渠道：不进玩家界面。
+type BlackBoxLogEntry struct {
+	Year     int     `json:"year"`
+	Month    int     `json:"month"`
+	ThetaHat float64 `json:"theta_hat"` // 决策时刻后验均值 (1 号自己的估计)
+	Lo       float64 `json:"lo"`        // 90% 质量最短区间下界
+	Hi       float64 `json:"hi"`        // 90% 质量最短区间上界
+	PDanger  float64 `json:"p_danger"`  // 危险区概率
+	ChosenR  float64 `json:"chosen_r"`
+	Utility  float64 `json:"utility"`
+	Reason   string  `json:"reason,omitempty"` // 理由码 exploit/explore/event (04 卷 §2.3)
+	Factors  string  `json:"factors"`          // 因子读数摘要 (可复盘依据)
+}
+
+// Silo1BlackBoxState 每堡黑箱状态 (22 黑箱学习系列 01 卷 §8)。
+// 真值 (Theta) 与信念 (Belief) 分字段存放：世界侧结算读 Theta，1 号决策侧
+// 只读 Belief 与观测——任何让决策读到 Theta 真值或 E 曲线参数的路径都是违规。
+type Silo1BlackBoxState struct {
+	// Initialized 零值 false → 功能未启用 = 旧档语义。
+	Initialized bool `json:"initialized,omitempty"`
+	// Theta 世界侧真实隐藏量 Θ (self_preservation)；0 = 完全按 Order 办事。
+	Theta float64 `json:"theta"`
+	// Belief N=20 箱后验 (长度 N)；nil → 首次启用时按先验初始化 (运行时，
+	// 不经升级器)。
+	Belief []float64 `json:"belief,omitempty"`
+	// LastAssignedRisk 上月 2b 指派、本月生效的 r；零值 → 首次启用月以当前
+	// SafeguardRisk 为生效 r (连续性)。
+	LastAssignedRisk float64 `json:"last_assigned_risk"`
+	// CurrentExecution 本月 E 生效槽 (4.55 写入，供 4.6 消费与审计回放)。
+	CurrentExecution float64 `json:"current_execution"`
+	// PendingObservations 在途延迟信号；零值 = 无在途。
+	PendingObservations []BlackBoxPendingObservation `json:"pending_observations,omitempty"`
+	// ObsSeq 堡内观测单调序号计数器。
+	ObsSeq int `json:"obs_seq,omitempty"`
+	// ProbeCooldown 探索冷却计数 (01 卷 §6.4 接口预留)；零值 = 可用。
+	ProbeCooldown int `json:"probe_cooldown,omitempty"`
+	// ObediencePulse 通牒后表面服从脉冲剩余月 (22-02 §3.5 ΔE_show、缺口 G10)：
+	// 通牒签发时置 1–2 月，4.55 结算时对 E 叠加临时项；零值 = 无脉冲。
+	ObediencePulse int `json:"obedience_pulse,omitempty"`
+	// Log 决策审计日志，环形上限 24 (每堡独立)。
+	Log []BlackBoxLogEntry `json:"log,omitempty"`
+}
+
+// 盲区经营六通道 (23 系列 04 卷 §1.1)。固定顺序即存档数组序与累加序，
+// 禁止 map 遍历序 (确定性纪律)。
+const (
+	BlindSpotChannelEquipment = "equipment" // 监控设备盲区
+	BlindSpotChannelSchedule  = "schedule"  // 排班/迎检安排
+	BlindSpotChannelReports   = "reports"   // 报表口径
+	BlindSpotChannelLedger    = "ledger"    // 台账/回执
+	BlindSpotChannelCensus    = "census"    // 人口底册
+	BlindSpotChannelTiming    = "timing"    // 上报时点
+)
+
+// 拆穿阶段 (23 系列 04 卷 §3.4)。
+const (
+	BlindSpotStageNone      = ""
+	BlindSpotStageDoubt     = "doubt"     // 起疑
+	BlindSpotStageVerify    = "verify"    // 查证
+	BlindSpotStageConfirmed = "confirmed" // 坐实
+)
+
+// BlindSpotTraceEntry 手段使用在世界侧留下的可追溯痕迹 (事实层；1 号侧永不
+// 直读，只能经稽查抽样与统计形状间接捕捉)。
+type BlindSpotTraceEntry struct {
+	Year      int     `json:"year"`
+	Month     int     `json:"month"`
+	Channel   string  `json:"channel"`   // BlindSpotChannel*
+	Kind      string  `json:"kind"`      // 痕迹类型 (04 卷 §1.4 表)
+	Magnitude float64 `json:"magnitude"` // 痕迹量级 ∝ 手段力度
+	Seq       int     `json:"seq"`       // 堡内单调序号 (排序键)
+}
+
+// BlindSpotEvidenceEntry 拆穿判据窗口内的证据事件 (环形上限 24)。
+type BlindSpotEvidenceEntry struct {
+	Year      int     `json:"year"`
+	Month     int     `json:"month"`
+	Source    string  `json:"source"`    // cross_mismatch / proto_contrast / burst_residual / trace_shape
+	Magnitude float64 `json:"magnitude"` // 证据量级 ∈ [0,1]
+	Seq       int     `json:"seq"`
+}
+
+// BlindSpotCultivationState 每堡盲区经营累积状态 (23 系列 04 卷 §1.5)。
+// 零值 = 未经营 = 注入恒等映射 = 旧档逐位不变。
+type BlindSpotCultivationState struct {
+	// Initialized 零值 false → 功能未启用 = 旧档语义。
+	Initialized bool `json:"initialized,omitempty"`
+	// Coverage 逐通道盲区厚度 Cov_c ∈ [0,1]，固定通道序 (六通道)。
+	Coverage [6]float64 `json:"coverage"`
+	// Bias 逐通道被经营偏置 ∈ [0,1] (方向固定朝"平静")，固定通道序。
+	Bias [6]float64 `json:"bias"`
+	// Suspicion 怀疑计数器 ∈ [0,1] (04 卷 §3.2)。
+	Suspicion float64 `json:"suspicion"`
+	// Stage 拆穿阶段 (BlindSpotStage*)；StageMonths 当前阶段已持续月数。
+	Stage       string `json:"stage,omitempty"`
+	StageMonths int    `json:"stage_months,omitempty"`
+	// Traces 痕迹账本 (保留期 36 月，升序)。
+	Traces []BlindSpotTraceEntry `json:"traces,omitempty"`
+	// TraceSeq 堡内痕迹单调序号计数器。
+	TraceSeq int `json:"trace_seq,omitempty"`
+	// Evidence 近期证据事件 (环形上限 24)。
+	Evidence []BlindSpotEvidenceEntry `json:"evidence,omitempty"`
+	// ChannelResetMonth 逐通道最近一次重置月 (04 卷 §4.5)。
+	ChannelResetMonth [6]int `json:"channel_reset_month"`
+	// StrictUntil 「更严监控」标记的截止月 (04 卷 §4.2)。
+	StrictUntil int `json:"strict_until,omitempty"`
+	// ActiveDisguise 上月选中手段类 (惯性因子输入，03 卷 §2.9)。
+	ActiveDisguise string `json:"active_disguise,omitempty"`
+	// Log 盲区经营决策审计日志 (世界侧，环形上限 24；不进玩家界面)。
+	Log []BlindSpotDecisionLogEntry `json:"log,omitempty"`
+}
+
+// BlindSpotDecisionLogEntry 一次盲区经营决策的审计留痕 (23 系列 03 卷)。
+type BlindSpotDecisionLogEntry struct {
+	Year      int    `json:"year"`
+	Month     int    `json:"month"`
+	Acted     bool   `json:"acted"`            // 第一级抽取结果
+	Choice    string `json:"choice,omitempty"` // 手段类 ID (不动手为 idle)
+	Channel   string `json:"channel,omitempty"`
+	Intensity int    `json:"intensity,omitempty"` // 力度档
+	Weights   string `json:"weights"`             // 归一化权重表
+	Factors   string `json:"factors"`             // 六因子读数摘要 (可归因)
+}
+
 // World 一局游戏的顶层聚合 (多堡研究 §2)。P0.5 起可挂两个完整模拟堡：
 // 世界时钟为权威 (各堡时钟是其镜像)、跨堡事件队列按 (到期月, Seq) 排序、
 // Silo 1 为脚本化状态机。单堡 (空邻堡) 配置下所有多堡机制关闭，行为与
@@ -354,8 +577,14 @@ type World struct {
 	// LineShifts 改道日志：主线每次变化记一条 (含首次确立，From 为空)。
 	// 改道是玩家可见的事实——从《共证》改道《公议》不该是"某个数字悄悄不涨"。
 	LineShifts []LineShift `gorm:"type:text;serializer:json" json:"line_shifts,omitempty"`
-	CreatedAt  time.Time   `json:"created_at"`
-	UpdatedAt  time.Time   `json:"updated_at"`
+	// Silo1Stewardship 1 号权衡层 (22 设计卷)：指标一/二。零值 = 未启用。
+	Silo1Stewardship Silo1StewardshipState `gorm:"type:text;serializer:json" json:"silo1_stewardship"`
+	// Silo1BlackBoxEnabled 权衡层功能开关 (建档请求 Silo1BlackBox 持久化)：
+	// false (默认/旧档) → 黑箱回合、4.55/4.65、指标一/二全部跳过，零 RNG 消耗，
+	// 与既有 parity 基线逐位一致。
+	Silo1BlackBoxEnabled bool      `gorm:"default:false" json:"silo1_black_box_enabled"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // LineShift 一次主线变化：From 为空表示首次确立主线。
@@ -496,23 +725,32 @@ type ShadowAuthority struct {
 
 // Silo 地堡核心模型
 type Silo struct {
-	ID              uint                    `gorm:"primarykey" json:"id"`
-	WorldID         uint                    `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
-	Name            string                  `gorm:"size:100" json:"name"`
-	Traits          []string                `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
-	SafeguardRisk   float64                 `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
-	TotalPopulation int                     `gorm:"default:10000" json:"total_population"`
-	Legitimacy      float64                 `gorm:"default:1.0" json:"legitimacy"`                      // Compatibility mirror of Mayor.Legitimacy.
-	Mayor           MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`             // 现任 Mayor 个人正统性
-	Authority       ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`         // IT 幕后威势与 Judicial 附着
-	EscapedGroup    EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`     // 已离开且可能存续的堡外群体 (G5)
-	TopStance       TopStanceState          `gorm:"type:text;serializer:json" json:"top_stance"`        // 顶层立场 (16 §3.2)：内部状态，仲裁不读
-	Negotiation     NegotiationState        `gorm:"type:text;serializer:json" json:"negotiation"`       // 市长与叛乱方谈判/妥协层 (21 设计卷)：只改变谁在阻碍谁，不发放胜利
-	EscapePrep      EscapePreparation       `gorm:"type:text;serializer:json" json:"escape_prep"`       // 逃跑准备账本 (16 §2)：事实账本，仲裁不读
-	SpilloverPrep   SpilloverPreparation    `gorm:"type:text;serializer:json" json:"spillover_prep"`    // 外溢准备账本 (16 §2.3)：信道建立侧
-	EscapeResponse  EscapeResponseState     `gorm:"type:text;serializer:json" json:"escape_response"`   // 筹备反制层 (20 修订/ADR-0014)：组织怀疑度与 IT 带权响应
-	Countermeasure  CountermeasureState     `gorm:"type:text;serializer:json" json:"countermeasure"`    // 20 分册第 5 批：T1-3/T2-4/T3-1b/T3-2 反制账本
-	PreFallSnapshot PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
+	ID            uint     `gorm:"primarykey" json:"id"`
+	WorldID       uint     `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
+	Name          string   `gorm:"size:100" json:"name"`
+	Traits        []string `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
+	SafeguardRisk float64  `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
+	// BlackBox 每堡黑箱状态 (22 黑箱学习系列 01 卷 §8)：真值 Theta 与信念 Belief
+	// 分字段存放。零值 = 功能未启用 = 旧档语义。
+	BlackBox Silo1BlackBoxState `gorm:"type:text;serializer:json" json:"black_box"`
+	// BlindSpot 每堡盲区经营累积状态 (23 系列 04 卷)。零值 = 未经营 = 恒等映射。
+	BlindSpot BlindSpotCultivationState `gorm:"type:text;serializer:json" json:"blind_spot"`
+	// SafeguardIncidents 引擎侧后果事件登记簿 (ADR-0019)：原直接累加风险度的各
+	// 累加点改为在此登记 (kind -> 计数)，经观测管线进入 1 号信念。引擎包写入
+	// (协议偏离/IT 过度干预/不作为/蒙蔽崩塌)，观测管线消费。
+	SafeguardIncidents map[string]int          `gorm:"type:text;serializer:json" json:"safeguard_incidents,omitempty"`
+	TotalPopulation    int                     `gorm:"default:10000" json:"total_population"`
+	Legitimacy         float64                 `gorm:"default:1.0" json:"legitimacy"`                      // Compatibility mirror of Mayor.Legitimacy.
+	Mayor              MayorOffice             `gorm:"type:text;serializer:json" json:"mayor"`             // 现任 Mayor 个人正统性
+	Authority          ShadowAuthority         `gorm:"type:text;serializer:json" json:"authority"`         // IT 幕后威势与 Judicial 附着
+	EscapedGroup       EscapeGroup             `gorm:"type:text;serializer:json" json:"escaped_group"`     // 已离开且可能存续的堡外群体 (G5)
+	TopStance          TopStanceState          `gorm:"type:text;serializer:json" json:"top_stance"`        // 顶层立场 (16 §3.2)：内部状态，仲裁不读
+	Negotiation        NegotiationState        `gorm:"type:text;serializer:json" json:"negotiation"`       // 市长与叛乱方谈判/妥协层 (21 设计卷)：只改变谁在阻碍谁，不发放胜利
+	EscapePrep         EscapePreparation       `gorm:"type:text;serializer:json" json:"escape_prep"`       // 逃跑准备账本 (16 §2)：事实账本，仲裁不读
+	SpilloverPrep      SpilloverPreparation    `gorm:"type:text;serializer:json" json:"spillover_prep"`    // 外溢准备账本 (16 §2.3)：信道建立侧
+	EscapeResponse     EscapeResponseState     `gorm:"type:text;serializer:json" json:"escape_response"`   // 筹备反制层 (20 修订/ADR-0014)：组织怀疑度与 IT 带权响应
+	Countermeasure     CountermeasureState     `gorm:"type:text;serializer:json" json:"countermeasure"`    // 20 分册第 5 批：T1-3/T2-4/T3-1b/T3-2 反制账本
+	PreFallSnapshot    PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
 	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
 	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
 	PublicEvidence []PublicEvidenceRecord `gorm:"type:text;serializer:json" json:"public_evidence,omitempty"`
@@ -678,26 +916,26 @@ type NegotiationLogEntry struct {
 //     但须叛乱方接受 (接受是带权决策，不是自动成立)。
 //   - 零值 = 无谈判 = 旧档语义；未开信道的运行不消耗任何新 RNG。
 type NegotiationState struct {
-	Initialized           bool   `json:"initialized"`
-	ChannelOpen           bool   `json:"channel_open"`
-	OpenedYear            int    `json:"opened_year,omitempty"`
-	OpenedMonth           int    `json:"opened_month,omitempty"`
-	MayorDisposition      string `json:"mayor_disposition,omitempty"` // 开信道时一次性抽取
-	Rounds                int    `json:"rounds"`                      // 已交换回合数
-	MayorPath             string `json:"mayor_path,omitempty"`        // 市长最近一次路径决策
-	MayorLean             float64 `json:"mayor_lean"`                 // 玩家可感知的市长倾向 (0-1)
-	RebelPosture          string `json:"rebel_posture,omitempty"`     // 叛乱方最近姿态
-	StalledRounds         int    `json:"stalled_rounds"`              // 连续谈判无进展回合 (谈判权重软衰减输入)
-	SuppressRounds        int    `json:"suppress_rounds"`             // 累计镇压回合 (叛乱方拒绝权重输入)
-	OfferOnTable          bool   `json:"offer_on_table"`
-	OfferedBy             string `json:"offered_by,omitempty"` // mayor | rebels
-	OfferTerms            string `json:"offer_terms,omitempty"`
-	CompromiseEstablished bool   `json:"compromise_established"`
-	CompromiseYear        int    `json:"compromise_year,omitempty"`
-	CompromiseMonth       int    `json:"compromise_month,omitempty"`
-	Takeover              string `json:"takeover,omitempty"` // ""(未选)/takeover/hands_off
-	Closed                bool   `json:"closed"`
-	CloseReason           string `json:"close_reason,omitempty"`
+	Initialized           bool                  `json:"initialized"`
+	ChannelOpen           bool                  `json:"channel_open"`
+	OpenedYear            int                   `json:"opened_year,omitempty"`
+	OpenedMonth           int                   `json:"opened_month,omitempty"`
+	MayorDisposition      string                `json:"mayor_disposition,omitempty"` // 开信道时一次性抽取
+	Rounds                int                   `json:"rounds"`                      // 已交换回合数
+	MayorPath             string                `json:"mayor_path,omitempty"`        // 市长最近一次路径决策
+	MayorLean             float64               `json:"mayor_lean"`                  // 玩家可感知的市长倾向 (0-1)
+	RebelPosture          string                `json:"rebel_posture,omitempty"`     // 叛乱方最近姿态
+	StalledRounds         int                   `json:"stalled_rounds"`              // 连续谈判无进展回合 (谈判权重软衰减输入)
+	SuppressRounds        int                   `json:"suppress_rounds"`             // 累计镇压回合 (叛乱方拒绝权重输入)
+	OfferOnTable          bool                  `json:"offer_on_table"`
+	OfferedBy             string                `json:"offered_by,omitempty"` // mayor | rebels
+	OfferTerms            string                `json:"offer_terms,omitempty"`
+	CompromiseEstablished bool                  `json:"compromise_established"`
+	CompromiseYear        int                   `json:"compromise_year,omitempty"`
+	CompromiseMonth       int                   `json:"compromise_month,omitempty"`
+	Takeover              string                `json:"takeover,omitempty"` // ""(未选)/takeover/hands_off
+	Closed                bool                  `json:"closed"`
+	CloseReason           string                `json:"close_reason,omitempty"`
 	Log                   []NegotiationLogEntry `json:"log,omitempty"` // 环形保留最近 24 条
 }
 
@@ -752,12 +990,12 @@ const EscapeResponseLogCap = 24
 //     不困死玩家；玩家永远还有路走。
 //   - 零值 = 无响应层活动 = 旧档语义 (未做任何组织动作的运行逐位不变)。
 type EscapeResponseState struct {
-	Initialized       bool    `json:"initialized"`
-	OrgSuspicion      float64 `json:"org_suspicion"` // 组织怀疑度 (0-1)
-	LastDecisionYear  int     `json:"last_decision_year,omitempty"`
-	LastDecisionMonth int     `json:"last_decision_month,omitempty"`
-	CoverActive       bool    `json:"cover_active"` // IT 正在把动向蒙住，不让 1 号察觉
-	CoverMonths       int     `json:"cover_months"`
+	Initialized       bool                     `json:"initialized"`
+	OrgSuspicion      float64                  `json:"org_suspicion"` // 组织怀疑度 (0-1)
+	LastDecisionYear  int                      `json:"last_decision_year,omitempty"`
+	LastDecisionMonth int                      `json:"last_decision_month,omitempty"`
+	CoverActive       bool                     `json:"cover_active"` // IT 正在把动向蒙住，不让 1 号察觉
+	CoverMonths       int                      `json:"cover_months"`
 	Decisions         []EscapeResponseLogEntry `json:"decisions,omitempty"` // 环形保留最近 24 条
 }
 
@@ -1349,6 +1587,9 @@ type CreateGameRequest struct {
 	Pacing       *WorldPacing        `json:"pacing,omitempty"`        // 可选：节奏定制 (缺省 = 全 1.0，行为与历史逐位一致)
 	Neighbor     *NeighborSiloConfig `json:"neighbor,omitempty"`      // Optional Silo 18; nil preserves the legacy path.
 	IncludeSilo1 bool                `json:"include_silo1,omitempty"` // Opt in to a fully simulated peer Silo 1.
+	// Silo1BlackBox 权衡层功能开关 (22 黑箱学习系列)：开启后 1 号黑箱回合、
+	// 4.55/4.65 步骤与指标一/二启用；关闭 (默认) 时行为与既有基线逐位一致。
+	Silo1BlackBox bool `json:"silo1_black_box,omitempty"`
 }
 
 // NeighborSiloConfig 双地堡模式的启用开关。第二堡固定为 18 号地堡并跑
@@ -1405,6 +1646,10 @@ type WorldView struct {
 	StationOperations        []Silo1Operation `json:"station_operations,omitempty"`
 	Silos                    []WorldSiloRef   `json:"silos"`
 	Neighbors                []RumorView      `json:"neighbors,omitempty"` // 非玩家堡的迷雾视图 (P0.5)
+	// 1 号权衡层对玩家是黑箱 (22 黑箱学习系列 04 卷)：Θ、信念与决策日志一律不进
+	// 玩家界面，玩家经 Order 渠道感知 r 档位变化 (故事事件)。这里只下发"功能是
+	// 否启用"供呈现端决定要不要渲染既有的 1 号动向骨架。
+	StewardshipEnabled bool `json:"stewardship_enabled,omitempty"`
 }
 
 // GameState 后端权威游戏状态快照 (返回给前端)
@@ -1477,11 +1722,11 @@ type InformationProgress struct {
 // 跨线共享的事实 (信念覆盖、登记簿、W、警察服从……) 不在线卡里重复，
 // 由呈现端从既有快照单点读取。
 const (
-	LineInformation  = "information"  // 《共证》
-	LineRebellion    = "rebellion"    // 《越岭》
-	LineRuleOfLaw    = "rule_of_law"  // 《公议》
+	LineInformation  = "information"   // 《共证》
+	LineRebellion    = "rebellion"     // 《越岭》
+	LineRuleOfLaw    = "rule_of_law"   // 《公议》
 	LinePersonalRule = "personal_rule" // 《人治》
-	LineTime         = "time"         // 《无人裁决》
+	LineTime         = "time"          // 《无人裁决》
 )
 
 // LineMilestone 单条线上的一个里程碑事实键的点亮状态。

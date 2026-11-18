@@ -36,6 +36,7 @@ type DebugHTTPServer struct {
 	api    GameAPI
 	llm    LlmAPI
 	agent  AgentAPI
+	silo1  Silo1AuditAPI
 	server *http.Server
 }
 
@@ -67,11 +68,22 @@ type AgentAPI interface {
 	AgentStop() (any, error)
 }
 
+// Silo1AuditAPI is the optional Silo 1 black-box audit surface (22 黑箱学习
+// 系列 00 卷裁决 12：1 号信念决策日志是审计渠道，不进玩家界面). Kept separate
+// from GameAPI so existing implementors are unaffected; when not set, the
+// /debug/silo1/blackbox route answers 503.
+type Silo1AuditAPI interface {
+	Silo1BlackBoxAudit() (string, error)
+}
+
 // SetLlmAPI attaches the LLM surface before Start.
 func (s *DebugHTTPServer) SetLlmAPI(l LlmAPI) { s.llm = l }
 
 // SetAgentAPI attaches the agent-operator surface before Start.
 func (s *DebugHTTPServer) SetAgentAPI(a AgentAPI) { s.agent = a }
+
+// SetSilo1AuditAPI attaches the Silo 1 black-box audit surface before Start.
+func (s *DebugHTTPServer) SetSilo1AuditAPI(a Silo1AuditAPI) { s.silo1 = a }
 
 func NewDebugHTTPServer(addr string, api GameAPI) *DebugHTTPServer {
 	addr = strings.TrimSpace(addr)
@@ -105,6 +117,7 @@ func NewDebugHTTPServer(addr string, api GameAPI) *DebugHTTPServer {
 	mux.HandleFunc("/debug/agent/status", s.handleAgentStatus)
 	mux.HandleFunc("/debug/agent/export", s.handleAgentExport)
 	mux.HandleFunc("/debug/agent/stop", s.handleAgentStop)
+	mux.HandleFunc("/debug/silo1/blackbox", s.handleSilo1BlackBox)
 
 	s.server = &http.Server{
 		Addr:              addr,
@@ -507,6 +520,29 @@ func (s *DebugHTTPServer) handleAgentStop(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// handleSilo1BlackBox serves the Silo 1 black-box audit export (22 黑箱学习
+// 系列 00 卷裁决 12：审计渠道). The payload is already a JSON document built by
+// the service layer, so it is written through verbatim.
+func (s *DebugHTTPServer) handleSilo1BlackBox(w http.ResponseWriter, r *http.Request) {
+	if !allowMethod(w, r, http.MethodGet) {
+		return
+	}
+	if s.silo1 == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("silo1 black-box audit not attached"))
+		return
+	}
+	audit, err := s.silo1.Silo1BlackBoxAudit()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	if _, err := io.WriteString(w, audit); err != nil {
+		log.Printf("failed to write silo1 black-box audit: %v", err)
+	}
 }
 
 func withCORS(next http.Handler) http.Handler {

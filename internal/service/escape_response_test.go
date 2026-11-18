@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"silo40/internal/engine"
 	"silo40/internal/model"
 )
 
@@ -174,7 +175,7 @@ func TestEscapeResponseDecisionFiresAndLogs(t *testing.T) {
 }
 
 // TestEscapeResponseCoverCollapseViaMonthlyTick 蒙蔽付不起月费时崩塌：
-// safeguard 风险上浮，决策日志记录结果。
+// 登记蒙蔽崩塌事件 (ADR-0019，不再直接累加风险度)，决策日志记录结果。
 func TestEscapeResponseCoverCollapseViaMonthlyTick(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "escape-response-cover.db"))
 	if _, err := svc.CreateGame(threeSiloRequest(4204)); err != nil {
@@ -186,6 +187,10 @@ func TestEscapeResponseCoverCollapseViaMonthlyTick(t *testing.T) {
 
 	state := &svc.silo.EscapeResponse
 	state.Initialized = true
+	// 打开黑箱功能语义 (ADR-0019 事件登记)，同时用专线干扰挡住 1 号月度指派
+	// 对风险基线的改写，隔离响应层副作用。
+	svc.silo.BlackBox.Initialized = true
+	svc.world.Flags[model.WorldFlagNetworkJammed] = true
 	state.OrgSuspicion = 0.5
 	state.CoverActive = true
 	state.Decisions = []model.EscapeResponseLogEntry{{Decision: model.EscapeResponseConceal}}
@@ -201,8 +206,11 @@ func TestEscapeResponseCoverCollapseViaMonthlyTick(t *testing.T) {
 	if state.CoverActive {
 		t.Fatal("unaffordable cover must collapse during the monthly tick")
 	}
-	if svc.silo.SafeguardRisk <= rsBefore {
-		t.Fatalf("collapse must raise safeguard risk: %v -> %v", rsBefore, svc.silo.SafeguardRisk)
+	if svc.silo.SafeguardRisk != rsBefore {
+		t.Fatalf("collapse must not write safeguard risk directly: %v -> %v", rsBefore, svc.silo.SafeguardRisk)
+	}
+	if svc.silo.SafeguardIncidents[engine.SafeguardIncidentCoverCollapse] == 0 {
+		t.Fatalf("collapse must register a cover_collapse incident: %+v", svc.silo.SafeguardIncidents)
 	}
 	if state.Decisions[len(state.Decisions)-1].Outcome == "" {
 		t.Fatal("collapse must be recorded in the decision log outcome")
@@ -240,9 +248,10 @@ func TestEscapeResponseWindowOpenEndsLayer(t *testing.T) {
 	}
 }
 
-// TestEscapeResponseSafeguardBudget 预算不变式：组织活动持续不断的最坏
-// 情况下，响应层对 safeguard 风险的全程净贡献 ≤0.25——本通道单独永远
-// 到不了硬护栏 1.0，后果只能是"日后更贵、更窄"，不困死玩家。
+// TestEscapeResponseSafeguardBudget 预算不变式 (ADR-0019 新语义)：组织活动
+// 持续不断的最坏情况下，响应层对 safeguard 风险的全程净贡献为 0——不作为与
+// 蒙蔽崩塌改登记事件、经观测管线进入 1 号信念，本通道永不直接触碰风险度，
+// 更到不了硬护栏 1.0，后果只能是"日后更贵、更窄"，不困死玩家。
 func TestEscapeResponseSafeguardBudget(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "escape-response-budget.db"))
 	if _, err := svc.CreateGame(threeSiloRequest(4206)); err != nil {
@@ -252,6 +261,10 @@ func TestEscapeResponseSafeguardBudget(t *testing.T) {
 		t.Fatalf("settle opening month: %v", err)
 	}
 	svc.silo.EscapeResponse.Initialized = true
+	// 功能开启语义 (ADR-0019)：登记事件而非写风险度；专线干扰隔离 1 号月度
+	// 指派对风险基线的改写，便于断言响应层净贡献。
+	svc.silo.BlackBox.Initialized = true
+	svc.world.Flags[model.WorldFlagNetworkJammed] = true
 	rsStart := svc.silo.SafeguardRisk
 
 	// 24 月筹备窗 (16 §6.3 渗透下界口径)：每月把怀疑度垫回门槛上方，
@@ -267,11 +280,17 @@ func TestEscapeResponseSafeguardBudget(t *testing.T) {
 		}
 	}
 	delta := svc.silo.SafeguardRisk - rsStart
-	if delta > 0.25 {
-		t.Fatalf("response channel contribution = %v, exceeds the 0.25 budget", delta)
+	if delta != 0 {
+		t.Fatalf("response channel must not write safeguard risk directly: delta=%v", delta)
 	}
 	if len(svc.silo.EscapeResponse.Decisions) == 0 {
 		t.Fatal("budget scenario must actually fire decisions (no empty green)")
+	}
+	incidents := svc.silo.SafeguardIncidents[engine.SafeguardIncidentIgnore] +
+		svc.silo.SafeguardIncidents[engine.SafeguardIncidentCoverCollapse]
+	if incidents == 0 {
+		t.Fatalf("fired decisions with consequences must register incidents: %+v",
+			svc.silo.SafeguardIncidents)
 	}
 }
 
