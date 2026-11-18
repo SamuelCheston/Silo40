@@ -506,25 +506,25 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	case deathFact && !escapeAlive:
 		decision.Selected = endingDeath
 		decision.Reason = deathNarrative(s, station, trigger, terminationFact, strikeFact)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	case resetFact && !escapeAlive:
 		decision.Selected = endingReset
 		decision.Reason = endingDescriptions[endingReset] + fmt.Sprintf("重置之后驻地仍有居民 %d 人，历史包袱降至 %.2f——人还在，记忆不在了；任务死于接收者的消失，不是死于镇压。",
 			station.TotalPopulation, station.HistoryBurden)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	case fractureFact && !escapeAlive:
 		decision.Selected = endingFracture
 		decision.Reason = endingDescriptions[endingFracture] + fractureSettlementLine(station)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	case trigger == endingCompromised:
 		decision.Selected = endingCompromised
 		decision.Reason = endingDescriptions[endingCompromised] + compromisedSettlementLine(station)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	case deathFact || resetFact || fractureFact:
 		// escapeAlive == true here: the local fall becomes a pyrrhic epilogue.
 		decision.Selected = endingRebellion
 		decision.Reason = "逃出群体已先成立并存续：原驻地的毁灭/重置/崩坏只作《越岭》惨胜尾声。" + rebellionSettlementLine(station)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	}
 
 	// P1: build the qualification pool. Old triggers only request the terminal
@@ -581,7 +581,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if len(decision.Pool) == 0 {
 		decision.Selected = ""
 		decision.Reason = "无合格候选：继续模拟，不硬凑结局。"
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	}
 
 	// P2: four entity types weight only qualified candidates.
@@ -677,7 +677,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if best == "" {
 		decision.Selected = ""
 		decision.Reason = "合格候选均未达最低社会支撑分：继续模拟。"
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	}
 	decision.Selected = best
 	// Settlement narrative replaces the score formula on the ending screen:
@@ -740,12 +740,17 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		narrative += rebellionSettlementLine(station)
 	}
 	decision.Reason = narrative
-	return s.finishArbitration(decision)
+	return s.finishArbitration(decision, station)
 }
 
 // finishArbitration records the audit copy on the world (结局体系 12 §9) and
-// returns the decision for the engine hook.
-func (s *GameService) finishArbitration(decision *model.EndingDecision) *model.EndingDecision {
+// returns the decision for the engine hook. 结局回读在此收口：只有裁决出
+// 具体结局 (Selected 非空) 时才投影本局关键抉择；空池"继续模拟"不生成。
+// 投影只读事实，不参与仲裁与加权。
+func (s *GameService) finishArbitration(decision *model.EndingDecision, station *model.Silo) *model.EndingDecision {
+	if decision != nil && decision.Selected != "" {
+		decision.Recap = s.buildEndingRecap(station, decision.Selected)
+	}
 	if s.world != nil {
 		s.world.LastEndingAudit = decision
 	}

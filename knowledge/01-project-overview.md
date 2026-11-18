@@ -34,9 +34,9 @@ Silo40 是基于《羊毛战记》世界观的单机策略原型，技术栈为 
 - **信息与人际**：碎片搜集/分享、真假信息、人脉、威望、宣传、怀疑度和职业行动。
 - **人口与派系**：cohort 思潮、关键 Resident、距离聚类、派系持久 ID/Stance/Memory/Demands。
 - **秘密 operation**：驻地情报/策反/欺骗/黑市，Silo 1 情报/欺骗；AP 成本、1–2 月延迟、目标实测 delta、Exposure 和反间谍。
-- **多实体结局**：硬失败护栏，加上玩家、驻地派系、关键人物和 Silo 1 共同贡献的 INFORMATION/TIME/REBELLION/EXCLUSIONIST 加权仲裁。
+- **多实体结局**：硬失败护栏（DEATH→RESET→FRACTURE→AGENT_COMPROMISED，先读逃出群体），加上玩家、驻地派系、关键人物和 Silo 1 共同贡献的六个候选 INFORMATION/REBELLION/RULE_OF_LAW/TIME/PERSONAL_RULE/EXCLUSIONIST 加权仲裁（`internal/service/weighted_endings.go` `endingOutcomeOrder`）。
 - **历史引导附加分**：按已结算 operation 的目标 before/after 实测变化计分，不把自然演化或正典覆写冒充玩家贡献。
-- **存档**：v7 单槽存档，保存三堡、阶段、永久解锁、operation、历史影响和仲裁记录。
+- **存档**：v14 单槽存档（`CurrentSaveVersion = 14`，v7→v14 逐级升级器），保存三堡、阶段、永久解锁、operation、历史影响和仲裁记录；v5/v6 存档被拒绝载入（`internal/model/models.go`、`internal/service/game_service.go` 版本校验）。
 - **外部操作员**：`/debug/agent/*` 让 AI 在 NPC 决策点真实选择并导出样本；`cmd/agenthost` 提供无 GUI 宿主。
 - **可选 LLM 顾问**：默认关闭，支持 shadow/on 和决策日志回放，不是 Agent 操作员模式的替代品。
 
@@ -50,4 +50,4 @@ Silo40 是基于《羊毛战记》世界观的单机策略原型，技术栈为 
 - 试玩产物目标是 Linux amd64 + GTK3/WebKitGTK 4.1；Windows/macOS 包与多桌面视觉走查不属于当前交付。
 - 大规模 Agent 采样仍未开放；当前接口与 smoke 链路不等于训练数据已定型。
 
-更完整的限制见 [确定性与已知问题](08-determinism-known-issues.md)。本篇按合流后本地 `main`、代码核对至 `e37237d` 重写；本次未重新进行人工视觉试玩，界面观感标记为**未核实**。
+更完整的限制见 [确定性与已知问题](08-determinism-known-issues.md)。本篇按合流后本地 `main`、代码核对至 `eaa7aab` 重写；本次未重新进行人工视觉试玩，界面观感标记为**未核实**。
