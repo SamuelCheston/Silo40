@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
@@ -153,4 +154,53 @@ func TestContentGuardEveryEventLoadsValidAndTriggerable(t *testing.T) {
 	}
 	sort.Strings(keys)
 	t.Logf("loaded %d content definitions: %v", len(keys), keys)
+}
+
+// TestContentGuardEventTriggerReferencesResolve 防止"有内容却触发不到"的键
+// 拼写漂移：每个 event_triggered 的 category:event_id 必须指向已加载的
+// 内容定义，或指向明确的运行时完成键组 (player_action / observation)。
+// 例：histories 组被误写成 history 时，条件永远不会成立，事件静默死亡。
+func TestContentGuardEventTriggerReferencesResolve(t *testing.T) {
+	svc := bootstrapRealContent(t)
+	// 引擎在载入时会把目录组折叠成运行时类别：histories→history、
+	// player_actions→player_action、events→special。引用比对必须用
+	// 同一口径，否则 history 组会被误报成死键。
+	normalize := func(group string) string {
+		switch strings.ToLower(strings.TrimSpace(group)) {
+		case "histories", "history":
+			return "history"
+		case "player_actions", "player_action":
+			return "player_action"
+		case "events":
+			return "special"
+		default:
+			return strings.ToLower(strings.TrimSpace(group))
+		}
+	}
+	known := map[string]string{}
+	for _, def := range svc.contentDefinitions {
+		known[normalize(def.SourceGroup)+":"+def.EventID] = def.SourceGroup + "/" + def.SourceFile
+	}
+	// 运行时写入的完成键组：不是内容文件，由服务层动作完成时落账。
+	runtimeGroups := map[string]bool{
+		"player_action": true, // 普通/职务/职业动作完成键（含职业动作）
+		"observation":   true, // 首次本地观察等观察键
+	}
+
+	var walk func(def engine.ContentEventDefinition, tr engine.ContentTrigger)
+	walk = func(def engine.ContentEventDefinition, tr engine.ContentTrigger) {
+		if tr.Type == "event_triggered" {
+			key := tr.Category + ":" + tr.EventID
+			if _, ok := known[key]; !ok && !runtimeGroups[tr.Category] {
+				t.Errorf("%s/%s (event %s): event_triggered references unknown key %q",
+					def.SourceGroup, def.SourceFile, def.EventID, key)
+			}
+		}
+		for _, child := range tr.Conditions {
+			walk(def, child)
+		}
+	}
+	for _, def := range svc.contentDefinitions {
+		walk(def, def.Trigger)
+	}
 }
