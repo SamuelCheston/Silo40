@@ -137,7 +137,9 @@
 
 - C3：ambition mutation 通路单测（事件改 ambition、模拟不改）。
 - C4：派生威望单测（四层同构）；prestige→influence 折算单测；既有结局/门控测试重锚
-  （PoliticalPrestige=100 → Ambition=1/Influence=1）。
+  （PoliticalPrestige=100 → Ambition=1/Influence=1）。存档升级链测试与 4 个种子调优
+  可玩性测试的预期内失败留档 [25-v15-test-debt.md](25-v15-test-debt.md)，
+  种子重调建议等 C7/C9 落地后一次完成。
 - C5：玩家任代表/创始人的序列化与快照单测。
 - C6：发起资格门单测（威望/强度/AP 三闸、零成员派系合法）。
 - C7：零发起零派系；筹备期解散；死亡接任（含平局）；亲缘场不产生派系；双跑确定性。
