@@ -151,3 +151,42 @@ func TestT13RelationCoolingHalvesBuild(t *testing.T) {
 		t.Errorf("relation cooldown after next month = %d, want 11 (no refresh)", got)
 	}
 }
+
+// T2-4：prep_exposure ≥ 0.4 → Guarantee −0.15，且同一来源只侵蚀一次。
+func TestT24GuaranteeErosionOnce(t *testing.T) {
+	svc := counterTestService(t)
+	svc.silo.TopStance.Guarantee = 0.5
+	svc.silo.EscapePrep.PrepExposure = 0.39
+
+	if logs, stories := svc.runCountermeasureMonth(svc.silo); len(logs) != 0 || len(stories) != 0 {
+		t.Fatalf("below threshold produced signals: %v %v", logs, stories)
+	}
+	if svc.silo.TopStance.Guarantee != 0.5 {
+		t.Fatalf("guarantee changed below threshold: %.3f", svc.silo.TopStance.Guarantee)
+	}
+
+	svc.silo.EscapePrep.PrepExposure = 0.4
+	logs, stories := svc.runCountermeasureMonth(svc.silo)
+	if got := svc.silo.TopStance.Guarantee; got < 0.3499 || got > 0.3501 {
+		t.Fatalf("guarantee = %.4f, want 0.35 after T2-4", got)
+	}
+	if !svc.silo.Countermeasure.GuaranteeEroded {
+		t.Fatal("T2-4 flag not set")
+	}
+	if len(logs) != 1 || len(stories) != 1 {
+		t.Fatalf("T2-4 signals = %d logs / %d stories, want 1/1", len(logs), len(stories))
+	}
+	if stories[0].Title != "中间人的措辞" {
+		t.Errorf("T2-4 story title = %q", stories[0].Title)
+	}
+
+	// 同源去重：暴露继续上升也不再次侵蚀。
+	svc.silo.EscapePrep.PrepExposure = 0.8
+	if logs, stories := svc.runCountermeasureMonth(svc.silo); len(logs) != 0 || len(stories) != 0 {
+		t.Fatalf("T2-4 re-fired: %v %v", logs, stories)
+	}
+	if got := svc.silo.TopStance.Guarantee; got < 0.3499 || got > 0.3501 {
+		t.Errorf("guarantee after re-check = %.4f, want 0.35", got)
+	}
+}
+

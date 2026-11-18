@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+
 	"silo40/internal/engine"
 	"silo40/internal/model"
 )
@@ -18,6 +20,34 @@ func (s *GameService) runCountermeasureMonth(silo *model.Silo) ([]string, []mode
 	if agent == nil {
 		agent = s.agent
 	}
-	engine.AdvanceCountermeasures(silo, agent)
-	return nil, nil
+	signals := engine.AdvanceCountermeasures(silo, agent)
+	if len(signals) == 0 {
+		return nil, nil
+	}
+
+	logs := make([]string, 0, len(signals))
+	stories := make([]model.StoryEvent, 0, len(signals))
+	for _, signal := range signals {
+		switch signal.Kind {
+		case engine.CounterSignalGuarantee:
+			logs = append(logs, fmt.Sprintf("[Countermeasure] %d-%02d T2-4 prep_exposure=%.2f 保障可信度被侵蚀",
+				silo.CurrentYear, silo.CurrentMonth, silo.EscapePrep.PrepExposure))
+			stories = append(stories, s.countermeasureStory(silo, "guarantee", "中间人的措辞",
+				"中间人回来时话少了很多。他转述的条款听上去比你们递过去的更含糊。"))
+		}
+	}
+	return logs, stories
+}
+
+// countermeasureStory 反制叙事：只描述发生的事，不指认玩家 (20 分册 §5.2)。
+func (s *GameService) countermeasureStory(silo *model.Silo, key, title, description string) model.StoryEvent {
+	return model.StoryEvent{
+		ID:          fmt.Sprintf("countermeasure:%d:%d:%d:%s", silo.CurrentYear, silo.CurrentMonth, silo.ID, key),
+		Category:    "SOCIAL",
+		Title:       title,
+		Description: description,
+		Type:        "SOCIAL",
+		SiloID:      silo.ID,
+		SiloName:    silo.Name,
+	}
 }

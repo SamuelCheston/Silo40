@@ -18,16 +18,33 @@ const (
 	// T1-3 关系冷却：部门对泄漏事实 B ≥ 0.45 → 关系增长减半 12 月。
 	counterRelationThreshold = 0.45 // TODO(balance)
 	counterRelationMonths    = 12   // TODO(balance)
+
+	// T2-4 谈判可信度侵蚀：prep_exposure ≥ 0.4 → 保障可信度 −0.15。
+	counterGuaranteeThreshold = 0.40  // TODO(balance)
+	counterGuaranteeDelta     = -0.15 // TODO(balance)
 )
 
+// 反制信号：服务层据此生成月度故事 (内容层，不指认玩家)。
+const (
+	CounterSignalGuarantee = "guarantee_erosion"
+)
+
+// CountermeasureSignal 一次月度结算产生的、需要叙事的反制事实。
+type CountermeasureSignal struct {
+	Kind string
+	Dept string
+}
+
 // AdvanceCountermeasures 反制账本的月度回合：先让既有窗口递减一格，再结算
-// 本月新触发。
-func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent) {
+// 本月新触发。返回需要叙事的新信号 (可能为空)。
+func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent) []CountermeasureSignal {
 	if silo == nil {
-		return
+		return nil
 	}
 	state := &silo.Countermeasure
 	tickCountermeasureWindows(state)
+
+	var signals []CountermeasureSignal
 
 	// T1-3：部门知道了泄漏事实，关系还维持，但推进变慢。
 	for i := range silo.Professions {
@@ -43,6 +60,15 @@ func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent) {
 		}
 		state.RelationCooldown[prof.Name] = counterRelationMonths
 	}
+
+	// T2-4：筹备活动可见度越线，承诺听上去不再可信 (只侵蚀一次)。
+	if !state.GuaranteeEroded && silo.EscapePrep.PrepExposure >= counterGuaranteeThreshold {
+		addTopStanceGuarantee(silo, counterGuaranteeDelta)
+		state.GuaranteeEroded = true
+		signals = append(signals, CountermeasureSignal{Kind: CounterSignalGuarantee})
+	}
+
+	return signals
 }
 
 // tickCountermeasureWindows 每个月初把剩余月数递减一格 (夹到 0)。
