@@ -72,8 +72,12 @@ func TestViolationIgnoresIgnoranceAndForgery(t *testing.T) {
 	if dev == nil || !dev.Open || !dev.Acknowledged {
 		t.Fatalf("ignorance must not change the true judgment: %+v", silo.Protocol.Deviations)
 	}
-	if silo.SafeguardRisk != 0.08 {
-		t.Fatalf("major violation R_s = %v, want 0.08", silo.SafeguardRisk)
+	// ADR-0017：偏离不再直接累加风险度，改登记事件 (一期一次)。
+	if silo.SafeguardRisk != 0 {
+		t.Fatalf("violation must not accumulate into R_s: %v", silo.SafeguardRisk)
+	}
+	if silo.SafeguardIncidents[SafeguardIncidentDeviation] != 1 {
+		t.Fatalf("major violation must register one deviation incident: %+v", silo.SafeguardIncidents)
 	}
 	if silo.Protocol.J != 0.6 {
 		t.Fatalf("J = %v, want 0.6", silo.Protocol.J)
@@ -101,8 +105,12 @@ func TestExistentialViolationGoesStraightToReview(t *testing.T) {
 	if silo.Protocol.InterventionStage != InterventionAssessment {
 		t.Fatalf("existential violation must enter assessment: %+v", silo.Protocol)
 	}
-	if silo.SafeguardRisk != 0.25 {
-		t.Fatalf("existential violation R_s = %v, want 0.25", silo.SafeguardRisk)
+	// ADR-0017：存在级违反同样只登记事件，不直接累加风险度。
+	if silo.SafeguardRisk != 0 {
+		t.Fatalf("existential violation must not accumulate into R_s: %v", silo.SafeguardRisk)
+	}
+	if silo.SafeguardIncidents[SafeguardIncidentDeviation] != 1 {
+		t.Fatalf("existential violation must register one deviation incident: %+v", silo.SafeguardIncidents)
 	}
 }
 

@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"math"
 
 	"silo40/internal/model"
 )
@@ -18,8 +17,9 @@ import (
 //   - 怀疑度到门槛后 IT 必须做选择：镇压 / 蒙住 1 号 / 不作为。选择是
 //     带权重的随机裁量 (ADR-0007 同构)，不是阈值 if-else；权重因子可归因，
 //     决策日志留痕。
-//   - 任何机制都不把玩家困死：全部后果是成本与风险的上浮 (戒备/恐慌/
-//     safeguard 风险)，不直接判负、不没收、不永久锁定；玩家永远还有路走。
+//   - 任何机制都不把玩家困死：全部后果是成本与风险的上浮 (戒备/恐慌) 与
+//     事件登记 (ADR-0017：不作为/蒙蔽崩塌进 SafeguardIncidents，不再直接
+//     累加风险度)，不直接判负、不没收、不永久锁定；玩家永远还有路走。
 //   - 随机源走引擎单一 RNG 流：未产生组织怀疑度的运行不进入任何取样，
 //     RNG 消耗逐位不变 (同谈判层纪律)。
 
@@ -73,13 +73,10 @@ const (
 	escapeResponseCoverLeakBase   = 0.06 // 当月暴露概率基数
 	escapeResponseCoverLeakGrowth = 0.03 // 暴露概率逐月增量 (蒙得越久越危险)
 	escapeResponseCoverLeakCap    = 0.50
-	escapeResponseCoverCollapseRS = 0.08 // 蒙蔽崩塌：safeguard 风险上浮
-
-	// 不作为后果：异常悬而未决，safeguard 风险上浮。全程预算 ≤0.25：
-	// 决策冷却 4 月 → 24 月筹备窗内至多 6 次决策，6×0.03 = 0.18，叠加
-	// 一次蒙蔽崩塌 (+0.08) 仍在预算内——本通道单独永远到不了硬护栏 1.0。
-	escapeResponseIgnoreRS = 0.03
 )
+
+// ADR-0017：不作为与蒙蔽崩塌不再直接累加风险度，改登记
+// Silo.SafeguardIncidents (ignore / cover_collapse)，经观测管线进入 1 号信念。
 
 // EscapeResponseWeights 一次决策的三档权重 (未归一)。
 type EscapeResponseWeights struct {
@@ -149,8 +146,8 @@ func EscapeResponseDecisionWeights(silo *model.Silo) EscapeResponseWeights {
 	guarantee := silo.TopStance.Guarantee
 
 	// 残余力量：W 高 → 转向慢、镇压可行；W 低 → 弱势的权力方收手是自保。
-	w.Suppress += 0.30 * wResidual          // TODO(balance)
-	w.Ignore += 0.20 * (1 - wResidual)      // TODO(balance)
+	w.Suppress += 0.30 * wResidual     // TODO(balance)
+	w.Ignore += 0.20 * (1 - wResidual) // TODO(balance)
 
 	// 怀疑度深度：动向越大越难蒙住。
 	w.Suppress += 0.25 * suspicion // TODO(balance)
@@ -261,8 +258,9 @@ func RunEscapeResponseDecision(silo *model.Silo) *EscapeResponseDecisionResult {
 		state.CoverActive = true
 		state.CoverMonths = 0
 	case model.EscapeResponseIgnore:
-		// 不作为是 IT 的自由裁量，但异常悬而未决：1 号可能自己注意到。
-		silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+escapeResponseIgnoreRS)
+		// 不作为是 IT 的自由裁量，但异常悬而未决：登记事件，经观测管线
+		// 进入 1 号信念 (ADR-0017)，不直接改写风险度。
+		registerSafeguardIncident(silo, SafeguardIncidentIgnore, 1)
 	}
 	state.LastDecisionYear = silo.CurrentYear
 	state.LastDecisionMonth = silo.CurrentMonth
@@ -275,8 +273,9 @@ func RunEscapeResponseDecision(silo *model.Silo) *EscapeResponseDecisionResult {
 }
 
 // EscapeResponseCoverMonth 蒙蔽维持推进一个月：支付 R_op (弱势成本曲线)，
-// 抽取暴露。返回是否崩塌 (付不起或暴露)。崩塌时 safeguard 风险上浮——
-// 后果落在"日后更贵、更窄"，不是当场判负。
+// 抽取暴露。返回是否崩塌 (付不起或暴露)。崩塌时登记蒙蔽崩塌事件
+// (ADR-0017)，经观测管线进入 1 号信念——后果落在"日后更贵、更窄"，
+// 不是当场判负。
 func EscapeResponseCoverMonth(silo *model.Silo) bool {
 	if silo == nil {
 		return false
@@ -291,7 +290,7 @@ func EscapeResponseCoverMonth(silo *model.Silo) bool {
 	if silo.ItAuthority.ROp < cost {
 		// 付不起：蒙蔽维持不住，异常暴露。
 		state.CoverActive = false
-		silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+escapeResponseCoverCollapseRS)
+		registerSafeguardIncident(silo, SafeguardIncidentCoverCollapse, 1)
 		return true
 	}
 	silo.ItAuthority.ROp -= cost
@@ -302,7 +301,7 @@ func EscapeResponseCoverMonth(silo *model.Silo) bool {
 	}
 	if DrawFloat64() < p {
 		state.CoverActive = false
-		silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+escapeResponseCoverCollapseRS)
+		registerSafeguardIncident(silo, SafeguardIncidentCoverCollapse, 1)
 		return true
 	}
 	return false

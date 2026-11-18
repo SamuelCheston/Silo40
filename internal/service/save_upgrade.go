@@ -953,6 +953,151 @@ func upgradeV13ToPermeation(tx *gorm.DB) error {
 	return nil
 }
 
+// blackBoxSaveVersion 是 v14→v15 升级的目标版本 (黑箱学习层 + 盲区经营)。
+// 升级器必须写固定目标版本而不是 model.CurrentSaveVersion——后续版本各自有
+// 自己的升级步，不能由更早的升级步越级顶替。
+//
+// 版本冲突记录：并行轨 feat/opening-variability 亦声明 v15；按合入顺序裁决，
+// 先合入者保留 v15，后者顺延。
+const blackBoxSaveVersion = 15
+
+// UpgradeV14ToBlackBoxSave adds the Silo 1 black-box learning layer
+// (22 黑箱学习系列 01 卷 §8) and blind-spot cultivation (23 盲区经营系列
+// 04 卷 §1.5): World.Silo1Stewardship (权衡层世界侧台账) 与
+// World.Silo1BlackBoxEnabled (功能开关)，Silo.BlackBox (每堡黑箱状态：真值
+// Theta 与信念 Belief 分离)、Silo.BlindSpot (每堡盲区经营累积) 与
+// Silo.SafeguardIncidents (引擎侧后果事件登记簿)。v15 之前没有任何写入方，
+// 升级后行为与旧档逐位一致：新字段零值 = 未启用 (开关关闭 → 黑箱回合全部
+// 跳过、零 RNG 消耗；盲区零覆盖 → 观测注入恒等映射)。升级器不回填任何推测
+// 状态——Belief 先验等初始化发生在运行时首次启用，不经升级器。
+//
+// 语义变化 (数值不动)：旧档 Silo.SafeguardRisk 的累积值自此语义为「1 号指派
+// 基线 + 内容增量」——迁移不改任何数值，只升版本并重放新序列化列。
+//
+// Chains on top of the v14 permeation upgrade: v12 saves reach v15 via
+// UpgradeV12ToNegotiationSave and UpgradeV13ToPermeationSave then this step;
+// v14 saves come straight here. Same safety contract as v13→v14: backup +
+// one transaction + readback verification.
+func UpgradeV14ToBlackBoxSave(db *gorm.DB, dbPath string) (bool, error) {
+	var meta model.SaveMeta
+	err := db.First(&meta, "`key` = ?", saveMetaKey).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("v15 black-box upgrade: read save meta: %w", err)
+	}
+	if meta.SaveVersion != 14 {
+		return false, nil
+	}
+	backupPath := fmt.Sprintf("%s.bak-%s-v15blackbox", dbPath, time.Now().Format("20060102-150405"))
+	if err := backupSaveFile(db, backupPath); err != nil {
+		return false, fmt.Errorf("v15 black-box upgrade: backup to %s failed: %w（数据库未改动）", backupPath, err)
+	}
+	if err := db.Transaction(upgradeV14ToBlackBox); err != nil {
+		return false, fmt.Errorf("v15 black-box upgrade: %w（数据库未改动，备份保留在 %s，可用它还原）", err, backupPath)
+	}
+	log.Printf("v14 save upgraded to v15 black-box model (backup: %s)——黑箱/盲区状态零值起步 (未启用)，SafeguardRisk 数值不动 (语义自此为「1 号指派基线 + 内容增量」)，不回填推测状态", backupPath)
+	return true, nil
+}
+
+func upgradeV14ToBlackBox(tx *gorm.DB) error {
+	var worlds []model.World
+	if err := tx.Order("id ASC").Find(&worlds).Error; err != nil {
+		return fmt.Errorf("load worlds: %w", err)
+	}
+	var silos []model.Silo
+	if err := tx.Order("id ASC").Find(&silos).Error; err != nil {
+		return fmt.Errorf("load silos: %w", err)
+	}
+	legacyRisk := make(map[uint]float64, len(silos))
+	for i := range silos {
+		legacyRisk[silos[i].ID] = silos[i].SafeguardRisk
+	}
+	for i := range worlds {
+		// Re-save so the new serialized stewardship/switch columns exist
+		// explicitly; zero values are the documented v14 semantics (未启用),
+		// so no guessed state is backfilled.
+		if err := tx.Save(&worlds[i]).Error; err != nil {
+			return fmt.Errorf("resave world %d: %w", worlds[i].ID, err)
+		}
+	}
+	for i := range silos {
+		// Re-save so the new serialized black-box/blind-spot/incident columns
+		// exist explicitly; SafeguardRisk 数值逐堡原样保留，语义变化 (自此为
+		// 「1 号指派基线 + 内容增量」) 由读取侧承担。
+		if err := tx.Save(&silos[i]).Error; err != nil {
+			return fmt.Errorf("resave silo %d: %w", silos[i].ID, err)
+		}
+	}
+	if err := tx.Save(&model.SaveMeta{Key: saveMetaKey, SaveVersion: blackBoxSaveVersion}).Error; err != nil {
+		return fmt.Errorf("bump save meta: %w", err)
+	}
+
+	var checkWorlds []model.World
+	if err := tx.Order("id ASC").Find(&checkWorlds).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload worlds: %w", err)
+	}
+	if len(checkWorlds) != len(worlds) {
+		return fmt.Errorf("post-write verification failed: world count changed")
+	}
+	for i := range checkWorlds {
+		world := &checkWorlds[i]
+		if world.Silo1BlackBoxEnabled {
+			return fmt.Errorf("post-write verification failed: world %d black-box switch turned on during migration", world.ID)
+		}
+		stewardship := world.Silo1Stewardship
+		if stewardship.Initialized ||
+			stewardship.Experiment.FulfillmentDeficit != 0 || stewardship.Experiment.DiversityLoss != 0 ||
+			len(stewardship.Experiment.Scheduled) != 0 || len(stewardship.Experiment.Cleared) != 0 ||
+			len(stewardship.Experiment.Missed) != 0 || len(stewardship.Experiment.Misses) != 0 ||
+			len(stewardship.Experiment.Ledger) != 0 ||
+			stewardship.Lifespan.Initialized || stewardship.Lifespan.AvgLifespan != 0 ||
+			len(stewardship.Lifespan.Postures) != 0 || len(stewardship.Lifespan.Ledger) != 0 {
+			return fmt.Errorf("post-write verification failed: world %d gained stewardship state during migration", world.ID)
+		}
+	}
+	var checkSilos []model.Silo
+	if err := tx.Order("id ASC").Find(&checkSilos).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: reload silos: %w", err)
+	}
+	if len(checkSilos) != len(silos) {
+		return fmt.Errorf("post-write verification failed: silo count changed")
+	}
+	for i := range checkSilos {
+		silo := &checkSilos[i]
+		blackBox := silo.BlackBox
+		if blackBox.Initialized || blackBox.Theta != 0 || len(blackBox.Belief) != 0 ||
+			blackBox.LastAssignedRisk != 0 || blackBox.CurrentExecution != 0 ||
+			len(blackBox.PendingObservations) != 0 || blackBox.ObsSeq != 0 ||
+			blackBox.ProbeCooldown != 0 || blackBox.ObediencePulse != 0 || len(blackBox.Log) != 0 {
+			return fmt.Errorf("post-write verification failed: silo %d gained black-box state during migration", silo.ID)
+		}
+		blindSpot := silo.BlindSpot
+		if blindSpot.Initialized || blindSpot.Coverage != [6]float64{} || blindSpot.Bias != [6]float64{} ||
+			blindSpot.Suspicion != 0 || blindSpot.Stage != "" || blindSpot.StageMonths != 0 ||
+			len(blindSpot.Traces) != 0 || blindSpot.TraceSeq != 0 || len(blindSpot.Evidence) != 0 ||
+			blindSpot.ChannelResetMonth != [6]int{} || blindSpot.StrictUntil != 0 ||
+			blindSpot.ActiveDisguise != "" || len(blindSpot.Log) != 0 {
+			return fmt.Errorf("post-write verification failed: silo %d gained blind-spot state during migration", silo.ID)
+		}
+		if len(silo.SafeguardIncidents) != 0 {
+			return fmt.Errorf("post-write verification failed: silo %d gained safeguard incidents during migration", silo.ID)
+		}
+		if silo.SafeguardRisk != legacyRisk[silo.ID] {
+			return fmt.Errorf("post-write verification failed: silo %d SafeguardRisk changed during migration", silo.ID)
+		}
+	}
+	var checkMeta model.SaveMeta
+	if err := tx.First(&checkMeta, "`key` = ?", saveMetaKey).Error; err != nil {
+		return fmt.Errorf("post-write verification failed: meta missing: %w", err)
+	}
+	if checkMeta.SaveVersion != blackBoxSaveVersion {
+		return fmt.Errorf("post-write verification failed: version = %d, want %d", checkMeta.SaveVersion, blackBoxSaveVersion)
+	}
+	return nil
+}
+
 // legacyUnaffiliatedSignature 与 engine.unaffiliatedSignature 一致 (跨包不导出，
 // 升级器按字面值对齐)。
 const legacyUnaffiliatedSignature = "special:unaffiliated"
