@@ -323,7 +323,7 @@ type OperationTrack struct {
 	Operations          []Silo1Operation `json:"operations"`
 }
 
-// ============ 1 号权衡层 (22 设计卷、22 黑箱学习系列、ADR-0018) ============
+// ============ 1 号权衡层 (22 设计卷、22 黑箱学习系列、ADR-0019) ============
 //
 // 语义锚点：
 //   - 指标一 (Experiment)：实验履约与保留多样性——只影响"最终可保留地堡的
@@ -729,7 +729,7 @@ type Silo struct {
 	BlackBox Silo1BlackBoxState `gorm:"type:text;serializer:json" json:"black_box"`
 	// BlindSpot 每堡盲区经营累积状态 (23 系列 04 卷)。零值 = 未经营 = 恒等映射。
 	BlindSpot BlindSpotCultivationState `gorm:"type:text;serializer:json" json:"blind_spot"`
-	// SafeguardIncidents 引擎侧后果事件登记簿 (ADR-0018)：原直接累加风险度的各
+	// SafeguardIncidents 引擎侧后果事件登记簿 (ADR-0019)：原直接累加风险度的各
 	// 累加点改为在此登记 (kind -> 计数)，经观测管线进入 1 号信念。引擎包写入
 	// (协议偏离/IT 过度干预/不作为/蒙蔽崩塌)，观测管线消费。
 	SafeguardIncidents map[string]int          `gorm:"type:text;serializer:json" json:"safeguard_incidents,omitempty"`

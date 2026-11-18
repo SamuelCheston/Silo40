@@ -316,7 +316,7 @@ func (e *GameEngine) executeItAction(silo *model.Silo, agent *model.Agent, actio
 		}
 	case "protocol_disposal":
 		// 恢复一项 Protocol 目标：关闭最早一条未达成偏离 (条款 ID 升序)。
-		// 保护性篡改风险度改登记 IT 过度干预事件 (ADR-0018)，不再直接写。
+		// 保护性篡改风险度改登记 IT 过度干预事件 (ADR-0019)，不再直接写。
 		closeEarliestUnmet(silo)
 		applySafeguardConsequence(silo, SafeguardIncidentITOverreach, action.RSDelta, 1)
 	case "suppress_signal":
@@ -327,7 +327,7 @@ func (e *GameEngine) executeItAction(silo *model.Silo, agent *model.Agent, actio
 		// 语义的功能载体，执行即为 equipment 通道世界侧簿记 +1。选
 		// SafeguardIncidents["equipment_use"] 而非 Traces(kind=calibration)：
 		// 本动作不依赖 BlindSpot.Initialized (Traces 属经营态、零值语义要求未启用
-		// 时不写)，而事件登记簿是初始化无关的事实层 (ADR-0018 同款)，供后续缺口
+		// 时不写)，而事件登记簿是初始化无关的事实层 (ADR-0019 同款)，供后续缺口
 		// 通道格按事实计数消费。
 		registerSafeguardIncident(silo, BlindSpotEquipmentUseKey, 1)
 	case "quiet_disappearance":

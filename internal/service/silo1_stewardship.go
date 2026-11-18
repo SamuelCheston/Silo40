@@ -1,6 +1,6 @@
 package service
 
-// 1 号权衡层调度器 (22 设计卷、22 黑箱学习系列、ADR-0018)。
+// 1 号权衡层调度器 (22 设计卷、22 黑箱学习系列、ADR-0019)。
 //
 // 纪律：
 //   - 功能开关门控：World.Silo1BlackBoxEnabled 为 false (默认/旧档) 时全步骤

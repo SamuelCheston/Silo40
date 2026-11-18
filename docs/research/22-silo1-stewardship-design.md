@@ -2,7 +2,7 @@
 
 > 状态：修订版（对齐黑箱学习规格）
 > **指标三（风险度指派与自保动力学）的权威规格是 [22 黑箱学习系列](./22-silo1-blackbox-learning/00-index.md)**（00 总览/01 动力学/02 观测/03 探索/04 命名与可读性 + [ADR-0015](../../knowledge/adr/0015-silo1-blackbox-learning.md)）。本卷只保留指标一、指标二与集成事项的权威口径；凡与黑箱系列冲突处，以黑箱系列为准。
-> 对齐：[ADR-0018](../../knowledge/adr/0018-safeguard-from-accumulation-to-assignment.md)（safeguard 由后果累加改为 1 号指派基线）。
+> 对齐：[ADR-0019](../../knowledge/adr/0018-safeguard-from-accumulation-to-assignment.md)（safeguard 由后果累加改为 1 号指派基线）。
 > 上游裁决演进记录（按时间序）：离心不是负反馈刹车 → 执行强度单峰 → 曲线对 1 号黑箱 → 风险度只驱动隐藏量增速（`self_preservation`，占位命名）→ **黑箱学习规格定稿**（20 箱后验、零 RNG 决策、观测伪装为主防线、参数重算 `g_max=0.12/τ_decay=15/θ_defy=0.70`）。
 
 ## 1. 目标与范围
@@ -49,7 +49,7 @@ r 采用指派月索引：月 t 指派、月 t+1 本地相生效（`LastAssigned
 
 - 每堡：`Silo.BlackBox Silo1BlackBoxState`——真值 `Theta` 与信念 `Belief`（N=20 箱）**同堡分字段存放**，读权限隔离由代码纪律与守卫测试保证（决策代码只读信念与观测）。
 - 世界：`World.Silo1Stewardship`——指标一（Experiment）、指标二（Lifespan）。
-- 引擎侧登记簿：`Silo.SafeguardIncidents`（Go 累加点的事件登记，ADR-0018）。
+- 引擎侧登记簿：`Silo.SafeguardIncidents`（Go 累加点的事件登记，ADR-0019）。
 
 ## 3. 指标一：实验履约与保留多样性（本卷权威）
 
@@ -86,7 +86,7 @@ r 采用指派月索引：月 t 指派、月 t+1 本地相生效（`LastAssigned
 
 ## 5. 指标三：与黑箱系列的集成关系（细节以系列为准）
 
-- `SafeguardRisk` = 1 号指派基线 `r`（菜单 0.00–0.95）+ 内容事件增量；`≥ 1.0` DEATH 硬线保留（00 卷 §5.1、ADR-0018）。
+- `SafeguardRisk` = 1 号指派基线 `r`（菜单 0.00–0.95）+ 内容事件增量；`≥ 1.0` DEATH 硬线保留（00 卷 §5.1、ADR-0019）。
 - Go 累加点（不作为/蒙蔽崩塌/协议偏离/IT 过度干预）改登记 `Silo.SafeguardIncidents`，经观测管线（举报率代理）进入信念。
 - Θ 动力学、E(r,Θ) 单峰（峰位左移/峰高下降/峰宽收窄）、20 箱后验、零 RNG argmax 决策、三信号观测与伪装——黑箱系列 01/02 卷权威。
 - E 消费：主消费点 `RunITAuthorityMonthly` 效用乘子；次消费点反应链触发后的烈度/窗口调制（00 卷裁决 1）。

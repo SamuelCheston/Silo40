@@ -282,7 +282,7 @@ func bbChannelRoutineAuditDue(r float64, year, month int) bool {
 
 // bbChannelConsumeIncidentsMonth G9：汇总 SafeguardIncidents 全部非 "obs"
 // 前缀键的计数为「1 号可见异常数」，记审计日志行后按登记簿月度消费语义
-// (ADR-0018) 清零已消费键。
+// (ADR-0019) 清零已消费键。
 //
 // 清零范围只限四类旧累加键 (ignore / cover_collapse / deviation /
 // it_overreach)；reports_received / census_anomaly / audit_fact /

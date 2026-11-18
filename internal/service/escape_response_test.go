@@ -175,7 +175,7 @@ func TestEscapeResponseDecisionFiresAndLogs(t *testing.T) {
 }
 
 // TestEscapeResponseCoverCollapseViaMonthlyTick 蒙蔽付不起月费时崩塌：
-// 登记蒙蔽崩塌事件 (ADR-0018，不再直接累加风险度)，决策日志记录结果。
+// 登记蒙蔽崩塌事件 (ADR-0019，不再直接累加风险度)，决策日志记录结果。
 func TestEscapeResponseCoverCollapseViaMonthlyTick(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "escape-response-cover.db"))
 	if _, err := svc.CreateGame(threeSiloRequest(4204)); err != nil {
@@ -187,7 +187,7 @@ func TestEscapeResponseCoverCollapseViaMonthlyTick(t *testing.T) {
 
 	state := &svc.silo.EscapeResponse
 	state.Initialized = true
-	// 打开黑箱功能语义 (ADR-0018 事件登记)，同时用专线干扰挡住 1 号月度指派
+	// 打开黑箱功能语义 (ADR-0019 事件登记)，同时用专线干扰挡住 1 号月度指派
 	// 对风险基线的改写，隔离响应层副作用。
 	svc.silo.BlackBox.Initialized = true
 	svc.world.Flags[model.WorldFlagNetworkJammed] = true
@@ -248,7 +248,7 @@ func TestEscapeResponseWindowOpenEndsLayer(t *testing.T) {
 	}
 }
 
-// TestEscapeResponseSafeguardBudget 预算不变式 (ADR-0018 新语义)：组织活动
+// TestEscapeResponseSafeguardBudget 预算不变式 (ADR-0019 新语义)：组织活动
 // 持续不断的最坏情况下，响应层对 safeguard 风险的全程净贡献为 0——不作为与
 // 蒙蔽崩塌改登记事件、经观测管线进入 1 号信念，本通道永不直接触碰风险度，
 // 更到不了硬护栏 1.0，后果只能是"日后更贵、更窄"，不困死玩家。
@@ -261,7 +261,7 @@ func TestEscapeResponseSafeguardBudget(t *testing.T) {
 		t.Fatalf("settle opening month: %v", err)
 	}
 	svc.silo.EscapeResponse.Initialized = true
-	// 功能开启语义 (ADR-0018)：登记事件而非写风险度；专线干扰隔离 1 号月度
+	// 功能开启语义 (ADR-0019)：登记事件而非写风险度；专线干扰隔离 1 号月度
 	// 指派对风险基线的改写，便于断言响应层净贡献。
 	svc.silo.BlackBox.Initialized = true
 	svc.world.Flags[model.WorldFlagNetworkJammed] = true
