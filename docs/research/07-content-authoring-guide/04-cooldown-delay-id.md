@@ -11,7 +11,7 @@
   走 `delayTasks` 队列。用于延迟代价链：`silo1_ultimatum → ultimatum_aftermath(+3 月)`、
   `materials_cannibalization → lower_deck_collapse(+4 月)`。
 - **时间窗约束**：当前内容时段 = Y122M1 开局 → Y130M1 `silo1_destroyed_signal` → TIME 结局，
-  两端相差约 96 个月（这不是标准窗口，整局以几十年计，见 ADR-0018）。所有事件与延迟落点必须在覆灭锚点前；延迟档用 2–3 月（短）/ 4–6 月（中），
+  两端相差约 96 个月（这不是窗口；游戏不设时长窗口，终局事件发生即结算，见 ADR-0018）。所有事件与延迟落点必须在覆灭锚点前；延迟档用 2–3 月（短）/ 4–6 月（中），
   且发起时机不晚于 ~Y128。锚点取值本身列入复核，不因 96 反推。
 - **第 N 次质变**：`script.apply` 读 `ctx.runtime.trigger_count`（本次触发后的累计次数，
   首次=1）分支，范例 `events/special/materials_cannibalization.js`（第 5 次起出事故）。

@@ -23,7 +23,7 @@
 
 三个实验事实（任务书登记，可直接引用）：
 
-1. **【实测】正典链与真实结算的落差**：《共证》正典主干 9 节点（感染 I-1/I-2/I-3 → 复制 R-1/R-2 → 活链 L-1/L-2/L-3 → 公共事实 P-1，[23 分册](../story/endings/23-information-nodes.md)）按设计铺在 122/2 到 130/1 的正典区间里（两端相差 96 个月，这不是标准窗口，见 [ADR-0018](../../knowledge/adr/0018-game-duration-decades-not-96-months.md)）；但真实点击局里《共证》在 123/2 就成立，只点亮了 9 个节点中的 2 个。
+1. **【实测】正典链与真实结算的落差**：《共证》正典主干 9 节点（感染 I-1/I-2/I-3 → 复制 R-1/R-2 → 活链 L-1/L-2/L-3 → 公共事实 P-1，[23 分册](../story/endings/23-information-nodes.md)）按设计铺在 122/2 到 130/1 的正典区间里（两端相差 96 个月，这不是标准窗口，见 [ADR-0018](../../knowledge/adr/0018-no-duration-window-settle-on-terminal-event.md)）；但真实点击局里《共证》在 123/2 就成立，只点亮了 9 个节点中的 2 个。
 2. **【实测】动作不耗日历**：Gather／Share 均为 `duration_months: 0` 的动作（[common_actions.js](../../events/mechanics/common_actions.js)），AP 前置（开局 50、月回约 3），玩家可以在不推进日历的情况下连续做出大量动作。"每月一次操作"的节奏模型在开局不成立——开局 50 AP 足够在同一个月内做 ~16 次流通动作。
 3. **【现状】门槛读瞬时值**：INFORMATION 资格门 `allDepartmentsHoldFragments`（[weighted_endings.go](../../internal/service/weighted_endings.go)）读的是"本月此刻"部门信念层 `B ≥ 0.30` 的事实数。只要某个月份的集中流通让 9 部门 × 3 事实同时过地板，门当月即为真，仲裁当月即可收局。
 
@@ -245,7 +245,7 @@ Layer 1 落地即改变结局行为，**必须与 §7 的重调同批合并**，
 2. 不改写 `B/π`，不让渗透读取或影响 `π`；E/Q 聚合不读渗透（《公议》间接影响走重测，不走机制耦合）。
 3. 不在本轮对特工层与具名人物层施加渗透（§3.2 预留口径）。
 4. 不采用持续成熟（§3.4），不把资格门变成实时杂耍；混合口径留待另行评审。
-5. 本设计范围内不移动 130/1 的 Silo 1 覆灭锚点、不动 WorldPacing 的日历纪律（[models.go](../../internal/model/models.go)：节奏旋钮绝不触碰日历）。锚点取值是否被旧的 96 月口径带偏，按 [ADR-0018](../../knowledge/adr/0018-game-duration-decades-not-96-months.md) 单列复核。
+5. 本设计范围内不移动 130/1 的 Silo 1 覆灭锚点、不动 WorldPacing 的日历纪律（[models.go](../../internal/model/models.go)：节奏旋钮绝不触碰日历）。锚点取值是否被旧的 96 月口径带偏，按 [ADR-0018](../../knowledge/adr/0018-no-duration-window-settle-on-terminal-event.md) 单列复核。
 6. 不允许渗透单独落地：Layer 1 必须与测试重调同批合并（§8）。
 7. 本轮不改代码、事件、配置与数值；本册只产出机制设计与规格。
 
