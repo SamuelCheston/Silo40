@@ -9,10 +9,14 @@ package service
 // Policies are deterministic functions of observable state (no policy RNG):
 //
 //   - ruleoflaw: charter contact -> circulation -> investigate/verify/publish
-//     the first core fact, keep everyday pressure (expose/share), publish the
-//     second core fact only once W has reached the daily trough band — that
-//     second registration IS the large-scale-evidence decisive shock. Then
-//     circulate to the belief gate so arbitration settles.
+//     the first core fact, keep everyday pressure (expose/share) until the
+//     second core fact is verified. From then on the line hoards AP for the
+//     release: the second publication needs 20 AP and the same settlement
+//     month pairs one extra exposure (another 20), so the −24 large-scale
+//     evidence shock lands together with the ordinary negative shock and holds
+//     W<=18 for the three-month covenant window. If the second belief is still
+//     below the 0.9 publish floor, investigate outranks the hoard. That second
+//     registration IS the decisive shock. Then circulate so arbitration settles.
 //   - personalrule: mayor ally route (survey -> accept) + the SAME everyday
 //     pressure but only ONE published core fact — no decisive event. The
 //     line must settle on the daily-pressure retreat of W (<= MayorOpenW)
@@ -207,10 +211,15 @@ func (r *acceptanceRunner) settle() {
 
 // evidenceRoute drives verify/publish for the core dispatch facts.
 // publishSecond=false never publishes the second qualifying fact (no decisive
-// event); with publishSecond=true the second fact waits for the trough band so
-// the decisive blow lands on an already-ground-down W. Monthly priority order
-// across the loop: verify/publish -> expose -> investigate -> circulation.
-func (r *acceptanceRunner) evidenceRoute(publishSecond, waitTrough bool) {
+// event); with publishSecond=true the second fact uses the release gate:
+// waitTrough keeps the old "wait for the daily trough band" rule (the
+// contention line, which already funds post-lock top-ups), while decisiveReady
+// lets the rule-of-law line release once everyday pressure has armed the blow
+// (W has reached the band where the −24 shock plus the paired exposure can
+// hold W<=18). releaseAP reserves enough AP for the second publication plus the
+// same-month paired exposure. Monthly priority order across the loop:
+// verify/publish -> expose -> investigate -> circulation.
+func (r *acceptanceRunner) evidenceRoute(publishSecond, waitTrough, decisiveReady bool, releaseAP float64) {
 	svc, silo := r.svc, r.svc.silo
 	// Trough gate for the decisive blow: the −24 shock only sustains the
 	// 3-month W<=18 window when it lands on a W already ground to ~36 or
@@ -222,7 +231,13 @@ func (r *acceptanceRunner) evidenceRoute(publishSecond, waitTrough bool) {
 		}
 		return 0
 	}
-	allowSecond := publishSecond && (!waitTrough || trough)
+	allowSecond := false
+	if publishSecond {
+		allowSecond = decisiveReady
+		if waitTrough {
+			allowSecond = trough
+		}
+	}
 	for _, fact := range []string{"Judicial_1", "Judicial_2"} {
 		if fact == "Judicial_2" && !allowSecond {
 			continue
@@ -238,7 +253,13 @@ func (r *acceptanceRunner) evidenceRoute(publishSecond, waitTrough bool) {
 		if fact == "Judicial_2" && !allowSecond {
 			continue
 		}
-		if beliefOf(fact) >= 0.9 && factVerified(silo, fact) && !factPublished(silo, fact) && svc.agent.ActionPoints >= 20 {
+		// 第二份事实的登记要留出当月配对曝光的 AP：只有确定性 −24 冲击与
+		// 一次普通负冲击落在同一个结算月，W<=18 的窗口才撑得住三个月。
+		minAP := 20.0
+		if fact == "Judicial_2" && releaseAP > minAP {
+			minAP = releaseAP
+		}
+		if beliefOf(fact) >= 0.9 && factVerified(silo, fact) && !factPublished(silo, fact) && svc.agent.ActionPoints >= minAP {
 			if r.execute("publish_evidence", model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "publish_evidence"}) {
 				note := "published " + fact
 				if fact == "Judicial_2" {
@@ -248,6 +269,42 @@ func (r *acceptanceRunner) evidenceRoute(publishSecond, waitTrough bool) {
 			}
 			break
 		}
+	}
+}
+
+// decisiveExpose pairs one real capability check with the second publication
+// in the same settlement month. It ignores the everyday expose interval and
+// budget (the release month is the one exception), but keeps the suspicion
+// ceiling: the hard failure line is 1.0 (除名).
+func (r *acceptanceRunner) decisiveExpose(m int, exposes, lastExpose *int) bool {
+	svc := r.svc
+	if svc.agent.SuspicionLevel >= 0.85 || svc.agent.ActionPoints < 20 {
+		return false
+	}
+	beliefFloor := func(factID string) bool {
+		belief := engine.BeliefFor(svc.agent, factID)
+		return belief != nil && belief.B >= 0.6
+	}
+	if !beliefFloor("Judicial_1") && !beliefFloor("Judicial_2") {
+		return false
+	}
+	if !r.execute("expose_execution_failure", model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "expose_execution_failure"}) {
+		return false
+	}
+	*exposes++
+	*lastExpose = m
+	return true
+}
+
+// emergencyRation keeps supplies above the collapse line while AP is hoarded
+// for the decisive release; circulation is deliberately skipped so the hoard
+// actually accumulates.
+func (r *acceptanceRunner) emergencyRation() {
+	svc := r.svc
+	if resourceAmount(svc.silo, "Supplies") < 1500 && svc.agent.ActionPoints >= 15 {
+		r.execute("supply_ration", model.AgentAction{
+			Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Supplies",
+		})
 	}
 }
 
@@ -515,6 +572,10 @@ func runRuleOfLawFamily(t *testing.T, line string, seed int64, withMayorRoute bo
 
 	exposes, lastExpose := 0, -3
 	shareAttempts := map[string]int{}
+	// 决定性释放的“武装”状态：日常压力把 W 磨进可击穿带 (≤42) 后置位，
+	// 之后不再因为月度波动回落而撤防——−24 加上当月配对曝光的普通负冲击
+	// 足以把 W 压到 18 以下，真正的风险只是发布当月没有攒够两次动作的 AP。
+	releaseArmed := false
 	for m := 1; m <= acceptanceMaxMonths && !svc.gameOver(); m++ {
 		r.passTime()
 		if svc.gameOver() {
@@ -532,27 +593,58 @@ func runRuleOfLawFamily(t *testing.T, line string, seed int64, withMayorRoute bo
 				}
 			}
 		}
-		// The decisive blow waits for the trough: everyday pressure first.
+		if !withMayorRoute && svc.silo.Authority.W <= 42 {
+			releaseArmed = true
+		}
+		// 第二份事实核验后进入“发布储备”：非争仲裁线不再等一个只可能由
+		// 本次发布自身产生的 W 谷底（谷底与 20+20 AP 很难落在同一个月），
+		// 改为在武装状态下攒够发布与配对曝光后主动释放。争仲裁线仍走谷底门。
 		circulationOnly := factPublished(svc.silo, "Judicial_2")
+		waitTrough := withMayorRoute
+		releaseAP := 0.0
+		if !withMayorRoute {
+			releaseAP = 40
+		}
 		if svc.silo.Rebellion < 0.7 {
-			r.evidenceRoute(true, true)
-			if !circulationOnly {
+			r.evidenceRoute(true, waitTrough, releaseArmed, releaseAP)
+			releasedNow := !withMayorRoute && !circulationOnly && factPublished(svc.silo, "Judicial_2")
+			releasePending := !withMayorRoute && releaseArmed && factVerified(svc.silo, "Judicial_2") &&
+				!factPublished(svc.silo, "Judicial_2")
+			switch {
+			case releasedNow:
+				// 发布当月叠加一次曝光：普通负冲击与−24 的大规模证据冲击
+				// 落在同一结算月，W<=18 的三个月窗口才成立。
+				if r.decisiveExpose(m, &exposes, &lastExpose) {
+					r.beat("decisive release paired with one exposure (ordinary negative shock stacked)")
+				}
+			case releasePending:
+				// 攒 AP 期间不花在曝光与流通上；信念若仍低于发布门 0.9，
+				// 定向调查优先（脚本会深挖较弱的一条链，即 Judicial_2）。
+				if belief := engine.BeliefFor(svc.agent, "Judicial_2"); belief != nil && belief.B < 0.9 {
+					r.investigateLagging()
+				}
+				r.emergencyRation()
+			case !circulationOnly:
 				r.investigateLagging()
 				r.exposeBurst(m, &exposes, &lastExpose, 8, 0.6)
-			} else if withMayorRoute && svc.silo.Authority.Judicial.PactLocked &&
-				svc.silo.Authority.W >= 28 && svc.agent.ActionPoints >= 20 {
-				// Contention: keep W under the personal-rule bar after the
-				// lock so both lines stay eligible at the settlement. The
-				// top-up may spend suspicion capital up to 0.85: the horizon
-				// arrives at Silo 1's destruction anyway, and the hard
-				// failure line is 1.0.
-				r.exposeBurst(m, &exposes, &lastExpose, 14, 0.85)
+			default:
+				// 已发布（含非争仲裁线）：继续用曝光维持牵制，否则 IT 的维护
+				// 需求塌陷会转为 counter_investigate_player，怀疑度会一路
+				// 累积到 1.0（除名）。争仲裁线另用更高的怀疑上限顶托 W。
+				maxSuspicion := 0.6
+				if withMayorRoute && svc.silo.Authority.Judicial.PactLocked &&
+					svc.silo.Authority.W >= 28 {
+					maxSuspicion = 0.85
+				}
+				r.exposeBurst(m, &exposes, &lastExpose, 14, maxSuspicion)
 			}
 			reserve := 0.0
 			if withMayorRoute && circulationOnly {
 				reserve = 20 // the post-lock top-up fund
 			}
-			r.everydayPressure(m, shareAttempts, circulationOnly, reserve)
+			if !releasePending {
+				r.everydayPressure(m, shareAttempts, circulationOnly, reserve)
+			}
 		}
 		if m%12 == 0 {
 			r.beat("year sample")
@@ -642,7 +734,7 @@ func playPersonalRuleAcceptance(t *testing.T, seed int64) *acceptanceRunner {
 		// transiently and the timing is the play.
 		horizon := svc.silo.CurrentYear >= 129
 		if svc.silo.Rebellion < 0.7 {
-			r.evidenceRoute(false, false)
+			r.evidenceRoute(false, false, false, 0)
 			switch {
 			case horizon:
 				// Expose timing outranks the supply buffer in the final months
@@ -754,5 +846,22 @@ func TestEndingAcceptanceDump(t *testing.T) {
 		t.Logf("%s seed=%d ending=%s settled_month=%d pact_locked=%v(%d) w_min=%.1f w30=%d w18=%d shocks=%v pool=%v",
 			rec.Line, rec.Seed, rec.Ending, rec.SettledMonth, rec.PactLocked, rec.PactLockedMonth,
 			rec.WMin, rec.W30Month, rec.W18Month, rec.DecisiveShocks, rec.Pool)
+	}
+	// 显式验收断言：ruleoflaw 必须真的走到《公议》——第二份核心事实公开
+	// （大规模证据决定性冲击）→ W<=18 持续三个月 → 约章锁定。缺任何一环
+	// 都会在结算时静默退回 EXCLUSIONIST，这里让它在 CI 里直接变红。
+	if records[0].Ending != "RULE_OF_LAW" {
+		t.Fatalf("ruleoflaw line settled as %q, want RULE_OF_LAW (pact_locked=%v shocks=%v pool=%v)",
+			records[0].Ending, records[0].PactLocked, records[0].DecisiveShocks, records[0].Pool)
+	}
+	if !records[0].PactLocked {
+		t.Fatalf("ruleoflaw line never locked the covenant (ending=%q shocks=%v)",
+			records[0].Ending, records[0].DecisiveShocks)
+	}
+	if records[1].Ending != "PERSONAL_RULE" {
+		t.Fatalf("personalrule line settled as %q, want PERSONAL_RULE", records[1].Ending)
+	}
+	if records[2].Ending == "" {
+		t.Fatalf("contention line never settled through arbitration")
 	}
 }
