@@ -15,6 +15,8 @@ C4 落地后 `go build ./...`、`go vet ./...`、`go test ./internal/engine/` �
 及更早存档。下文失败现象按合并前 (要求=15) 记录；合并后升级链终点 v15
 同样被 v16 闸拒绝，黑箱侧的 resume 类测试（TestUpgradeV14ToBlackBoxSave
 及 v12→v15 迁移链连续性测试等）并入同一欠账类别。
+TestResumeRejectsWrongVersion 原硬编码「当前要求=15」，已改读
+model.CurrentSaveVersion 动态断言（拒绝机制本身与版本无关）。
 
 ## 一、存档升级链测试（硬切断的直接后果）
 
