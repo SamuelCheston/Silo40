@@ -2,6 +2,7 @@ package service
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
@@ -375,9 +376,24 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 		// Once the repeatable underground-coordination node can snowball
 		// rebellion, keep Energy positive so it cannot confirm FRACTURE.
 		if energyGuard && svc.agent.ActionPoints >= 15 {
-			execute(model.AgentAction{
+			outcome, err := svc.ExecuteAction(model.AgentAction{
 				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Energy",
 			})
+			// T3-1b 复查期会把职务动作灰置一个月；像玩家一样等窗口过去，
+			// 不用白盒状态让测试变绿。
+			if err != nil && strings.Contains(err.Error(), "职务暂时交接") {
+				if _, err := svc.PassTime(1); err != nil {
+					t.Fatalf("advance through profession lock at month %d: %v", month, err)
+				}
+				observe()
+				continue
+			}
+			if err != nil {
+				t.Fatalf("execute ration at month %d: %v", month, err)
+			}
+			if !outcome.Result.Executed {
+				t.Fatalf("execute ration at month %d rejected: %+v", month, outcome.Result)
+			}
 			rations++
 			t.Logf("ration %d at %d-%02d: rebellion=%.3f energy=%.0f supplies=%.0f materials=%.0f population=%d AP=%.1f",
 				rations, svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.Rebellion,
@@ -540,9 +556,22 @@ func TestTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T) {
 			continue
 		}
 		if energyGuard && svc.agent.ActionPoints >= 15 {
-			execute(model.AgentAction{
+			outcome, err := svc.ExecuteAction(model.AgentAction{
 				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Energy",
 			})
+			// T3-1b 复查期会把职务动作灰置一个月；像玩家一样等窗口过去。
+			if err != nil && strings.Contains(err.Error(), "职务暂时交接") {
+				if _, err := svc.PassTime(1); err != nil {
+					t.Fatalf("advance through profession lock at month %d: %v", month, err)
+				}
+				continue
+			}
+			if err != nil {
+				t.Fatalf("execute ration at month %d: %v", month, err)
+			}
+			if !outcome.Result.Executed {
+				t.Fatalf("execute ration at month %d rejected: %+v", month, outcome.Result)
+			}
 			rations++
 			continue
 		}

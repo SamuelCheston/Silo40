@@ -509,6 +509,16 @@ func ApplyBeliefForgetting(silo *model.Silo, cfg InformationConfig) {
 	}
 }
 
+// LeakFactPrefix 20 分册 §3.2：反制方对"有人在传某事实"的观察事实前缀。
+// 泄漏事实只在反制方 (IT/Judicial) 的信念层累积、会淡忘，但永不成熟，也不
+// 计入《共证》资格门的成熟事实数。
+const LeakFactPrefix = "leak:"
+
+// IsLeakFact 判断一条部门信念是否为反制用的泄漏观察。
+func IsLeakFact(factID string) bool {
+	return strings.HasPrefix(factID, LeakFactPrefix)
+}
+
 // ApplyPermeation 部门信念层时间渗透 (18-time-permeation §3)。事实变成"可用
 // 证据"需要日历时间：当月淡忘结算后 B 仍不低于分享地板 (QualRumor) 则计数
 // +1，否则计数清零 (清零而非暂停——"断了就要重新渗透")；计数达到
@@ -520,7 +530,7 @@ func ApplyBeliefForgetting(silo *model.Silo, cfg InformationConfig) {
 // 切片均按既有持久化顺序遍历 (确定性)。挂钩点与 ApplyBeliefForgetting 同一
 // 月度 dispatch (EVENT_METRICS_UPDATE)，顺序固定为先淡忘、再计数、再判成熟。
 // 仅部门层渗透：特工层与具名人物层不写入 (§3.2)。PermeationMonths <= 0 或
-// 空堡为无操作。
+// 空堡为无操作。泄漏观察 (leak:) 只淡忘、不计入渗透。
 func ApplyPermeation(silo *model.Silo, cfg InformationConfig) {
 	if silo == nil || cfg.PermeationMonths <= 0 {
 		return
@@ -528,7 +538,7 @@ func ApplyPermeation(silo *model.Silo, cfg InformationConfig) {
 	for i := range silo.Professions {
 		for j := range silo.Professions[i].Beliefs {
 			belief := &silo.Professions[i].Beliefs[j]
-			if belief.Matured {
+			if belief.Matured || IsLeakFact(belief.FactID) {
 				continue
 			}
 			if belief.B >= cfg.QualRumor {
@@ -551,7 +561,7 @@ func MaturedFactCount(prof *model.Profession) int {
 	}
 	count := 0
 	for _, belief := range prof.Beliefs {
-		if belief.Matured {
+		if belief.Matured && !IsLeakFact(belief.FactID) {
 			count++
 		}
 	}

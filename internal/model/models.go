@@ -506,6 +506,7 @@ type Silo struct {
 	EscapePrep      EscapePreparation       `gorm:"type:text;serializer:json" json:"escape_prep"`       // 逃跑准备账本 (16 §2)：事实账本，仲裁不读
 	SpilloverPrep   SpilloverPreparation    `gorm:"type:text;serializer:json" json:"spillover_prep"`    // 外溢准备账本 (16 §2.3)：信道建立侧
 	EscapeResponse  EscapeResponseState     `gorm:"type:text;serializer:json" json:"escape_response"`   // 筹备反制层 (20 修订/ADR-0014)：组织怀疑度与 IT 带权响应
+	Countermeasure  CountermeasureState     `gorm:"type:text;serializer:json" json:"countermeasure"`    // 20 分册第 5 批：T1-3/T2-4/T3-1b/T3-2 反制账本
 	PreFallSnapshot PreFallIdeologySnapshot `gorm:"type:text;serializer:json" json:"pre_fall_snapshot"` // 覆灭前夕人口加权思潮快照 (G4)
 	// PublicEvidence 已公开证据登记 (§3.7)：Q 与独立公开事实资格只读这里，
 	// 私下确信 (玩家 B) 永远不直接进入曝光或公开证据。
@@ -753,6 +754,27 @@ type EscapeResponseState struct {
 	CoverActive       bool    `json:"cover_active"` // IT 正在把动向蒙住，不让 1 号察觉
 	CoverMonths       int     `json:"cover_months"`
 	Decisions         []EscapeResponseLogEntry `json:"decisions,omitempty"` // 环形保留最近 24 条
+}
+
+// CountermeasureState 20 分册第 5 批反制的持久账本：T1-3 关系冷却、T2-4
+// 谈判可信度侵蚀、T3-1b 身份线日常绑定、T3-2 联系人监视。零值 = 无任何
+// 反制生效 = 旧档语义；不含 RNG 状态，不参与月度采样。
+type CountermeasureState struct {
+	// RelationCooldown 部门名 → 剩余关系冷却月数 (T1-3)。只在触发月写入，
+	// 同源在冷却期内不刷新、不叠加。
+	RelationCooldown map[string]int `json:"relation_cooldown,omitempty"`
+	// ContactWatch 部门名 → 联系人不可用剩余月数 (T3-2)。键的"存在"即该部门
+	// 的联系人已被调离/问话一次 (同源一次性去重)；值归零后键保留。
+	ContactWatch map[string]int `json:"contact_watch,omitempty"`
+	// LocationLockMonths 身份复核期绑定：地点类动作剩余灰置月数 (T3-1b)。
+	LocationLockMonths int `json:"location_lock_months,omitempty"`
+	// ProfessionLockMonths 身份复查期绑定：职务动作剩余灰置月数 (T3-1b)。
+	ProfessionLockMonths int `json:"profession_lock_months,omitempty"`
+	// GuaranteeEroded T2-4 已结算：prep_exposure 越线只侵蚀一次保障可信度。
+	GuaranteeEroded bool `json:"guarantee_eroded,omitempty"`
+	// IdentityQueryBound / ArchiveReviewBound 身份线节点只绑定一次。
+	IdentityQueryBound bool `json:"identity_query_bound,omitempty"`
+	ArchiveReviewBound bool `json:"archive_review_bound,omitempty"`
 }
 
 // AppendDecision 追加一条决策日志并夹到环形上限 (超限时丢弃最旧条目)。

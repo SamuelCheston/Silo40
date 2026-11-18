@@ -80,6 +80,11 @@ func (s *GameService) runOneMonthWorld(source string) ([]string, []model.StoryEv
 		logs = append(logs, responseLogs...)
 		stampSilo(responseStories, silo)
 		stories = append(stories, responseStories...)
+		// 20 分册第 5 批：T1-3/T2-4/T3-1b/T3-2 确定性状态反应。
+		counterLogs, counterStories := s.runCountermeasureMonth(silo)
+		logs = append(logs, counterLogs...)
+		stampSilo(counterStories, silo)
+		stories = append(stories, counterStories...)
 	}
 
 	// 阶段 2a：跨堡队列派发 (各堡本地结算后、时钟推进前)。
