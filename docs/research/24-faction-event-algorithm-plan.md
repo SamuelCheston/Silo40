@@ -176,6 +176,10 @@
   领袖达标，ADR-0010 直选豁免只适用加入。引擎全绿、前端 tsc 通过；service 全量复测
   仍为 13 个已知失败，无新增漂移。开局门控回归随 political_faction_count 指标修复，
   留档 [25-v16-test-debt.md](25-v16-test-debt.md) §七）。
+- C11：下游重锚 ✓（balance.md 政治派系节改事件驱动生命周期 + Ambition/Influence 节；
+  knowledge/03 §5 派系叙事与门控表；knowledge/07 版本链重锚 v15/v16/v17；
+  14 篇 §5/§6.6 取代标注）。合并态全量复测 13 失败构成更新（Covenant 恢复、
+  DeathPhysicalStrike 新漂移），留档 25 篇 §八；种子重调批次以合并态为准。
 
 ## 8. 下游影响清单
 

@@ -26,7 +26,7 @@ AVAILABLE：当前可执行
 
 - `event_completed`：驻地 ContentEventState 中指定节点已完成。
 - `stage_at_least`：达到有序阶段数组中的某阶段。
-- `metric + min/max`：AP、威望、宣传、怀疑、已知碎片、合法性、凝聚力、叛乱、历史包袱。
+- `metric + min/max`：AP、威望（派生值 `50×(Ambition+Influence)`）、宣传、怀疑、已知碎片、合法性、凝聚力、叛乱、历史包袱、政治派系数量。
 - `relation + min/max`：玩家与指定部门的 Connection。
 
 BeginAction 和 ExecuteAction 都在成本解析后调用同一 gate 校验，不能通过构造 HTTP 请求执行 LOCKED/UNLOCKED 行动。生产缺注册表或配置非法会显式失败并默认锁定，不回退为全按钮开放。
@@ -41,6 +41,9 @@ BeginAction 和 ExecuteAction 都在成本解析后调用同一 gate 校验，�
 | Conduct Propaganda | Mayor 关系 ≥ 0.15 | first_signal |
 | Incite Rebellion | 政治威望 ≥ 60 | Mayor 关系 ≥ 0.25 |
 | Publicize Faction | archive_awakened | 政治威望 ≥ 80 |
+| Found Faction | 无 | 派生威望 ≥ 50 且强度 ≥ 0.25（AP 20） |
+| Join Faction | 无 | 存在政治派系（AP 10，玩家直选豁免感知闸） |
+| Merge Faction | 无 | 存在政治派系（AP 15，领袖关系 ≥ 0.60 且亲缘圈内） |
 | 全部职业行动 | first_signal | 无额外 gate 条件 |
 | STATION_INTEL / SILO1_INTEL | first_signal | 无额外 gate 条件 |
 | STATION_INFILTRATE | archive_awakened | Mechanical 关系 ≥ 0.20 |
@@ -72,7 +75,7 @@ BeginAction 和 ExecuteAction 都在成本解析后调用同一 gate 校验，�
 
 NPC 采用效用候选和共享 RNG 加权选择。候选动作现在显式携带 TargetDept、FragmentIds 或 ResourceTarget，执行观察器记录真实结果；早期“目标只写进 message、执行必然失败”的 KI-1 已修复。
 
-派系由 cohort 特征距离聚类，不再按签名分桶：亲外、忠诚和阶层构成加权向量；既有归属有惯性半径，政治准入仍有 0.7/0.6 迟滞。lineage 继承持久 ID、名称、公开状态、威望、Stance 和 Memory，新 ID 单调分配；Demands 随主导 drive 派生。派系再驱动驻地凝聚力、叛乱和结局贡献；合法性不由派系派生，只随离散写入与叛乱侵蚀变化。
+派系是**领袖发起的事件产物**，不再由每 tick 距离聚类产生（[24 篇方案](../docs/research/24-faction-event-algorithm-plan.md)）。发起三闸：派生威望 ≥ 50、意识形态强度 ≥ 0.25、AP ≥ 20；零成员派系合法（筹备期 18 个月未满 200 人解散）。成员资格持久：已感知（`faction:<id>:founded` 信念 ≥ 0.30）的 cohort 每月加权掷骰加入，意识形态相近度主导，关系三档闸 + 部门敌意硬否决；漂移出亲缘半径后惯性保护的对称掷骰退出。玩家 FOUND/JOIN/MERGE 直选不掷骰（ADR-0018/0010），NPC 走加权随机。领袖死亡自动加权接任（0.5×威望/100 + 0.5×ambition，平局取小 ID），无可接任者解散；相近领袖关系 ≥ 0.60 可合并（存续方保留 ID）。特征距离聚类降级为亲缘场，只算加入概率与退出压力。派系驱动驻地凝聚力、叛乱和结局贡献；合法性不由派系派生，只随离散写入与叛乱侵蚀变化。政治威望全层派生：`50×(Ambition+Influence)`，无独立字段；ambition 开局定死、仅事件可改。
 
 ## 6. 结局：硬护栏加历史仲裁
 

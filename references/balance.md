@@ -56,39 +56,71 @@ Sources:
 - Common action usage: [common_actions.js](../events/mechanics/common_actions.js)
 - IT safeguard coupling: [engine.go](../internal/engine/engine.go) (ACTOR_ACTION subscriber)
 
-## Political Faction Gate
+## Political Faction Lifecycle (event-driven)
 
-- `loyalty` does not participate in faction grouping signatures.
-- `ambition` participates only via the potential-leader bypass: a cohort is
-  political when `pro_foreign >= PoliticalEntryThreshold` **or** it has a
-  resident with `Ambition >= AmbitionHighThreshold` and
-  `Influence >= LeaderInfluenceThreshold`. (Note: with initial resident
-  ambition capped below the threshold, the leader path has never fired in
-  simulation; the ideology path is the effective gate.)
-- Political faction grouping uses only `pro_foreign` for the gate, then
-  applies the birth-bucket profile tag plus `drive`.
-- A political faction forms when a cohort's `pro_foreign` reaches
-  `PoliticalEntryThreshold` (0.7). The birth-bucket profile tag
-  (`Medium`/`High`) in the signature is assigned at cohort creation and is
-  not refreshed afterwards.
-- **Hysteresis**: once political, a cohort depoliticizes only when
-  `pro_foreign` falls below `PoliticalExitThreshold` (0.6). The band keeps
-  cohorts hovering near the gate from flipping every tick.
-- Cohorts without a formed political profile are folded into `Unaffiliated`
-  and contribute `0` political influence.
-- All gate/grouping tunables live in `engine.FactionConfig`
-  (`internal/engine/faction_config.go`); no save-format fields are involved.
+Factions are no longer produced by per-tick distance clustering. The
+authoritative design is [24-faction-event-algorithm-plan.md](../docs/research/24-faction-event-algorithm-plan.md);
+all tunables live in `engine.FactionConfig`
+(`internal/engine/faction_config.go`), no save-format fields involved.
 
-## Resident Ambition
+- **Founding is the only faction source.** `FOUND_FACTION` requires
+  derived prestige ≥ 50, ideology intensity ≥ 0.25 and AP ≥ 20 (cost 20,
+  no cooldown). Zero-member factions are legal (preparation period).
+  Player founds by direct choice; NPCs roll a weighted decision
+  (ambition/prestige/intensity are weights, never hard gates).
+- **Derived prestige**: `prestige = 50 × (Ambition + Influence)` at every
+  layer (Agent/Profession/Resident/Cohort via representative). There is no
+  independent PoliticalPrestige field. Ambition is fixed at creation and
+  only events may change it (`actor_metric_delta/set: ambition`).
+- **Awareness**: founding seeds a `faction:<id>:founded` belief fact for
+  every observer (departments, cohort-bound resident representatives,
+  player), reliability = three-channel awareness (relation 0.40 /
+  ideology 0.35 / tier 0.25, same-class bonus 0.15). These facts never
+  mature and never count toward the co-evidence gate (same exemption as
+  `leak:`). Monthly gossip spreads them along relation networks
+  (×0.6 per hop); info actions piggyback rumors (chance 0.15, player
+  deterministic, zero draws while no political faction exists).
+- **Join/exit**: perceived cohorts (belief ≥ AwarenessJoinFloor 0.30)
+  roll monthly, ideology closeness^2 dominates; relation < 0.10 vetoes,
+  cross-tier (PowerLevel gap ≥ 3) needs relation ≥ 0.40, cross-class
+  needs ≥ 0.60, mutual department hostility < 0.05 hard-vetoes. Exit is
+  a symmetric inertia-protected roll after drifting outside the affinity
+  radius (0.30). Membership is persistent; exit phase runs before join
+  phase so no cohort round-trips in one month. `JOIN_FACTION` (AP 10) is
+  player direct choice, exempt from awareness/relation gates (ADR-0010).
+- **Lifecycle**: a faction younger than 18 months with MemberCount < 200
+  dissolves (members return to the Unaffiliated bucket). Leader death →
+  automatic succession by highest `0.5×(prestige/100) + 0.5×ambition`
+  among member representatives (tie → smaller ID); no successor →
+  dissolve. Player/NPC leaders never die.
+- **Merge**: `MERGE_FACTION` (AP 15) requires both leaders' personal
+  relation ≥ 0.60 (LeaderRelations sub-matrix) and centroid distance ≤
+  affinity radius. Survivor keeps its ID; absorbed members transfer,
+  Memory records the merge. The relation gate applies to players too —
+  merge is mutual consent, not intervention.
+- The old feature-distance machinery (`faction_cluster.go`) survives only
+  as the **affinity field**: join probability and exit pressure inputs,
+  never a faction source. Cohorts without political membership sit in the
+  `special:unaffiliated` bucket and contribute 0 political influence.
 
-- `ambition` now belongs only to explicit `Resident` actors.
-- Representative residents generate a native `Ambition` value when they are created.
-- Resident ambition is fixed after creation and does not drift with cohort, faction, legitimacy, or panic updates.
-- `Ambition >= 0.62` still marks a resident as `drive:ambition` / `status:ambitious`, but that affects personal tagging only.
+## Ambition & Influence
+
+- `Ambition` / `Influence` exist on Agent, Profession and Resident
+  (ADR-0018 isomorphism); Cohorts derive prestige via their representative.
+- Ambition is fixed after creation and does not drift with cohort,
+  faction, legitimacy, or panic updates; only event mutations change it.
+- Influence evolves: residents/player grow `(0.005 + Ambition×0.05)/year`;
+  departments converge toward PowerLevel/10. Annual settlement uses
+  start-of-period prestige (Go/JS agent_update match agent_stats display).
+- `Ambition >= 0.62` still marks a resident as `drive:ambition` /
+  `status:ambitious`, but that affects personal tagging only.
 
 Source:
-- [residents.go](../internal/engine/residents.go#L13-L23)
-- [residents.go](../internal/engine/residents.go#L458-L669)
+- [residents.go](../internal/engine/residents.go)
+- [faction_found.go](../internal/engine/faction_found.go)
+- [faction_awareness.go](../internal/engine/faction_awareness.go)
+- [faction_join.go](../internal/engine/faction_join.go)
+- [faction_merge.go](../internal/engine/faction_merge.go)
 
 ## Post-Grouping Loyalty Dynamics
 
@@ -103,8 +135,9 @@ Source:
   (`monthlyTimeScale`). A monthly tick keeps the historical rate exactly;
   zero-duration steps (instant/0-month actions) apply nothing, so instant
   actions cannot accelerate loyalty evolution. The dynamics run as an
-  explicit pipeline step after `RebuildImplicitFactions` (which is now
-  grouping-only).
+  explicit pipeline step after `MaintainFactions` (grouping-only
+  maintenance: stats recompute, grace dissolution, death succession,
+  delegate top-up, flag repair — no evolution draws).
 
 Source:
 - [residents.go](../internal/engine/residents.go#L779-L836)

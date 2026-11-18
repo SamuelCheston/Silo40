@@ -213,3 +213,30 @@ action_join_faction / action_merge_faction 门控初版 `available:{}`（恒可�
 处理：第五节 5 个可玩性漂移的种子重调批次靶子已随 C9/C10 定型（成员流动
 机制完整：发起/加入/退出/合并/接任/解散），可择期一次重调；升级链 8 个按
 ADR-0017 整体删除或改断言硬切断拒绝（第一节两选项），不在本阶段处理。
+
+## 八、C8+C9/C10 合并态 main 的最终账目（2026-11-19）
+
+C8 与 C9/C10 分别复测时各自维持第五节的 13 个失败清单，但**合并态**
+（月度管线顺序：忠诚动力学 → 口碑传播 → 加入/退出；两分支掷骰点叠加）
+再次平移共享流，失败构成发生变化，总数不变：
+
+**13 个失败 = 8 升级链（不变）+ 5 可玩性漂移（构成更新）**
+
+| 测试 | 合并态状态 |
+| --- | --- |
+| TestRebellionLinePlayableFromNewGame | 持续漂移（第二节） |
+| TestEscapePreparationGradientNotReversed | 持续漂移（第二节） |
+| TestInformationEndingPlayableFromNewGame | 持续漂移（第二节） |
+| TestRuleOfLawLinePlayableFromNewGame | 持续漂移（第二节） |
+| TestDeathPhysicalStrikePlayableFromNewGame | **新漂移**：C7/C8/C9 单独跑均恢复通过，合并态下物理打击后的远程终结落点改道（bombing_terminal 129-10 已触发但 remote termination 未落地），脚本时序与动力学错位，属种子调优漂移而非代码回归 |
+| TestCovenantConvergenceDecisiveEventSucceeds | **恢复通过**：pact=0.936、decisiveFired=true（第五/六/七节的 −24 冲击改道现象在合并态落点下消失） |
+
+Exclusionist / TerminationChannel 维持通过。升级链 8 个维持 v17 硬切断
+拒绝（链尾 v15，"存档=15，当前要求=17"）。
+
+原因：合并把 C8 口碑掷骰与 C9/C10 加入/退出/合并掷骰叠进同一月度流，
+相对顺序（口碑先于加入）与任一单分支都不同；长局落点再次平移。
+LeaderRelations 感知接线是纯函数零 RNG，不移动流。
+
+处理：**种子重调批次靶子以此合并态为准**（5 个漂移 = 上表前 5 行），
+机制已完整定型，重调一次覆盖；升级链 8 个仍按第一节两选项处理。
