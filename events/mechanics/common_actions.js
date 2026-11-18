@@ -374,6 +374,41 @@ defineMechanics([
       };
     },
   },
+  {
+    id: "action_join_faction",
+    action_type: "JOIN_FACTION",
+    label: "Join Faction",
+    description:
+      "直选加入一个已感知的派系 (玩家不掷骰)。需无政治派系归属，消耗 10 AP。目标派系由 target_faction_id 指定。",
+    target_type: "NONE",
+    ap_cost: 10,
+    duration_months: 0,
+    apply(ctx) {
+      // 预检与 Go 侧 joinFactionEligible 同口径，只为给出失败文案；
+      // 权威判定 (含目标存在/无阵营桶排除) 与 AP 扣除在 faction_join_actor
+      // 处理器中原子完成。玩家直选不受感知地板/关系闸约束 (ADR-0010)。
+      const targetID = ctx.action.target_faction_id || 0;
+      if (!targetID) {
+        return { action_result: { executed: false, message: "未指定要加入的派系。" } };
+      }
+      const factions = ctx.silo.factions || [];
+      const target = factions.find((f) => f.id === targetID);
+      if (!target) {
+        return { action_result: { executed: false, message: "目标派系不存在。" } };
+      }
+      const faction = ctx.actor.faction;
+      if (faction && faction.signature !== "special:unaffiliated") {
+        return { action_result: { executed: false, message: "你已身处政治派系，不能再加入其他派系。" } };
+      }
+      if ((ctx.actor.action_points || 0) < 10) {
+        return { action_result: { executed: false, message: "AP 不足，加入派系需要 10 AP。" } };
+      }
+      return {
+        mutations: [{ type: "faction_join_actor", int_value: targetID }],
+        action_result: { executed: true, message: "你加入了「" + target.name + "」。" },
+      };
+    },
+  },
 ]);
 
 // suspicionDelta / detectionClass live in the mechanic prelude; detection is

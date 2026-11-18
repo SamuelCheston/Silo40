@@ -334,6 +334,10 @@ func (v *ActorView) FactionID() *uint {
 	if v.resident != nil {
 		return v.resident.FactionID
 	}
+	// 玩家成员资格 (JOIN_FACTION) 优先；未加入时回退到任代表的派系 (发起/领导)。
+	if v.agent != nil && v.agent.FactionID != nil {
+		return v.agent.FactionID
+	}
 	if f := v.representedFaction(); f != nil {
 		id := f.ID
 		return &id

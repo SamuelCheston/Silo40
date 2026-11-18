@@ -761,6 +761,7 @@ func actionContext(action model.AgentAction) map[string]interface{} {
 		"fragment_ids":      append([]string(nil), action.FragmentIds...),
 		"profession_action": action.ProfessionAction,
 		"resource_target":   action.ResourceTarget,
+		"target_faction_id": action.TargetFactionID,
 		"cost":              action.Cost,
 	}
 }
@@ -972,6 +973,8 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 		e.applyActorFactionPublic(silo, actor, mutation.BoolValue)
 	case "faction_found_actor":
 		e.applyFactionFoundActor(silo, actor)
+	case "faction_join_actor":
+		e.applyFactionJoinActor(silo, actor, agent, uint(mutation.IntValue))
 	case "silo_flag_set":
 		writeSiloFlag(silo, mutation.Field, mutation.BoolValue)
 	case "victory_status_set":

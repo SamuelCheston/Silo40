@@ -58,6 +58,12 @@
       "reason": "需要政治威望 ≥ 50 且意识形态强度 ≥ 0.25"
     },
     {
+      "id": "action_join_faction",
+      "unlock": {},
+      "available": {},
+      "reason": "需无政治派系归属且 AP ≥ 10；目标派系须已感知"
+    },
+    {
       "action_type": "PROFESSION_ACTION",
       "unlock": { "stage_at_least": "first_signal" },
       "available": { "metric": "identity_profession_lock", "max": 0 },

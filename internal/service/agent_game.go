@@ -976,6 +976,8 @@ func agentCandidateDescription(c engine.CandidateInfo) string {
 		return "publicize the faction to the whole silo"
 	case model.ActionFoundFaction:
 		return "found their own faction via a clustering event"
+	case model.ActionJoinFaction:
+		return "join an existing faction with their people"
 	case model.ActionProfession:
 		desc := "profession action " + c.ProfessionAction
 		if c.TargetDept != "" {

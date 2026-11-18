@@ -587,6 +587,9 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 	// advances on monthly ticks and is a no-op for zero-duration instant
 	// resolutions (deltaYears == 0), so instant actions cannot accelerate it.
 	ApplyFactionLoyaltyDynamics(silo, deltaYears)
+	// 成员流动 (24 篇 C9)：已感知 cohort 的月度加权加入/退出，与忠诚动力学
+	// 同层、零月无操作。读 C8 写入的 faction: 信念事实，按 cohort ID 升序掷骰。
+	ApplyFactionJoinDynamics(silo, agent, deltaYears)
 
 	var npcProfs []*model.Profession
 	for i := range silo.Professions {

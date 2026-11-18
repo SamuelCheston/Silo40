@@ -106,6 +106,18 @@ type FactionTuning struct {
 
 	FactionGraceMonths       int     // 筹备期月数：届满不足 MinFactionSize 即解散
 	SuccessionPrestigeWeight float64 // 接任评分威望权重 (ambition 占 1−w)
+
+	// ---- 加入/退出 (24 篇 §1.4/§4, C9) ----
+
+	JoinAPCost           float64 // JOIN_FACTION 动作 AP 成本 (与 ACTION_COSTS 一致)
+	JoinAffinityExponent float64 // 加入概率 = 相近度^k (意识形态主导)
+	JoinRelationVeto     float64 // 关系一票否决地板
+	CrossTierPowerGap    int     // PowerLevel 差 ≥ 此值算跨层级
+	CrossTierRelationMin float64 // 跨层级所需关系
+	CrossClassRelationMin float64 // 跨阶级所需关系
+	AwarenessJoinFloor   float64 // 可考虑加入的信念地板 (= QualRumor 0.30)
+	AffinityRadius       float64 // 亲缘半径：加权特征距离 ≤ 此值算亲缘圈内
+	ExitInertiaFactor    float64 // 退出惯性系数：退出概率 ×(1−此值)，低于加入概率
 }
 
 // FactionConfig is the active tuning for faction clustering and the
@@ -164,4 +176,14 @@ var FactionConfig = FactionTuning{
 
 	FactionGraceMonths:       18,
 	SuccessionPrestigeWeight: 0.5,
+
+	JoinAPCost:            10,
+	JoinAffinityExponent:  2.0,
+	JoinRelationVeto:      0.10,
+	CrossTierPowerGap:     3,
+	CrossTierRelationMin:  0.40,
+	CrossClassRelationMin: 0.60,
+	AwarenessJoinFloor:    0.30,
+	AffinityRadius:        0.30,
+	ExitInertiaFactor:     0.5,
 }
