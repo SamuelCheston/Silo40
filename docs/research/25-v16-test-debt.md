@@ -296,3 +296,30 @@ Death 旧种子 2101 的合并态失败是 ordering 断言：termination_release
   leader 在 main 另行重锚）+ Information（本节欠账）**，无其他新增；
   第八节的其余 4 个漂移全部恢复，Covenant/Exclusionist/TerminationChannel
   维持通过。
+
+## 十、最终欠账清点（2026-11-19，派系事件化收官）
+
+test/seed-retune 已合并 main（b512691），合并态全量复测（238s）：
+
+**1 个失败 = TestInformationEndingPlayableFromNewGame（第九节留档欠账）**。
+`go build ./...`、`go vet ./...` 通过，其余全部包全绿。
+
+### 各类欠账的闭合状态
+
+| 类别 | 状态 |
+| --- | --- |
+| 升级链 8 个（第一节） | **已闭合**：按第一节选项 2 重锚为断言 v17 硬切断拒绝（c886c2f），升级步骤本身仍验 DB 状态与备份。链尾 v15 档必须被拒是 ADR-0017 的正确行为，不是欠账。选项 1（整体删除死代码升级链）仍可日后择机执行，非义务。 |
+| 可玩性漂移 5 个（第八节） | **4 个已闭合**（第九节纯换种子重调：Rebellion/Gradient 2408、RuleOfLaw 2420、Death 2103）；**Information 1 个留红**，属路线配速设计问题而非种子运气（120 种子零命中，85 落 TIME 抢先结算），未来修复方向是脚本层策略重设计（渗透窗口与固定时钟的竞速关系），按 ADR-0020 不再投入扫种子。 |
+| Covenant/Exclusionist/TerminationChannel | 合并态下通过，无需动作。 |
+
+### 此后的纪律
+
+- 派系事件化 C1–C11 全部落地并推送，机制定型。后续任何机制改动导致的
+  消耗品漂移（种子/parity 基线/轨迹转储）按
+  [ADR-0020](../../knowledge/adr/0020-pre-release-consumables-no-retune-obligation.md)
+  只落欠账（本文续记），不自动立项重调；重调仅在所有者明确要求或
+  上线验收时进行。
+- 读测试报告先对照本清单：当前唯一已知红信号 = Information 路线配速
+  欠账；出现其他失败应先按真实回归排查，不得默认归入漂移。
+- 上线验收整备时：Information 路线重设计 + 全量消耗品重建（含 parity
+  基线与轨迹转储）一并处理。
