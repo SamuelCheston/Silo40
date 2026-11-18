@@ -2,7 +2,7 @@
 
 > 状态：修订版（对齐黑箱学习规格）
 > **指标三（风险度指派与自保动力学）的权威规格是 [22 黑箱学习系列](./22-silo1-blackbox-learning/00-index.md)**（00 总览/01 动力学/02 观测/03 探索/04 命名与可读性 + [ADR-0015](../../knowledge/adr/0015-silo1-blackbox-learning.md)）。本卷只保留指标一、指标二与集成事项的权威口径；凡与黑箱系列冲突处，以黑箱系列为准。
-> 对齐：[ADR-0019](../../knowledge/adr/0018-safeguard-from-accumulation-to-assignment.md)（safeguard 由后果累加改为 1 号指派基线）。
+> 对齐：[ADR-0019](../../knowledge/adr/0019-safeguard-from-accumulation-to-assignment.md)（safeguard 由后果累加改为 1 号指派基线）。
 > 上游裁决演进记录（按时间序）：离心不是负反馈刹车 → 执行强度单峰 → 曲线对 1 号黑箱 → 风险度只驱动隐藏量增速（`self_preservation`，占位命名）→ **黑箱学习规格定稿**（20 箱后验、零 RNG 决策、观测伪装为主防线、参数重算 `g_max=0.12/τ_decay=15/θ_defy=0.70`）。
 
 ## 1. 目标与范围
