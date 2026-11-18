@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strings"
 
 	"silo40/internal/engine"
 	"silo40/internal/model"
@@ -20,7 +21,10 @@ func (s *GameService) runCountermeasureMonth(silo *model.Silo) ([]string, []mode
 	if agent == nil {
 		agent = s.agent
 	}
-	signals := engine.AdvanceCountermeasures(silo, agent)
+	signals := engine.AdvanceCountermeasures(silo, agent, engine.CountermeasureTriggers{
+		IdentityQuery: s.countermeasureEventFired(silo.ID, "special:identity_query_local"),
+		ArchiveReview: s.countermeasureEventFired(silo.ID, "special:archive_review_opened"),
+	})
 	if len(signals) == 0 {
 		return nil, nil
 	}
@@ -37,6 +41,20 @@ func (s *GameService) runCountermeasureMonth(silo *model.Silo) ([]string, []mode
 		}
 	}
 	return logs, stories
+}
+
+// countermeasureEventFired 内容账本是否已点火该事件 (支持分组前缀键)。
+func (s *GameService) countermeasureEventFired(siloID uint, eventKey string) bool {
+	states := s.contentStates[siloID]
+	if state, ok := states[eventKey]; ok && state.Triggered {
+		return true
+	}
+	for key, state := range states {
+		if state.Triggered && strings.HasSuffix(key, ":"+eventKey) {
+			return true
+		}
+	}
+	return false
 }
 
 // countermeasureStory 反制叙事：只描述发生的事，不指认玩家 (20 分册 §5.2)。

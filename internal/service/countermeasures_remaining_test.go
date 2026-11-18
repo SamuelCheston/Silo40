@@ -190,3 +190,65 @@ func TestT24GuaranteeErosionOnce(t *testing.T) {
 	}
 }
 
+
+// T3-1b：复核期次月灰置地点动作；复查期灰置职务动作；抹除准备期灰置
+// 秘密行动 (suspicion ≥ 0.7)。三级绑定都走既有门控与 DisabledReason。
+func TestT31bIdentityBindingsGateActions(t *testing.T) {
+	svc := counterTestService(t)
+	svc.agent.ActionPoints = 50
+	completeGateEvent(svc, "observation:first_local")
+	states := svc.statesMapFor(svc.silo.ID)
+
+	// 复核期：identity_query_local 点火 → 下一月地点类动作不可用。
+	states["special:identity_query_local"] = model.ContentEventState{
+		SiloID: svc.silo.ID, EventKey: "special:identity_query_local", Triggered: true, TriggerCount: 1,
+	}
+	svc.runCountermeasureMonth(svc.silo)
+	if got := svc.silo.Countermeasure.LocationLockMonths; got != 1 {
+		t.Fatalf("location lock = %d months, want 1", got)
+	}
+	meta, visible := svc.applyActionGate(model.PlayerActionMeta{ID: "action_gather_info", ActionType: model.ActionGatherInfo, Enabled: true})
+	if !visible || meta.Enabled || meta.DisabledReason != "例行核查期间不便前往" {
+		t.Fatalf("gather gate = visible:%v enabled:%v reason:%q", visible, meta.Enabled, meta.DisabledReason)
+	}
+	if err := svc.validateActionGate(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "IT", Cost: 2}); err == nil {
+		t.Fatal("gather action executed during identity review lock")
+	}
+
+	// 窗口到期自动恢复。
+	svc.runCountermeasureMonth(svc.silo)
+	if got := svc.silo.Countermeasure.LocationLockMonths; got != 0 {
+		t.Fatalf("location lock after expiry = %d, want 0", got)
+	}
+	if meta, _ := svc.applyActionGate(model.PlayerActionMeta{ID: "action_gather_info", ActionType: model.ActionGatherInfo, Enabled: true}); !meta.Enabled {
+		t.Fatalf("gather still disabled after expiry: %q", meta.DisabledReason)
+	}
+
+	// 复查期：archive_review_opened 点火 → 下一月职务动作不可用。
+	states["special:archive_review_opened"] = model.ContentEventState{
+		SiloID: svc.silo.ID, EventKey: "special:archive_review_opened", Triggered: true, TriggerCount: 1,
+	}
+	svc.runCountermeasureMonth(svc.silo)
+	if got := svc.silo.Countermeasure.ProfessionLockMonths; got != 1 {
+		t.Fatalf("profession lock = %d months, want 1", got)
+	}
+	profMeta, visible := svc.applyActionGate(model.PlayerActionMeta{ActionType: model.ActionProfession, Enabled: true})
+	if !visible || profMeta.Enabled || profMeta.DisabledReason != "职务暂时交接" {
+		t.Fatalf("profession gate = visible:%v enabled:%v reason:%q", visible, profMeta.Enabled, profMeta.DisabledReason)
+	}
+
+	// 抹除准备期：suspicion ≥ 0.7 → 秘密行动类动作不可用。
+	svc.agent.SuspicionLevel = 0.7
+	secretMeta, visible := svc.applyActionGate(model.PlayerActionMeta{ID: "STATION_INTEL", ActionType: model.ActionStationOperation, Enabled: true})
+	if !visible || secretMeta.Enabled {
+		t.Fatalf("secret action available at erasure stage: visible:%v enabled:%v", visible, secretMeta.Enabled)
+	}
+	if !strings.Contains(secretMeta.DisabledReason, "抹除准备期") {
+		t.Errorf("secret gate reason = %q", secretMeta.DisabledReason)
+	}
+	svc.agent.SuspicionLevel = 0.69
+	if meta, _ := svc.applyActionGate(model.PlayerActionMeta{ID: "STATION_INTEL", ActionType: model.ActionStationOperation, Enabled: true}); !meta.Enabled {
+		t.Errorf("secret action disabled below erasure stage: %q", meta.DisabledReason)
+	}
+}
+

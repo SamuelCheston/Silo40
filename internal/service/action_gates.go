@@ -169,7 +169,10 @@ func supportedActionMetric(metric string) bool {
 		// 21 设计卷：谈判层 0/1 门控指标。
 		"negotiation_channel", "negotiation_compromise", "negotiation_takeover_decided",
 		// 16 §3.5 (Layer 3)：外溢投递侧门控指标——包裹质量与各信道可用性。
-		"package_quality", "spillover_channel_it_line", "spillover_channel_cross_signal", "spillover_channel_physical":
+		"package_quality", "spillover_channel_it_line", "spillover_channel_cross_signal", "spillover_channel_physical",
+		// 20 分册 T3-1b：身份线日常绑定——地点/职务动作的剩余灰置月数，
+		// 以及抹除准备期标记 (suspicion ≥ 0.7)。
+		"identity_location_lock", "identity_profession_lock", "identity_erasure_stage":
 		return true
 	default:
 		return false
@@ -346,6 +349,18 @@ func (s *GameService) actionConditionValue(condition actionCondition) (float64, 
 		return spilloverChannelGateValue(s.silo, model.SpilloverChannelCrossSignal), true
 	case "spillover_channel_physical":
 		return spilloverChannelGateValue(s.silo, model.SpilloverChannelPhysicalHandoff), true
+	case "identity_location_lock":
+		// 20 分册 T3-1b：复核期剩余灰置月数 (>0 = 不可用)。
+		return float64(s.silo.Countermeasure.LocationLockMonths), true
+	case "identity_profession_lock":
+		// 20 分册 T3-1b：复查期剩余灰置月数 (>0 = 不可用)。
+		return float64(s.silo.Countermeasure.ProfessionLockMonths), true
+	case "identity_erasure_stage":
+		// 20 分册 T3-1b：抹除准备期 = 怀疑度 ≥ 0.7 (既有身份线节点口径)。
+		if s.agent.SuspicionLevel >= 0.7 {
+			return 1, true
+		}
+		return 0, true
 	default:
 		return 0, false
 	}

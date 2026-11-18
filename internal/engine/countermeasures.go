@@ -22,6 +22,9 @@ const (
 	// T2-4 谈判可信度侵蚀：prep_exposure ≥ 0.4 → 保障可信度 −0.15。
 	counterGuaranteeThreshold = 0.40  // TODO(balance)
 	counterGuaranteeDelta     = -0.15 // TODO(balance)
+
+	// T3-1b 身份线日常绑定：每级节点附带一个月的动作灰置。
+	counterIdentityLockMonths = 1 // TODO(balance)
 )
 
 // 反制信号：服务层据此生成月度故事 (内容层，不指认玩家)。
@@ -35,9 +38,15 @@ type CountermeasureSignal struct {
 	Dept string
 }
 
+// CountermeasureTriggers 身份线节点的完成状态 (由服务层从内容账本读取)。
+type CountermeasureTriggers struct {
+	IdentityQuery bool
+	ArchiveReview bool
+}
+
 // AdvanceCountermeasures 反制账本的月度回合：先让既有窗口递减一格，再结算
 // 本月新触发。返回需要叙事的新信号 (可能为空)。
-func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent) []CountermeasureSignal {
+func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent, triggers CountermeasureTriggers) []CountermeasureSignal {
 	if silo == nil {
 		return nil
 	}
@@ -66,6 +75,16 @@ func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent) []CountermeasureSi
 		addTopStanceGuarantee(silo, counterGuaranteeDelta)
 		state.GuaranteeEroded = true
 		signals = append(signals, CountermeasureSignal{Kind: CounterSignalGuarantee})
+	}
+
+	// T3-1b：复核期 → 地点类动作下一月灰置；复查期 → 职务动作下一月灰置。
+	if triggers.IdentityQuery && !state.IdentityQueryBound {
+		state.IdentityQueryBound = true
+		state.LocationLockMonths = counterIdentityLockMonths
+	}
+	if triggers.ArchiveReview && !state.ArchiveReviewBound {
+		state.ArchiveReviewBound = true
+		state.ProfessionLockMonths = counterIdentityLockMonths
 	}
 
 	return signals
