@@ -162,8 +162,8 @@
   发起播种零 RNG、口碑按 (派系, 源, 目标) 固定序、玩家搭载不掷骰、无派系零消耗；
   引擎全绿，service 全量失败清单与 §五相同，漂移留档
   [25-v16-test-debt.md](25-v16-test-debt.md) §六）。
-  遗留接线：居民对领袖的个人关系子通道待 C9 的 LeaderRelations 落地后并入
-  factionAwareness 关系通道（取部门人脉与个人关系的高者，§1.2）。
+  C9 合并后接线已闭合：居民观察者的 LeaderRelations 个人关系并入关系通道
+  （取部门人脉与个人关系的高者，§1.2），事实键统一走 FactionFoundedFactID。
 - C9：加入概率意识形态主导；三档关系门槛与跨层级/跨阶级闸；玩家直选不掷骰；退出惯性 ✓
   （faction_join_test.go 9 项；引擎全绿、前端 tsc 通过。感知读取走引擎 BeliefIn 直读
   model 信念层 `faction:<id>:founded`，无 service 回调；C8 未落地时该事实缺省 B=0，

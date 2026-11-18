@@ -22,8 +22,8 @@ func FactionFoundedFactID(factionID uint) string {
 }
 
 // factionAwareness 三通道感知度 ∈ [0,1] (24 §1.2)，各通道单调：
-//   - 关系通道：观察者对发起者所属部门的人脉 (GetConnection 统一口径)。
-//     居民对领袖的个人关系子通道待 C9 的 LeaderRelations 字段，暂不启用。
+//   - 关系通道：观察者对发起者所属部门的人脉 (GetConnection 统一口径)；
+//     居民观察者另取领袖↔代表个人关系 (LeaderRelations 子矩阵，C9)，取高者。
 //   - 思潮通道：(pf, loyalty) 平面加权欧氏距离取补，复用聚类特征权重。
 //   - 阶层通道：权力级差取补 (级差 10 为满幅)，同 ClassType 加成。
 //
@@ -37,6 +37,18 @@ func factionAwareness(silo *model.Silo, observer, leader *ActorView) float64 {
 	rel := 0.0
 	if leaderProf != nil {
 		rel = clamp01(observer.GetConnection(leaderProf.ID))
+	}
+	if r := observer.resident; r != nil {
+		leaderID := leader.Ref.ResidentID
+		switch leader.Ref.Kind {
+		case ActorPlayer:
+			leaderID = leader.Ref.AgentID
+		case ActorNPC:
+			leaderID = leader.Ref.ProfessionID
+		}
+		if personal := clamp01(r.LeaderRelations[leaderRelationKey(string(leader.Ref.Kind), leaderID)]); personal > rel {
+			rel = personal
+		}
 	}
 
 	oi, li := observer.Ideologies(), leader.Ideologies()

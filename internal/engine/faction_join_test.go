@@ -216,7 +216,7 @@ func TestResidentJoinBringsCohort(t *testing.T) {
 			ActionPoints: 20,
 			Relations:    map[string]float64{"Mechanical": 0.6},
 			Ideologies:   map[string]float64{model.IdeologyProForeign: 0.9, model.IdeologyLoyalty: 0.2},
-			Beliefs:      []model.FactBelief{{FactID: factionFoundedFactID(7), B: 0.6}}},
+			Beliefs:      []model.FactBelief{{FactID: FactionFoundedFactID(7), B: 0.6}}},
 	}
 	silo.Cohorts = []model.PopulationCohort{{
 		ID: 1, ProfessionID: 1, Count: 300, FactionID: nil,
@@ -250,7 +250,7 @@ func TestMonthlyJoinBeliefGated(t *testing.T) {
 			{ID: 9, Alive: true, CohortID: uintPtr(1), ProfessionID: 1, Profession: "Mechanical",
 				Relations:  map[string]float64{"Mechanical": 0.6},
 				Ideologies: map[string]float64{model.IdeologyProForeign: 0.9, model.IdeologyLoyalty: 0.2},
-				Beliefs:    []model.FactBelief{{FactID: factionFoundedFactID(7), B: belief}}},
+				Beliefs:    []model.FactBelief{{FactID: FactionFoundedFactID(7), B: belief}}},
 		}
 		silo.Cohorts = []model.PopulationCohort{{
 			ID: 1, ProfessionID: 1, Count: 300,
@@ -302,7 +302,7 @@ func TestMonthlyExitNoSameMonthRejoin(t *testing.T) {
 		{ID: 9, Alive: true, CohortID: uintPtr(2), ProfessionID: 1, Profession: "Mechanical",
 			Relations:  map[string]float64{"Mechanical": 0.6},
 			Ideologies: map[string]float64{model.IdeologyProForeign: 0.1, model.IdeologyLoyalty: 0.2},
-			Beliefs:    []model.FactBelief{{FactID: factionFoundedFactID(7), B: 0.9}}},
+			Beliefs:    []model.FactBelief{{FactID: FactionFoundedFactID(7), B: 0.9}}},
 	}
 	// cohort 1 锚定质心 (pf0.9 大数量)，cohort 2 漂移远 (pf0.1)。
 	silo.Cohorts = []model.PopulationCohort{
@@ -343,7 +343,7 @@ func TestJoinScanDeterministicDoubleRun(t *testing.T) {
 				ID: 10 + id, Alive: true, CohortID: uintPtr(id), ProfessionID: 1, Profession: "Mechanical",
 				Relations:  map[string]float64{"Mechanical": 0.6},
 				Ideologies: map[string]float64{model.IdeologyProForeign: 0.85, model.IdeologyLoyalty: 0.2},
-				Beliefs:    []model.FactBelief{{FactID: factionFoundedFactID(7), B: 0.7}},
+				Beliefs:    []model.FactBelief{{FactID: FactionFoundedFactID(7), B: 0.7}},
 			})
 		}
 		silo.Factions = []model.Faction{{

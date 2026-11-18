@@ -91,6 +91,31 @@ func TestFactionAwarenessChannelMonotonicity(t *testing.T) {
 	}
 }
 
+// 居民观察者的个人关系子通道 (C9 接线, §1.2)：LeaderRelations 高于部门
+// 人脉时抬升感知度；低于时不拉低 (取高者)。
+func TestFactionAwarenessPersonalRelationSubChannel(t *testing.T) {
+	silo, _, leader := awarenessPair()
+	cohortID := uint(10)
+	silo.Cohorts = []model.PopulationCohort{{ID: cohortID, ProfessionID: 2, Count: 100}}
+	silo.Residents = []model.Resident{{
+		ID: 5, Alive: true, ProfessionID: 2, CohortID: &cohortID,
+		Relations: map[string]float64{"Mechanical": 0.2},
+	}}
+	observer, err := CreateActorView(CreateActorRefForResident(&silo.Residents[0]), silo, nil)
+	if err != nil {
+		t.Fatalf("resident view: %v", err)
+	}
+	base := factionAwareness(silo, observer, leader)
+	silo.Residents[0].LeaderRelations = map[string]float64{"npc:1": 0.9}
+	if high := factionAwareness(silo, observer, leader); high <= base {
+		t.Fatalf("个人关系子通道未抬升感知：部门0.2→%v, 个人0.9→%v", base, high)
+	}
+	silo.Residents[0].LeaderRelations["npc:1"] = 0.05
+	if low := factionAwareness(silo, observer, leader); low != base {
+		t.Fatalf("个人关系低于部门人脉时不应拉低：%v vs %v", low, base)
+	}
+}
+
 // 发起钩子：全堡观察者写入 faction:<id>:founded；创始人 B=1；不挂 cohort
 // 的正典居民与死亡居民不是代表观察者；发起零 RNG。
 func TestFoundFactionSeedsAwarenessBeliefs(t *testing.T) {

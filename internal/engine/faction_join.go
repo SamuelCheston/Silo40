@@ -22,11 +22,6 @@ import (
 	"silo40/internal/model"
 )
 
-// factionFoundedFactID 派系发起感知事实键 (C8 写入侧约定)。
-func factionFoundedFactID(factionID uint) string {
-	return fmt.Sprintf("faction:%d:founded", factionID)
-}
-
 // leaderRelationKey 领袖↔代表个人关系子矩阵的键 (24 篇 §3)：居民 res:<id>、
 // 玩家 agent:<id>、部门 npc:<id>，与部门关系键 (按部门名) 隔离。
 func leaderRelationKey(kind string, id uint) string {
@@ -215,7 +210,7 @@ func joinRelationGate(silo *model.Silo, rep *model.Resident, target *model.Facti
 // cohortBeliefAboutFaction cohort 对某派系发起事实的感知度：取代表居民与
 // 所属部门两层信念的高者 (C8 可写任一观测者层)。无事实 = 0。
 func cohortBeliefAboutFaction(silo *model.Silo, cohort *model.PopulationCohort, rep *model.Resident, factionID uint) float64 {
-	factID := factionFoundedFactID(factionID)
+	factID := FactionFoundedFactID(factionID)
 	best := 0.0
 	if rep != nil {
 		if b := BeliefIn(&rep.Beliefs, factID); b != nil && b.B > best {
