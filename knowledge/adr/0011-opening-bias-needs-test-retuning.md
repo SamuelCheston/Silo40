@@ -2,7 +2,7 @@
 
 | 状态 | 日期 | 依据 |
 | --- | --- | --- |
-| 已接受 | 2026-11-15 | [19 开局可变性设计](../../docs/research/19-opening-variability-design.md) §5/§6；0.03 开放度原型回退事件 |
+| 已接受（「重调后的通过记录」前置义务被 [0020](0020-pre-release-consumables-no-retune-obligation.md) 调整，其余纪律保留） | 2026-11-15 | [19 开局可变性设计](../../docs/research/19-opening-variability-design.md) §5/§6；0.03 开放度原型回退事件 |
 
 ## 背景与问题
 

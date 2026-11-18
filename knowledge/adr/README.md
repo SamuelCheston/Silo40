@@ -27,7 +27,7 @@
 | [0008](0008-escape-gate-to-outcome-layer.md) | 逃离的顶层一致门降为结果层 | 已接受 | 2026-11-15 |
 | [0009](0009-intel-fading.md) | 情报会淡忘 | 已接受 | 2026-11-15 |
 | [0010](0010-player-as-intervener.md) | 玩家是干涉者，不是指挥者 | 已接受 | 2026-11-15 |
-| [0011](0011-opening-bias-needs-test-retuning.md) | 开局偏向必须与可玩路线测试重调同时落地 | 已接受 | 2026-11-15 |
+| [0011](0011-opening-bias-needs-test-retuning.md) | 开局偏向必须与可玩路线测试重调同时落地 | 已接受（重调义务条款被 [0020](0020-pre-release-consumables-no-retune-obligation.md) 调整） | 2026-11-15 |
 | [0012](0012-world-countermeasures-read-public-facts-only.md) | 世界的反制只读公开事实、只产成本、藏在日常小动作里 | 已接受 | 2026-11-15 |
 | [0013](0013-negotiation-changes-blocking-not-victory.md) | 谈判/妥协只改变谁在阻碍谁，不产生胜利 | 已接受 | 2026-11-15 |
 | [0014](0014-countermeasures-cost-suspicion-org-only.md) | 反制只抬成本与风险、不困死玩家；怀疑度只由组织行为驱动，不由囤积驱动 | 已接受 | 2026-11-15 |
@@ -36,6 +36,7 @@
 | [0017](0017-no-backward-compat-before-release.md) | 正式上线前不承担向后兼容义务（存档走硬切断） | 已接受 | 2026-11-15 |
 | [0018](0018-unified-actor-player-as-representative.md) | 后端无玩家/NPC 之分：共用 Actor 接口，玩家即代表人物 | 已接受 | 2026-11-17 |
 | [0019](0019-safeguard-from-accumulation-to-assignment.md) | safeguard 由后果累加改为 1 号指派基线（Go 累加点变观测输入，DEATH 硬线保留） | 已接受 | 2026-11-15 |
+| [0020](0020-pre-release-consumables-no-retune-obligation.md) | 上线前种子调优等消耗品不承担即时重调义务（漂移落欠账，重调须所有者裁决） | 已接受 | 2026-11-19 |
 
 ## 维护约定
 
