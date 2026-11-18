@@ -94,6 +94,8 @@ type Agent struct {
 	Profession        string       `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
 	Traits            []string     `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
 	PoliticalPrestige float64      `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
+	Ambition          float64      `gorm:"default:0.0" json:"ambition"`             // 野心 (开局定死，仅事件可改)
+	Influence         float64      `gorm:"default:0.0" json:"influence"`            // 个人影响力
 	PoliticalPoints   float64      `gorm:"default:0.0" json:"political_points"`     // 政治点数
 	ActionPoints      float64      `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
 	PropagandaLevel   float64      `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
@@ -1109,6 +1111,8 @@ type Profession struct {
 	ActionPoints      float64   `gorm:"default:0" json:"action_points"`                    // 行动点数 (AP)
 	SuspicionLevel    float64   `gorm:"default:0" json:"suspicion_level"`                  // 怀疑度
 	PoliticalPrestige float64   `gorm:"default:0" json:"political_prestige"`               // 政治威望
+	Ambition          float64   `gorm:"default:0" json:"ambition"`                         // 部门野心 (开局定死，仅事件可改)
+	Influence         float64   `gorm:"default:0" json:"influence"`                        // 部门影响力
 	PropagandaLevel   float64   `gorm:"default:0" json:"propaganda_level"`                 // 宣传力度
 	Traits            []string  `gorm:"type:text;serializer:json" json:"traits,omitempty"` // 特质
 	Relics            []Relic   `gorm:"foreignKey:ProfessionID" json:"relics,omitempty"`   // 部门保管的遗物 (如司法部)

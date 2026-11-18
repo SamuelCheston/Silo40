@@ -702,6 +702,8 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			"action_points":      ctx.Actor.ActionPoints(),
 			"suspicion_level":    ctx.Actor.SuspicionLevel(),
 			"political_prestige": ctx.Actor.PoliticalPrestige(),
+			"ambition":           ctx.Actor.Ambition(),
+			"influence":          ctx.Actor.Influence(),
 			"political_points":   ctx.Actor.PoliticalPoints(),
 			"propaganda_level":   ctx.Actor.PropagandaLevel(),
 			"traits":             append([]string(nil), ctx.Actor.Traits()...),
@@ -1107,6 +1109,10 @@ func (e *GameEngine) applyActorMetricDelta(actor *ActorView, field string, delta
 		actor.SetSuspicionLevel(math.Max(0, actor.SuspicionLevel()+delta))
 	case "political_prestige":
 		actor.SetPoliticalPrestige(math.Max(0, actor.PoliticalPrestige()+delta))
+	case "ambition":
+		actor.SetAmbition(clamp01(actor.Ambition() + delta))
+	case "influence":
+		actor.SetInfluence(clamp01(actor.Influence() + delta))
 	case "political_points":
 		actor.SetPoliticalPoints(math.Max(0, actor.PoliticalPoints()+delta))
 	case "propaganda_level":
@@ -1125,6 +1131,10 @@ func (e *GameEngine) applyActorMetricSet(actor *ActorView, field string, value f
 		actor.SetSuspicionLevel(math.Max(0, value))
 	case "political_prestige":
 		actor.SetPoliticalPrestige(math.Max(0, value))
+	case "ambition":
+		actor.SetAmbition(clamp01(value))
+	case "influence":
+		actor.SetInfluence(clamp01(value))
 	case "political_points":
 		actor.SetPoliticalPoints(math.Max(0, value))
 	case "propaganda_level":

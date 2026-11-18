@@ -499,7 +499,7 @@ func validateTrigger(trigger ContentTrigger) error {
 		return nil
 	case "actor_metric_gte":
 		switch trigger.Metric {
-		case "propaganda_level", "suspicion_level", "political_prestige":
+		case "propaganda_level", "suspicion_level", "political_prestige", "ambition", "influence":
 			return nil
 		default:
 			return fmt.Errorf("actor_metric_gte metric %q is not readable", trigger.Metric)
@@ -908,6 +908,10 @@ func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext
 			value = ctx.Agent.SuspicionLevel
 		case "political_prestige":
 			value = ctx.Agent.PoliticalPrestige
+		case "ambition":
+			value = ctx.Agent.Ambition
+		case "influence":
+			value = ctx.Agent.Influence
 		default:
 			return false
 		}

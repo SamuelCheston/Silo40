@@ -176,6 +176,48 @@ func (v *ActorView) SetPoliticalPrestige(val float64) {
 	}
 }
 
+// Ambition 野心：开局定死，仅事件可改 (读写穿透到 Agent / Profession / Resident)
+func (v *ActorView) Ambition() float64 {
+	if v.agent != nil {
+		return v.agent.Ambition
+	}
+	if v.resident != nil {
+		return v.resident.Ambition
+	}
+	return v.prof.Ambition
+}
+
+func (v *ActorView) SetAmbition(val float64) {
+	if v.agent != nil {
+		v.agent.Ambition = val
+	} else if v.resident != nil {
+		v.resident.Ambition = val
+	} else {
+		v.prof.Ambition = val
+	}
+}
+
+// Influence 个人/部门影响力
+func (v *ActorView) Influence() float64 {
+	if v.agent != nil {
+		return v.agent.Influence
+	}
+	if v.resident != nil {
+		return v.resident.Influence
+	}
+	return v.prof.Influence
+}
+
+func (v *ActorView) SetInfluence(val float64) {
+	if v.agent != nil {
+		v.agent.Influence = val
+	} else if v.resident != nil {
+		v.resident.Influence = val
+	} else {
+		v.prof.Influence = val
+	}
+}
+
 func (v *ActorView) PropagandaLevel() float64 {
 	if v.agent != nil {
 		return v.agent.PropagandaLevel
