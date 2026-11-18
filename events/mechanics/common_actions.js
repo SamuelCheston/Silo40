@@ -338,6 +338,42 @@ defineMechanics([
       };
     },
   },
+  {
+    id: "action_found_faction",
+    action_type: "FOUND_FACTION",
+    label: "Found Faction",
+    description:
+      "发起派系聚类事件，创立自己的派系。需要政治威望 ≥ 50、意识形态强度 ≥ 0.25，消耗 20 AP。零成员派系合法，筹备期内凑不够人数则消亡。",
+    target_type: "NONE",
+    ap_cost: 20,
+    duration_months: 0,
+    apply(ctx) {
+      // 预检与 Go 侧 foundFactionEligible 同口径，只为给出失败文案；
+      // 权威判定与 AP 扣除在 faction_found_actor 处理器中原子完成。
+      const prestige = ctx.actor.political_prestige || 0;
+      if (prestige < 50) {
+        return { action_result: { executed: false, message: "政治威望不足 50，还没有人愿意追随你。" } };
+      }
+      const pf = (ctx.actor.ideologies || {}).pro_foreign || 0;
+      if (Math.abs(pf - 0.5) < 0.25) {
+        return { action_result: { executed: false, message: "意识形态立场不够鲜明，无法凝聚追随者 (强度需 ≥ 0.25)。" } };
+      }
+      const faction = ctx.actor.faction;
+      if (faction && faction.signature !== "special:unaffiliated") {
+        return { action_result: { executed: false, message: "你已身处政治派系，不能再发起新派系。" } };
+      }
+      if ((ctx.actor.action_points || 0) < 20) {
+        return { action_result: { executed: false, message: "AP 不足，发起派系聚类事件需要 20 AP。" } };
+      }
+      return {
+        mutations: [{ type: "faction_found_actor" }],
+        action_result: {
+          executed: true,
+          message: "你发起了派系聚类事件，「" + ctx.actor.label + "的派系」成立 (零成员筹备期)。",
+        },
+      };
+    },
+  },
 ]);
 
 // suspicionDelta / detectionClass live in the mechanic prelude; detection is

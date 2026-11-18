@@ -372,6 +372,13 @@ func (NpcBrain) scoreCandidates(view *ActorView, silo *model.Silo, pick func(n i
 		}
 	}
 
+	// --- FOUND_FACTION：无政治派系且三闸齐备时发起 (24 篇 §1, C6) ---
+	// 野心不是门槛，只是权重输入：weight = A + prestige/100 + 强度。
+	if ok, _ := foundFactionEligible(view, silo); ok {
+		weight := view.Ambition() + view.PoliticalPrestige()/100 + view.IdeologicalIntensity()
+		add(model.ActionFoundFaction, weight, "initiated a faction clustering event and founded their own faction.", 1.0, "")
+	}
+
 	// --- 职业专属行动：按职业注册表挑选，走统一执行管线 ---
 	resTypes := []string{"Energy", "Materials", "Supplies"}
 	for _, def := range GetProfessionActions(view.Profession()) {

@@ -46,6 +46,7 @@ export type AgentActionType =
   | "PROFESSION_ACTION"
   | "PLAYER_EVENT"
   | "PUBLICIZE_FACTION"
+  | "FOUND_FACTION"
   | "SILO1_OPERATION"
   | "STATION_OPERATION";
 

@@ -669,6 +669,10 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		return
 	}
 
+	// C6 共存期：事件发起派系 (founded: 签名) 不参与距离聚类，跨 rebuild
+	// 整体保留；C7 切换后聚类退化为维护管线。
+	founded := foundedFactions(silo)
+
 	for i := range silo.Residents {
 		silo.Residents[i].FactionID = nil
 		silo.Residents[i].IsRepresentative = false
@@ -980,7 +984,28 @@ func RebuildImplicitFactions(silo *model.Silo) {
 		}
 	}
 
-	silo.Factions = factions
+	silo.Factions = append(factions, founded...)
+
+	// 发起派系的居民代表在 cohort 同步中被清掉了标志，这里重新绑定。
+	for i := range silo.Factions {
+		f := &silo.Factions[i]
+		if !strings.HasPrefix(f.Signature, foundedSignaturePrefix) || f.RepresentativeKind != string(ActorResident) {
+			continue
+		}
+		for j := range silo.Residents {
+			r := &silo.Residents[j]
+			if r.ID != f.RepresentativeID {
+				continue
+			}
+			r.IsRepresentative = true
+			r.FactionID = uintPtr(f.ID)
+			if prof := getProfessionByID(silo, r.ProfessionID); prof != nil {
+				r.Tags = buildResidentTags(r, prof, silo)
+			}
+			releaseResidentRepresentativeClaims(silo, r.ID, f.ID)
+			break
+		}
+	}
 }
 
 func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCohort) *model.Resident {

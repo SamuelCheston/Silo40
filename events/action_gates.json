@@ -46,6 +46,18 @@
       "reason": "需要政治威望达到 80"
     },
     {
+      "id": "action_found_faction",
+      "unlock": {},
+      "available": {
+        "all": [
+          { "metric": "political_prestige", "min": 50 },
+          { "metric": "ideology_intensity", "min": 0.25 }
+        ]
+      },
+      "hide_when_unavailable": true,
+      "reason": "需要政治威望 ≥ 50 且意识形态强度 ≥ 0.25"
+    },
+    {
       "action_type": "PROFESSION_ACTION",
       "unlock": { "stage_at_least": "first_signal" },
       "available": { "metric": "identity_profession_lock", "max": 0 },

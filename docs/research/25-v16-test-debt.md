@@ -93,3 +93,24 @@ model.CurrentSaveVersion 动态断言（拒绝机制本身与版本无关）。
 - harness 快照 prestige 读法 → engine.DerivedPrestige。
 - agent_stats 展示口径测试 → 派生公式（A0.8/I0.6 → 70，AP 39.5）。
 - 新增 prestige_derive_test.go：四层同构 + prestige→influence 折算。
+
+## 四、C6 发起候选的动力学漂移（新增 3 个，2026-11-18）
+
+C6（FOUND_FACTION 动作 + NPC 发起候选）落地后，种子调优可玩性失败
+从 4 个增至 7 个。新增清单：
+
+| 测试 | 现象 |
+| --- | --- |
+| TestExclusionistEndingPlayableFromNewGame | 零输入路线 125-02 落 RESET 而非 EXCLUSIONIST |
+| TestDeathPhysicalStrikePlayableFromNewGame | 事件链时序漂移，deceive 路线未按预期推进 |
+| TestTerminationChannelCountermeasurePlayableFromNewGame | 干扰信道后真实叛乱未达自测阈值 (deceives=0) |
+
+原因：NPC 加权决策新增 FOUND_FACTION 候选（weight = A + prestige/100 +
+强度），改变共享随机流的落点；发起成功的零成员派系进入忠诚度动力学与
+结局仲裁遍历（零影响力计零分，但 openFactions 计数含 pro_foreign:High
+发起派系）。C6 单测与端到端执行测试全绿，失败均为长局动力学漂移，
+与第二节同类。
+
+处理：并入第二节的种子重调批次，**等 C7/C9 落地后一次完成**。
+C7 废除自动聚类后发起成为派系唯一来源，届时漂移会再发生一次，
+现在重调仍是双重返工。

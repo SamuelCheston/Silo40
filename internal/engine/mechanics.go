@@ -710,6 +710,7 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			"known_fragments":    append([]string(nil), ctx.Actor.KnownFragments()...),
 			"is_representative":  ctx.Actor.IsRepresentative(),
 			"is_faction_leader":  actorLeadsFaction(ctx.Silo, ctx.Actor),
+			"ideologies":         cloneFloatMap(ctx.Actor.Ideologies()),
 			"connections":        []map[string]interface{}{},
 			"beliefs":            []map[string]interface{}{},
 		}
@@ -740,6 +741,7 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			actorPayload["faction"] = map[string]interface{}{
 				"id":        faction.ID,
 				"name":      faction.Name,
+				"signature": faction.Signature,
 				"influence": faction.Influence,
 				"cohesion":  faction.Cohesion,
 				"prestige":  faction.Prestige,
@@ -968,6 +970,8 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 		e.applyActorFactionMetricDelta(silo, actor, mutation.Field, mutation.Value)
 	case "faction_is_public_actor":
 		e.applyActorFactionPublic(silo, actor, mutation.BoolValue)
+	case "faction_found_actor":
+		e.applyFactionFoundActor(silo, actor)
 	case "silo_flag_set":
 		writeSiloFlag(silo, mutation.Field, mutation.BoolValue)
 	case "victory_status_set":

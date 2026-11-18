@@ -325,38 +325,68 @@ func (v *ActorView) IsRepresentative() bool {
 	if v.resident != nil {
 		return v.resident.IsRepresentative
 	}
-	// ADR-0018：玩家与 NPC 同构——玩家任代表的派系 (含零成员派系)
-	// 通过 RepresentativeKind=PLAYER 引用判定，不另设特殊分支。
-	return v.playerRepresentedFaction() != nil
+	// ADR-0018：玩家与 NPC 同构——任代表的派系 (含零成员派系) 通过
+	// RepresentativeKind=PLAYER/NPC 引用判定，不另设特殊分支。
+	return v.representedFaction() != nil
 }
 
 func (v *ActorView) FactionID() *uint {
 	if v.resident != nil {
 		return v.resident.FactionID
 	}
-	if f := v.playerRepresentedFaction(); f != nil {
+	if f := v.representedFaction(); f != nil {
 		id := f.ID
 		return &id
-	}
-	if v.prof != nil {
-		// 部门层面不直接持有 FactionID，但我们可以从其人口单元推导 (这里简化处理)
-		return nil
 	}
 	return nil
 }
 
-// playerRepresentedFaction 玩家任代表的派系 (RepresentativeKind=PLAYER)。
-func (v *ActorView) playerRepresentedFaction() *model.Faction {
-	if v.agent == nil || v.silo == nil {
+// representedFaction 该 Actor 任代表的派系 (PLAYER 按特工 id、NPC 按部门 id)。
+func (v *ActorView) representedFaction() *model.Faction {
+	if v.silo == nil {
+		return nil
+	}
+	var kind string
+	var id uint
+	switch {
+	case v.agent != nil:
+		kind, id = string(ActorPlayer), v.agent.ID
+	case v.prof != nil:
+		kind, id = string(ActorNPC), v.prof.ID
+	default:
 		return nil
 	}
 	for i := range v.silo.Factions {
 		f := &v.silo.Factions[i]
-		if f.RepresentativeKind == string(ActorPlayer) && f.RepresentativeID == v.agent.ID {
+		if f.RepresentativeKind == kind && f.RepresentativeID == id {
 			return f
 		}
 	}
 	return nil
+}
+
+// Ideologies 意识形态向量：居民/部门读自身，玩家读所属部门的思潮
+// (Agent 不持有独立 Ideologies，ADR-0018 同构口径)。
+func (v *ActorView) Ideologies() map[string]float64 {
+	if v.resident != nil {
+		return v.resident.Ideologies
+	}
+	if v.prof != nil {
+		return v.prof.Ideologies
+	}
+	if v.agent != nil && v.silo != nil {
+		for i := range v.silo.Professions {
+			if v.silo.Professions[i].Name == v.agent.Profession {
+				return v.silo.Professions[i].Ideologies
+			}
+		}
+	}
+	return nil
+}
+
+// IdeologicalIntensity 意识形态强度 |pro_foreign−0.5| (发起资格输入)。
+func (v *ActorView) IdeologicalIntensity() float64 {
+	return ideologicalIntensity(v.Ideologies()[model.IdeologyProForeign])
 }
 
 func (v *ActorView) Relations() map[string]float64 {

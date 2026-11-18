@@ -114,6 +114,12 @@ type FactionTuning struct {
 	AmbitionPowerWeight     float64 // weight of min(PowerLevel,10)/10
 	AmbitionIntensityWeight float64 // weight of ideological intensity
 	AmbitionNoise           float64 // uniform noise amplitude
+
+	// ---- FOUND_FACTION 发起资格 (24 篇 §1/§4, C6) ----
+
+	FoundPrestigeThreshold  float64 // 发起所需派生威望 (50×(A+I))
+	FoundIntensityThreshold float64 // 发起所需意识形态强度 |pf−0.5|
+	FoundAPCost             float64 // 发起 AP 成本 (与 ACTION_COSTS 一致)
 }
 
 // FactionConfig is the active tuning for faction clustering and the
@@ -171,4 +177,8 @@ var FactionConfig = FactionTuning{
 	AmbitionPowerWeight:     0.40,
 	AmbitionIntensityWeight: 0.30,
 	AmbitionNoise:           0.08,
+
+	FoundPrestigeThreshold:  50,
+	FoundIntensityThreshold: 0.25,
+	FoundAPCost:             20,
 }
