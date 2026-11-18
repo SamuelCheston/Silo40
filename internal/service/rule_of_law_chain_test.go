@@ -338,7 +338,7 @@ func TestRuleOfLawGuardBranches(t *testing.T) {
 // arbitration as RULE_OF_LAW, after which further actions are rejected.
 func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "rule-of-law-playable.db"))
-	req := threeSiloRequest(2401)
+	req := threeSiloRequest(2420)
 	req.Profession = "Mines"
 	// Start before the fixed archive broadcast so real tunnel actions have time
 	// to build the resident support needed by weighted arbitration.

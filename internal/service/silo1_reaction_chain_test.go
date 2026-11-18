@@ -285,7 +285,7 @@ func selectsFlagGuard(def engine.ContentEventDefinition, flag string) bool {
 // or delay task is seeded by the test.
 func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "death-physical-strike.db"))
-	req := threeSiloRequest(2101)
+	req := threeSiloRequest(2103)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
