@@ -240,3 +240,59 @@ LeaderRelations 感知接线是纯函数零 RNG，不移动流。
 
 处理：**种子重调批次靶子以此合并态为准**（5 个漂移 = 上表前 5 行），
 机制已完整定型，重调一次覆盖；升级链 8 个仍按第一节两选项处理。
+
+## 九、种子重调批次（2026-11-19）
+
+靶子来自第八节合并态清单（5 个可玩性漂移）。所有者批准收尾；同时立
+[ADR-0020](../../knowledge/adr/0020-pre-release-consumables-no-retune-obligation.md)：
+上线前种子等消耗品不承担即时重调义务，本批次是批准例外（成本已沉没、
+设施可复用），此后漂移只落欠账，重调须所有者裁决或上线验收。
+
+方法：临时 env 门控扫描设施（**未提交，已删除**）。harness 系用
+`SILO40_RETUNE_SWEEP=<起>-<止>` 批量 runEscapeLine（每种子 full+sparse
+双跑），按原断言口径逐条判定；脚本系用 `SILO40_RETUNE_SEED` 注入种子、
+`-run` 单测迭代。判定口径与测试断言完全一致，未削弱任何断言。
+
+### 结果（4/5 重调成功，全部纯换种子，零时序微调）
+
+| 测试 | 旧种子 | 新种子 | 扫描区间 | 命中 |
+| --- | --- | --- | --- | --- |
+| TestRebellionLinePlayableFromNewGame | 2402 | **2408** | 2402–2461（60，full+sparse） | 严格口径 1/60（仅 2408） |
+| TestEscapePreparationGradientNotReversed | 2401 | **2408** | 同上 | 梯度口径 28/60，2408 在列 |
+| TestRuleOfLawLinePlayableFromNewGame | 2401 | **2420** | 2401–2460（60） | 3/60（2420、2436、2452），取首命中 |
+| TestDeathPhysicalStrikePlayableFromNewGame | 2101 | **2103** | 2101–2160（60） | 22/60，取首命中 |
+| TestInformationEndingPlayableFromNewGame | 2401 | **不变（重调失败）** | 2401–2520（120） | 0/120 |
+
+2408 严格口径落点：full ending=REBELLION won，departed=30 survivors=24，
+MonthsOut=4，结算群组 20 人存活、demise 空；sparse ending=EXCLUSIONIST
+departed=15 survivors=1——梯度 30≥15、24≥1 成立。Rebellion 与 Gradient
+共用一种子，两测试各自独立跑 full/sparse。
+
+Death 旧种子 2101 的合并态失败是 ordering 断言：termination_release
+(ts=10560) 先于 bombing_terminal (ts=10680) 落地；2103 下远程终结严格
+晚于物理打击，全部断言（含条件式 ordering 检查）原样通过。
+
+### Information 重调失败账（留档停止，不硬改）
+
+120 个种子（2401–2460 原区间 + 2461–2520 扩展区间）零命中。失败形态：
+
+- 86 个晚期失败：85 个落 TIME（固定时钟 130-01 抢先结算）、1 个落
+  FRACTURE——流通路线在合并态动力学下系统性赶不上《共证》门成熟；
+- 33 个中途失败：成本探针/流通动作被「该部门没有回应你的接触」拒绝
+  （resolveActionCost 路径 Fatalf）；
+- 1 个终局后动作被拒。
+
+结论：不是种子运气问题，换种子已穷尽合理区间。未来修复方向是路线
+节奏/策略重设计（脚本层，如渗透窗口与固定时钟的竞速关系），不是继续
+扫种子；按 ADR-0020 留欠账，不再投入。测试保持原种子 2401 与原断言，
+仍红。
+
+### 复测（2026-11-19，分支 test/seed-retune，基线 946b90b）
+
+- `go build ./...`、`go vet ./...` 通过。
+- 5 靶子 -run：4 绿（Rebellion/Gradient/RuleOfLaw/Death）+ 1 红
+  （Information，上述留档欠账）。
+- 全量 service 套件（208s）：**9 失败 = 8 升级链（第一节，基线预期，
+  leader 在 main 另行重锚）+ Information（本节欠账）**，无其他新增；
+  第八节的其余 4 个漂移全部恢复，Covenant/Exclusionist/TerminationChannel
+  维持通过。
