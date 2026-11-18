@@ -114,3 +114,47 @@ C6（FOUND_FACTION 动作 + NPC 发起候选）落地后，种子调优可玩性
 处理：并入第二节的种子重调批次，**等 C7/C9 落地后一次完成**。
 C7 废除自动聚类后发起成为派系唯一来源，届时漂移会再发生一次，
 现在重调仍是双重返工。
+
+## 五、C7 事件化落地后的账目更新（2026-11-18）
+
+C7（废除每 tick 聚类、MaintainFactions 维护管线、筹备期解散、死亡接任）
+落地后全量复测：**13 个失败 = 8 升级链 + 5 可玩性漂移**。
+
+**版本顺延 v16 → v17**：v16 存档里的聚类派系与归属是已废除算法的产物，
+语义不可延续，按 ADR-0017 拒载。升级链 8 个测试的拒绝信息变为
+「存档=15，当前要求=17」，类别与第一节完全相同，不另列。
+
+### 随 C7 修复的真实回归（不是欠账，已闭合）
+
+1. **TestLegitimacySurvivesRealMonthlyTick**：探针派系 fixture 在 C7 下
+   不合法（无领袖/无 founding 戳；组织统计改由成员 cohort 派生，注入
+   Influence/Cohesion 不再生效）。重锚为零成员筹备期发起派系
+   （PLAYER 代表 + founding 戳），totalInf=0 → 叛乱保持 0 → 正统性留存。
+2. **TestSilo18NamedCharactersFate / TestSilo18ChainSurvivesResume**：
+   MaintainFactions 的代表标志修复段原先对**所有**居民重建派生标签，
+   覆写了 18 号正典具名人物的 silo18NamedTag / silo18CanonTrait，
+   导致 namedResident / silo18Canon 找不到人、链条整体停摆。
+   修复：不挂 cohort 的个体（正典具名人物）标签由链条节点权威维护，
+   维护管线跳过（旧 RebuildImplicitFactions 本就只重建挂 cohort 的居民）。
+
+### 可玩性漂移（5 个，并入第二节重调批次）
+
+| 测试 | 状态 |
+| --- | --- |
+| TestRebellionLinePlayableFromNewGame | 持续（第二节） |
+| TestEscapePreparationGradientNotReversed | 持续（第二节） |
+| TestInformationEndingPlayableFromNewGame | 持续（第二节） |
+| TestRuleOfLawLinePlayableFromNewGame | 持续（第二节） |
+| TestCovenantConvergenceDecisiveEventSucceeds | 新增：decisive 发布成功 (publishW=52.6) 但 large_scale_evidence −24 冲击落点改道，约章未锁 (pact=0.001) |
+
+C6 新增的 3 个漂移（Exclusionist / DeathPhysicalStrike /
+TerminationChannel）在 C7 的随机流重排下**恢复通过**——漂移对 RNG
+落点高度敏感，进一步说明现在重调种子仍是返工。
+
+原因：聚类掷骰整体移除 + NPC 决策人口扩到全部存活 cohort 代表
+（C7 前仅现任派系代表），共享随机流大幅平移；零成员发起派系进入
+忠诚动力学与结局仲裁。C7 引擎审计测试全绿（零发起零派系、筹备期
+解散、接任确定性、无单月归属往返、双跑一致）。
+
+处理：**等 C9（加入/退出）落地后一次重调**，届时成员流动机制定型，
+种子策略才有稳定靶子。

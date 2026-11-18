@@ -1,6 +1,7 @@
 package engine
 
-// P1-S4 可解释归属测试：解释接口只读、自洽，且能区分"距离更近"与"惯性保留"。
+// C7 可解释归属测试：解释接口只读、自洽；距离只是亲缘参考，
+// 归属由发起/加入事件确立 (无惯性保留语义)。
 
 import (
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"silo40/internal/model"
 )
 
-// explainTestSilo 三个政治派系 (质心相距较远) + 一个无阵营 cohort。
+// explainTestSilo 两个发起派系 (各有一个成员 cohort) + 一个无阵营 cohort。
 func explainTestSilo() *model.Silo {
 	silo := &model.Silo{
 		ID:           1,
@@ -30,41 +31,59 @@ func explainTestSilo() *model.Silo {
 			{ID: 3, ProfessionID: 3, Name: "Quiet", Count: 400, Influence: 0.5,
 				Ideologies: map[string]float64{model.IdeologyProForeign: 0.10, model.IdeologyLoyalty: 0.80}},
 		},
+		Factions: []model.Faction{
+			{
+				ID: 11, SiloID: 1, Name: "激进派",
+				Signature: "founded:PLAYER:42|" + model.IdeologyProForeign + ":High",
+				Tags:      []string{model.IdeologyProForeign + ":High"},
+				TagStats:  map[string]int{},
+				Memory:    []string{"founded:Y122M1"},
+				FoundedYear: 122, FoundedMonth: 1,
+				RepresentativeKind: string(ActorPlayer), RepresentativeID: 42,
+			},
+			{
+				ID: 12, SiloID: 1, Name: "温和派",
+				Signature: "founded:PLAYER:43|" + model.IdeologyProForeign + ":High",
+				Tags:      []string{model.IdeologyProForeign + ":High"},
+				TagStats:  map[string]int{},
+				Memory:    []string{"founded:Y122M1"},
+				FoundedYear: 122, FoundedMonth: 1,
+				RepresentativeKind: string(ActorPlayer), RepresentativeID: 43,
+			},
+		},
 	}
 	for i := range silo.Cohorts {
 		prof := getProfessionByID(silo, silo.Cohorts[i].ProfessionID)
 		silo.Cohorts[i].Tags = buildCohortTags(&silo.Cohorts[i], prof, silo)
 	}
+	silo.Cohorts[0].FactionID = uintPtr(11)
+	silo.Cohorts[1].FactionID = uintPtr(12)
 	return silo
 }
 
 func TestExplainCohortAffiliationDistances(t *testing.T) {
 	silo := explainTestSilo()
-	RebuildImplicitFactions(silo)
+	MaintainFactions(silo, nil)
 
-	// Radicals 与 Moderates 各自成派 (距离 > 半径)，Quiet 无阵营。
+	// Radicals 是激进派唯一成员 → 自身即质心 (距离 0)，次近为温和派。
 	expl, err := ExplainCohortAffiliation(silo, 1)
 	if err != nil {
 		t.Fatalf("explain cohort 1: %v", err)
 	}
-	if expl.FactionID == 0 {
-		t.Fatalf("expected political affiliation, got unaffiliated")
+	if expl.FactionID != 11 {
+		t.Fatalf("expected event-established affiliation with faction 11, got %+v", expl)
 	}
-	if expl.NearestID == 0 {
-		t.Fatalf("expected a nearest other political faction")
+	if expl.OwnDistance != 0 {
+		t.Fatalf("sole member cohort must sit on its own centroid, got %.3f", expl.OwnDistance)
 	}
-	if expl.OwnDistance >= expl.NearestDist {
-		t.Fatalf("freshly clustered cohort must be closer to its own faction: own=%.3f nearest=%.3f",
-			expl.OwnDistance, expl.NearestDist)
-	}
-	if expl.HeldByInertia {
-		t.Fatalf("freshly clustered cohort must not be inertia-held")
+	if expl.NearestID != 12 || expl.NearestDist <= 0 {
+		t.Fatalf("expected the other founded faction as nearest, got %+v", expl)
 	}
 	if expl.Margin <= 0 {
 		t.Fatalf("margin must be positive when own faction is nearest, got %.3f", expl.Margin)
 	}
-	if !strings.Contains(expl.Reason, "本派系更近") {
-		t.Fatalf("reason must explain nearest-own case, got %q", expl.Reason)
+	if !strings.Contains(expl.Reason, "事件驱动成员资格") || !strings.Contains(expl.Reason, "亲缘参考") {
+		t.Fatalf("reason must state event-driven membership with affinity-only distances, got %q", expl.Reason)
 	}
 
 	// 无阵营 cohort 的解释。
@@ -72,14 +91,42 @@ func TestExplainCohortAffiliationDistances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("explain cohort 3: %v", err)
 	}
-	if explQuiet.FactionID != 0 || !strings.Contains(explQuiet.Reason, "unaffiliated") {
+	if explQuiet.FactionID != 0 || !strings.Contains(explQuiet.Reason, "无阵营") {
 		t.Fatalf("quiet cohort must be explained as unaffiliated, got %+v", explQuiet)
+	}
+}
+
+// 零成员筹备期派系：无质心可算，解释必须明说而不是报错。
+func TestExplainZeroMemberFaction(t *testing.T) {
+	silo := explainTestSilo()
+	silo.Factions = append(silo.Factions, model.Faction{
+		ID: 14, SiloID: 1, Name: "空壳派系",
+		Signature: "founded:PLAYER:44|" + model.IdeologyProForeign + ":High",
+		Tags:      []string{model.IdeologyProForeign + ":High"},
+		TagStats:  map[string]int{},
+		Memory:    []string{"founded:Y122M1"},
+		FoundedYear: 122, FoundedMonth: 1,
+		RepresentativeKind: string(ActorPlayer), RepresentativeID: 44,
+	})
+	MaintainFactions(silo, nil)
+	silo.Residents = append(silo.Residents, model.Resident{
+		ID: 900, SiloID: 1, Name: "FounderProbe", Alive: true,
+		ProfessionID: 1, Profession: "Mechanical", FactionID: uintPtr(14),
+		Ideologies: map[string]float64{model.IdeologyProForeign: 0.9, model.IdeologyLoyalty: 0.2},
+	})
+
+	expl, err := ExplainResidentAffiliation(silo, "FounderProbe")
+	if err != nil {
+		t.Fatalf("explain zero-member faction resident: %v", err)
+	}
+	if expl.FactionID != 14 || !strings.Contains(expl.Reason, "零成员筹备期") {
+		t.Fatalf("zero-member faction must be explained as in grace period, got %+v", expl)
 	}
 }
 
 func TestExplainResidentAffiliationReadOnly(t *testing.T) {
 	silo := explainTestSilo()
-	RebuildImplicitFactions(silo)
+	MaintainFactions(silo, nil)
 
 	// 为 Radicals cohort 造一个具名居民 (模拟 Silo 18 具名个体的解释路径)。
 	cohort := &silo.Cohorts[0]
@@ -104,7 +151,7 @@ func TestExplainResidentAffiliationReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("explain resident: %v", err)
 	}
-	if expl.FactionID == 0 || expl.OwnDistance <= 0 {
+	if expl.FactionID != 11 || expl.OwnDistance <= 0 {
 		t.Fatalf("resident explanation must carry faction and distance, got %+v", expl)
 	}
 	if cohort.ID != before.ID || cohort.Count != before.Count ||

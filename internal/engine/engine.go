@@ -582,7 +582,7 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 	// decisions remain the active NPC production-side behavior.
 	updatePopulationCohorts(silo, deltaYears)
 	updateKeyResidents(silo, deltaYears)
-	RebuildImplicitFactions(silo)
+	MaintainFactions(silo, addLog)
 	// Faction-driven loyalty evolution is an explicit, time-scaled step: it
 	// advances on monthly ticks and is a no-op for zero-duration instant
 	// resolutions (deltaYears == 0), so instant actions cannot accelerate it.
@@ -627,10 +627,11 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 		}
 	}
 
-	// 3b. Resident Representative decisions (e.g., Faction Leaders)
+	// 3b. Resident delegate decisions：每个 cohort 代表都是决策节点
+	// (24 篇 C7：任何代表都可能发起派系，不限现任 faction 领袖)。
 	for i := range silo.Residents {
 		res := &silo.Residents[i]
-		if !res.Alive || !res.IsRepresentative {
+		if !res.Alive || res.CohortID == nil {
 			continue
 		}
 		view, err := CreateActorView(CreateActorRefForResident(res), silo, nil)

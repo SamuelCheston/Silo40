@@ -167,8 +167,8 @@ func PredictCandidates(view *ActorView, silo *model.Silo) []CandidateInfo {
 }
 
 // DecisionActors enumerates every actor that may reach a decision point in
-// RunNpcTurn (profession NPCs except the player's, plus alive resident
-// representatives), in RunNpcTurn order. It does not consume rng. Used by
+// RunNpcTurn (profession NPCs except the player's, plus alive cohort
+// delegates), in RunNpcTurn order. It does not consume rng. Used by
 // the LLM prefetch layer to predict next month's decision points.
 func DecisionActors(silo *model.Silo, agent *model.Agent) []*ActorView {
 	if silo == nil {
@@ -186,7 +186,7 @@ func DecisionActors(silo *model.Silo, agent *model.Agent) []*ActorView {
 	}
 	for i := range silo.Residents {
 		res := &silo.Residents[i]
-		if !res.Alive || !res.IsRepresentative {
+		if !res.Alive || res.CohortID == nil {
 			continue
 		}
 		if view, err := CreateActorView(CreateActorRefForResident(res), silo, nil); err == nil {

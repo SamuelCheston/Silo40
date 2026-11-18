@@ -76,7 +76,11 @@ const (
 //     50×(Ambition+Influence) 派生；Agent/Profession 补齐 Ambition/Influence。
 //     破坏性语义变更，无升级步：v15 及更早存档拒载 (ADR-0017 硬切断)。
 //     与 v15 黑箱层合并时顺延编号：黑箱升级链终点 v15 保留不动。
-const CurrentSaveVersion = 16
+//   - v17: 派系事件化 (24 篇 C7)。废除每 tick 距离聚类建派系：派系只能由
+//     FOUND_FACTION 创立，成员资格持久，筹备期解散与领袖死亡接任上线。
+//     v16 存档的聚类派系/归属是已废除算法的产物，语义不可延续，拒载
+//     (ADR-0017 硬切断，无升级步)。开局零派系 (仅无阵营桶)。
+const CurrentSaveVersion = 17
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {

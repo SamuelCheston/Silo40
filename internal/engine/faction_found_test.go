@@ -156,9 +156,9 @@ func TestNPCFoundFactionIsomorphic(t *testing.T) {
 	}
 }
 
-// C6 共存期：发起派系跨 RebuildImplicitFactions 保留，居民代表重新绑定，
-// 聚类派系不得重复认领同一居民代表。
-func TestFoundedFactionSurvivesRebuild(t *testing.T) {
+// C7：发起派系跨维护管线保留 (成员凑够则越过筹备期)，居民代表保持
+// 绑定；维护不再自动聚类出任何政治派系。
+func TestFoundedFactionSurvivesMaintenance(t *testing.T) {
 	silo := foundTestSilo()
 	silo.Cohorts = []model.PopulationCohort{
 		{
@@ -188,10 +188,11 @@ func TestFoundedFactionSurvivesRebuild(t *testing.T) {
 		t.Fatalf("resident founding failed: factions=%d", len(silo.Factions))
 	}
 	foundedID := silo.Factions[0].ID
+	silo.Cohorts[0].FactionID = uintPtr(foundedID) // 成员加入 (C9 前的手工资格)
 
 	silo.CurrentYear = 123
 	silo.CurrentMonth = 9
-	RebuildImplicitFactions(silo)
+	MaintainFactions(silo, nil)
 
 	var founded, political *model.Faction
 	for i := range silo.Factions {
@@ -204,20 +205,20 @@ func TestFoundedFactionSurvivesRebuild(t *testing.T) {
 		}
 	}
 	if founded == nil || founded.ID != foundedID {
-		t.Fatal("founded faction must survive rebuild with its persistent ID")
+		t.Fatal("founded faction must survive maintenance with its persistent ID")
 	}
 	if founded.FoundedYear != 122 || founded.FoundedMonth != 5 ||
 		founded.RepresentativeKind != string(ActorResident) || founded.RepresentativeID != 9 {
-		t.Fatalf("rebuild reset founding facts: %+v", founded)
+		t.Fatalf("maintenance reset founding facts: %+v", founded)
 	}
-	if political == nil {
-		t.Fatal("auto-clustering must still produce a political faction in C6 coexistence")
+	if founded.MemberCount != 400 {
+		t.Fatalf("member count = %d, want 400", founded.MemberCount)
 	}
-	if political.RepresentativeKind == string(ActorResident) && political.RepresentativeID == 9 {
-		t.Fatal("clustered faction must not double-claim the resident founder")
+	if political != nil {
+		t.Fatalf("maintenance must not auto-cluster political factions: %+v", political)
 	}
 	r := &silo.Residents[0]
 	if !r.IsRepresentative || r.FactionID == nil || *r.FactionID != foundedID {
-		t.Fatalf("resident founder must rebind to founded faction: %+v", r)
+		t.Fatalf("resident founder must stay bound to founded faction: %+v", r)
 	}
 }

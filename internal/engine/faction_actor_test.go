@@ -105,9 +105,9 @@ func TestFactionActorFieldsJSONRoundTrip(t *testing.T) {
 	}
 }
 
-// 成立年月与创始人随亲缘 ID 继承：重建不重置 founding 事实；
-// 新派系打上当期年月戳。
-func TestFactionFounderInheritedAcrossRebuilds(t *testing.T) {
+// C7：founding 事实 (成立年月/创始人) 是持久身份，维护管线只改统计；
+// 凑够 MinFactionSize 的派系越过筹备期也不重置 founding。
+func TestFactionFounderPersistAcrossMaintenance(t *testing.T) {
 	silo := &model.Silo{
 		ID:           1,
 		Legitimacy:   0.60,
@@ -125,49 +125,46 @@ func TestFactionFounderInheritedAcrossRebuilds(t *testing.T) {
 		},
 		Cohorts: []model.PopulationCohort{
 			{
-				ID:              1,
-				ProfessionID:    1,
-				Name:            "Mechanical Bloc",
-				Count:           400,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High"},
-				Influence:       0.70,
-				Ideologies:      map[string]float64{model.IdeologyProForeign: 0.90},
+				ID:           1,
+				ProfessionID: 1,
+				Name:         "Mechanical Bloc",
+				Count:        400,
+				Influence:    0.70,
+				Ideologies:   map[string]float64{model.IdeologyProForeign: 0.90},
 			},
 		},
 	}
-	prof := getProfessionByID(silo, 1)
-	silo.Cohorts[0].Tags = buildCohortTags(&silo.Cohorts[0], prof, silo)
+	factionID := uint(5)
+	silo.Factions = []model.Faction{{
+		ID: factionID, SiloID: 1, Name: "持久派系",
+		Signature: "founded:PLAYER:42|" + model.IdeologyProForeign + ":High",
+		Tags:      []string{model.IdeologyProForeign + ":High"},
+		TagStats:  map[string]int{},
+		Memory:    []string{"founded:Y121M2"},
+		FounderKind: string(ActorPlayer), FounderID: 42,
+		FoundedYear: 121, FoundedMonth: 2,
+		RepresentativeKind: string(ActorPlayer), RepresentativeID: 42,
+	}}
+	silo.Cohorts[0].FactionID = uintPtr(factionID)
 
-	RebuildImplicitFactions(silo)
-	var political *model.Faction
-	for i := range silo.Factions {
-		if silo.Factions[i].Signature != unaffiliatedSignature {
-			political = &silo.Factions[i]
-		}
-	}
-	if political == nil {
-		t.Fatal("expected a political faction")
-	}
-	if political.FoundedYear != 122 || political.FoundedMonth != 5 {
-		t.Fatalf("new faction founding stamp = Y%dM%d, want Y122M5", political.FoundedYear, political.FoundedMonth)
-	}
-
-	political.FounderKind = string(ActorPlayer)
-	political.FounderID = 42
-	political.FoundedYear = 121
-	political.FoundedMonth = 2
-
+	// 推进到筹备期之后 (31 个月)：成员 ≥200，派系存续且 founding 不变。
 	silo.CurrentYear = 123
 	silo.CurrentMonth = 9
-	RebuildImplicitFactions(silo)
+	MaintainFactions(silo, nil)
 
+	var f *model.Faction
 	for i := range silo.Factions {
-		f := &silo.Factions[i]
-		if f.Signature == unaffiliatedSignature {
-			continue
+		if silo.Factions[i].ID == factionID {
+			f = &silo.Factions[i]
 		}
-		if f.FounderKind != string(ActorPlayer) || f.FounderID != 42 || f.FoundedYear != 121 || f.FoundedMonth != 2 {
-			t.Fatalf("lineage rebuild reset founding facts: %+v", f)
-		}
+	}
+	if f == nil {
+		t.Fatal("faction with enough members must survive the grace window")
+	}
+	if f.FounderKind != string(ActorPlayer) || f.FounderID != 42 || f.FoundedYear != 121 || f.FoundedMonth != 2 {
+		t.Fatalf("maintenance reset founding facts: %+v", f)
+	}
+	if f.MemberCount != 400 {
+		t.Fatalf("member count = %d, want 400", f.MemberCount)
 	}
 }

@@ -20,7 +20,7 @@ func initResidentsAndFactions(silo *model.Silo) {
 	silo.Cohorts = initPopulationCohorts(silo)
 	refreshProfessionPopulationFromCohorts(silo)
 	silo.Residents = initKeyResidents(silo)
-	RebuildImplicitFactions(silo)
+	MaintainFactions(silo, nil)
 }
 
 func initPopulationCohorts(silo *model.Silo) []model.PopulationCohort {
@@ -398,84 +398,6 @@ func clamp01(v float64) float64 {
 	return math.Max(0, math.Min(1, v))
 }
 
-func isPotentialLeader(res *model.Resident) bool {
-	return res.Ambition >= FactionConfig.AmbitionHighThreshold && res.Influence >= FactionConfig.LeaderInfluenceThreshold
-}
-
-func hasPotentialLeaderInCohort(silo *model.Silo, cohortID uint) bool {
-	for i := range silo.Residents {
-		res := &silo.Residents[i]
-		if res.CohortID != nil && *res.CohortID == cohortID {
-			if isPotentialLeader(res) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func factionSignatureForResident(resident *model.Resident) (string, []string) {
-	profile := make([]string, 0, 1)
-	if resident.Ideologies[model.IdeologyProForeign] >= 0.7 {
-		profile = append(profile, model.IdeologyProForeign+":High")
-	} else if resident.Ideologies[model.IdeologyProForeign] >= 0.3 {
-		profile = append(profile, model.IdeologyProForeign+":Medium")
-	}
-
-	// 即使 ideology 不够 High，如果该居民本身就是潜在领袖，也允许显示其意识形态标签
-	isIdeologyHigh := resident.Ideologies[model.IdeologyProForeign] >= 0.7
-	isPolitical := isIdeologyHigh || isPotentialLeader(resident)
-
-	if !isPolitical {
-		profile = []string{"ideology:status_quo"}
-	}
-
-	sort.Strings(profile)
-	drive := "drive:care"
-	for _, tag := range resident.Tags {
-		if strings.HasPrefix(tag, "drive:") {
-			drive = tag
-		}
-	}
-	return strings.Join(profile, "|") + "|" + drive, append(profile, drive)
-}
-
-func factionSignatureForCohort(cohort *model.PopulationCohort, _ *model.Profession, political bool) (string, []string) {
-	// political 由分组循环按滞回门槛统一判定，签名与其保持一致。
-	profile := factionProfileTags(cohort.IdeologyProfile, political)
-	sort.Strings(profile)
-	sig := strings.Join(profile, "|")
-
-	// 补充 Drive 标签以增加区分度 (从标签中提取)
-	drive := "drive:care"
-	for _, tag := range cohort.Tags {
-		if strings.HasPrefix(tag, "drive:") {
-			drive = tag
-			break
-		}
-	}
-
-	fullSig := sig + "|" + drive
-	return fullSig, append(append([]string{}, profile...), drive)
-}
-
-func factionProfileTags(profile []string, isPolitical bool) []string {
-	filtered := make([]string, 0, len(profile))
-	for _, tag := range profile {
-		if strings.HasPrefix(tag, model.IdeologyLoyalty+":") {
-			continue
-		}
-		if strings.HasPrefix(tag, model.IdeologyProForeign+":") {
-			filtered = append(filtered, tag)
-		}
-	}
-	// 如果不是政治化状态，且没有达到 High 门槛，则显示为 status_quo
-	if !isPolitical && politicalFormationTier(filtered) == "" {
-		return []string{"ideology:status_quo"}
-	}
-	return filtered
-}
-
 func politicalFormationTier(tags []string) string {
 	if len(tags) < 1 {
 		return ""
@@ -501,34 +423,6 @@ func politicalFormationTier(tags []string) string {
 		return "formation:medium"
 	}
 	return ""
-}
-
-func factionNameFromSignature(tags []string) string {
-	words := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		parts := strings.SplitN(tag, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		// 转换 Ideology:Level 为 "Level Ideology"
-		// 例如 pro_foreign:High -> High Proforeign
-		if parts[0] == model.IdeologyProForeign || parts[0] == model.IdeologyLoyalty {
-			words = append(words, fmt.Sprintf("%s %s", titleToken(parts[1]), titleToken(parts[0])))
-		} else {
-			words = append(words, titleToken(parts[1]))
-		}
-	}
-	if len(words) == 0 {
-		return "Independent Circle"
-	}
-	return strings.Join(words, " ") + " Circle"
-}
-
-func titleToken(value string) string {
-	if value == "" {
-		return value
-	}
-	return strings.ToUpper(value[:1]) + value[1:]
 }
 
 func factionCohesion(silo *model.Silo, members []*model.PopulationCohort, leader *model.Resident) float64 {
@@ -596,14 +490,6 @@ func factionCohesion(silo *model.Silo, members []*model.PopulationCohort, leader
 	return clamp01(cohesion)
 }
 
-func representativeScore(resident *model.Resident) float64 {
-	return resident.Influence*0.40 +
-		resident.Ambition*0.20 +
-		resident.Ideologies[model.IdeologyLoyalty]*0.20 +
-		DerivedPrestige(resident.Ambition, resident.Influence)/100.0*0.15 +
-		resident.ActionPoints/100.0*0.10
-}
-
 // cohortPrestige 聚合单元没有自己的野心/影响力人格：威望借其存活代表居民
 // 派生 (24 篇 §2)。无代表时为 0。
 func cohortPrestige(silo *model.Silo, cohort *model.PopulationCohort) float64 {
@@ -614,13 +500,6 @@ func cohortPrestige(silo *model.Silo, cohort *model.PopulationCohort) float64 {
 		}
 	}
 	return 0
-}
-
-func representativeCohortScore(silo *model.Silo, cohort *model.PopulationCohort) float64 {
-	scale := math.Log(float64(cohort.Count) + 1)
-	return cohortPrestige(silo, cohort)/20.0*FactionConfig.RepScorePrestigeWeight +
-		cohort.Ideologies[model.IdeologyLoyalty]*FactionConfig.RepScoreLoyaltyWeight +
-		scale*FactionConfig.RepScoreSizeWeight
 }
 
 func refreshProfessionPopulationFromCohorts(silo *model.Silo) {
@@ -641,371 +520,259 @@ func refreshProfessionPopulationFromCohorts(silo *model.Silo) {
 	silo.TotalPopulation = totalPopulation
 }
 
-// cohortIsPolitical resolves the political participation gate with
-// hysteresis: entering requires pro_foreign >= PoliticalEntryThreshold,
-// staying only >= PoliticalExitThreshold (both bypassed by a potential
-// leader). The band keeps cohorts hovering near the gate from flipping
-// between political and unaffiliated every tick.
-func cohortIsPolitical(silo *model.Silo, cohort *model.PopulationCohort, wasPolitical bool) bool {
-	if cohort == nil {
-		return false
-	}
-	threshold := FactionConfig.PoliticalEntryThreshold
-	if wasPolitical {
-		threshold = FactionConfig.PoliticalExitThreshold
-	}
-	if cohort.Ideologies[model.IdeologyProForeign] >= threshold {
-		return true
-	}
-	return hasPotentialLeaderInCohort(silo, cohort.ID)
-}
-
-// RebuildImplicitFactions 依据 cohort 意识形态距离聚类派系 (P1-S2 起为距离
-// 聚类，替代签名分桶)，并为每个派系选出 cohort/resident 双代表。纯分组：
-// 不改动忠诚度——派系驱动的忠诚度演化由 ApplyFactionLoyaltyDynamics 作为
-// 独立的时间缩放步骤执行。
-func RebuildImplicitFactions(silo *model.Silo) {
+// MaintainFactions 事件驱动派系的维护管线 (24 篇 C7)：派系只能由
+// FOUND_FACTION 创立，成员资格持久 (加入/退出见 C9)。本管线不聚类、
+// 不产生新派系，只做：无阵营桶兜底、成员统计重算、筹备期解散、
+// 领袖死亡接任、cohort 代表补员与归属修复。全程确定性：按切片序
+// (ID 升序) 处理，补员掷骰顺序固定。logf 可为 nil (初始化路径)。
+func MaintainFactions(silo *model.Silo, logf func(string)) {
 	if silo == nil {
 		return
 	}
 
-	// C6 共存期：事件发起派系 (founded: 签名) 不参与距离聚类，跨 rebuild
-	// 整体保留；C7 切换后聚类退化为维护管线。
-	founded := foundedFactions(silo)
+	unaffiliatedID := ensureUnaffiliatedFaction(silo)
 
-	for i := range silo.Residents {
-		silo.Residents[i].FactionID = nil
-		silo.Residents[i].IsRepresentative = false
-		if silo.Residents[i].CohortID == nil {
-			continue
-		}
-		cohort := cohortByID(silo, *silo.Residents[i].CohortID)
-		prof := getProfessionByID(silo, silo.Residents[i].ProfessionID)
-		if cohort == nil || prof == nil {
-			continue
-		}
-		silo.Residents[i].FactionID = cohort.FactionID
-		silo.Residents[i].Tags = buildResidentTags(&silo.Residents[i], prof, silo)
-	}
-
-	// Hysteresis needs the previous tick's political status; capture it from
-	// the still-intact FactionID/Factions pairing before anything is cleared.
-	// P1-S2 距离聚类同时需要：上一 tick 归属 (惯性) 与旧派系质心锚点。
-	wasPolitical := make(map[uint]bool, len(silo.Cohorts))
-	prevFactionOf := make(map[uint]uint, len(silo.Cohorts))
+	// 成员资格持久：只修复悬空引用 (派系已解散/不存在)，不做聚类重分配。
 	for i := range silo.Cohorts {
 		cohort := &silo.Cohorts[i]
-		if cohort.FactionID == nil {
-			continue
+		if cohort.FactionID == nil || factionByID(silo, *cohort.FactionID) == nil {
+			cohort.FactionID = uintPtr(unaffiliatedID)
 		}
-		prevFactionOf[cohort.ID] = *cohort.FactionID
-		for j := range silo.Factions {
-			if silo.Factions[j].ID == *cohort.FactionID && silo.Factions[j].Signature != unaffiliatedSignature {
-				wasPolitical[cohort.ID] = true
-				break
-			}
+		if prof := getProfessionByID(silo, cohort.ProfessionID); prof != nil {
+			cohort.Tags = buildCohortTags(cohort, prof, silo)
 		}
 	}
-	anchors := buildFactionAnchors(silo)
 
-	// P1-S3 persistent identity: capture the previous tick's factions before
-	// anything is rebuilt. Lineage clusters inherit the previous faction ID
-	// (and with it Name/IsPublic/Prestige/Stance/Memory); genuinely new
-	// clusters get monotonically increasing IDs, never reused.
-	prevFactionByID := make(map[uint]*model.Faction, len(silo.Factions))
-	prevRankByID := make(map[uint]int, len(silo.Factions))
-	maxPrevID := uint(0)
-	prevUnaffiliated := uint(0)
+	// 逐派系维护：统计重算 → 筹备期解散 → 领袖死亡接任。
+	var dissolved []uint
 	for i := range silo.Factions {
 		f := &silo.Factions[i]
-		prevFactionByID[f.ID] = f
-		prevRankByID[f.ID] = i
-		if f.ID > maxPrevID {
-			maxPrevID = f.ID
-		}
+		members := factionMemberCohorts(silo, f.ID)
+		recomputeFactionStats(silo, f, members)
 		if f.Signature == unaffiliatedSignature {
-			prevUnaffiliated = f.ID
-		}
-	}
-	nextNewID := maxPrevID + 1
-
-	for i := range silo.Cohorts {
-		silo.Cohorts[i].FactionID = nil
-		prof := getProfessionByID(silo, silo.Cohorts[i].ProfessionID)
-		if prof == nil {
 			continue
 		}
-		silo.Cohorts[i].Tags = buildCohortTags(&silo.Cohorts[i], prof, silo)
+		switch {
+		case factionGraceExpired(silo, f):
+			dissolved = append(dissolved, f.ID)
+			if logf != nil {
+				logf(fmt.Sprintf("「%s」筹备期届满未凑够 %d 人，宣告解散。", f.Name, FactionConfig.MinFactionSize))
+			}
+		case !succeedFactionLeader(silo, f):
+			dissolved = append(dissolved, f.ID)
+			if logf != nil {
+				logf(fmt.Sprintf("「%s」领袖死亡且无可接任者，宣告解散。", f.Name))
+			}
+		}
+	}
+	for _, id := range dissolved {
+		dissolveFaction(silo, id, unaffiliatedID)
 	}
 
-	// P1-S2 距离聚类：政治 cohort 按特征向量距离归并 (替代签名分桶)，
-	// 归属惯性压制临界往返。详见 faction_cluster.go。
-	var political []*model.PopulationCohort
-	var unaffiliatedCohorts []*model.PopulationCohort
+	// cohort 代表补员：代表死亡时按 cohort ID 升序重建 (掷骰顺序固定)。
+	// 新代表跟随 cohort 归属；既有代表的派系归属持久，不被 cohort 覆盖。
 	for i := range silo.Cohorts {
 		cohort := &silo.Cohorts[i]
-		prof := getProfessionByID(silo, cohort.ProfessionID)
-		if prof == nil || cohort.Count <= 0 {
+		if cohort.Count <= 0 {
 			continue
 		}
-		if !cohortIsPolitical(silo, cohort, wasPolitical[cohort.ID]) {
-			unaffiliatedCohorts = append(unaffiliatedCohorts, cohort)
-			continue
-		}
-		political = append(political, cohort)
-	}
-
-	clusters := clusterPoliticalCohorts(silo, political, anchors, prevFactionOf)
-
-	// 预先计算大小并过滤掉人数过少的阵营，将其归入“无阵营”
-	validClusters := clusters[:0]
-	for _, c := range clusters {
-		if c.totalPop >= FactionConfig.MinFactionSize {
-			validClusters = append(validClusters, c)
-		} else {
-			unaffiliatedCohorts = append(unaffiliatedCohorts, c.members...)
-		}
-	}
-	clusters = validClusters
-
-	// P1-S3: convert clusters into groups, resolving persistent identity.
-	// Lineage clusters inherit the previous tick's faction record (ID first);
-	// genuinely new clusters get monotonically increasing IDs, never reused.
-	// Signature/tags still derive per tick (centroid profile bucket + dominant
-	// member drive) and feed naming of NEW factions only.
-	type factionGroup struct {
-		id           uint
-		signature    string
-		tags         []string
-		members      []*model.PopulationCohort
-		prev         *model.Faction
-		prevRank     int
-		seedCohortID uint
-		political    bool
-	}
-	groups := make([]factionGroup, 0, len(clusters)+1)
-	newSigCounts := make(map[string]int)
-	for _, c := range clusters {
-		profile := clusterDerivedProfile(c)
-		sort.Strings(profile)
-		drive := clusterDriveTag(c)
-		tags := append(append([]string{}, profile...), drive)
-		signature := strings.Join(profile, "|") + "|" + drive
-		g := factionGroup{
-			signature:    signature,
-			tags:         tags,
-			members:      c.members,
-			seedCohortID: c.seedCohortID,
-			political:    true,
-		}
-		if c.lineage != 0 {
-			if prev, ok := prevFactionByID[c.lineage]; ok {
-				g.prev = prev
-				g.id = prev.ID
-				g.prevRank = prevRankByID[prev.ID]
-			}
-		}
-		if g.id == 0 {
-			g.id = nextNewID
-			nextNewID++
-			newSigCounts[signature]++
-		}
-		groups = append(groups, g)
-	}
-
-	// Deterministic order: size desc; ties broken by inherited identity first
-	// (previous-tick rank ascending — equivalent to S2's lineage-ascending
-	// tie-break, since faction IDs were handed out in rank order), then new
-	// groups by seed cohort ID. Group order drives the RNG consumption order
-	// of ensureRepresentativeResident, so it must stay identical to S2.
-	sort.Slice(groups, func(i, j int) bool {
-		a, b := groups[i], groups[j]
-		sa, sb := factionGroupSize(a.members), factionGroupSize(b.members)
-		if sa != sb {
-			return sa > sb
-		}
-		if (a.prev != nil) != (b.prev != nil) {
-			return a.prev != nil
-		}
-		if a.prev != nil {
-			return a.prevRank < b.prevRank
-		}
-		return a.seedCohortID < b.seedCohortID
-	})
-
-	// 将“无阵营”群体作为一个特殊的组添加到最后；其 ID 同样继承上一 tick 的
-	// 无阵营派系 (若有)，保持持久身份语义。
-	if len(unaffiliatedCohorts) > 0 {
-		unaffiliatedID := prevUnaffiliated
-		if unaffiliatedID == 0 {
-			unaffiliatedID = nextNewID
-			nextNewID++
-		}
-		groups = append(groups, factionGroup{
-			id:        unaffiliatedID,
-			signature: unaffiliatedSignature,
-			tags:      []string{"status:unaffiliated"},
-			members:   unaffiliatedCohorts,
-			political: false,
-		})
-	}
-
-	newSigIndex := make(map[string]int)
-
-	factions := make([]model.Faction, 0, len(groups))
-	for _, g := range groups {
-		members := g.members
-		tags := g.tags
-
-		faction := model.Faction{
-			ID:          g.id,
-			SiloID:      silo.ID,
-			Signature:   g.signature,
-			Tags:        tags,
-			TagStats:    make(map[string]int),
-			MemberCount: 0,
-		}
-
-		if g.signature == unaffiliatedSignature {
-			faction.Name = FactionConfig.NonFactionName
-		} else if g.prev != nil {
-			// Identity inheritance: name/visibility/prestige/stance/memory
-			// follow the persistent ID instead of being re-derived from the
-			// per-tick signature key.
-			faction.Name = g.prev.Name
-			faction.IsPublic = g.prev.IsPublic
-			faction.Prestige = g.prev.Prestige
-			faction.Stance = g.prev.Stance
-			faction.Memory = append([]string(nil), g.prev.Memory...)
-			faction.FounderKind = g.prev.FounderKind
-			faction.FounderID = g.prev.FounderID
-			faction.FoundedYear = g.prev.FoundedYear
-			faction.FoundedMonth = g.prev.FoundedMonth
-		} else {
-			newSigIndex[g.signature]++
-			name := factionNameFromSignature(tags)
-			if newSigCounts[g.signature] > 1 {
-				name = fmt.Sprintf("%s (%d)", name, newSigIndex[g.signature])
-			}
-			faction.Name = name
-			// Stance is fixed at founding: the derived profile joined by "|"
-			// (status_quo when the centroid carries no profile bucket).
-			var profileTags []string
-			for _, tag := range tags {
-				if !strings.HasPrefix(tag, "drive:") {
-					profileTags = append(profileTags, tag)
-				}
-			}
-			faction.Stance = strings.Join(profileTags, "|")
-			if faction.Stance == "" {
-				faction.Stance = "status_quo"
-			}
-			faction.Memory = []string{fmt.Sprintf("founded:Y%dM%d", silo.CurrentYear, silo.CurrentMonth)}
-			faction.FoundedYear = silo.CurrentYear
-			faction.FoundedMonth = silo.CurrentMonth
-		}
-
-		// Demands re-derive every tick from the dominant member cohort's drive.
-		if g.political {
-			drive := strings.TrimPrefix(clusterDriveTag(&distCluster{members: members}), "drive:")
-			faction.Demands = []string{"demand:" + drive}
-		}
-
-		// 非政治阵营的影响力设为 0，确保不参与政治指标计算
-		totalInfluence := 0.0
-		if g.political {
-			for _, cohort := range members {
-				weight := float64(cohort.Count)
-				totalInfluence += cohort.Influence * weight
-			}
-		}
-		faction.Influence = totalInfluence
-
-		var repCohort *model.PopulationCohort
-		bestScore := -1.0
-		for _, cohort := range members {
-			cohort.FactionID = uintPtr(faction.ID)
-
-			// 宏观统计：统计阵营内不同职业和标签的分布
-			prof := getProfessionByID(silo, cohort.ProfessionID)
-			if prof != nil {
-				faction.TagStats["prof:"+prof.Name] += cohort.Count
-			}
-			for _, t := range cohort.Tags {
-				faction.TagStats[t] += cohort.Count
-			}
-
-			score := representativeCohortScore(silo, cohort)
-			if score > bestScore {
-				bestScore = score
-				repCohort = cohort
-			}
-			faction.MemberCount += cohort.Count
-		}
-
-		var leader *model.Resident
-		if repCohort != nil {
-			faction.RepresentativeCohortID = uintPtr(repCohort.ID)
-			rep := ensureRepresentativeResident(silo, repCohort)
-			if rep != nil {
-				rep.IsRepresentative = true
-				rep.FactionID = uintPtr(faction.ID)
-				if prof := getProfessionByID(silo, rep.ProfessionID); prof != nil {
-					rep.Tags = buildResidentTags(rep, prof, silo)
-				}
-				faction.RepresentativeKind = string(ActorResident)
-				faction.RepresentativeID = rep.ID
-				faction.RepresentativeName = rep.Name
-				leader = rep
-			} else {
-				faction.RepresentativeName = repCohort.Name
-			}
-		}
-
-		// 计算阵营凝聚力 (传入 Silo, 成员列表, 和领袖)
-		faction.Cohesion = factionCohesion(silo, members, leader)
-
-		factions = append(factions, faction)
-	}
-
-	// 同步 Resident 的 FactionID。忠诚度演化不在此处发生：它被移到
-	// ApplyFactionLoyaltyDynamics，由回合管线按游戏时间显式驱动，零时长
-	// 步骤不再推进政治演化。
-	for i := range silo.Residents {
-		resident := &silo.Residents[i]
-		if resident.CohortID == nil {
-			continue
-		}
-		if cohort := cohortByID(silo, *resident.CohortID); cohort != nil {
-			resident.FactionID = cohort.FactionID
-			if prof := getProfessionByID(silo, resident.ProfessionID); prof != nil {
-				resident.Tags = buildResidentTags(resident, prof, silo)
-			}
+		rep := ensureRepresentativeResident(silo, cohort)
+		if rep != nil && (rep.FactionID == nil || factionByID(silo, *rep.FactionID) == nil) {
+			rep.FactionID = uintPtr(*cohort.FactionID)
 		}
 	}
 
-	silo.Factions = append(factions, founded...)
-
-	// 发起派系的居民代表在 cohort 同步中被清掉了标志，这里重新绑定。
+	// 代表标志以派系引用为准：IsRepresentative = 某派系的 RESIDENT 代表。
+	repIDs := make(map[uint]bool)
 	for i := range silo.Factions {
 		f := &silo.Factions[i]
-		if !strings.HasPrefix(f.Signature, foundedSignaturePrefix) || f.RepresentativeKind != string(ActorResident) {
-			continue
-		}
-		for j := range silo.Residents {
-			r := &silo.Residents[j]
-			if r.ID != f.RepresentativeID {
-				continue
-			}
-			r.IsRepresentative = true
-			r.FactionID = uintPtr(f.ID)
-			if prof := getProfessionByID(silo, r.ProfessionID); prof != nil {
-				r.Tags = buildResidentTags(r, prof, silo)
-			}
-			releaseResidentRepresentativeClaims(silo, r.ID, f.ID)
-			break
+		if f.RepresentativeKind == string(ActorResident) && f.RepresentativeID > 0 {
+			repIDs[f.RepresentativeID] = true
 		}
 	}
+	for i := range silo.Residents {
+		r := &silo.Residents[i]
+		if r.FactionID != nil && factionByID(silo, *r.FactionID) == nil {
+			r.FactionID = uintPtr(unaffiliatedID)
+		}
+		r.IsRepresentative = r.Alive && repIDs[r.ID]
+		// 不挂 cohort 的个体 (18 号正典具名人物) 状态由链条节点权威维护，
+		// 其自定义标签不可被派生标签覆写。
+		if r.CohortID == nil {
+			continue
+		}
+		if prof := getProfessionByID(silo, r.ProfessionID); prof != nil {
+			r.Tags = buildResidentTags(r, prof, silo)
+		}
+	}
+}
+
+// ensureUnaffiliatedFaction 无阵营桶：持久 ID，缺失时以 max+1 新建。
+func ensureUnaffiliatedFaction(silo *model.Silo) uint {
+	for i := range silo.Factions {
+		if silo.Factions[i].Signature == unaffiliatedSignature {
+			return silo.Factions[i].ID
+		}
+	}
+	nextID := uint(1)
+	for i := range silo.Factions {
+		if silo.Factions[i].ID >= nextID {
+			nextID = silo.Factions[i].ID + 1
+		}
+	}
+	silo.Factions = append(silo.Factions, model.Faction{
+		ID:        nextID,
+		SiloID:    silo.ID,
+		Name:      FactionConfig.NonFactionName,
+		Signature: unaffiliatedSignature,
+		Tags:      []string{"status:unaffiliated"},
+		TagStats:  map[string]int{},
+	})
+	return nextID
+}
+
+func factionMemberCohorts(silo *model.Silo, factionID uint) []*model.PopulationCohort {
+	var members []*model.PopulationCohort
+	for i := range silo.Cohorts {
+		c := &silo.Cohorts[i]
+		if c.FactionID != nil && *c.FactionID == factionID {
+			members = append(members, c)
+		}
+	}
+	return members
+}
+
+// recomputeFactionStats 从成员 cohort 重算组织统计；身份字段
+// (Name/IsPublic/Prestige/Stance/Memory/Founder/代表) 持久不动。
+func recomputeFactionStats(silo *model.Silo, f *model.Faction, members []*model.PopulationCohort) {
+	f.MemberCount = 0
+	f.TagStats = make(map[string]int)
+	totalInfluence := 0.0
+	for _, cohort := range members {
+		f.MemberCount += cohort.Count
+		if f.Signature != unaffiliatedSignature {
+			totalInfluence += cohort.Influence * float64(cohort.Count)
+		}
+		if prof := getProfessionByID(silo, cohort.ProfessionID); prof != nil {
+			f.TagStats["prof:"+prof.Name] += cohort.Count
+		}
+		for _, t := range cohort.Tags {
+			f.TagStats[t] += cohort.Count
+		}
+	}
+	if f.Signature == unaffiliatedSignature {
+		f.Influence = 0
+		f.Cohesion = 0
+		f.Demands = nil
+		return
+	}
+	f.Influence = totalInfluence
+	var leader *model.Resident
+	if f.RepresentativeKind == string(ActorResident) {
+		if r := residentByID(silo, f.RepresentativeID); r != nil && r.Alive {
+			leader = r
+		}
+	}
+	f.Cohesion = factionCohesion(silo, members, leader)
+	f.Demands = []string{"demand:" + factionDriveTag(members)}
+}
+
+// factionDriveTag 成员主导 drive：人数最多者，平局取 cohort ID 小者。
+func factionDriveTag(members []*model.PopulationCohort) string {
+	var best *model.PopulationCohort
+	for _, m := range members {
+		if best == nil || m.Count > best.Count || (m.Count == best.Count && m.ID < best.ID) {
+			best = m
+		}
+	}
+	if best != nil {
+		for _, tag := range best.Tags {
+			if strings.HasPrefix(tag, "drive:") {
+				return strings.TrimPrefix(tag, "drive:")
+			}
+		}
+	}
+	return "care"
+}
+
+// factionGraceExpired 筹备期届满 (成立满 FactionGraceMonths 个月) 且
+// 人数不足 MinFactionSize。成立年月缺失 (0) 时不判解散。
+func factionGraceExpired(silo *model.Silo, f *model.Faction) bool {
+	if f.FoundedYear == 0 || f.MemberCount >= FactionConfig.MinFactionSize {
+		return false
+	}
+	ageMonths := (silo.CurrentYear-f.FoundedYear)*12 + (silo.CurrentMonth - f.FoundedMonth)
+	return ageMonths >= FactionConfig.FactionGraceMonths
+}
+
+// succeedFactionLeader 领袖死亡/离任时自动接任 (24 篇 §1.5)：派系内
+// 存活居民按 SuccessionPrestigeWeight×(prestige/100) + (1−w)×ambition
+// 评分，平局取 ID 小者。返回 false = 无可接任者，派系应解散。
+// PLAYER/NPC 领袖不死亡，恒有主。
+func succeedFactionLeader(silo *model.Silo, f *model.Faction) bool {
+	if f.RepresentativeKind == string(ActorPlayer) || f.RepresentativeKind == string(ActorNPC) {
+		return true
+	}
+	if f.RepresentativeKind == string(ActorResident) {
+		if r := residentByID(silo, f.RepresentativeID); r != nil && r.Alive &&
+			r.FactionID != nil && *r.FactionID == f.ID {
+			return true
+		}
+	}
+	var best *model.Resident
+	bestScore := -1.0
+	for i := range silo.Residents {
+		r := &silo.Residents[i]
+		if !r.Alive || r.FactionID == nil || *r.FactionID != f.ID {
+			continue
+		}
+		score := FactionConfig.SuccessionPrestigeWeight*(DerivedPrestige(r.Ambition, r.Influence)/100) +
+			(1-FactionConfig.SuccessionPrestigeWeight)*r.Ambition
+		if score > bestScore || (score == bestScore && best != nil && r.ID < best.ID) {
+			best, bestScore = r, score
+		}
+	}
+	if best == nil {
+		return false
+	}
+	f.RepresentativeKind = string(ActorResident)
+	f.RepresentativeID = best.ID
+	f.RepresentativeName = best.Name
+	best.IsRepresentative = true
+	return true
+}
+
+// dissolveFaction 解散派系：成员 cohort 与居民回无阵营桶，派系除名。
+func dissolveFaction(silo *model.Silo, factionID, unaffiliatedID uint) {
+	for i := range silo.Cohorts {
+		c := &silo.Cohorts[i]
+		if c.FactionID != nil && *c.FactionID == factionID {
+			c.FactionID = uintPtr(unaffiliatedID)
+		}
+	}
+	for i := range silo.Residents {
+		r := &silo.Residents[i]
+		if r.FactionID != nil && *r.FactionID == factionID {
+			r.FactionID = uintPtr(unaffiliatedID)
+			r.IsRepresentative = false
+		}
+	}
+	kept := silo.Factions[:0]
+	for _, f := range silo.Factions {
+		if f.ID != factionID {
+			kept = append(kept, f)
+		}
+	}
+	silo.Factions = kept
+}
+
+func residentByID(silo *model.Silo, id uint) *model.Resident {
+	for i := range silo.Residents {
+		if silo.Residents[i].ID == id {
+			return &silo.Residents[i]
+		}
+	}
+	return nil
 }
 
 func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCohort) *model.Resident {

@@ -2,14 +2,12 @@ package engine
 
 import (
 	"fmt"
-	"strings"
 
 	"silo40/internal/model"
 )
 
-// foundedSignaturePrefix 事件发起派系的签名前缀 (24 篇 C6)。自动聚类
-// (RebuildImplicitFactions) 在 C6 共存期整体保留这类派系，C7 切换后
-// 聚类退化为维护管线。
+// foundedSignaturePrefix 事件发起派系的签名前缀 (24 篇 C6)。C7 起
+// 发起是派系的唯一来源，MaintainFactions 只做生命周期维护。
 const foundedSignaturePrefix = "founded:"
 
 // foundFactionEligible 发起资格三闸 + 无政治派系 (24 篇 §1)：
@@ -87,6 +85,8 @@ func (e *GameEngine) applyFactionFoundActor(silo *model.Silo, actor *ActorView) 
 	case pf >= 0.3:
 		signature += "|" + model.IdeologyProForeign + ":Medium"
 		tags = append(tags, model.IdeologyProForeign+":Medium")
+	default:
+		tags = append(tags, "ideology:status_quo")
 	}
 
 	name := actor.Label() + "的派系"
@@ -120,32 +120,7 @@ func (e *GameEngine) applyFactionFoundActor(silo *model.Silo, actor *ActorView) 
 				break
 			}
 		}
-		releaseResidentRepresentativeClaims(silo, actorID, faction.ID)
 	}
 
 	e.logf(fmt.Sprintf("%s 发起派系聚类事件，创立「%s」(零成员筹备期)。", actor.Label(), name))
-}
-
-// releaseResidentRepresentativeClaims 居民发起派系后，解除其他派系对其
-// 代表身份的引用 (聚类可能同时选其为 cohort 代表)，避免双重代表。
-func releaseResidentRepresentativeClaims(silo *model.Silo, residentID, keepFactionID uint) {
-	for i := range silo.Factions {
-		f := &silo.Factions[i]
-		if f.ID != keepFactionID && f.RepresentativeKind == string(ActorResident) && f.RepresentativeID == residentID {
-			f.RepresentativeKind = ""
-			f.RepresentativeID = 0
-			f.RepresentativeName = ""
-		}
-	}
-}
-
-// foundedFactions 收集事件发起派系 (rebuild 共存期保留用)。
-func foundedFactions(silo *model.Silo) []model.Faction {
-	var out []model.Faction
-	for i := range silo.Factions {
-		if strings.HasPrefix(silo.Factions[i].Signature, foundedSignaturePrefix) {
-			out = append(out, silo.Factions[i])
-		}
-	}
-	return out
 }

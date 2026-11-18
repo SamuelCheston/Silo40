@@ -22,10 +22,21 @@ func TestLegitimacySurvivesRealMonthlyTick(t *testing.T) {
 	}
 	silo := svc.silo
 
-	// 有派系、无叛乱：修复前此月过后正统性会被覆写为凝聚力 (0.9)，
-	// 修复后必须原样留存。正统性 0.2 同时低于 mayor_public_stand 的
-	// 0.5 门槛，排除担当时刻写入的干扰。
-	silo.Factions = []model.Faction{{ID: 1, Name: "Persist Probe", Influence: 1, Cohesion: 0.9}}
+	// 有派系、无叛乱：修复前此月过后正统性会被覆写为凝聚力，修复后必须
+	// 原样留存。C7：探针必须是合法发起派系——组织统计由成员 cohort 派生，
+	// 注入 Influence/Cohesion 不再生效。零成员筹备期派系合法且 totalInf=0，
+	// 月度结算不推高叛乱，Rebellion 保持 0。正统性 0.2 同时低于
+	// mayor_public_stand 的 0.5 门槛，排除担当时刻写入的干扰。
+	silo.Factions = []model.Faction{{
+		ID: 99, SiloID: silo.ID, Name: "Persist Probe",
+		Signature:          "founded:PLAYER:1|" + model.IdeologyProForeign + ":High",
+		Tags:               []string{model.IdeologyProForeign + ":High"},
+		TagStats:           map[string]int{},
+		FoundedYear:        silo.CurrentYear,
+		FoundedMonth:       silo.CurrentMonth,
+		RepresentativeKind: "PLAYER",
+		RepresentativeID:   1,
+	}}
 	silo.Rebellion = 0
 	silo.SetMayorLegitimacy(0.2)
 	if _, err := svc.PassTime(1); err != nil {

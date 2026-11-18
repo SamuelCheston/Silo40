@@ -17,24 +17,10 @@ type FactionTuning struct {
 	// NonFactionName: display name of the unaffiliated bucket.
 	NonFactionName string
 
-	// ---- political participation gate ----
-
-	// PoliticalEntryThreshold: an unaffiliated cohort politicizes when its
-	// pro_foreign reaches this value (or a potential leader emerges).
-	PoliticalEntryThreshold float64
-	// PoliticalExitThreshold: a political cohort de-politicizes only when its
-	// pro_foreign falls below this value (and it has no potential leader).
-	// Kept below PoliticalEntryThreshold as hysteresis so cohorts hovering
-	// near the gate do not flip every tick. Equal to the entry threshold
-	// disables hysteresis.
-	PoliticalExitThreshold float64
-
 	// AmbitionHighThreshold: ambition at or above this marks a resident as
-	// "ambitious" (drive:ambition / status:ambitious) and is the ambition
-	// half of the potential-leader gate.
+	// "ambitious" (drive:ambition / status:ambitious)。纯 tagging 参数——
+	// 潜在领袖硬门槛已废除 (24 篇 C7)，野心只进加权决策权重。
 	AmbitionHighThreshold float64
-	// LeaderInfluenceThreshold: influence half of the potential-leader gate.
-	LeaderInfluenceThreshold float64
 
 	// ---- drive tag selection ----
 
@@ -83,11 +69,11 @@ type FactionTuning struct {
 	FormationBiasLeader float64 // leader-formed (no formation tier) factions
 	// FormationNonPublicBase / FormationPrestigeDivisor: non-public factions
 	// keep only base + prestige/divisor of their organization strength.
-	FormationNonPublicBase     float64
-	FormationPrestigeDivisor   float64
-	UnrestDissentBase          float64 // target -= formation*unrest*(base + extra*dissent)
-	UnrestDissentExtra         float64
-	OrderLegitimacyGain        float64 // target += formation*legitimacy*gain*order
+	FormationNonPublicBase   float64
+	FormationPrestigeDivisor float64
+	UnrestDissentBase        float64 // target -= formation*unrest*(base + extra*dissent)
+	UnrestDissentExtra       float64
+	OrderLegitimacyGain      float64 // target += formation*legitimacy*gain*order
 
 	// ---- visibility model ----
 
@@ -102,11 +88,6 @@ type FactionTuning struct {
 	FeatureWeightProForeign float64
 	FeatureWeightLoyalty    float64
 	FeatureWeightClass      float64
-	// ClusterJoinRadius: cohort 与派系质心的距离不超过该半径才并入。
-	ClusterJoinRadius float64
-	// ClusterInertiaBonus: 归属惯性——留在上一 tick 所属派系时，半径放大为
-	// JoinRadius*(1+bonus)。压制临界往返 (A→B→A) 振荡。
-	ClusterInertiaBonus float64
 
 	// ---- representative ambition generation ----
 
@@ -120,6 +101,11 @@ type FactionTuning struct {
 	FoundPrestigeThreshold  float64 // 发起所需派生威望 (50×(A+I))
 	FoundIntensityThreshold float64 // 发起所需意识形态强度 |pf−0.5|
 	FoundAPCost             float64 // 发起 AP 成本 (与 ACTION_COSTS 一致)
+
+	// ---- 派系生命周期 (24 篇 §1.5, C7) ----
+
+	FactionGraceMonths       int     // 筹备期月数：届满不足 MinFactionSize 即解散
+	SuccessionPrestigeWeight float64 // 接任评分威望权重 (ambition 占 1−w)
 }
 
 // FactionConfig is the active tuning for faction clustering and the
@@ -130,11 +116,7 @@ var FactionConfig = FactionTuning{
 	BadRelationThreshold: 0.05,
 	NonFactionName:       "Unaffiliated",
 
-	PoliticalEntryThreshold: 0.7,
-	PoliticalExitThreshold:  0.6, // hysteresis band: exit only below 0.6
-
-	AmbitionHighThreshold:    0.62,
-	LeaderInfluenceThreshold: 0.25,
+	AmbitionHighThreshold: 0.62,
 
 	DriveStabilityPanicThreshold:    0.5,
 	DriveStabilityCohesionThreshold: 0.45,
@@ -170,8 +152,6 @@ var FactionConfig = FactionTuning{
 	FeatureWeightProForeign: 1.0,
 	FeatureWeightLoyalty:    0.5,
 	FeatureWeightClass:      0.4,
-	ClusterJoinRadius:       0.30,
-	ClusterInertiaBonus:     0.5,
 
 	AmbitionBase:            0.22,
 	AmbitionPowerWeight:     0.40,
@@ -181,4 +161,7 @@ var FactionConfig = FactionTuning{
 	FoundPrestigeThreshold:  50,
 	FoundIntensityThreshold: 0.25,
 	FoundAPCost:             20,
+
+	FactionGraceMonths:       18,
+	SuccessionPrestigeWeight: 0.5,
 }
