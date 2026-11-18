@@ -74,6 +74,8 @@ const recapLineTitle: Record<string, string> = {
 
 function App() {
     const [resultText, setResultText] = useState("在下方输入特工代号 👇");
+    // 最近一次结算的死亡归因行（后端 [人口] 月度日志），挂在人口读数上。
+    const [deathNote, setDeathNote] = useState<string | null>(null);
     const [name, setName] = useState('');
     const [gameStarted, setGameStarted] = useState(false);
     const [showSetup, setShowSetup] = useState(false);
@@ -310,15 +312,21 @@ function App() {
 
     const drainOperation = useCallback(async () => {
         let last: any = null;
+        let deathLine: string | null = null;
         for (let i = 0; i < 256; i++) {
             const step = await ProcessNextEvent();
             last = step;
+            // 死亡归因行由后端月度结算写入 logs；一次操作可能跨多步，取最后一条。
+            for (const line of step.logs || []) {
+                if (line.startsWith('[人口]')) deathLine = line;
+            }
             if (step.operation_complete) break;
         }
         if (!last || !last.operation_complete) {
             throw new Error('Operation exceeded 256 event steps; save was not attempted.');
         }
         // 只在最终步应用状态：中间事件步不触发整树重渲染，避免一次操作多次重渲染。
+        setDeathNote(deathLine);
         applyEventState(last);
         await refreshEventHistory();
         return last;
@@ -330,6 +338,7 @@ function App() {
         setSilo(null);
         setAgent(null);
         setWorld(null);
+        setDeathNote(null);
         setEventHistory([]);
         setMoments([]);
         setLinesProgress(null);
@@ -491,7 +500,7 @@ function App() {
 
     return (
         <Box minH="100vh" bg="white" color="gray.800" display="flex" flexDirection="column">
-            {gameStarted && <HeaderStats agent={agent} silo={silo} agentStats={agentStats} />}
+            {gameStarted && <HeaderStats agent={agent} silo={silo} agentStats={agentStats} deathNote={deathNote} />}
             
             <HStack align="stretch" flex={1} w="full" gap={0} overflow="hidden">
                 {/* Sidebar */}

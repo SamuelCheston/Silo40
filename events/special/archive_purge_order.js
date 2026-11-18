@@ -1,7 +1,7 @@
 defineEvent({
   id: "archive_purge_order",
   title: "档案清洗令",
-  description: "IT 部门对觉醒的追问发动了档案清洗。目录被逐条抹除——但抹除这个动作本身，也被人们记住了。",
+  description: "IT 部门对觉醒的追问发动了档案清洗。追问暂时被压下去，楼梯间的惊慌与怨气却越传越远。",
   type: "SOCIAL",
   fire_mode: "ONCE",
   trigger: siloMetricGte("history_burden", 0.12),

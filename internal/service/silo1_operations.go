@@ -29,7 +29,7 @@ type silo1OperationDef struct {
 var silo1OperationDefinitions = []silo1OperationDef{
 	{
 		ActionID: Silo1OpDeceive, Label: "投放伪造档案", APCost: 20, DelayMonths: 2,
-		Description: "2 个月后 Silo 1 叛乱 +0.15，各部门恐慌与亲外思潮上升。暴露 +10%，结算时怀疑度 +0.04。",
+		Description: "2 个月后 Silo 1 叛乱最多增加 0.15，各部门恐慌最多增加 0.06、亲外思潮最多增加 0.04。暴露 +10%，结算时怀疑度 +0.04。",
 		Effect:      "推动目标叛乱与亲外思潮", Exposure: 0.10, OpeningSuspicion: 0.006, TraceSuspicion: 0.04,
 	},
 }
@@ -143,7 +143,6 @@ func (s *GameService) applySilo1Operation(def silo1OperationDef, operationID int
 	historyBefore := snapshotHistoryMetrics(target)
 	switch def.ActionID {
 	case Silo1OpDeceive:
-		before := target.Rebellion
 		target.Rebellion = clampSilo1Unit(target.Rebellion + 0.15)
 		target.HistoryBurden = clampSilo1Unit(target.HistoryBurden + 0.02)
 		for i := range target.Professions {
@@ -153,7 +152,8 @@ func (s *GameService) applySilo1Operation(def silo1OperationDef, operationID int
 		for i := range target.Cohorts {
 			target.Cohorts[i].Ideologies[model.IdeologyProForeign] = clampSilo1Unit(target.Cohorts[i].Ideologies[model.IdeologyProForeign] + 0.04)
 		}
-		resolution := fmt.Sprintf("叛乱 %.2f→%.2f；全部部门恐慌 +0.06、亲外思潮 +0.04。", before, target.Rebellion)
+		resolution := fmt.Sprintf("叛乱 %.2f→%.2f；部门平均亲外思潮 %.2f→%.2f。",
+			historyBefore.rebellion, target.Rebellion, historyBefore.proForeign, averageSiloProForeign(target))
 		s.recordHistoryImpact(target, operationID, def, historyBefore, resolution)
 		return resolution
 	default:

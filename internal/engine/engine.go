@@ -47,6 +47,10 @@ type GameEngine struct {
 	tickStories  []*model.StoryEvent
 	actionResult *model.ActionResult
 	logs         []string
+	// pendingDeathParts 本批 mutation 的死因拆分快照：JS 突变流可能先覆写
+	// rebellion 再投递 apply_population_deaths，归因必须按批前状态读取才与
+	// metrics_update 的死亡率口径一致 (见 deathRateBreakdown)。
+	pendingDeathParts []deathCausePart
 
 	// 配置常量
 	perCapitaConsumption map[string]float64
@@ -821,7 +825,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 			silo.VictoryStatus = &model.VictoryStatus{
 				IsWon:       false,
 				Type:        "AGENT_COMPROMISED",
-				Description: "由于传播过多掺杂了个人意图的虚假信息，你的特工身份彻底暴露。司法部已经下达了逮捕令。",
+				Description: "一次次行动留下的痕迹终于被串了起来。你的特工身份彻底暴露，司法部已经下达逮捕令。",
 			}
 			return
 		}
@@ -996,10 +1000,9 @@ func (e *GameEngine) updateResources(silo *model.Silo, deltaYears float64) {
 		if prof == nil {
 			return 0
 		}
-		// 效率默认 1.0
-		eff := 1.0
+		eff := clampUnit(prof.Productivity)
 		if isRebelling {
-			eff = 0.3
+			eff *= 0.3
 		}
 		return eff * float64(prof.Population)
 	}
@@ -1105,9 +1108,10 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 		silo.Rebellion = 0
 	}
 
-	// 叛乱侵蚀现任市长个人正统性 (ADR-0007 后果条、18 §4)：接既有
-	// MayorLegitimacy，不新造状态；纯算术不消耗 RNG，叛乱为 0 时逐位不变。
-	ApplyRebellionLegitimacyErosion(silo, deltaYears)
+	// 叛乱侵蚀现任市长个人正统性 (ADR-0007 后果条、18 §4) 已移到
+	// runMonthlyPoliticalDispatch：JS 成功路与 Go 兜底路共用的唯一月度
+	// 路径。此处曾直接调用，但本函数只在 JS 机制失败时进入（真实流程
+	// 不可达），侵蚀从未发生；不要在这里恢复它，否则会双跑。
 
 	// DeptTension must not depend on Go map iteration or DB preload order.
 	// Sort a copy by persistent profession ID, then sort each Relations map by key.

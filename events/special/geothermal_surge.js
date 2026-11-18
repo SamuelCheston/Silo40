@@ -1,7 +1,7 @@
 defineEvent({
   id: "geothermal_surge",
   title: "地热脉冲",
-  description: "深井传来一次季节性的地热脉冲，发电机出力短暂回升。走廊里的灯亮了一些，人们的脸色也亮了一些。",
+  description: "深井传来一次季节性的地热脉冲，发电机借这股脉冲向储备补进了 600 能源。走廊里的灯亮了一些，人们的脸色也亮了一些。",
   type: "EXTERNAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 12,

@@ -126,6 +126,17 @@ v7 轨迹运行在「无结局链/失败结局/逃出/谈判/时间渗透/反制
 对当前代码不可比；按纪律不保留两份都宣称有效的基准。`parity-v7-three-silo.json`
 已删除，当前唯一有效基准为 `parity-v8-three-silo.json`。
 
+**2026-11-16 正统性修复后再基线**：`metrics_update` 不再把 legitimacy 覆写为
+凝聚力、叛乱侵蚀接入真实月度路径（0170c55、972a8b5）之后，v8 快照的
+legitimacy 轨迹改变（旧：6 种子恒为 1.000；新：0.9623–0.9698，逐月侵蚀可见），
+结局与结算月不变（6 种子仍为 RESET @37–38 月）。本次按同一 harness 重新生成，
+基线版本 `c4e161e`（其上仅文档提交），种子 7–12，双跑 `cmp` 逐字节一致。
+
+- 新 SHA-256：`f23f3ab2014924d2c54860a7593ec4f25f5f7c9bbc85b4b77f59bab5e4f39b43`
+  （转储 13690 字节）
+- 旧快照 SHA-256：`c63e0a57b9e374611f5b74ae267a8e3b24f18bfd5c6dd0c8b096d3df5de09cfe`
+  （13588 字节）已作废，不作为任何验收依据。
+
 重建命令（绝对路径）：
 `SILO40_PARITY_DUMP=<绝对路径> go test ./internal/service -run '^TestParityHarnessDump$' -v`。
 

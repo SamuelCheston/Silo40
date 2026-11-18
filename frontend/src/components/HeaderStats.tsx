@@ -3,14 +3,17 @@ import { Box, HStack, Text, VStack, Badge } from "@chakra-ui/react";
 import { Agent, AgentStats, Silo } from "../logic/models";
 import { Zap, Eye, Star, Megaphone, Users, Clock, Shield, Flame } from 'lucide-react';
 import { Tooltip } from "./ui/tooltip";
+import { ResourcePanel } from "./ResourcePanel";
 
 interface HeaderStatsProps {
     agent: Agent | null;
     silo: Silo | null;
     agentStats: AgentStats | null;
+    // 最近一次结算的死因归因行（后端月度日志），挂在人口读数上。
+    deathNote?: string | null;
 }
 
-export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }: HeaderStatsProps) {
+export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats, deathNote }: HeaderStatsProps) {
     if (!agent || !silo || !agentStats) return null;
 
     return (
@@ -39,7 +42,7 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }
 
                 {/* Global Stats */}
                 <HStack gap={4}>
-                    <Tooltip content="地堡正统性。受管理决策和全局事件影响。">
+                    <Tooltip content="市长的正统性。随管理决策与事件变化，也会受叛乱侵蚀。">
                         <HStack gap={1} cursor="help">
                             <Shield size={16} color="#3182ce" />
                             <Text fontSize="sm" fontWeight="bold" color="blue.600">
@@ -57,14 +60,28 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }
                         </HStack>
                     </Tooltip>
 
-                    <Tooltip content="地堡总人口。">
+                    <Tooltip
+                        content={
+                            deathNote ? (
+                                <VStack align="start" gap={1} p={1}>
+                                    <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>地堡总人口</Text>
+                                    <Text color="red.300">{deathNote}</Text>
+                                    <Text fontSize="10px" color="gray.400">死因按死亡率构成逐项拆分；库存耗尽、结构失稳与高叛乱都会抬升死亡。</Text>
+                                </VStack>
+                            ) : (
+                                "地堡总人口。"
+                            )
+                        }
+                    >
                         <HStack gap={1} cursor="help">
-                            <Users size={16} color="#38a169" />
-                            <Text fontSize="sm" fontWeight="bold" color="green.600">
+                            <Users size={16} color={deathNote ? "#e53e3e" : "#38a169"} />
+                            <Text fontSize="sm" fontWeight="bold" color={deathNote ? "red.600" : "green.600"}>
                                 {silo.total_population}
                             </Text>
                         </HStack>
                     </Tooltip>
+
+                    <ResourcePanel silo={silo} />
                 </HStack>
 
                 {/* Agent Stats */}
@@ -101,18 +118,18 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats }
                             <VStack align="start" gap={1} p={1}>
                                 <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>怀疑度</Text>
                                 <Text>当前等级: {agent.suspicion_level.toFixed(2)}</Text>
-                                <Text fontSize="10px" color="gray.400">超过 0.5 将显著增加被发现风险</Text>
+                                <Text fontSize="10px" color="gray.400">达到 1.00 会触发身份暴露结局。怀疑度随时间下降，每年减少 0.05。</Text>
                                 <VStack align="start" gap={0} mt={1}>
-                                    <Text fontSize="10px">主要来源:</Text>
-                                    <Text fontSize="10px" color="red.300">· 传播虚假信息</Text>
-                                    <Text fontSize="10px" color="red.300">· 执行高风险职业行动</Text>
+                                    <Text fontSize="10px">累积来源</Text>
+                                    <Text fontSize="10px" color="red.300">· 留下痕迹的探查</Text>
+                                    <Text fontSize="10px" color="red.300">· 涉及怀疑度的职业行动与行动反查</Text>
                                 </VStack>
                             </VStack>
                         }
                     >
                         <HStack gap={1} cursor="help">
-                            <Eye size={16} color={agent.suspicion_level > 0.5 ? "#e53e3e" : "#38a169"} />
-                            <Text fontSize="sm" fontWeight="bold" color={agent.suspicion_level > 0.5 ? "red.600" : "green.600"}>
+                            <Eye size={16} color={agent.suspicion_level >= 1 ? "#e53e3e" : "#38a169"} />
+                            <Text fontSize="sm" fontWeight="bold" color={agent.suspicion_level >= 1 ? "red.600" : "green.600"}>
                                 {agent.suspicion_level.toFixed(2)}
                             </Text>
                         </HStack>

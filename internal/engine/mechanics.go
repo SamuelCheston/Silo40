@@ -858,6 +858,18 @@ func (e *GameEngine) applyMechanicMutations(event *GameEvent, mutations []Mechan
 	silo, _ := event.Data["silo"].(*model.Silo)
 	agent, _ := event.Data["agent"].(*model.Agent)
 
+	// 死因归因快照必须在批前取：同一批里 silo_metric_set rebellion 先于
+	// apply_population_deaths 应用，批中状态已不是 JS 计算死亡率时的口径。
+	e.pendingDeathParts = nil
+	if silo != nil {
+		for _, mutation := range mutations {
+			if mutation.Type == "apply_population_deaths" {
+				e.pendingDeathParts = deathRateBreakdown(silo)
+				break
+			}
+		}
+	}
+
 	for _, mutation := range mutations {
 		// 直接应用变更
 		e.ApplyMutation(silo, agent, actorRef, mutation)
@@ -933,7 +945,16 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 	case "sync_profession_ideologies_from_cohorts":
 		e.syncProfessionIdeologiesFromCohorts(silo)
 	case "apply_population_deaths":
+		parts := e.pendingDeathParts
+		e.pendingDeathParts = nil
 		applyPopulationDeathsToCohorts(silo, mutation.IntValue)
+		if silo != nil && mutation.IntValue > 0 {
+			if parts == nil {
+				// 批外直接调用 (测试/兜底路径) 时按当前状态归因。
+				parts = deathRateBreakdown(silo)
+			}
+			e.logf(deathAttributionLine(silo, mutation.IntValue, parts))
+		}
 	case "refresh_profession_population_from_cohorts":
 		refreshProfessionPopulationFromCohorts(silo)
 	case "faction_metric_delta_actor":
@@ -949,6 +970,125 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 	case "log":
 		e.logf(mutation.Text)
 	}
+}
+
+// ============ 死亡归因 (纯展示层) ============
+//
+// apply_population_deaths 只携带死亡总数，死因拆分在 Go 侧按
+// events/mechanics/core_systems.js metrics_update 的死亡率公式逐项还原：
+// 基础 0.001；每种耗尽资源 +0.05；楼层平均稳定度 < 0.8 时 +(0.8-均值)*0.25；
+// 叛乱 > 0.8 时 +(叛乱-0.8)*0.2。全部为纯算术，不消耗 RNG、不修改任何
+// 状态与数值，只产出一条带死因的月度日志。
+
+// deathCausePart 死因拆分之一：Rate 为该死因在总死亡率中的份额。
+type deathCausePart struct {
+	Label string
+	Rate  float64
+}
+
+// deathRateBreakdown 按 JS 侧公式把当前死亡率拆成逐项死因。
+// 与 mechanicScriptContext 一致：资源按 Type→Amount 聚合后判定耗尽
+// (同类型多条记录后者生效)，输出按类型名排序保证日志确定性。
+func deathRateBreakdown(silo *model.Silo) []deathCausePart {
+	if silo == nil {
+		return nil
+	}
+	parts := []deathCausePart{{Label: "基础死亡", Rate: 0.001}}
+
+	amounts := make(map[string]float64, len(silo.Resources))
+	order := make([]string, 0, len(silo.Resources))
+	for _, res := range silo.Resources {
+		if _, ok := amounts[res.Type]; !ok {
+			order = append(order, res.Type)
+		}
+		amounts[res.Type] = res.Amount
+	}
+	sort.Strings(order)
+	for _, resType := range order {
+		if amounts[resType] <= 0 {
+			parts = append(parts, deathCausePart{Label: resourceLabelZH(resType) + "耗尽", Rate: 0.05})
+		}
+	}
+
+	if len(silo.Floors) > 0 {
+		total := 0.0
+		for _, floor := range silo.Floors {
+			total += floor.Stability
+		}
+		avg := total / float64(len(silo.Floors))
+		if avg < 0.8 {
+			parts = append(parts, deathCausePart{Label: "结构失稳", Rate: (0.8 - avg) * 0.25})
+		}
+	}
+
+	if silo.Rebellion > 0.8 {
+		parts = append(parts, deathCausePart{Label: "叛乱冲突", Rate: (silo.Rebellion - 0.8) * 0.2})
+	}
+	return parts
+}
+
+func resourceLabelZH(resType string) string {
+	switch resType {
+	case "Energy":
+		return "能源"
+	case "Materials":
+		return "材料"
+	case "Supplies":
+		return "补给"
+	default:
+		return resType
+	}
+}
+
+// splitDeathsByCauses 把死亡人数按各死因的死亡率份额拆分。确定性：
+// 先逐项取整，余数按小数部分从大到小逐个补齐（并列按死因顺序），
+// 保证各项之和恒等于 deaths。
+func splitDeathsByCauses(deaths int, parts []deathCausePart) []int {
+	counts := make([]int, len(parts))
+	if deaths <= 0 || len(parts) == 0 {
+		return counts
+	}
+	total := 0.0
+	for _, p := range parts {
+		total += p.Rate
+	}
+	if total <= 0 {
+		counts[0] = deaths
+		return counts
+	}
+	type fracEntry struct {
+		index int
+		frac  float64
+	}
+	fracs := make([]fracEntry, 0, len(parts))
+	used := 0
+	for i, p := range parts {
+		exact := float64(deaths) * p.Rate / total
+		whole := int(math.Floor(exact))
+		counts[i] = whole
+		used += whole
+		fracs = append(fracs, fracEntry{index: i, frac: exact - float64(whole)})
+	}
+	// 稳定排序：小数部分相同保持原死因顺序，逐位确定。
+	sort.SliceStable(fracs, func(i, j int) bool { return fracs[i].frac > fracs[j].frac })
+	for i := 0; i < deaths-used && i < len(fracs); i++ {
+		counts[fracs[i].index]++
+	}
+	return counts
+}
+
+// deathAttributionLine 生成月度死因归因日志行。
+func deathAttributionLine(silo *model.Silo, deaths int, parts []deathCausePart) string {
+	counts := splitDeathsByCauses(deaths, parts)
+	segments := make([]string, 0, len(parts))
+	for i, p := range parts {
+		if counts[i] <= 0 {
+			continue
+		}
+		segments = append(segments, fmt.Sprintf("%s %d", p.Label, counts[i]))
+	}
+	return fmt.Sprintf("[人口] %d年%d月死亡 %d 人：%s。",
+		silo.CurrentYear, silo.CurrentMonth, deaths, strings.Join(segments, "、"))
 }
 
 func (e *GameEngine) applyActorMetricDelta(actor *ActorView, field string, delta float64) {
@@ -1271,6 +1411,7 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 		silo, _ := event.Data["silo"].(*model.Silo)
 		agent, _ := event.Data["agent"].(*model.Agent)
 		e.runMonthlyBeliefDispatch(eventType, event, silo)
+		e.runMonthlyPoliticalDispatch(eventType, event, silo)
 		e.applyWeightedEnding(eventType, silo, agent)
 		if len(result.Logs) > 0 {
 			for _, entry := range result.Logs {
@@ -1296,6 +1437,7 @@ func (e *GameEngine) runEventMechanic(eventType string, event *GameEvent, ctx *E
 		e.checkVictoryConditions(silo, agent)
 	}
 	e.runMonthlyBeliefDispatch(eventType, event, silo)
+	e.runMonthlyPoliticalDispatch(eventType, event, silo)
 	e.applyWeightedEnding(eventType, silo, agent)
 }
 
@@ -1323,6 +1465,29 @@ func (e *GameEngine) runMonthlyBeliefDispatch(eventType string, event *GameEvent
 	cfg := DefaultInformationConfig()
 	ApplyBeliefForgetting(silo, cfg)
 	ApplyPermeation(silo, cfg)
+}
+
+// runMonthlyPoliticalDispatch 月度政治层结算：叛乱侵蚀市长个人正统性
+// (ADR-0007 后果条、18 §4)，确定性。
+//
+// 与 runMonthlyBeliefDispatch 同型：runEventMechanic 的 JS 成功路与 Go
+// 兜底路各调用本函数一次，但两路互斥，故每个 EVENT_METRICS_UPDATE 恰好
+// 一次。此前侵蚀只挂在 Go 兜底的 updateSiloMetrics 里，而 JS 的
+// metrics_update 总是成功、兜底不可达——真实流程里侵蚀从未发生。现在
+// 无论 JS 成败都在同一时点执行（读当月更新后的叛乱值），且
+// updateSiloMetrics 不再调用它：全引擎只有这一条月度正统性路径。
+//
+// deltaYears <= 0 的零月路径不结算 (与 JS 侧守卫一致)；纯算术不耗 RNG，
+// 叛乱为 0 时逐位不变。
+func (e *GameEngine) runMonthlyPoliticalDispatch(eventType string, event *GameEvent, silo *model.Silo) {
+	if eventType != EVENT_METRICS_UPDATE || silo == nil {
+		return
+	}
+	deltaYears, _ := event.Data["deltaYears"].(float64)
+	if deltaYears <= 0 {
+		return
+	}
+	ApplyRebellionLegitimacyErosion(silo, deltaYears)
 }
 
 // applyWeightedEnding lets the service arbitrate the terminal evaluation

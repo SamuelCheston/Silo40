@@ -1,7 +1,7 @@
 defineEvent({
   id: "replication_progress",
   title: "复制推进",
-  description: "接收者开始把材料传给下一位接收者。每一次成功的传递都让这条链多长出一节，也让历史包袱多沉下一分。",
+  description: "流通过的材料有了后续的公开记录：有些部门已经能够谈起副本和它的来处。历史包袱也多沉下一分。",
   type: "INTERNAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 3,
