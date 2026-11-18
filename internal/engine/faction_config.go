@@ -113,7 +113,6 @@ type FactionTuning struct {
 	AwarenessIdeologyWeight float64 // 思潮通道权重 (pf/loyalty 平面加权距离)
 	AwarenessTierWeight     float64 // 阶层通道权重 (权力级差 + 同阶层加成)
 	AwarenessSameClassBonus float64 // 同 ClassType 时阶层通道加成
-	AwarenessJoinFloor      float64 // 考虑加入的信念地板 (= QualRumor，C9 加入掷骰读取)
 
 	// ---- 月度口碑传播 (24 篇 §1.3/§4, C8) ----
 
@@ -127,6 +126,23 @@ type FactionTuning struct {
 	// RumorPiggybackChance: 信息动作成功时搭载派系传闻的概率。
 	// NPC/居民掷骰；玩家确定性搭载 (玩家动作不消耗 RNG，§6)。
 	RumorPiggybackChance float64
+
+	// ---- 加入/退出 (24 篇 §1.4/§4, C9) ----
+
+	JoinAPCost           float64 // JOIN_FACTION 动作 AP 成本 (与 ACTION_COSTS 一致)
+	JoinAffinityExponent float64 // 加入概率 = 相近度^k (意识形态主导)
+	JoinRelationVeto     float64 // 关系一票否决地板
+	CrossTierPowerGap    int     // PowerLevel 差 ≥ 此值算跨层级
+	CrossTierRelationMin float64 // 跨层级所需关系
+	CrossClassRelationMin float64 // 跨阶级所需关系
+	AwarenessJoinFloor   float64 // 可考虑加入的信念地板 (= QualRumor 0.30，C8 感知/C9 加入共用)
+	AffinityRadius       float64 // 亲缘半径：加权特征距离 ≤ 此值算亲缘圈内
+	ExitInertiaFactor    float64 // 退出惯性系数：退出概率 ×(1−此值)，低于加入概率
+
+	// ---- 合并 (24 篇 §1.6/§4, C10) ----
+
+	MergeRelationMin float64 // 合并所需双方领袖个人关系 (LeaderRelations 子矩阵)
+	MergeAPCost      float64 // MERGE_FACTION 动作 AP 成本 (与 ACTION_COSTS 一致)
 }
 
 // FactionConfig is the active tuning for faction clustering and the
@@ -190,7 +206,6 @@ var FactionConfig = FactionTuning{
 	AwarenessIdeologyWeight: 0.35,
 	AwarenessTierWeight:     0.25,
 	AwarenessSameClassBonus: 0.15,
-	AwarenessJoinFloor:      0.30,
 
 	GossipReliabilityDecay: 0.6,
 	GossipBeliefThreshold:  0.50,
@@ -198,4 +213,17 @@ var FactionConfig = FactionTuning{
 	GossipSpreadChance:     0.25,
 
 	RumorPiggybackChance: 0.15,
+
+	JoinAPCost:            10,
+	JoinAffinityExponent:  2.0,
+	JoinRelationVeto:      0.10,
+	CrossTierPowerGap:     3,
+	CrossTierRelationMin:  0.40,
+	CrossClassRelationMin: 0.60,
+	AwarenessJoinFloor:    0.30,
+	AffinityRadius:        0.30,
+	ExitInertiaFactor:     0.5,
+
+	MergeRelationMin: 0.60,
+	MergeAPCost:      15,
 }

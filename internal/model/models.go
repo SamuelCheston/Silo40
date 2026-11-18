@@ -117,6 +117,10 @@ type Agent struct {
 	ActionPoints      float64      `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
 	PropagandaLevel   float64      `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
 	SuspicionLevel    float64      `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
+	// FactionID 玩家成员资格 (24 篇 C9, ADR-0018)：玩家 JOIN_FACTION 加入的派系。
+	// 与"任代表"(RepresentativeKind=PLAYER) 区分：发起/领导走代表引用，加入走
+	// 本字段。零值 (nil) = 无成员资格，旧档语义不变，存档版本不升。
+	FactionID         *uint        `gorm:"index" json:"faction_id,omitempty"`
 	Connections       []Connection `gorm:"foreignKey:AgentID" json:"connections"`
 	KnownFragments    []string     `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
 	// Beliefs 分层信念层 (10-it-control-credibility §3.3/§3.5)：每个事实的连续
@@ -1415,6 +1419,10 @@ type Resident struct {
 	PropagandaLevel   float64            `gorm:"default:0.0" json:"propaganda_level"`
 	KnownFragments    []string           `gorm:"type:text;serializer:json" json:"known_fragments"`
 	Relations         map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"`
+	// LeaderRelations 领袖↔代表个人关系子矩阵 (24 篇 §3, C9)：键 `res:<id>` /
+	// `agent:<id>`，与部门关系键 (Relations 按部门名) 隔离。加入/合并的个人关系
+	// 闸读这一层。增量字段零值安全，存档版本不升 (仍 v17)。
+	LeaderRelations map[string]float64 `gorm:"type:text;serializer:json" json:"leader_relations,omitempty"`
 	// Beliefs 具名人物层信念 (§3.3)：公开传播与关键人物确信进入 E 聚合。
 	Beliefs          []FactBelief `gorm:"type:text;serializer:json" json:"beliefs,omitempty"`
 	IsRepresentative bool         `gorm:"default:false" json:"is_representative"`
@@ -1553,6 +1561,8 @@ const (
 	ActionPlayerEvent       AgentActionType = "PLAYER_EVENT"
 	ActionPublicizeFaction  AgentActionType = "PUBLICIZE_FACTION"
 	ActionFoundFaction      AgentActionType = "FOUND_FACTION"
+	ActionJoinFaction       AgentActionType = "JOIN_FACTION"
+	ActionMergeFaction      AgentActionType = "MERGE_FACTION"
 	ActionSilo1Operation    AgentActionType = "SILO1_OPERATION"
 	ActionStationOperation  AgentActionType = "STATION_OPERATION"
 )
@@ -1565,6 +1575,9 @@ type AgentAction struct {
 	FragmentIds      []string        `json:"fragment_ids,omitempty"`
 	ProfessionAction string          `json:"profession_action,omitempty"`
 	ResourceTarget   string          `json:"resource_target,omitempty"`
+	// TargetFactionID JOIN_FACTION / MERGE_FACTION 的目标派系 ID (24 篇 C9/C10)。
+	// 零值 = 无目标；增量字段，旧动作不受影响。
+	TargetFactionID  uint            `json:"target_faction_id,omitempty"`
 	Cost             float64         `json:"cost"`
 }
 
@@ -1986,6 +1999,8 @@ var ACTION_COSTS = map[AgentActionType]float64{
 	ActionConductPropaganda: 20,
 	ActionPublicizeFaction:  25,
 	ActionFoundFaction:      20, // 24 篇 §4：发起派系聚类事件的 AP 成本
+	ActionJoinFaction:       10, // 24 篇 C9：加入派系的 AP 成本 (方案留档自定值)
+	ActionMergeFaction:      15, // 24 篇 §4：合并派系的 AP 成本
 	ActionProfession:        0, // 实际成本由职业行动注册表决定
 	ActionPlayerEvent:       0, // 实际成本由 content event 元数据决定
 	ActionSilo1Operation:    0, // Actual cost comes from the operation definition.
@@ -2001,6 +2016,8 @@ var ACTION_DURATIONS = map[AgentActionType]int{
 	ActionConductPropaganda: 1,
 	ActionPublicizeFaction:  0, // 立即生效
 	ActionFoundFaction:      0, // 立即生效
+	ActionJoinFaction:       0, // 立即生效
+	ActionMergeFaction:      0, // 立即生效
 	ActionProfession:        1,
 	ActionPlayerEvent:       0,
 	ActionSilo1Operation:    0,

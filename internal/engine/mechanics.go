@@ -761,6 +761,7 @@ func actionContext(action model.AgentAction) map[string]interface{} {
 		"fragment_ids":      append([]string(nil), action.FragmentIds...),
 		"profession_action": action.ProfessionAction,
 		"resource_target":   action.ResourceTarget,
+		"target_faction_id": action.TargetFactionID,
 		"cost":              action.Cost,
 	}
 }
@@ -975,6 +976,10 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 	case "faction_rumor_piggyback":
 		// C8 信息动作搭载：JS 成功路径只发 marker，掷骰与吸收在 Go 权威侧。
 		e.applyFactionRumorPiggyback(silo, actor)
+	case "faction_join_actor":
+		e.applyFactionJoinActor(silo, actor, agent, uint(mutation.IntValue))
+	case "faction_merge_actor":
+		e.applyFactionMergeActor(silo, actor, agent, uint(mutation.IntValue))
 	case "silo_flag_set":
 		writeSiloFlag(silo, mutation.Field, mutation.BoolValue)
 	case "victory_status_set":

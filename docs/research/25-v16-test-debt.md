@@ -190,3 +190,26 @@ C8 引擎测试全绿（三通道单调、发起零 RNG、faction: 永不成熟/
 
 处理：仍**等 C9（加入/退出）落地后一次重调**。C9 的加入掷骰读
 belief.B ≥ AwarenessJoinFloor(0.30)，成员流动定型后种子才有稳定靶子。
+
+## 七、C9/C10 落地后的账目更新（2026-11-19）
+
+C9（LeaderRelations 子矩阵 + JOIN_FACTION + NPC 月度加权加入/退出）与
+C10（MERGE_FACTION）落地后全量复测：**仍为 13 个失败 = 8 升级链 + 5 可玩性
+漂移**，与第五节完全一致，**无新增可玩性漂移**。月度加入/退出扫描与 NPC
+合并候选虽平移了共享 RNG 流，但未把任何此前通过的测试推入失败——第五节
+的 5 个漂移测试维持原现象，升级链 8 个维持 v17 硬切断拒绝。
+
+### 随 C9/C10 修复的真实回归（不是欠账，已闭合）
+
+**TestActionGatesStartNarrowAndUnlockFromStoryStage /
+TestOpeningRequiresSuccessfulActionsNotIdleMonths**：C9/C10 新增的
+action_join_faction / action_merge_faction 门控初版 `available:{}`（恒可用）
+使两动作在开局即暴露，破坏「开局只暴露 Gather Info」不变量。修复：新增
+门控指标 `political_faction_count`（政治派系数量，非无阵营桶），两动作门控
+改 `{metric: political_faction_count, min: 1}` + `hide_when_unavailable:true`
+——开局零政治派系则隐藏，发起派系后才暴露。语义诚实：加入/合并是派系存在
+后的政治动作。修复后两测试恢复通过。
+
+处理：第五节 5 个可玩性漂移的种子重调批次靶子已随 C9/C10 定型（成员流动
+机制完整：发起/加入/退出/合并/接任/解散），可择期一次重调；升级链 8 个按
+ADR-0017 整体删除或改断言硬切断拒绝（第一节两选项），不在本阶段处理。

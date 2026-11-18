@@ -379,6 +379,49 @@ func (NpcBrain) scoreCandidates(view *ActorView, silo *model.Silo, pick func(n i
 		add(model.ActionFoundFaction, weight, "initiated a faction clustering event and founded their own faction.", 1.0, "")
 	}
 
+	// --- JOIN_FACTION：居民代表无政治派系且已感知可加入目标时 (24 篇 C9) ---
+	// 权重 = 意识形态相近度^k (与月度加入扫描同口径)；目标由 pick 随机选定。
+	if joinTargets := joinableFactionsForRepresentative(silo, view); len(joinTargets) > 0 {
+		target := joinTargets[pick(len(joinTargets))]
+		rep := residentActorRepresentative(view, silo)
+		cohort := cohortOfRepresentative(silo, rep)
+		centroid, _ := factionFeatureCentroid(silo, target, nil)
+		feat := cohortFeature(silo, cohort, getProfessionByID(silo, cohort.ProfessionID))
+		weight := joinProbability(featureDistance(feat, centroid))
+		cost := model.ACTION_COSTS[model.ActionJoinFaction]
+		if cost <= ap && weight > 0 {
+			candidates = append(candidates, WeightedDecision{
+				decision: NpcDecision{
+					Action:    model.AgentAction{Type: model.ActionJoinFaction, Cost: cost, TargetFactionID: target.ID},
+					Message:   "led their people into " + target.Name + ".",
+					LogChance: 0.6,
+				},
+				weight: weight,
+			})
+		}
+	}
+
+	// --- MERGE_FACTION：领袖把亲缘相近、关系达标的另一派系并入自己派系 (24 篇 C10) ---
+	// 权重 = 两派系质心相近度^k；目标由 pick 随机选定。三闸在候选筛选时已校验。
+	if mergeTargets := mergeableFactionsForLeader(silo, view); len(mergeTargets) > 0 {
+		target := mergeTargets[pick(len(mergeTargets))]
+		own := actorLedFaction(silo, view)
+		cOwn, _ := factionFeatureCentroid(silo, own, nil)
+		cTarget, _ := factionFeatureCentroid(silo, target, nil)
+		weight := joinProbability(featureDistance(cOwn, cTarget))
+		cost := model.ACTION_COSTS[model.ActionMergeFaction]
+		if cost <= ap && weight > 0 {
+			candidates = append(candidates, WeightedDecision{
+				decision: NpcDecision{
+					Action:    model.AgentAction{Type: model.ActionMergeFaction, Cost: cost, TargetFactionID: target.ID},
+					Message:   "merged " + target.Name + " into their own faction.",
+					LogChance: 0.6,
+				},
+				weight: weight,
+			})
+		}
+	}
+
 	// --- 职业专属行动：按职业注册表挑选，走统一执行管线 ---
 	resTypes := []string{"Energy", "Materials", "Supplies"}
 	for _, def := range GetProfessionActions(view.Profession()) {

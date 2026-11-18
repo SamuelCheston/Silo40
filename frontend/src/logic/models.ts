@@ -47,6 +47,8 @@ export type AgentActionType =
   | "PLAYER_EVENT"
   | "PUBLICIZE_FACTION"
   | "FOUND_FACTION"
+  | "JOIN_FACTION"
+  | "MERGE_FACTION"
   | "SILO1_OPERATION"
   | "STATION_OPERATION";
 
