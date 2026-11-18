@@ -625,6 +625,9 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			// 已成熟事实必须继续可见。
 			beliefs := make([]map[string]interface{}, 0, len(prof.Beliefs))
 			for _, belief := range prof.Beliefs {
+				if IsLeakFact(belief.FactID) {
+					continue // 20 分册：反制观察不进 mechanic ctx / UI 信念视图
+				}
 				if belief.B <= 0 && !belief.Matured {
 					continue
 				}
@@ -651,6 +654,8 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 				"beliefs":         beliefs,
 				"ideologies":      cloneFloatMap(prof.Ideologies),
 				"relations":       cloneFloatMap(prof.Relations),
+				// T1-3 关系冷却：>0 时 Build 关系增长减半、回执措辞变谨慎。
+				"relation_cooldown": ctx.Silo.Countermeasure.RelationCooldown[prof.Name],
 			})
 		}
 		siloPayload["professions"] = professions

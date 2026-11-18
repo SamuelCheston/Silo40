@@ -2114,6 +2114,13 @@ func (s *GameService) runOneMonthSingle(source string) ([]string, []model.StoryE
 		st := responseStories[i]
 		stories = append(stories, &st)
 	}
+	// 20 分册第 5 批：T1-3/T2-4/T3-1b/T3-2 确定性状态反应。
+	counterLogs, counterStories := s.runCountermeasureMonth(s.silo)
+	logs = append(logs, counterLogs...)
+	for i := range counterStories {
+		st := counterStories[i]
+		stories = append(stories, &st)
+	}
 	// 世界时钟镜像玩家堡时钟。权威时钟仍在堡内流水线；多堡阶段 (P0.5+) 会把
 	// 时钟推进上移到世界 tick 编排，此处改为世界时钟下发到各堡。
 	if s.world != nil {

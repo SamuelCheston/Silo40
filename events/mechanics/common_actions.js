@@ -161,6 +161,23 @@ defineMechanics([
           ideology: "pro_foreign",
           value: absorbed * 0.12,
         });
+        // 20 分册 §3.2：玩家的一次流通会在反制方 (IT/Judicial) 心里留下
+        // "有人在传这个事实"的观察。走既有部门信念吸收与同源折减，只淡忘、
+        // 不计入成熟事实；T1-3/T3-2 读的正是这条泄漏确信。
+        if (ctx.actor.kind === "PLAYER") {
+          for (const watcher of ["IT", "Judicial"]) {
+            if (!professionByName(ctx, watcher)) {
+              continue;
+            }
+            mutations.push({
+              type: "profession_belief_absorb",
+              profession: watcher,
+              fragment: "leak:" + fragment,
+              source: "player",
+              value: absorbed,
+            });
+          }
+        }
       }
       return {
         mutations,
@@ -195,11 +212,19 @@ defineMechanics([
       if ((ctx.actor.traits || []).includes("魅力非凡")) {
         increase *= 1.5;
       }
+      // 20 分册 T1-3：部门对泄漏事实的确信越线后，关系推进减半 (12 月)。
+      // 冷却由月度反制账本维护；回执只描述"对方比上次谨慎"，不报数值。
+      const cooling = (profession.relation_cooldown || 0) > 0;
+      if (cooling) {
+        increase *= 0.5;
+      }
       const current = actorConnectionTo(ctx, target);
       const applied = clampUnit(current + increase) - current;
       const message = applied <= 0
         ? "与 " + profession.name + " 的人脉已达上限。"
-        : "与 " + profession.name + " 的人脉加深" + (applied >= 0.005 ? "（+" + applied.toFixed(2) + "）。" : "。");
+        : cooling
+          ? "与 " + profession.name + " 的人脉加深" + (applied >= 0.005 ? "（+" + applied.toFixed(2) + "）。" : "。") + "对方比上次谨慎，谈话一直停在例行的寒暄上。"
+          : "与 " + profession.name + " 的人脉加深" + (applied >= 0.005 ? "（+" + applied.toFixed(2) + "）。" : "。");
       return {
         mutations: [
           { type: "actor_connection_delta", connection_dept: target, value: increase },

@@ -519,6 +519,9 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 			// 也必须继续可见。
 			beliefs := make([]map[string]interface{}, 0, len(profession.Beliefs))
 			for _, belief := range profession.Beliefs {
+				if IsLeakFact(belief.FactID) {
+					continue // 20 分册：反制观察不进内容层/UI 信念视图
+				}
 				if belief.B <= 0 && !belief.Matured {
 					continue
 				}

@@ -1,0 +1,84 @@
+package engine
+
+import (
+	"silo40/internal/model"
+)
+
+// 20 分册第 5 批：世界反制剩余四档的确定性月度结算。
+//
+// 纪律：
+//   - 全部为状态反应，不消耗 RNG；未触发任何门槛的运行逐位不变。
+//   - 只抬成本/收窄路径，不直接判负；所有窗口到期自动解除 (6.3 上界纪律)。
+//   - 同源在冷却周期内只生效一次，不叠加 (6.4)。
+//   - 新增持久状态零值 = 旧档语义。
+//
+// 数值为设计给定的起点值，TODO(balance)。
+
+const (
+	// T1-3 关系冷却：部门对泄漏事实 B ≥ 0.45 → 关系增长减半 12 月。
+	counterRelationThreshold = 0.45 // TODO(balance)
+	counterRelationMonths    = 12   // TODO(balance)
+)
+
+// AdvanceCountermeasures 反制账本的月度回合：先让既有窗口递减一格，再结算
+// 本月新触发。
+func AdvanceCountermeasures(silo *model.Silo, _ *model.Agent) {
+	if silo == nil {
+		return
+	}
+	state := &silo.Countermeasure
+	tickCountermeasureWindows(state)
+
+	// T1-3：部门知道了泄漏事实，关系还维持，但推进变慢。
+	for i := range silo.Professions {
+		prof := &silo.Professions[i]
+		if departmentLeakBelief(prof) < counterRelationThreshold {
+			continue
+		}
+		if state.RelationCooldown[prof.Name] > 0 {
+			continue // 冷却周期内不刷新、不叠加
+		}
+		if state.RelationCooldown == nil {
+			state.RelationCooldown = map[string]int{}
+		}
+		state.RelationCooldown[prof.Name] = counterRelationMonths
+	}
+}
+
+// tickCountermeasureWindows 每个月初把剩余月数递减一格 (夹到 0)。
+func tickCountermeasureWindows(state *model.CountermeasureState) {
+	for name, months := range state.RelationCooldown {
+		if months > 0 {
+			state.RelationCooldown[name] = months - 1
+		}
+	}
+	if state.LocationLockMonths > 0 {
+		state.LocationLockMonths--
+	}
+	if state.ProfessionLockMonths > 0 {
+		state.ProfessionLockMonths--
+	}
+}
+
+// departmentLeakBelief 部门信念层中对泄漏事实的最高确信值 (B)。只读
+// leak:<fact_id> 观察，避免把部门原有的正当知识误当反制输入。
+func departmentLeakBelief(prof *model.Profession) float64 {
+	max := 0.0
+	for _, belief := range prof.Beliefs {
+		if !IsLeakFact(belief.FactID) {
+			continue
+		}
+		if belief.B > max {
+			max = belief.B
+		}
+	}
+	return max
+}
+
+// RelationCooling 报告该部门的关系增长是否仍在 T1-3 冷却期。
+func RelationCooling(silo *model.Silo, dept string) bool {
+	if silo == nil || dept == "" {
+		return false
+	}
+	return silo.Countermeasure.RelationCooldown[dept] > 0
+}
