@@ -85,6 +85,7 @@ func escapeResponseTestSilo() *model.Silo {
 	silo.ItAuthority = model.ItAuthorityState{Initialized: true, ROp: 60}
 	silo.Authority.W = 50
 	silo.EscapeResponse.Initialized = true
+	silo.BlackBox.Initialized = true // ADR-0018 功能开启语义：后果登记事件
 	silo.EscapeResponse.OrgSuspicion = 0.5
 	return silo
 }
@@ -214,7 +215,7 @@ func TestEscapeResponseSuppressEffects(t *testing.T) {
 	}
 }
 
-// TestEscapeResponseIgnoreRegistersIncident 不作为的后果 (ADR-0017)：
+// TestEscapeResponseIgnoreRegistersIncident 不作为的后果 (ADR-0018)：
 // 不再直接累加风险度，改登记 ignore 事件，经观测管线进入 1 号信念
 // (异常悬而未决，1 号可能自己注意到)。
 func TestEscapeResponseIgnoreRegistersIncident(t *testing.T) {
@@ -240,7 +241,7 @@ func TestEscapeResponseIgnoreRegistersIncident(t *testing.T) {
 }
 
 // TestEscapeResponseCoverMonth 蒙蔽维持：按月付 R_op；付不起时崩塌并
-// 登记蒙蔽崩塌事件 (ADR-0017)，不再直接累加风险度。
+// 登记蒙蔽崩塌事件 (ADR-0018)，不再直接累加风险度。
 func TestEscapeResponseCoverMonth(t *testing.T) {
 	// 付得起：扣费，维持 (低暴露概率下取一个不暴露的种子)。
 	silo := escapeResponseTestSilo()

@@ -168,12 +168,13 @@ func TestDispatchIsTheOnlyDirectLeak(t *testing.T) {
 }
 
 // TestProtocolDisposalRestoresAndRegistersOverreach locks the §5.5
-// same-direction case under ADR-0017: protocol disposal closes the earliest
+// same-direction case under ADR-0018: protocol disposal closes the earliest
 // unmet target; the protective risk tampering no longer lowers safeguard risk
 // directly — it registers an it_overreach incident instead.
 func TestProtocolDisposalRestoresAndRegistersOverreach(t *testing.T) {
 	e := NewGameEngine()
 	silo := CreateInitialSilo("Disposal Fixture", 122, nil)
+	silo.BlackBox.Initialized = true // ADR-0018 功能开启语义：后果登记事件
 	silo.SafeguardRisk = 0.2
 	silo.Protocol.Deviations = []model.ProtocolDeviation{
 		{ClauseID: "O-02", Kind: DeviationUnmet, Open: true},

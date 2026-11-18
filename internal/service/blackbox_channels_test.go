@@ -353,13 +353,14 @@ func TestBlackBoxChannelsAttentionThrottle(t *testing.T) {
 
 // ===== G1 稽查机制 (最小骨架) =====
 
-// TestBlackBoxChannelsPassiveAudit P_danger 恰达门槛且节流允许 → 专项核查事实
-// +1 + 审计日志行 + 占用当月观测槽。
+// TestBlackBoxChannelsPassiveAudit P_danger 恰达门槛、执行层在线且节流允许 →
+// 专项核查事实 +1 + 审计日志行 + 占用当月观测槽。
 func TestBlackBoxChannelsPassiveAudit(t *testing.T) {
 	svc, _, _, silo18 := blackBoxChannelsFixture()
 	silo18.BlackBox.Log = []model.BlackBoxLogEntry{{
 		Year: 122, Month: 1, PDanger: bbChannelAuditPDangerThreshold, ChosenR: 0.4,
 	}}
+	silo18.BlackBox.CurrentExecution = 1.0
 	logs, stories := []string{}, []model.StoryEvent{}
 	svc.runBlackBoxChannelsMonth(&logs, &stories)
 
@@ -375,7 +376,7 @@ func TestBlackBoxChannelsPassiveAudit(t *testing.T) {
 	}
 	found := false
 	for _, line := range logs {
-		if strings.Contains(line, "silo 3 passive audit triggered") {
+		if strings.Contains(line, "silo 3 audit carried out") {
 			found = true
 		}
 	}
@@ -384,6 +385,35 @@ func TestBlackBoxChannelsPassiveAudit(t *testing.T) {
 	}
 	if len(stories) != 0 {
 		t.Fatalf("passive audit must not emit story events: %+v", stories)
+	}
+}
+
+// TestBlackBoxChannelsPassiveAuditIdleAtExtremeRisk 执行强度低于门槛 (极高指派
+// 把 Θ 推高、E→0)：稽查空转，不登记事实、不占用观测槽 (22 系列 §8 A2)。
+func TestBlackBoxChannelsPassiveAuditIdleAtExtremeRisk(t *testing.T) {
+	svc, _, _, silo18 := blackBoxChannelsFixture()
+	silo18.BlackBox.Log = []model.BlackBoxLogEntry{{
+		Year: 122, Month: 1, PDanger: 0.9, ChosenR: 0.9,
+	}}
+	silo18.BlackBox.LastAssignedRisk = 0.9
+	silo18.BlackBox.CurrentExecution = bbChannelAuditExecutionFloor - 0.001
+	logs := []string{}
+	stories := []model.StoryEvent{}
+	svc.runBlackBoxChannelsMonth(&logs, &stories)
+	if got := silo18.SafeguardIncidents[bbChannelIncidentAuditFact]; got != 0 {
+		t.Fatalf("idle execution must not register audit facts: %+v", silo18.SafeguardIncidents)
+	}
+	if !svc.silo1ActiveObservationAllowed(silo18.ID) {
+		t.Fatal("idle execution must not consume the observation slot")
+	}
+	found := false
+	for _, line := range logs {
+		if strings.Contains(line, "inspection postponed") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("idle execution must leave a postponement log line: %v", logs)
 	}
 }
 
@@ -507,6 +537,7 @@ func TestBlackBoxChannelsRoundConsumesNoRNG(t *testing.T) {
 	silo18.Professions = []model.Profession{{Name: "Security",
 		Beliefs: []model.FactBelief{{FactID: "Fact_A", B: 0.9}}}}
 	silo18.BlackBox.Log = []model.BlackBoxLogEntry{{Year: 122, Month: 1, PDanger: 0.8}}
+	silo18.BlackBox.CurrentExecution = 1.0
 	silo18.SafeguardIncidents = map[string]int{engine.SafeguardIncidentDeviation: 2}
 
 	const seed = 555

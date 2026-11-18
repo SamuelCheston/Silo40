@@ -29,8 +29,17 @@ const (
 	// 最小定量替代：「某堡可能出事了」)。
 	bbChannelCensusDropThreshold = 0.02 // TODO(balance)
 	// bbChannelAuditPDangerThreshold G1 被动专项核查的 P_danger 门槛：1 号自己
-	// 的危险区概率估计越过该值才值得花一次主动观测。
+	// 的危险区概率估计越过该值才值得额外花一次主动观测。
 	bbChannelAuditPDangerThreshold = 0.5 // TODO(balance)
+	// bbChannelAuditExecutionFloor G1 执行门槛：稽查由本地执行层落实，执行强度
+	// E 低于该值即「稽查空转」——高指派把 Θ 推高后 E→0，1 号再怎么起疑也查
+	// 不动 (22 系列 §8 A2「该堡 IT 服从/稽查显著退化」)。TODO(balance)
+	bbChannelAuditExecutionFloor = 0.15
+	// bbChannelAuditRoutineMinRisk 例行稽查的最低指派档：稽查频率随 r 分配
+	// (22-02 §3.8)，低 r 无稽查动机。TODO(balance)
+	bbChannelAuditRoutineMinRisk   = 0.20
+	bbChannelAuditRoutinePeriodMid = 4 // r ∈ [0.20, 0.60)：每 4 月一次
+	bbChannelAuditRoutinePeriodHi  = 2 // r ≥ 0.60：每 2 月一次
 )
 
 // SafeguardIncidents 台账键约定 (登记簿键契约，与 W5 Θ 行为化兼容)：
@@ -215,38 +224,65 @@ func bbChannelAttentionKey(year, month int, siloID uint) string {
 
 // ===== G1 稽查机制 (最小骨架) =====
 
-// bbChannelPassiveAuditMonth G1 被动触发：该堡黑箱日志最新一条 (当月 2b
-// 决策留痕) 的 P_danger ≥ 门槛且节流允许 (G7) → 记一条「专项核查」事实
-// (audit_fact，供 W5 的 f_risk 消费) + 审计日志行，并占用当月主动观测槽。
-// 主动稽查操作 (注意力成本/暴露/延迟结算，参照 STATION_INTEL 骨架) 待 22-03
-// 探索层落地，不新增玩家动作、不碰 action_gates。零 RNG。
+// bbChannelPassiveAuditMonth G1 稽查：触发来源有二——
+//  1. 被动专项核查：该堡黑箱日志最新一条 (当月 2b 决策留痕) 的 P_danger ≥ 门槛；
+//  2. 例行稽查：稽查频率随指派 r 分配 (22-02 §3.8)，r 越高排期越密。
+//
+// 触发只是「1 号要查」；能否查出东西取决于本地执行层——执行强度 E 低于门槛
+// 即稽查空转 (22 系列 §8 A2：极高指派 → 服从/稽查显著退化)，不登记事实、
+// 不占用观测槽。实际执行的稽查记一条 audit_fact (供 W5 的 f_risk 消费) + 审计
+// 日志行，并占用当月主动观测槽。主动稽查操作 (注意力成本/暴露/延迟结算) 待
+// 22-03 探索层落地，不新增玩家动作、不碰 action_gates。零 RNG。
 func (s *GameService) bbChannelPassiveAuditMonth(silo *model.Silo, logs *[]string) {
 	bb := &silo.BlackBox
 	if len(bb.Log) == 0 {
 		return
 	}
 	last := bb.Log[len(bb.Log)-1]
-	if last.PDanger < bbChannelAuditPDangerThreshold {
+	emergency := last.PDanger >= bbChannelAuditPDangerThreshold
+	routine := bbChannelRoutineAuditDue(bb.LastAssignedRisk, s.world.CurrentYear, s.world.CurrentMonth)
+	if !emergency && !routine {
 		return
 	}
 	if !s.silo1ActiveObservationAllowed(silo.ID) {
+		return
+	}
+	if bb.CurrentExecution < bbChannelAuditExecutionFloor {
+		if logs != nil {
+			*logs = append(*logs, fmt.Sprintf(
+				"[Silo1Stewardship] silo %d inspection postponed (execution %.2f < %.2f)",
+				silo.ID, bb.CurrentExecution, bbChannelAuditExecutionFloor))
+		}
 		return
 	}
 	s.silo1ConsumeActiveObservation(silo.ID)
 	bbChannelRegisterIncident(silo, bbChannelIncidentAuditFact, 1)
 	if logs != nil {
 		*logs = append(*logs, fmt.Sprintf(
-			"[Silo1Stewardship] silo %d passive audit triggered (P_danger %.2f >= %.2f), audit_fact=%d",
-			silo.ID, last.PDanger, bbChannelAuditPDangerThreshold,
+			"[Silo1Stewardship] silo %d audit carried out (P_danger %.2f, r %.2f, execution %.2f), audit_fact=%d",
+			silo.ID, last.PDanger, bb.LastAssignedRisk, bb.CurrentExecution,
 			silo.SafeguardIncidents[bbChannelIncidentAuditFact]))
 	}
+}
+
+// bbChannelRoutineAuditDue 例行稽查排期：低 r 无稽查动机；r 越高周期越短。
+// 纯月索引取模，零 RNG。
+func bbChannelRoutineAuditDue(r float64, year, month int) bool {
+	if r < bbChannelAuditRoutineMinRisk {
+		return false
+	}
+	period := bbChannelAuditRoutinePeriodMid
+	if r >= bbChannelAuditRoutineMinRisk+0.40 { // r ≥ 0.60
+		period = bbChannelAuditRoutinePeriodHi
+	}
+	return stewardshipExperimentMonthIndex(year, month)%period == 0
 }
 
 // ===== G9 异常观察计数器 =====
 
 // bbChannelConsumeIncidentsMonth G9：汇总 SafeguardIncidents 全部非 "obs"
 // 前缀键的计数为「1 号可见异常数」，记审计日志行后按登记簿月度消费语义
-// (ADR-0017) 清零已消费键。
+// (ADR-0018) 清零已消费键。
 //
 // 清零范围只限四类旧累加键 (ignore / cover_collapse / deviation /
 // it_overreach)；reports_received / census_anomaly / audit_fact /

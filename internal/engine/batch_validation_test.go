@@ -47,7 +47,7 @@ func TestPressureReleaseLetsAuthorityRebound(t *testing.T) {
 }
 
 // TestOrderDeviationRegistersIncidentsAndHardLineHolds locks the Safeguard
-// 竞赛 batch scenario under ADR-0017: Protocol deviations no longer accumulate
+// 竞赛 batch scenario under ADR-0018: Protocol deviations no longer accumulate
 // into R_s — they register into the incident ledger by period, while the
 // retained intervention-chain override channel (Order 制度行动) still pushes
 // R_s to 1.0 and the hard guardrail ends the silo in DEATH (§6.2/§6.3 tables,
