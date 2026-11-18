@@ -20,6 +20,8 @@ defineMechanics([
         if (available.length > 0) {
           const fragment = available[randomInt(available.length)];
           mutations.push({ type: "actor_fragment_add", fragment });
+          // C8 搭载：诊疗听闻可能顺带听到派系传闻 (Go 权威侧掷骰/吸收)。
+          mutations.push({ type: "faction_rumor_piggyback" });
           logs.push("[Medical Passive] " + ctx.actor.label + " overheard rumors about " + fragment + ".");
         }
       }

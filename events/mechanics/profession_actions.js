@@ -420,6 +420,8 @@ defineMechanics([
           { type: "cohort_ideology_delta_all", profession: target.name, ideology: "pro_foreign", value: 0.03 },
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.015),
+          // C8 搭载：田间闲聊是传闻的天然场合 (Go 权威侧掷骰/吸收)。
+          { type: "faction_rumor_piggyback" },
         ],
         action_result: { executed: true, message: "Rumors spread from the fields. Heard about " + fragment + " from " + target.name + "." },
       };

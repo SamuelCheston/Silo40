@@ -41,8 +41,9 @@ func foundFactionEligible(view *ActorView, silo *model.Silo) (bool, string) {
 // applyFactionFoundActor 处理 faction_found_actor mutation：权威资格判定
 // 与 AP 扣除在此原子完成 (JS 侧只做同口径预检给出失败文案)。创立零成员
 // 派系 (ADR-0018)：代表=创始人=发起 Actor，立场取其思潮，筹备期人数
-// 规则由 C7 的消亡管线执行。
-func (e *GameEngine) applyFactionFoundActor(silo *model.Silo, actor *ActorView) {
+// 规则由 C7 的消亡管线执行。C8：成立即按三通道感知度为全堡观察者写入
+// faction:<id>:founded 信念事实 (零 RNG)。
+func (e *GameEngine) applyFactionFoundActor(silo *model.Silo, agent *model.Agent, actor *ActorView) {
 	if actor == nil {
 		return
 	}
@@ -122,5 +123,6 @@ func (e *GameEngine) applyFactionFoundActor(silo *model.Silo, actor *ActorView) 
 		}
 	}
 
+	e.seedFactionAwareness(silo, agent, &faction, actor)
 	e.logf(fmt.Sprintf("%s 发起派系聚类事件，创立「%s」(零成员筹备期)。", actor.Label(), name))
 }

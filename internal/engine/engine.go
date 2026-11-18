@@ -523,6 +523,8 @@ func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYe
 						addLog("[Medical Passive] " + view.Label() + " overheard rumors and gained intel on " + randomFragment + ".")
 					}
 				}
+				// C8：诊疗听闻搭载派系传闻 (与 JS agent_update 同口径)。
+				e.applyFactionRumorPiggyback(silo, view)
 			}
 		}
 	}
@@ -587,6 +589,11 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 	// advances on monthly ticks and is a no-op for zero-duration instant
 	// resolutions (deltaYears == 0), so instant actions cannot accelerate it.
 	ApplyFactionLoyaltyDynamics(silo, deltaYears)
+	// C8 月度口碑：高置信观察者沿关系网络扩散派系感知事实。与忠诚动力学
+	// 同为月度演化步，零时长即时结算 (deltaYears == 0) 不传播。
+	if deltaYears > 0 {
+		ApplyFactionGossip(silo, agent)
+	}
 
 	var npcProfs []*model.Profession
 	for i := range silo.Professions {

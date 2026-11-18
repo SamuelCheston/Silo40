@@ -158,3 +158,35 @@ TerminationChannel）在 C7 的随机流重排下**恢复通过**——漂移对
 
 处理：**等 C9（加入/退出）落地后一次重调**，届时成员流动机制定型，
 种子策略才有稳定靶子。
+
+## 六、C8 感知/口碑落地后的账目更新（2026-11-18）
+
+C8（三通道感知 + faction:<id>:founded 信念事实 + 月度口碑 + 信息动作
+搭载）落地后全量复测：**13 个失败 = 8 升级链 + 5 可玩性漂移**，清单与
+第五节完全相同，无新增、无恢复。
+
+新增掷骰点全部门控：发起感知写入零 RNG；口碑与搭载只在存在政治派系
+时掷骰（零派系零掷骰），玩家搭载确定性不消耗 RNG。因此**首次发起之前
+的共享流与 C7 逐位一致**；漂移只发生在 NPC/玩家发起成功之后的长局。
+C8 引擎测试全绿（三通道单调、发起零 RNG、faction: 永不成熟/不计共证门、
+首跳折减 0.6、多跳传播、玩家搭载零 RNG、JS marker 链路、同种子双跑
+逐字节一致），service 端到端发起测试通过。
+
+### 可玩性漂移（5 个，持续，并入第二节重调批次）
+
+| 测试 | 状态 |
+| --- | --- |
+| TestRebellionLinePlayableFromNewGame | 持续（第二节） |
+| TestEscapePreparationGradientNotReversed | 持续（第二节） |
+| TestInformationEndingPlayableFromNewGame | 持续（第二节） |
+| TestRuleOfLawLinePlayableFromNewGame | 持续（第二节） |
+| TestCovenantConvergenceDecisiveEventSucceeds | 持续：现象同第五节（decisive 发布成功 publishW=52.69，large_scale_evidence −24 冲击改道，pact=0.000），落点数值随 C8 流平移微漂 |
+
+原因：发起成功后月度口碑按 (派系, 源, 目标) 升序掷骰、NPC/居民信息
+动作搭载掷骰进入共享流，长局落点平移；faction: 事实可见于 mechanic ctx
+但永不成熟，共证门与 INFORMATION 结局闸不受污染。C7 恢复通过的 3 个
+（Exclusionist / DeathPhysicalStrike / TerminationChannel）在 C8 下仍
+通过。
+
+处理：仍**等 C9（加入/退出）落地后一次重调**。C9 的加入掷骰读
+belief.B ≥ AwarenessJoinFloor(0.30)，成员流动定型后种子才有稳定靶子。

@@ -90,6 +90,9 @@ defineMechanics([
           value: sampledSuspicion(INFO_CFG.probe_base_suspicion, INFO_CFG.probe_visibility, fit, INFO_CFG.probe_witness, INFO_CFG.probe_record, mismatch),
         });
       }
+      // C8 搭载：探查成功 (含复核) 可能顺带听到派系传闻；掷骰与吸收在
+      // Go 权威侧 (faction_rumor_piggyback)，无政治派系时零 RNG。
+      mutations.push({ type: "faction_rumor_piggyback" });
       return {
         mutations,
         action_result: {
@@ -179,6 +182,9 @@ defineMechanics([
           }
         }
       }
+      // C8 搭载：流通场合人多耳杂，分享成功可能顺带传出派系传闻
+      // (Go 权威侧掷骰；玩家确定性搭载不消耗 RNG)。
+      mutations.push({ type: "faction_rumor_piggyback" });
       return {
         mutations,
         action_result: {

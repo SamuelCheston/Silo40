@@ -106,6 +106,27 @@ type FactionTuning struct {
 
 	FactionGraceMonths       int     // 筹备期月数：届满不足 MinFactionSize 即解散
 	SuccessionPrestigeWeight float64 // 接任评分威望权重 (ambition 占 1−w)
+
+	// ---- 三通道感知 (24 篇 §1.2/§4, C8) ----
+
+	AwarenessRelationWeight float64 // 关系通道权重 (观察者→发起者所属部门人脉)
+	AwarenessIdeologyWeight float64 // 思潮通道权重 (pf/loyalty 平面加权距离)
+	AwarenessTierWeight     float64 // 阶层通道权重 (权力级差 + 同阶层加成)
+	AwarenessSameClassBonus float64 // 同 ClassType 时阶层通道加成
+	AwarenessJoinFloor      float64 // 考虑加入的信念地板 (= QualRumor，C9 加入掷骰读取)
+
+	// ---- 月度口碑传播 (24 篇 §1.3/§4, C8) ----
+
+	GossipReliabilityDecay float64 // 每跳可靠度折减 (接收强度 = 源 B × 折减)
+	GossipBeliefThreshold  float64 // 源置信度达到此值才传播
+	GossipRelationMin      float64 // 沿关系网络传播的最低关系值
+	GossipSpreadChance     float64 // 每 (源, 目标) 对的传播掷骰概率 TODO(balance)
+
+	// ---- 信息动作搭载 (24 篇 §1.3/§4, C8) ----
+
+	// RumorPiggybackChance: 信息动作成功时搭载派系传闻的概率。
+	// NPC/居民掷骰；玩家确定性搭载 (玩家动作不消耗 RNG，§6)。
+	RumorPiggybackChance float64
 }
 
 // FactionConfig is the active tuning for faction clustering and the
@@ -164,4 +185,17 @@ var FactionConfig = FactionTuning{
 
 	FactionGraceMonths:       18,
 	SuccessionPrestigeWeight: 0.5,
+
+	AwarenessRelationWeight: 0.40,
+	AwarenessIdeologyWeight: 0.35,
+	AwarenessTierWeight:     0.25,
+	AwarenessSameClassBonus: 0.15,
+	AwarenessJoinFloor:      0.30,
+
+	GossipReliabilityDecay: 0.6,
+	GossipBeliefThreshold:  0.50,
+	GossipRelationMin:      0.30,
+	GossipSpreadChance:     0.25,
+
+	RumorPiggybackChance: 0.15,
 }

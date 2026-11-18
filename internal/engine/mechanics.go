@@ -971,7 +971,10 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 	case "faction_is_public_actor":
 		e.applyActorFactionPublic(silo, actor, mutation.BoolValue)
 	case "faction_found_actor":
-		e.applyFactionFoundActor(silo, actor)
+		e.applyFactionFoundActor(silo, agent, actor)
+	case "faction_rumor_piggyback":
+		// C8 信息动作搭载：JS 成功路径只发 marker，掷骰与吸收在 Go 权威侧。
+		e.applyFactionRumorPiggyback(silo, actor)
 	case "silo_flag_set":
 		writeSiloFlag(silo, mutation.Field, mutation.BoolValue)
 	case "victory_status_set":
