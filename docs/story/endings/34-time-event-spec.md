@@ -9,9 +9,9 @@
 - **完成键**：事件节点为 `special:<id>`；玩家动作为 `player_actions:<事件 id>`（内容完成键按 `组:事件 ID` 命名）。一个键只记事实。
 - **兜底**：`deadline_year`／`deadline_month` 字段（硬伤 #3）：到期未触发则强制拉起一次（绕过 trigger 与 canTrigger）。相对 Y7M10 = 代码 `129/10`。注意：服务层 DB 同步路径曾丢失这两个字段（引擎有、生产装载没有），本批已修（模型加列、同步/加载携带）；此前一切依赖兜底的实装在生产路径上都不生效。
 - **布线事实**（与 27/31 号相同）：完成键发总线事件；`event_triggered` 参与月度持续评估；订阅既有动作的节点放 `special/`。
-- **快照纪律**：资格读引擎 `PreFallSnapshot`（`silo1_destroyed` 首次置真时截取，cohort 人口加权真源）；内容不重算思潮、不在覆灭后追加内容窗口。`cohort_ideology_delta` 只用于抉择的即时效果（定格前），不用于"补快照"。
+- **快照纪律**：资格读引擎 `PreFallSnapshot`（`silo1_destroyed` 首次置真时截取，cohort 人口加权真源）；内容不重算思潮、不在覆灭后追加内容环节。`cohort_ideology_delta` 只用于抉择的即时效果（定格前），不用于"补快照"。
 - **现有 DSL 盘点**：触发器含 `timestamp_at_or_after / silo_metric_gte|lte / silo_flag_true|false / event_triggered / player_action_is / profession_metric_gte_count / profession_ideology_gte_count / all / any / canTrigger`；效果含 `silo_metric_delta`、`profession_metric_delta_all`、`floor_stability_delta`、`cohort_ideology_delta`、`schedule_event`、`player_action_complete` 等（封闭集见作者手册 §4）。
-- **ctx 可读**：`silo_metrics`、`professions[].ideologies`（派生视图）、`states`、`authority`、`year/month`。快照本身在定格前不存在、定格后不参与内容触发（结算紧随覆灭，无内容窗口）。
+- **ctx 可读**：`silo_metrics`、`professions[].ideologies`（派生视图）、`states`、`authority`、`year/month`。快照本身在定格前不存在、定格后不参与内容触发（结算紧随覆灭，无内容环节）。
 
 ## 1. 节点规格
 
