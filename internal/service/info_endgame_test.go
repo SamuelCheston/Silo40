@@ -254,6 +254,12 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "information-playable.db"))
 	req := threeSiloArchetypeRequest(2401, archetype)
 	req.Profession = "Judicial"
+	// 磐石变体 (19 §4.2/§6.4)：信息线改走无声探查形态——特质解锁
+	// SILENT_PROBE（动作门控的特质条件），与钉档证据路线
+	// TestBedrockInformationLinePlayable 同一配装；其余档保持无特质。
+	if archetype == engine.ArchetypeBedrock {
+		req.TraitIds = []string{"shadowy"}
+	}
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
 	}
@@ -268,7 +274,11 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 		}
 	}
 
-	execute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
+	openingProbe := model.ActionGatherInfo
+	if archetype == engine.ArchetypeBedrock {
+		openingProbe = model.ActionSilentProbe
+	}
+	execute(model.AgentAction{Type: openingProbe, TargetDept: "Mayor"})
 	if svc.world.ProgressStage != "first_signal" {
 		t.Fatalf("real Gather action did not open the line: %s", svc.world.ProgressStage)
 	}
@@ -442,6 +452,22 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 		// no cost changes, loop cap unchanged (criterion 3/4).
 		shareCost := model.ACTION_COSTS[model.ActionShareInfo]
 		gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
+		// 磐石 (19 §4.2)：扩池/加深确信探查换无声探查——2×AP 买免怀疑，
+		// 成本按服务端权威口径（含规范冲突上浮）；其余档逐位不变。
+		probeType := model.ActionGatherInfo
+		if archetype == engine.ArchetypeBedrock {
+			probeType = model.ActionSilentProbe
+		}
+		probeBudgetFor := func(dept string) float64 {
+			if archetype != engine.ArchetypeBedrock {
+				return gatherCost
+			}
+			action := model.AgentAction{Type: probeType, TargetDept: dept}
+			if err := svc.resolveActionCost(&action); err != nil {
+				t.Fatalf("resolve probe cost: %v", err)
+			}
+			return action.Cost
+		}
 		// 流通摩擦 (T1-2) 让戒备 ≥ 0.30 的部门更贵；路线按服务端权威成本决定
 		// 此刻付不付得起，避免把一整个月浪费在必被拒的尝试上。
 		shareCostFor := func(dept string) float64 {
@@ -527,9 +553,9 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 					// otherwise gather the source department first to deepen it
 					// (a sub-floor seed just dies and wastes the slot).
 					if agentBelief := engine.BeliefFor(svc.agent, fragment); agentBelief != nil && agentBelief.B < 0.80 &&
-						svc.agent.ActionPoints >= gatherCost {
+						svc.agent.ActionPoints >= probeBudgetFor(fragmentDepartment(fragment)) {
 						if attemptCirculation(model.AgentAction{
-							Type: model.ActionGatherInfo, TargetDept: fragmentDepartment(fragment),
+							Type: probeType, TargetDept: fragmentDepartment(fragment),
 						}) {
 							shared = true
 							break
@@ -563,13 +589,16 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 			continue
 		}
 		switch {
-		case svc.agent.ActionPoints >= buildCostFor("Judicial") && month < 12:
+		case archetype != engine.ArchetypeBedrock && svc.agent.ActionPoints >= buildCostFor("Judicial") && month < 12:
 			attemptCirculation(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
-		case svc.agent.ActionPoints >= gatherCost:
+		// 磐石：Judicial 管道已在部门循环里建好，兜底不再空建连接——
+		// 与钉档证据路线同口径，立刻转入扩池探查，让第三份事实尽早
+		// 进流通（晚播种 = 给 IT 反击怀疑留出击穿窗口）。
+		case svc.agent.ActionPoints >= probeBudgetFor(gatherFrom):
 			// Nothing shareable: gather — the portfolio must keep growing, a
 			// stronger fourth fact is what the hardest department (zero-
 			// population Mayor) needs for its third matured belief.
-			attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
+			attemptCirculation(model.AgentAction{Type: probeType, TargetDept: gatherFrom})
 		}
 	}
 	if circulationActions == 0 {

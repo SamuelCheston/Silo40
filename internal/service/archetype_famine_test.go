@@ -16,7 +16,6 @@ package service
 // 全部状态经真实动作与真实月度推进产生；固定种子可复现，不引入新随机源。
 
 import (
-	"fmt"
 	"math"
 	"path/filepath"
 	"sort"
@@ -81,11 +80,11 @@ func TestFamineKnobsLockedAtCalibratedValues(t *testing.T) {
 	if !ok {
 		t.Fatal("famine archetype must stay registered")
 	}
-	if cfg.ResourceFactor != 0.6 {
-		t.Fatalf("famine ResourceFactor = %v, want calibrated 0.6 (边界标定见 archetype.go 注释)", cfg.ResourceFactor)
+	if cfg.ResourceFactor != 0.93 {
+		t.Fatalf("famine ResourceFactor = %v, want calibrated 0.93 (边界标定见 archetype.go 注释)", cfg.ResourceFactor)
 	}
-	if cfg.CrisisCooldownFactor != 0.7 {
-		t.Fatalf("famine CrisisCooldownFactor = %v, want calibrated 0.7 (边界标定见 archetype.go 注释)", cfg.CrisisCooldownFactor)
+	if cfg.CrisisCooldownFactor != 0.9 {
+		t.Fatalf("famine CrisisCooldownFactor = %v, want calibrated 0.9 (边界标定见 archetype.go 注释)", cfg.CrisisCooldownFactor)
 	}
 	// 方向锁：荒年=资源匮乏——水位更低、危机更早更密。
 	if cfg.ResourceFactor >= 1 || cfg.CrisisCooldownFactor >= 1 {
@@ -213,152 +212,35 @@ func TestFamineFirstResourceCrisisTiming(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // 可达性证据：三线荒年钉档真实通关 (结算月数 + 资源轨迹最低点)。
-// 策略逐字复刻各自已实测的荒年/原型适配路线，仅增量：建档覆写钉荒年档、
-// 逐月资源采样、结算月数与轨迹最低点回报。
+// 策略直接复用各自已实测的荒年/原型适配跑法 (《越岭》走 playLine 共享)，
+// 仅增量：建档覆写钉荒年档、逐月资源采样、结算月数与轨迹最低点回报。
 // ---------------------------------------------------------------------------
 
 // newFamineEscapeRunner 与 newEscapeRunner 同口径，唯建档以覆写钉荒年档。
 func newFamineEscapeRunner(t *testing.T, line string, seed int64, prepLevel string) *escapeRunner {
 	t.Helper()
-	svc := newGatedService(t, filepath.Join(t.TempDir(), line+"-escape.db"))
-	req := threeSiloRequest(seed)
-	req.Profession = "Mechanical"
-	req.Archetype = engine.ArchetypeFamine
-	if _, err := svc.CreateGame(req); err != nil {
-		t.Fatalf("create game %s seed %d: %v", line, seed, err)
+	r := newEscapeRunner(t, line, seed, prepLevel, engine.ArchetypeFamine)
+	if r.svc.silo.Archetype != engine.ArchetypeFamine {
+		t.Fatalf("archetype override = %q, want %q", r.svc.silo.Archetype, engine.ArchetypeFamine)
 	}
-	if svc.silo.Archetype != engine.ArchetypeFamine {
-		t.Fatalf("archetype override = %q, want %q", svc.silo.Archetype, engine.ArchetypeFamine)
-	}
-	return &escapeRunner{
-		t:       t,
-		svc:     svc,
-		rec:     &escapeRecord{Line: line, Seed: seed, Profession: "Mechanical", PrepLevel: prepLevel, Fires: map[string]int{}, Actions: map[string]int{}},
-		start:   svc.silo.CurrentYear*12 + svc.silo.CurrentMonth,
-		seen:    map[string]bool{},
-		actions: map[string]int{},
-	}
+	return r
 }
 
 // TestFamineReachabilityRebellionLine 可达性证据·《越岭》(REBELLION)：荒年
-// 重压线——维生挤占日历。策略是 runEscapeLine 的荒年重调线 (坍塌静默窗派遣
-// ＋开窗即走) 的逐字复刻，仅加建档覆写钉档与逐月资源采样。种子 2402 的号数
-// 派生亦为荒年 (17 号)，覆写与派生在此钉同一档。
+// 重压线——维生挤占日历。策略直接复用 runEscapeLine 的荒年重调跑法
+// (playLine 共享：渗透筹备＋确认接应＋备齐 20 套防护服即出发)，仅增量：
+// 建档覆写钉档与逐月资源采样。种子 2402 的号数派生亦为荒年 (17 号)，
+// 覆写与派生在此钉同一档。
 func TestFamineReachabilityRebellionLine(t *testing.T) {
 	const seed = int64(2402)
 	r := newFamineEscapeRunner(t, "famine-reachability-rebellion", seed, "full")
 	svc := r.svc
 	track := newFamineResourceTrack(svc.silo)
 	track.sample(svc.silo)
-	r.beat("game created (profession=Mechanical, prep=full, archetype=famine override)")
-
-	// 开局：首次本地观察 + 一次分享开阶段梯 (与 runEscapeLine 同口径)。
-	r.execute("gather", model.AgentAction{Type: model.ActionGatherInfo, TargetDept: "Mayor"})
-	r.execute("share", model.AgentAction{
-		Type: model.ActionShareInfo, TargetDept: "Mayor",
-		FragmentIds: []string{svc.agent.KnownFragments[0]},
-	})
-	r.snapshot()
-
-	for m := 1; m <= acceptanceMaxMonths && !svc.gameOver(); m++ {
-		r.passTime()
-		track.sample(svc.silo)
-		if svc.gameOver() {
-			break
-		}
-		r.countermeasures()
-		if svc.gameOver() {
-			break
-		}
-
-		// 维生职责 (荒年重压面)：叛乱过热时守住能量地板，防断裂点抢先。
-		if svc.silo.Rebellion >= 0.85 && resourceAmount(svc.silo, "Energy") < 400 &&
-			svc.agent.ActionPoints >= 18 {
-			r.execute("mechanical_overhaul", model.AgentAction{Type: model.ActionProfession, ProfessionAction: "MECHANICAL_OVERHAUL"})
-			track.sample(svc.silo)
-		}
-
-		if !r.launched {
-			if r.window && !r.guaranteeDone && r.cardEnabled("ESCAPE_NEGOTIATION_GUARANTEE") &&
-				svc.agent.ActionPoints >= 6 {
-				r.stanceTrigger = "guarantee"
-				if r.execute("negotiation_guarantee", r.playerEvent("ESCAPE_NEGOTIATION_GUARANTEE")) {
-					r.guaranteeDone = true
-				}
-			}
-			if r.window && !r.orderlyDone && r.cardEnabled("ESCAPE_WINDOW_ORDERLY") {
-				if r.execute("window_orderly", r.playerEvent("ESCAPE_WINDOW_ORDERLY")) {
-					r.orderlyDone = true
-				}
-			}
-			if r.window && svc.silo.TopStance.ITStance() == model.TopStanceCooperate &&
-				r.cardEnabled("ESCAPE_PREP_SUIT_WAREHOUSE") && svc.agent.ActionPoints >= 5 {
-				r.execute("suit_warehouse", r.playerEvent("ESCAPE_PREP_SUIT_WAREHOUSE"))
-			}
-			if r.window && r.orderlyDone && r.guaranteeDone && r.cardEnabled("ESCAPE_DEPARTURE_LAUNCH") {
-				prep := svc.silo.EscapePrep
-				itCoop := svc.silo.TopStance.ITStance() == model.TopStanceCooperate
-				sinceWindow := r.month() - r.rec.WindowMonth
-				ready := false
-				switch {
-				case itCoop && (prep.SuitsFunctional >= 18 || sinceWindow >= 3):
-					ready = true
-				case !itCoop:
-					// 荒年重调 (19 §6.3)：开窗当月即走。
-					ready = true
-				case r.calIndex() >= 128*12+9:
-					ready = true
-				}
-				if ready && prep.SuppliesPacked >= 50 && prep.PlanCompleteness >= 0.5 {
-					r.stanceTrigger = "launch"
-					r.rec.LedgerAtLaunch = svc.silo.EscapePrep
-					if r.execute("departure_launch", r.playerEvent("ESCAPE_DEPARTURE_LAUNCH")) {
-						r.launched = true
-						r.rec.LaunchMonth = r.month()
-						group := svc.silo.EscapedGroup
-						r.rec.Surviving = group.Surviving
-						r.rec.Fragile = group.Fragile
-						r.rec.Survivors = group.Population
-						if len(r.rec.Stances) > 0 {
-							last := r.rec.Stances[len(r.rec.Stances)-1]
-							r.rec.StanceAtLaunch = "mayor=" + last.Mayor + " it=" + last.IT
-						}
-						r.beat(fmt.Sprintf("ESCAPE_DEPARTURE_LAUNCH settled: departed=%d survivors=%d surviving=%v (%s)",
-							group.Departed, group.Population, group.Surviving, r.rec.StanceAtLaunch))
-					}
-					track.sample(svc.silo)
-					continue
-				}
-			}
-			if r.willingness && svc.silo.EscapePrep.SuitsFunctional < suitTarget("full") &&
-				r.cardEnabled("ESCAPE_PREP_SUIT_REPAIR") && r.month()-r.lastRepair >= 2 &&
-				svc.agent.ActionPoints >= 6 {
-				if r.execute("suit_repair", r.playerEvent("ESCAPE_PREP_SUIT_REPAIR")) {
-					r.lastRepair = r.month()
-				}
-			}
-			r.rebellionEngine()
-			if r.willingness {
-				r.routeActions()
-				if svc.agent.ActionPoints >= 14 {
-					r.prepActions("full")
-				}
-			} else if r.relationTo("Mechanical") < 0.25 || r.relationTo("Mayor") < 0.15 ||
-				r.relationTo("Supply") < 0.25 {
-				switch {
-				case r.relationTo("Mechanical") < 0.25:
-					r.buildOneRelation("Mechanical")
-				case r.relationTo("Mayor") < 0.15:
-					r.buildOneRelation("Mayor")
-				default:
-					r.buildOneRelation("Supply")
-				}
-			}
-		}
-		track.sample(svc.silo)
-	}
-	r.settle()
+	r.monthHook = func() { track.sample(svc.silo) }
+	r.playLine("full")
 	rec := r.rec
+	track.sample(svc.silo)
 
 	t.Logf("famine 《越岭》 reachability: seed=%d settled_month=%d ending=%s won=%v departed=%d survivors=%d months_out=%d stance_at_launch=%s; resource mins: energy=%.0f@m%d materials=%.0f@m%d supplies=%.0f@m%d",
 		seed, rec.SettledMonth, rec.Ending, rec.Won, rec.Departed, rec.Survivors, rec.MonthsOut,

@@ -361,7 +361,21 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 		}
 
 		buildupOpen := svc.silo.CurrentYear >= 128
-		buildingRebellion := buildupOpen && svc.silo.Rebellion < 0.82
+		// Famine retune (19 §6.3 荒年局): milder famine water levels slow the
+		// early order-pressure ladder (cross/omen fire two years later than on
+		// the harsher draw), so the bombing lands while rebellion is still low
+		// (0.43) and the post-strike snowball overshoots into FRACTURE. The
+		// harsher draw won with rebellion ≈0.75 at the bombing: open the buildup
+		// a year earlier and stop at 0.6 so two real deceives plus the natural
+		// growth land the bombing near that peak without overshooting the 0.9
+		// fracture feed on the way there.
+		deceiveCap := 2
+		rebellionBuildCap := 0.82
+		if svc.silo.Archetype == engine.ArchetypeFamine {
+			buildupOpen = svc.silo.CurrentYear >= 127
+			rebellionBuildCap = 0.6
+		}
+		buildingRebellion := buildupOpen && svc.silo.Rebellion < rebellionBuildCap
 		pending := deceivePending()
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
 		// Famine retune (19 §6.3 荒年局多配给): the physical channel only opens
@@ -375,7 +389,7 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 			!contentTriggered(svc, "special:strike_reconnaissance")
 		energyGuard := (svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500) ||
 			(strikeChannelLive && resourceAmount(svc.silo, "Energy") < 500)
-		if buildingRebellion && deceives < 2 && !pending && !energyGuard && deceive != nil && deceive.Enabled &&
+		if buildingRebellion && deceives < deceiveCap && !pending && !energyGuard && deceive != nil && deceive.Enabled &&
 			svc.agent.ActionPoints >= float64(deceive.APCost+15) {
 			execute(model.AgentAction{Type: model.ActionStationOperation, ActionID: StationOpDeceive})
 			deceives++
@@ -388,7 +402,17 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 
 		// Once the repeatable underground-coordination node can snowball
 		// rebellion, keep Energy positive so it cannot confirm FRACTURE.
-		if energyGuard && svc.agent.ActionPoints >= 15 {
+		// Famine retune (19 §6.3 荒年局): after the bombing lands, continuous
+		// rationing on milder water levels keeps the population alive long
+		// enough for the rebellion snowball to cross the fracture feed, while
+		// no rationing at all feeds panic into the same feed — ration only as
+		// emergency suppression when rebellion nears the threshold, and let the
+		// strike's attrition settle DEATH in between.
+		rationGuard := energyGuard
+		if contentTriggered(svc, "crisis:bombing_terminal") && svc.silo.Archetype == engine.ArchetypeFamine {
+			rationGuard = svc.silo.Rebellion >= 0.8 && resourceAmount(svc.silo, "Energy") < 1500
+		}
+		if rationGuard && svc.agent.ActionPoints >= 15 {
 			execute(model.AgentAction{
 				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Energy",
 			})
