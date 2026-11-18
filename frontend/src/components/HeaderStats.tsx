@@ -140,21 +140,14 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats, 
                             <VStack align="start" gap={1} p={1}>
                                 <Text fontWeight="bold" borderBottom="1px solid" borderColor="whiteAlpha.300" w="full" pb={1}>政治威望</Text>
                                 <HStack justify="space-between" w="full">
-                                    <Text>人脉基础 (均值):</Text>
-                                    <Text>{agentStats.prestige_base.toFixed(1)}</Text>
+                                    <Text>野心 ×50:</Text>
+                                    <Text>{(agentStats.ambition * 50).toFixed(1)}</Text>
                                 </HStack>
                                 <HStack justify="space-between" w="full">
-                                    <Text>职业修正 ({agent.profession}):</Text>
-                                    <Text color={agentStats.profession_factor >= 0 ? "green.300" : "red.300"}>×{(1 + agentStats.profession_factor).toFixed(1)}</Text>
+                                    <Text>影响力 ×50:</Text>
+                                    <Text>{(agentStats.influence * 50).toFixed(1)}</Text>
                                 </HStack>
-                                <HStack justify="space-between" w="full">
-                                    <Text>特质修正:</Text>
-                                    <Text color={agentStats.trait_factor >= 0 ? "green.300" : "red.300"}>×{(1 + agentStats.trait_factor).toFixed(1)}</Text>
-                                </HStack>
-                                <HStack justify="space-between" w="full">
-                                    <Text>结构加成:</Text>
-                                    <Text color="orange.300">+{agentStats.structural_prestige.toFixed(1)}</Text>
-                                </HStack>
+                                <Text fontSize="10px" color="gray.400">威望 = 50×(野心+影响力)。野心开局定死，仅事件可改；影响力随时间缓慢增长。</Text>
                                 <Text fontWeight="bold" pt={1} color="orange.300">最终威望值: {Math.floor(agentStats.political_prestige)}</Text>
                             </VStack>
                         }

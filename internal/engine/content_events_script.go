@@ -577,7 +577,9 @@ func contentScriptContext(ctx ContentEvaluationContext, ignoreActionMatch bool) 
 	if ctx.Agent != nil {
 		result["actor"] = map[string]interface{}{
 			"suspicion_level":    ctx.Agent.SuspicionLevel,
-			"political_prestige": ctx.Agent.PoliticalPrestige,
+			"political_prestige": DerivedPrestige(ctx.Agent.Ambition, ctx.Agent.Influence),
+			"ambition":           ctx.Agent.Ambition,
+			"influence":          ctx.Agent.Influence,
 			"propaganda_level":   ctx.Agent.PropagandaLevel,
 			"action_points":      ctx.Agent.ActionPoints,
 			"known_fragments":    len(ctx.Agent.KnownFragments),

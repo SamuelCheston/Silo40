@@ -18,7 +18,8 @@ func TestRuleOfLawEndingNarrativeReplacesFormula(t *testing.T) {
 	station.Authority.Judicial.Regime = "PACT"
 	station.Authority.Judicial.IndependentPublicFacts = 2
 	station.Authority.Judicial.PublicEvidenceQ = 0.95
-	svc.agent.PoliticalPrestige = 100
+	svc.agent.Ambition = 1
+	svc.agent.Influence = 1
 
 	decision := svc.resolveWeightedEnding(station, svc.agent)
 	if decision == nil || decision.Selected != endingRuleOfLaw {
@@ -61,7 +62,8 @@ func TestRuleOfLawAndPersonalRuleCoexistInPool(t *testing.T) {
 		{ID: 3, Name: "Open Voice", Alive: true, Influence: 1,
 			Ideologies: map[string]float64{model.IdeologyProForeign: 1}},
 	}
-	svc.agent.PoliticalPrestige = 100
+	svc.agent.Ambition = 1
+	svc.agent.Influence = 1
 
 	decision := svc.resolveWeightedEnding(station, svc.agent)
 	if decision == nil {

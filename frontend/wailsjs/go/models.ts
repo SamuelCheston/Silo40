@@ -360,10 +360,8 @@ export namespace model {
 	}
 	export class AgentStats {
 	    avg_connection: number;
-	    prestige_base: number;
-	    profession_factor: number;
-	    trait_factor: number;
-	    structural_prestige: number;
+	    ambition: number;
+	    influence: number;
 	    political_prestige: number;
 	    ap_base_recovery: number;
 	    ap_prestige_bonus: number;
@@ -381,10 +379,8 @@ export namespace model {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.avg_connection = source["avg_connection"];
-	        this.prestige_base = source["prestige_base"];
-	        this.profession_factor = source["profession_factor"];
-	        this.trait_factor = source["trait_factor"];
-	        this.structural_prestige = source["structural_prestige"];
+	        this.ambition = source["ambition"];
+	        this.influence = source["influence"];
 	        this.political_prestige = source["political_prestige"];
 	        this.ap_base_recovery = source["ap_base_recovery"];
 	        this.ap_prestige_bonus = source["ap_prestige_bonus"];
@@ -422,7 +418,8 @@ export namespace model {
 	    name: string;
 	    profession: string;
 	    traits: string[];
-	    political_prestige: number;
+	    ambition: number;
+	    influence: number;
 	    political_points: number;
 	    action_points: number;
 	    propaganda_level: number;
@@ -448,7 +445,8 @@ export namespace model {
 	        this.name = source["name"];
 	        this.profession = source["profession"];
 	        this.traits = source["traits"];
-	        this.political_prestige = source["political_prestige"];
+	        this.ambition = source["ambition"];
+	        this.influence = source["influence"];
 	        this.political_points = source["political_points"];
 	        this.action_points = source["action_points"];
 	        this.propaganda_level = source["propaganda_level"];
@@ -559,7 +557,6 @@ export namespace model {
 	    influence: number;
 	    action_points: number;
 	    suspicion_level: number;
-	    political_prestige: number;
 	    propaganda_level: number;
 	    known_fragments: string[];
 	    relations?: Record<string, number>;
@@ -589,7 +586,6 @@ export namespace model {
 	        this.influence = source["influence"];
 	        this.action_points = source["action_points"];
 	        this.suspicion_level = source["suspicion_level"];
-	        this.political_prestige = source["political_prestige"];
 	        this.propaganda_level = source["propaganda_level"];
 	        this.known_fragments = source["known_fragments"];
 	        this.relations = source["relations"];
@@ -628,7 +624,6 @@ export namespace model {
 	    loyalty: number;
 	    influence: number;
 	    action_points: number;
-	    political_prestige: number;
 	    panic_sensitivity: number;
 	    ideologies: Record<string, number>;
 	    known_fragments?: string[];
@@ -653,7 +648,6 @@ export namespace model {
 	        this.loyalty = source["loyalty"];
 	        this.influence = source["influence"];
 	        this.action_points = source["action_points"];
-	        this.political_prestige = source["political_prestige"];
 	        this.panic_sensitivity = source["panic_sensitivity"];
 	        this.ideologies = source["ideologies"];
 	        this.known_fragments = source["known_fragments"];
@@ -793,7 +787,8 @@ export namespace model {
 	    relations?: Record<string, number>;
 	    action_points: number;
 	    suspicion_level: number;
-	    political_prestige: number;
+	    ambition: number;
+	    influence: number;
 	    propaganda_level: number;
 	    traits?: string[];
 	    relics?: Relic[];
@@ -820,7 +815,8 @@ export namespace model {
 	        this.relations = source["relations"];
 	        this.action_points = source["action_points"];
 	        this.suspicion_level = source["suspicion_level"];
-	        this.political_prestige = source["political_prestige"];
+	        this.ambition = source["ambition"];
+	        this.influence = source["influence"];
 	        this.propaganda_level = source["propaganda_level"];
 	        this.traits = source["traits"];
 	        this.relics = this.convertValues(source["relics"], Relic);

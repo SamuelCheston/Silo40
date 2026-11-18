@@ -226,7 +226,8 @@ func TestWeightedEndingTieBreaksInFixedOrder(t *testing.T) {
 // (职业横评 Mechanical-40: 3.985 vs 3.996).
 func TestCompletedBeliefGateOutweighsLivingSilo1Exclusionist(t *testing.T) {
 	svc, station, _ := weightedEndingFixture("INFORMATION")
-	svc.agent.PoliticalPrestige = 0
+	svc.agent.Ambition = 0
+	svc.agent.Influence = 0
 	svc.agent.KnownFragments = nil
 	names := []string{"Mayor", "Judicial", "IT", "Police", "Medical", "Supply", "Mechanical", "Mines", "Agricultural"}
 	for i, name := range names {
@@ -412,7 +413,8 @@ func TestWeightedEndingPersonalRuleArbitratesWithoutJudicialAttachment(t *testin
 	svc, station, agent := weightedEndingFixture("PERSONAL_RULE")
 	*station = *personalRuleStation()
 	station.VictoryStatus = &model.VictoryStatus{IsWon: true, Type: "PERSONAL_RULE"}
-	agent.PoliticalPrestige = 100 // pushes the personal-rule score past the minimum
+	agent.Ambition = 1
+	agent.Influence = 1 // pushes the personal-rule score past the minimum
 
 	decision := svc.resolveWeightedEnding(station, agent)
 	if decision == nil || decision.Selected != "PERSONAL_RULE" {

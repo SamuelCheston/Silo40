@@ -255,7 +255,8 @@ func TestActionGatesUseAttributesRelationsAndAPReasons(t *testing.T) {
 	}
 	setGateConnection(svc, "Mayor", 0)
 	setGateConnection(svc, "Mechanical", 0)
-	svc.agent.PoliticalPrestige = 0
+	svc.agent.Ambition = 0
+	svc.agent.Influence = 0
 	svc.world.UnlockedActions = nil
 	svc.refreshActionProgress()
 	if actionByID(svc.availablePlayerActions(), "action_conduct_propaganda") != nil {
@@ -269,7 +270,8 @@ func TestActionGatesUseAttributesRelationsAndAPReasons(t *testing.T) {
 		t.Fatalf("relation threshold did not unlock propaganda: %+v", action)
 	}
 
-	svc.agent.PoliticalPrestige = 60
+	svc.agent.Ambition = 0.6
+	svc.agent.Influence = 0.6
 	setGateConnection(svc, "Mayor", 0)
 	svc.refreshActionProgress()
 	incite := actionByID(svc.availablePlayerActions(), "action_incite_rebellion")

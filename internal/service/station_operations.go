@@ -192,7 +192,7 @@ func (s *GameService) applyStationOperation(def silo1OperationDef, operationID i
 		after := siloResourceAmount(target, "Supplies")
 		target.SetMayorLegitimacy(target.MayorLegitimacy() + 0.03)
 		target.Cohesion = clampSilo1Unit(target.Cohesion + 0.05)
-		s.agent.PoliticalPrestige += 3
+		s.agent.Influence = clampSilo1Unit(s.agent.Influence + 3.0/50.0)
 		resolution := fmt.Sprintf("驻地黑市消耗 %.0f Supplies（%.0f→%.0f）；合法性 %.2f、凝聚力 %.2f，特工威望 +3。",
 			before-after, before, after, target.MayorLegitimacy(), target.Cohesion)
 		s.recordHistoryImpact(target, operationID, def, historyBefore, resolution)

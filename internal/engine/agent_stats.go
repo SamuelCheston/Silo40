@@ -41,28 +41,8 @@ func (e *GameEngine) BuildAgentStats(agent *model.Agent, silo *model.Silo) model
 		totalConnection /= float64(len(connValues))
 	}
 
-	professionFactor := e.professionFactors[agent.Profession]
-	traitFactor := 0.0
-	for _, trait := range agent.Traits {
-		traitFactor += e.traitFactors[trait]
-	}
-
-	powerLevel := 0
-	classType := ""
-	for _, profession := range silo.Professions {
-		if profession.Name == agent.Profession {
-			powerLevel = profession.PowerLevel
-			classType = profession.ClassType
-			break
-		}
-	}
-
-	prestigeBase := totalConnection * 100
-	structuralPrestige := float64(powerLevel)*1.5 + classBias(classType, 2.0)
-	prestige := prestigeBase*(1+professionFactor)*(1+traitFactor) + structuralPrestige
-	if prestige < 0 {
-		prestige = 0
-	}
+	// 威望全层派生 (24 篇 §2)：50×(Ambition+Influence)，展示同口径。
+	prestige := DerivedPrestige(agent.Ambition, agent.Influence)
 
 	apPrestigeBonus := prestige * 0.05
 	propagandaMultiplier := 1 + (agent.PropagandaLevel * 0.2)
@@ -78,10 +58,8 @@ func (e *GameEngine) BuildAgentStats(agent *model.Agent, silo *model.Silo) model
 
 	return model.AgentStats{
 		AvgConnection:        totalConnection,
-		PrestigeBase:         prestigeBase,
-		ProfessionFactor:     professionFactor,
-		TraitFactor:          traitFactor,
-		StructuralPrestige:   structuralPrestige,
+		Ambition:             agent.Ambition,
+		Influence:            agent.Influence,
 		PoliticalPrestige:    prestige,
 		APBaseRecovery:       agentAPBaseRecovery,
 		APPrestigeBonus:      apPrestigeBonus,

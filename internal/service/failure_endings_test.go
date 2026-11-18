@@ -36,7 +36,8 @@ func TestExclusionistEndingNarrativeAndVariants(t *testing.T) {
 		}
 		station.TotalPopulation = 100
 		station.SetMayorLegitimacy(0.55)
-		svc.agent.PoliticalPrestige = 100
+		svc.agent.Ambition = 1
+		svc.agent.Influence = 1
 		return svc, station
 	}
 

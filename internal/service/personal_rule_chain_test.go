@@ -23,7 +23,8 @@ func TestPersonalRuleEndingNarrativeAndCoexistence(t *testing.T) {
 		station.SetMayorLegitimacy(0.6)
 		station.Mayor.HolderResidentID = 7
 		station.Mayor.HolderName = "Named Mayor"
-		svc.agent.PoliticalPrestige = 100
+		svc.agent.Ambition = 1
+		svc.agent.Influence = 1
 		return svc, station
 	}
 

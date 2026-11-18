@@ -57,7 +57,7 @@
       "category": "personal_item",
       "locations": ["residential", "private_stash", "recycling"],
       "weight": 6,
-      "effects": { "political_prestige": 0.02 },
+      "effects": { "influence": 0.0004 },
       "fragments": ["Judicial_2"],
       "confiscable": false,
       "registrable": true

@@ -55,8 +55,6 @@ type GameEngine struct {
 	// 配置常量
 	perCapitaConsumption map[string]float64
 	resourceProducers    map[string][]string
-	professionFactors    map[string]float64
-	traitFactors         map[string]float64
 
 	// NpcPolicy optionally advises NPC decisions (LLM layer). nil keeps the
 	// original algorithm bit-for-bit; the service layer injects it.
@@ -84,20 +82,6 @@ func NewGameEngine() *GameEngine {
 			"Energy":    {"Mechanical"},
 			"Materials": {"Mines"},
 			"Supplies":  {"Supply", "Agricultural"},
-		},
-		professionFactors: map[string]float64{
-			"Mayor":      0.5,
-			"Judicial":   0.4,
-			"IT":         0.3,
-			"Police":     0.3,
-			"Mechanical": 0.2,
-			"Medical":    0.2,
-		},
-		traitFactors: map[string]float64{
-			"地堡土著":   0.1,
-			"一号地堡密使": 0.5,
-			"煽动者":    0.2,
-			"守旧派":    -0.1,
 		},
 	}
 	e.RuleEngine = NewRuleEngine(e.ConditionEngine, e.ScriptEngine, e.Bus)
@@ -531,49 +515,23 @@ func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYe
 		}
 	}
 
-	// 1. 计算平均人脉值 (0.0 - 1.0)
-	connValues := view.ConnectionValues()
-	totalConnection := 0.0
-	if len(connValues) > 0 {
-		for _, v := range connValues {
-			totalConnection += v
-		}
-		totalConnection /= float64(len(connValues))
-	}
-
-	// 2. 计算职业修正系数
-	profFactor := e.professionFactors[view.Profession()]
-
-	// 3. 计算特质修正系数
-	traitFactor := 0.0
-	for _, trait := range view.Traits() {
-		traitFactor += e.traitFactors[trait]
-	}
-
-	// 4. 计算政治威望：整合人脉、职业背景、权力等级和阶层偏见
-	// 获取职业对象以提取权力等级和阶层信息
-	var powerLevel int
-	var classType string
-	for _, p := range silo.Professions {
-		if p.Name == view.Profession() {
-			powerLevel = p.PowerLevel
-			classType = p.ClassType
-			break
+	// 政治威望全层派生 (24 篇 §2)：prestige = 50×(Ambition+Influence)。
+	// 影响力演化：玩家由野心驱动缓慢增长 (与 updateKeyResidents 同构)；
+	// 年度结算以期初威望为口径 (与 agent_stats 展示一致)；影响力演化
+	// 只影响下一期。部门向 PowerLevel/10 收敛 (与 updatePopulationCohorts
+	// 同构)。RESIDENT 的影响力由 updateKeyResidents 独占，避免双重结算。
+	prestige := view.PoliticalPrestige()
+	if view.IsPlayer() {
+		view.SetInfluence(clamp01(view.Influence() + (0.005+view.Ambition()*0.05)*deltaYears))
+	} else if view.Ref.Kind == ActorNPC {
+		for _, p := range silo.Professions {
+			if p.Name == view.Profession() {
+				target := clamp01(float64(p.PowerLevel) / 10.0)
+				view.SetInfluence(clamp01(view.Influence() + (target-view.Influence())*0.15*deltaYears))
+				break
+			}
 		}
 	}
-
-	// 基础威望来源于人脉积累
-	basePrestige := totalConnection * 100
-	// 职业背景加成
-	careerBonus := (1 + profFactor) * (1 + traitFactor)
-	// 权力等级和阶层偏见对威望的直接贡献 (取代独立的影响力参数)
-	structuralPrestige := float64(powerLevel)*1.5 + classBias(classType, 2.0)
-
-	prestige := basePrestige*careerBonus + structuralPrestige
-	if prestige < 0 {
-		prestige = 0
-	}
-	view.SetPoliticalPrestige(prestige)
 
 	// 5. 给予政治点数 (仅玩家特工) 和行动点数 (AP)
 	const pointGainRate = 0.1

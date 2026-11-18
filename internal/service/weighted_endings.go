@@ -418,7 +418,7 @@ func ruleOfLawExplanation(station *model.Silo, agent *model.Agent) string {
 	}
 	prestige := 0.0
 	if agent != nil {
-		prestige = agent.PoliticalPrestige
+		prestige = engine.DerivedPrestige(agent.Ambition, agent.Influence)
 	}
 	motive := fmt.Sprintf("动机: 玩家威望=%.0f, 开放派系 %d 个", prestige, openFactions)
 	return motive + "; " + intervention + "; " + evidence + "; " + adhesion
@@ -588,7 +588,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	accumulator := &endingScoreAccumulator{decision: decision, pool: pool}
 	playerID := fmt.Sprintf("agent:%d", agent.ID)
 	accumulator.add("player", playerID, agent.Name, config.PlayerBase, 1)
-	prestige := agent.PoliticalPrestige / config.PrestigeScale
+	prestige := engine.DerivedPrestige(agent.Ambition, agent.Influence) / config.PrestigeScale
 	accumulator.add("player", playerID, agent.Name, config.PlayerPerPrestige, prestige)
 	// 修复7：碎片贡献重锚到信念覆盖 (beliefCoverageFactCount)。旧口径读
 	// agent.KnownFragments——该层不再被 Share Info 写入，低威望职业完成全部门

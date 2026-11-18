@@ -194,7 +194,7 @@ func (r *acceptanceRunner) settle() {
 	}
 	r.rec.MayorHolder = silo.Mayor.HolderName
 	r.rec.MayorHolderID = silo.Mayor.HolderResidentID
-	r.rec.Prestige = r.svc.agent.PoliticalPrestige
+	r.rec.Prestige = engine.DerivedPrestige(r.svc.agent.Ambition, r.svc.agent.Influence)
 	for _, shock := range silo.Authority.DecisiveShocks {
 		r.rec.DecisiveShocks = append(r.rec.DecisiveShocks,
 			fmt.Sprintf("%s@%d-%02d(value=%.0f,applied=%v)", shock.Source, shock.Year, shock.Month, shock.Value,

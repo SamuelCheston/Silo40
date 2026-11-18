@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"silo40/internal/engine"
 	"silo40/internal/model"
 )
 
@@ -307,7 +308,7 @@ func (s *GameService) actionConditionValue(condition actionCondition) (float64, 
 	case "action_points":
 		return s.agent.ActionPoints, true
 	case "political_prestige":
-		return s.agent.PoliticalPrestige, true
+		return engine.DerivedPrestige(s.agent.Ambition, s.agent.Influence), true
 	case "propaganda_level":
 		return s.agent.PropagandaLevel, true
 	case "suspicion_level":

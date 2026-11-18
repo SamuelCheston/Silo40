@@ -1108,7 +1108,9 @@ func (e *GameEngine) applyActorMetricDelta(actor *ActorView, field string, delta
 	case "suspicion_level":
 		actor.SetSuspicionLevel(math.Max(0, actor.SuspicionLevel()+delta))
 	case "political_prestige":
-		actor.SetPoliticalPrestige(math.Max(0, actor.PoliticalPrestige()+delta))
+		// 威望已全层派生 (24 篇 §2)：旧 prestige mutation 折算为 influence
+		// (value/50)，保持内容语义近似。
+		actor.SetInfluence(clamp01(actor.Influence() + delta/50))
 	case "ambition":
 		actor.SetAmbition(clamp01(actor.Ambition() + delta))
 	case "influence":
@@ -1130,7 +1132,7 @@ func (e *GameEngine) applyActorMetricSet(actor *ActorView, field string, value f
 	case "suspicion_level":
 		actor.SetSuspicionLevel(math.Max(0, value))
 	case "political_prestige":
-		actor.SetPoliticalPrestige(math.Max(0, value))
+		actor.SetInfluence(clamp01(value / 50))
 	case "ambition":
 		actor.SetAmbition(clamp01(value))
 	case "influence":

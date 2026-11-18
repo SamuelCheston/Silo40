@@ -8,24 +8,6 @@ defineMechanics([
         return {};
       }
 
-      const professionFactors = {
-        Mayor: 0.5,
-        Judicial: 0.4,
-        IT: 0.3,
-        Police: 0.3,
-        Mechanical: 0.2,
-        Medical: 0.2,
-      };
-      const traitFactors = {
-        "地堡土著": 0.1,
-        "一号地堡密使": 0.5,
-        "煽动者": 0.2,
-        "守旧派": -0.1,
-      };
-      function classBias(classType, delta) {
-        return classType === "ELITE" ? delta : -delta * 0.35;
-      }
-
       const mutations = [];
       const logs = [];
 
@@ -42,29 +24,22 @@ defineMechanics([
         }
       }
 
-      const connections = ctx.actor.connections || [];
-      let avgConnection = 0;
-      if (connections.length > 0) {
-        for (const entry of connections) {
-          avgConnection += entry.value || 0;
-        }
-        avgConnection /= connections.length;
+      // 政治威望全层派生 (24 篇 §2)：prestige = 50×(Ambition+Influence)。
+      // 年度结算以期初威望为口径 (与 agent_stats 展示一致)，影响力演化
+      // 只影响下一期。演化与 Go updateActorEconomy 同构：玩家由野心驱动
+      // 增长，部门向 PowerLevel/10 收敛；RESIDENT 由 updateKeyResidents 独占。
+      const ambition = ctx.actor.ambition || 0;
+      const influence = ctx.actor.influence || 0;
+      const prestige = 50 * (ambition + influence);
+      if (ctx.actor.kind === "PLAYER") {
+        const growth = (0.005 + ambition * 0.05) * deltaYears;
+        mutations.push({ type: "actor_metric_delta", field: "influence", value: growth });
+      } else if (ctx.actor.kind === "NPC") {
+        const target = clamp((ctx.actor.power_level || 0) / 10, 0, 1);
+        const next = clamp(influence + (target - influence) * 0.15 * deltaYears, 0, 1);
+        mutations.push({ type: "actor_metric_set", field: "influence", value: next });
       }
 
-      const profFactor = professionFactors[ctx.actor.profession] || 0;
-      let traitFactor = 0;
-      for (const trait of ctx.actor.traits || []) {
-        traitFactor += traitFactors[trait] || 0;
-      }
-
-      const prestigeBase = avgConnection * 100;
-      const structuralPrestige = (ctx.actor.power_level || 0) * 1.5 + classBias(ctx.actor.class_type || "", 2.0);
-      let prestige = prestigeBase * (1 + profFactor) * (1 + traitFactor) + structuralPrestige;
-      if (prestige < 0) {
-        prestige = 0;
-      }
-
-      mutations.push({ type: "actor_metric_set", field: "political_prestige", value: prestige });
       if (ctx.actor.kind === "PLAYER") {
         mutations.push({ type: "actor_metric_delta", field: "political_points", value: prestige * 0.1 * deltaYears });
       }

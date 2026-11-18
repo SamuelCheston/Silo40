@@ -56,7 +56,7 @@ func TestFractureEndingPlayableFromNewGame(t *testing.T) {
 	}
 	if deceives == 0 {
 		t.Fatalf("real gates never allowed STATION_DECEIVE at %d-%02d: status=%+v prestige=%.3f AP=%.3f connections=%+v actions=%+v",
-			svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.VictoryStatus, svc.agent.PoliticalPrestige, svc.agent.ActionPoints, svc.agent.Connections, svc.availablePlayerActions())
+			svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.VictoryStatus, engine.DerivedPrestige(svc.agent.Ambition, svc.agent.Influence), svc.agent.ActionPoints, svc.agent.Connections, svc.availablePlayerActions())
 	}
 	for _, key := range []string{
 		"crisis:fracture_infrastructure",

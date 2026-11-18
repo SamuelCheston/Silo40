@@ -50,6 +50,8 @@
   新增 `actor_metric_delta/set: ambition` mutation 通路（PLAYER/RESIDENT/NPC 同构）。
 - **Influence 可演化**：居民/玩家沿用 `(0.005 + Ambition×0.05)/年` 增长；
   部门向 PowerLevel/10 收敛（沿用 cohort 公式）。
+- **年度结算以期初威望为口径**：Go/JS agent_update 先按期初 prestige 结算
+  政治点数/AP，再落影响力演化（下一期生效），与 agent_stats 展示口径逐位一致。
 - **循环依赖拆除**：generateResidentAmbition 不再以 cohort 威望为输入，改读 PowerLevel。
 - **删除两段威望动力学**：cohort 威望漂移（residents.go updatePopulationCohorts）与
   居民威望同步（updateKeyResidents）。

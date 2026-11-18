@@ -482,7 +482,8 @@ func TestRebellionEndingNarrative(t *testing.T) {
 			Initialized: true, Population: 120, Departed: 150, Surviving: true,
 			DepartedYear: 126, DepartedMonth: 3,
 		}
-		svc.agent.PoliticalPrestige = 100
+		svc.agent.Ambition = 1
+		svc.agent.Influence = 1
 		return svc, station
 	}
 

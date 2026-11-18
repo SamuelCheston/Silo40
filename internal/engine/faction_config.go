@@ -67,7 +67,7 @@ type FactionTuning struct {
 
 	// ---- representative cohort score weights ----
 
-	RepScorePrestigeWeight float64 // weight of PoliticalPrestige/20
+	RepScorePrestigeWeight float64 // weight of derived prestige/20
 	RepScoreLoyaltyWeight  float64 // weight of cohort loyalty
 	RepScoreSizeWeight     float64 // weight of ln(count+1)
 
@@ -110,10 +110,10 @@ type FactionTuning struct {
 
 	// ---- representative ambition generation ----
 
-	AmbitionBase           float64 // base ambition of generated representatives
-	AmbitionPrestigeWeight float64 // weight of min(prestige,30)/30
+	AmbitionBase            float64 // base ambition of generated representatives
+	AmbitionPowerWeight     float64 // weight of min(PowerLevel,10)/10
 	AmbitionIntensityWeight float64 // weight of ideological intensity
-	AmbitionNoise          float64 // uniform noise amplitude
+	AmbitionNoise           float64 // uniform noise amplitude
 }
 
 // FactionConfig is the active tuning for faction clustering and the
@@ -168,7 +168,7 @@ var FactionConfig = FactionTuning{
 	ClusterInertiaBonus:     0.5,
 
 	AmbitionBase:            0.22,
-	AmbitionPrestigeWeight:  0.40,
+	AmbitionPowerWeight:     0.40,
 	AmbitionIntensityWeight: 0.30,
 	AmbitionNoise:           0.08,
 }

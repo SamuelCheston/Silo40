@@ -62,7 +62,11 @@ const (
 //     地板满渗透月数后事实成熟，《共证》资格门改读成熟计数。零值 = 未渗透
 //     = 旧档"信念门未达成"的状态一致，不回填任何推测进度；v13 存档经
 //     备份+单事务+回读校验升级 (v12 旧档先经 v13 谈判层升级接力)。
-const CurrentSaveVersion = 14
+//   - v15: 政治威望全层派生 (24-faction-event-algorithm-plan)。Agent/Profession/
+//     Resident/PopulationCohort 删除独立 PoliticalPrestige 字段，威望改由
+//     50×(Ambition+Influence) 派生；Agent/Profession 补齐 Ambition/Influence。
+//     破坏性语义变更，无升级步：v14 及更早存档拒载 (ADR-0017 硬切断)。
+const CurrentSaveVersion = 15
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -93,7 +97,6 @@ type Agent struct {
 	Name              string       `gorm:"size:64" json:"name"`
 	Profession        string       `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
 	Traits            []string     `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
-	PoliticalPrestige float64      `gorm:"default:0.0" json:"political_prestige"`   // 政治威望
 	Ambition          float64      `gorm:"default:0.0" json:"ambition"`             // 野心 (开局定死，仅事件可改)
 	Influence         float64      `gorm:"default:0.0" json:"influence"`            // 个人影响力
 	PoliticalPoints   float64      `gorm:"default:0.0" json:"political_points"`     // 政治点数
@@ -1110,7 +1113,6 @@ type Profession struct {
 	// ---- 统一 Actor 经济体系 (与 Agent 同构) ----
 	ActionPoints      float64   `gorm:"default:0" json:"action_points"`                    // 行动点数 (AP)
 	SuspicionLevel    float64   `gorm:"default:0" json:"suspicion_level"`                  // 怀疑度
-	PoliticalPrestige float64   `gorm:"default:0" json:"political_prestige"`               // 政治威望
 	Ambition          float64   `gorm:"default:0" json:"ambition"`                         // 部门野心 (开局定死，仅事件可改)
 	Influence         float64   `gorm:"default:0" json:"influence"`                        // 部门影响力
 	PropagandaLevel   float64   `gorm:"default:0" json:"propaganda_level"`                 // 宣传力度
@@ -1144,7 +1146,6 @@ type PopulationCohort struct {
 	Loyalty           float64            `gorm:"default:0.5" json:"loyalty"`
 	Influence         float64            `gorm:"default:0.0" json:"influence"`
 	ActionPoints      float64            `gorm:"default:0.0" json:"action_points"`
-	PoliticalPrestige float64            `gorm:"default:0.0" json:"political_prestige"`
 	PanicSensitivity  float64            `gorm:"default:1.0" json:"panic_sensitivity"`
 	Ideologies        map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
 	KnownFragments    []string           `gorm:"type:text;serializer:json" json:"known_fragments,omitempty"`
@@ -1169,7 +1170,6 @@ type Resident struct {
 	Influence         float64            `gorm:"default:0.0" json:"influence"`
 	ActionPoints      float64            `gorm:"default:0.0" json:"action_points"`
 	SuspicionLevel    float64            `gorm:"default:0.0" json:"suspicion_level"`
-	PoliticalPrestige float64            `gorm:"default:0.0" json:"political_prestige"`
 	PropagandaLevel   float64            `gorm:"default:0.0" json:"propaganda_level"`
 	KnownFragments    []string           `gorm:"type:text;serializer:json" json:"known_fragments"`
 	Relations         map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"`
@@ -1579,10 +1579,8 @@ type WitnessChoice struct {
 // AgentStats 后端下发的 Agent 派生指标，用于前端展示，避免 UI 复算引擎公式
 type AgentStats struct {
 	AvgConnection        float64 `json:"avg_connection"`
-	PrestigeBase         float64 `json:"prestige_base"`
-	ProfessionFactor     float64 `json:"profession_factor"`
-	TraitFactor          float64 `json:"trait_factor"`
-	StructuralPrestige   float64 `json:"structural_prestige"`
+	Ambition             float64 `json:"ambition"`
+	Influence            float64 `json:"influence"`
 	PoliticalPrestige    float64 `json:"political_prestige"`
 	APBaseRecovery       float64 `json:"ap_base_recovery"`
 	APPrestigeBonus      float64 `json:"ap_prestige_bonus"`

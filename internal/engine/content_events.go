@@ -907,7 +907,7 @@ func evaluateContentTrigger(trigger ContentTrigger, ctx ContentEvaluationContext
 		case "suspicion_level":
 			value = ctx.Agent.SuspicionLevel
 		case "political_prestige":
-			value = ctx.Agent.PoliticalPrestige
+			value = DerivedPrestige(ctx.Agent.Ambition, ctx.Agent.Influence)
 		case "ambition":
 			value = ctx.Agent.Ambition
 		case "influence":

@@ -24,7 +24,8 @@ func pressureFixture(t *testing.T) (*GameService, int) {
 		t.Fatalf("create game: %v", err)
 	}
 	svc.agent.ActionPoints = 500
-	svc.agent.PoliticalPrestige = 60
+	svc.agent.Ambition = 0.6
+	svc.agent.Influence = 0.6
 	// incite 的可用门还要求 Mayor 关系 ≥0.25：fixture 直接给足。
 	for i := range svc.silo.Professions {
 		if svc.silo.Professions[i].Name == "Mayor" {
