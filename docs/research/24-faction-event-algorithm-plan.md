@@ -58,7 +58,8 @@
 - **玩家开局属性**（定死，特质修正）：
   Mayor A=0.8/I=0.8（prestige 80）；Judicial/IT/Medical/Mines A=0.05/I=0.05（prestige 5）；
   其余 A=0.1/I=0.1（prestige 10）；特质 charismatic → A+0.2、I+0.2（prestige +20，对齐旧值）。
-- **部门开局属性**：A = 0.2 + 0.03×PowerLevel + rng×0.05（定死）；I = 0.6×PowerLevel/10。
+- **部门开局属性**：A = 0.2 + 0.03×PowerLevel + 0.025（定死，开局不掷骰——新增 RNG
+  消耗会平移共享随机流，破坏种子调优的可玩性测试）；I = 0.6×PowerLevel/10。
 - **居民开局 ambition**：AmbitionBase + min(PowerLevel,10)/10×AmbitionPowerWeight +
   ideologicalIntensity×AmbitionIntensityWeight + rng×AmbitionNoise（公式结构不变，输入换轴）。
 
