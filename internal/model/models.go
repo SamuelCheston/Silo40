@@ -1562,6 +1562,7 @@ const (
 	ActionPublicizeFaction  AgentActionType = "PUBLICIZE_FACTION"
 	ActionFoundFaction      AgentActionType = "FOUND_FACTION"
 	ActionJoinFaction       AgentActionType = "JOIN_FACTION"
+	ActionMergeFaction      AgentActionType = "MERGE_FACTION"
 	ActionSilo1Operation    AgentActionType = "SILO1_OPERATION"
 	ActionStationOperation  AgentActionType = "STATION_OPERATION"
 )
@@ -1999,6 +2000,7 @@ var ACTION_COSTS = map[AgentActionType]float64{
 	ActionPublicizeFaction:  25,
 	ActionFoundFaction:      20, // 24 篇 §4：发起派系聚类事件的 AP 成本
 	ActionJoinFaction:       10, // 24 篇 C9：加入派系的 AP 成本 (方案留档自定值)
+	ActionMergeFaction:      15, // 24 篇 §4：合并派系的 AP 成本
 	ActionProfession:        0, // 实际成本由职业行动注册表决定
 	ActionPlayerEvent:       0, // 实际成本由 content event 元数据决定
 	ActionSilo1Operation:    0, // Actual cost comes from the operation definition.
@@ -2015,6 +2017,7 @@ var ACTION_DURATIONS = map[AgentActionType]int{
 	ActionPublicizeFaction:  0, // 立即生效
 	ActionFoundFaction:      0, // 立即生效
 	ActionJoinFaction:       0, // 立即生效
+	ActionMergeFaction:      0, // 立即生效
 	ActionProfession:        1,
 	ActionPlayerEvent:       0,
 	ActionSilo1Operation:    0,

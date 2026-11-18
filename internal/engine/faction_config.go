@@ -118,6 +118,11 @@ type FactionTuning struct {
 	AwarenessJoinFloor   float64 // 可考虑加入的信念地板 (= QualRumor 0.30)
 	AffinityRadius       float64 // 亲缘半径：加权特征距离 ≤ 此值算亲缘圈内
 	ExitInertiaFactor    float64 // 退出惯性系数：退出概率 ×(1−此值)，低于加入概率
+
+	// ---- 合并 (24 篇 §1.6/§4, C10) ----
+
+	MergeRelationMin float64 // 合并所需双方领袖个人关系 (LeaderRelations 子矩阵)
+	MergeAPCost      float64 // MERGE_FACTION 动作 AP 成本 (与 ACTION_COSTS 一致)
 }
 
 // FactionConfig is the active tuning for faction clustering and the
@@ -186,4 +191,7 @@ var FactionConfig = FactionTuning{
 	AwarenessJoinFloor:    0.30,
 	AffinityRadius:        0.30,
 	ExitInertiaFactor:     0.5,
+
+	MergeRelationMin: 0.60,
+	MergeAPCost:      15,
 }

@@ -975,6 +975,8 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 		e.applyFactionFoundActor(silo, actor)
 	case "faction_join_actor":
 		e.applyFactionJoinActor(silo, actor, agent, uint(mutation.IntValue))
+	case "faction_merge_actor":
+		e.applyFactionMergeActor(silo, actor, agent, uint(mutation.IntValue))
 	case "silo_flag_set":
 		writeSiloFlag(silo, mutation.Field, mutation.BoolValue)
 	case "victory_status_set":

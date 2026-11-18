@@ -165,7 +165,12 @@
   NPC 加入不触发，单测直接播种信念事实。玩家成员资格新增 Agent.FactionID（零值安全，
   存档仍 v17）；月度加入/退出挂 RunNpcTurn 的 ApplyFactionLoyaltyDynamics 之后，
   退出相先于加入相、退出 cohort 当月不再加入，杜绝单月往返）。
-- C10：合并资格与成员转移、ID 存续。
+- C10：合并资格与成员转移、ID 存续 ✓（faction_merge_test.go 4 项：三闸 + 领袖身份/
+  自身排除、成员转移 + 存续 ID 不变 + 被并方除名 + Memory 追加 + 领袖降级、玩家领袖
+  读 agent:<id> 键且不掷骰、零成员派系可合并。合并关系闸对玩家同样生效——合意需双方
+  领袖达标，ADR-0010 直选豁免只适用加入。引擎全绿、前端 tsc 通过；service 全量复测
+  仍为 13 个已知失败，无新增漂移。开局门控回归随 political_faction_count 指标修复，
+  留档 [25-v16-test-debt.md](25-v16-test-debt.md) §六）。
 
 ## 8. 下游影响清单
 
