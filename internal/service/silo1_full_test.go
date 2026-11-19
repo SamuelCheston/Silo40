@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"silo40/internal/engine"
 	"silo40/internal/model"
 )
 
@@ -16,6 +17,9 @@ func threeSiloRequest(seed int64) model.CreateGameRequest {
 		Seed:         seed,
 		IncludeSilo1: true,
 		Neighbor:     &model.NeighborSiloConfig{},
+		// 基线夹具钉档无原型：存量校准/验收测试按 ADR-0011 的重调纪律不应被
+		// 号数派生的开局偏向扰动；原型矩阵用 threeSiloArchetypeRequest 显式覆写。
+		Archetype: engine.ArchetypeNone,
 	}
 }
 

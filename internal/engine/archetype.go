@@ -18,6 +18,10 @@ const (
 	ArchetypeBedrock = "bedrock" // 磐石：IT 控制强化
 	ArchetypeRift    = "rift"    // 裂隙：控制松弛、秩序波动放大
 	ArchetypeFamine  = "famine"  // 荒年：资源匮乏
+	// ArchetypeNone 显式钉档"无原型"：跳过号数派生并按空原型 (零值) 运行。
+	// 仅用于夹具/旧档基线复现 (ADR-0011：基线校准测试不应被开局偏向扰动)；
+	// 生产新局留空仍按号数派生。
+	ArchetypeNone = "none"
 )
 
 // ArchetypeTableVersion 号数→档位查表的内容版本 (19 §3.3"查表内容进配置并

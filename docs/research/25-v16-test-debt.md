@@ -320,6 +320,35 @@ test/seed-retune 已合并 main（b512691），合并态全量复测（238s）�
   只落欠账（本文续记），不自动立项重调；重调仅在所有者明确要求或
   上线验收时进行。
 - 读测试报告先对照本清单：**当前零已知红信号**（Information 已于
-  2026-11-19 按 26 篇闭合）；出现任何失败都应先按真实回归排查，不得默认
-  归入漂移。
+  2026-11-19 按 26 篇闭合；**但 19 号开局弹性合并引入了新的原型 × 线红信号，
+  见第十一节**）；出现任何失败都应先按真实回归排查，不得默认归入漂移。
 - 上线验收整备时：全量消耗品重建（含 parity 基线与轨迹转储）一并处理。
+
+---
+
+## 十一、19 号开局弹性的合并后红信号（2026-11-19 复核）
+
+`5c59842`（合入 `feat/opening-variability`）落地并推送后，全量
+`go test ./internal/service/` 为红。复核结论与已做的处置：
+
+1. **基线夹具被号数派生扰动**（已修）：`CreateGame` 现在按
+   `assignedStationNumber(seed)` 派生原型，未显式覆写原型的存量校准夹具
+   （如 `TestCovenantConvergence*`）意外跑在裂隙档上。已加显式哨兵
+   `engine.ArchetypeNone`（`"none"`），并让 `threeSiloRequest` 钉档无原型；
+   原型矩阵仍走 `threeSiloArchetypeRequest` 显式覆写。号数派生本身由
+   `TestCreateGameDerivesArchetypeFromStationNumber` 覆盖。
+2. **原型 × 线可玩矩阵仍红**（未闭合）：全量 574s 后仍然失败——
+   `TestBedrockInformationLinePlayable`、`TestFamineReachabilityInformationLine`、
+   `TestRiftRuleOfLawReachable`、`TestRiftInformationReachable`、
+   `TestRebellionLinePlayableFromNewGame/rift`、
+   `TestInformationEndingPlayableFromNewGame/{bedrock,rift}`、
+   `TestRuleOfLawLinePlayableFromNewGame/{bedrock,famine}`、
+   `TestDeathPhysicalStrikePlayableFromNewGame/{bedrock,rift}`、
+   `TestTerminationChannelCountermeasurePlayableFromNewGame/bedrock`、
+   `TestSilentProbeInformationEndingMatrix/{bedrock,famine,rift}`。
+   症状多为 30 月渗透窗差 6–15 个月才凑齐三槽，属 26 篇信息线重设计
+   （3 事实 × 30 月）与 19 号原型 AP/探针成本叠加后的重调未完成，
+   不是机制断链。
+3. **处置**（按 [ADR-0011](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)）：
+   合并冻结在 `feat/opening-variability` 上待重调，不在红状态下继续叠加
+   新机制；原分支与工作树保留。上述清单即重调批次的任务表。

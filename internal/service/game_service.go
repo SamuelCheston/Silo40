@@ -1244,7 +1244,10 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	if archetype == "" {
 		archetype = engine.ArchetypeForStation(assignedStationNumber(seed))
 	}
-	if _, ok := engine.ArchetypeByID(archetype); !ok {
+	if archetype == engine.ArchetypeNone {
+		// 显式钉档无原型：跳过派生与开局覆写，按空原型零值运行 (夹具基线)。
+		archetype = ""
+	} else if _, ok := engine.ArchetypeByID(archetype); !ok {
 		return nil, fmt.Errorf("unknown archetype %q", archetype)
 	}
 	silo.Archetype = archetype

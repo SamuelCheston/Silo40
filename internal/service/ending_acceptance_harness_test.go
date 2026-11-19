@@ -749,7 +749,7 @@ func playPersonalRuleAcceptance(t *testing.T, seed int64, archetype string) *acc
 					// Rift retune (19 §6.3): the top-up cap carries the same
 					// hunt margin as the cover cycle below, and the cover
 					// cycle itself keeps running until the top-up window
-					// opens — year 129 without cover lets the hunt compound
+					// opens — year 129 without cover lets the hunt build up
 					// straight into 除名 before the settlement date. The
 					// window opens earlier and carries one extra burst than
 					// baseline: with the amplified volatility calmed, exposure
