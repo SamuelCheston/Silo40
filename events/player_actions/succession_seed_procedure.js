@@ -21,9 +21,13 @@ defineEvent({
     unavailable_behavior: "hide",
   },
   trigger: playerActionIs("SUCCESSION_SEED_PROCEDURE"),
-  script: {
-    apply: function(ctx) {
-      return { effects: [], emit: [] };
-    },
-  },
+  // 抉择即时后果（注释对账）：种子把"如何把市长权力变成可继承、可问责
+  // 的程序"重新打开——问题被追问，历史包袱 +0.02；文案承诺"司法侧的
+  // 程序派会注意到这些种子"——由 beliefObserve 机械兑现，司法职业层
+  // 收到一次事实观察。改道资格仍由 action_gates 的 event_completed 边
+  // 读 player_actions:succession_seed_procedure 完成键（不改资格口径）。
+  effects: [
+    siloMetricDelta("history_burden", 0.02), // initial calibration, TODO(balance)
+    beliefObserve("Judicial", "Judicial_1", 0.3), // initial calibration, TODO(balance)
+  ],
 });
