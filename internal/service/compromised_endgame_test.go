@@ -9,8 +9,12 @@ import (
 )
 
 func TestCompromisedEndingPlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testCompromisedEndingPlayableFromNewGame)
+}
+
+func testCompromisedEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "compromised-playable.db"))
-	req := threeSiloRequest(2801)
+	req := threeSiloArchetypeRequest(2801, archetype)
 	req.Profession = "Mayor"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
@@ -69,6 +73,16 @@ func TestCompromisedEndingPlayableFromNewGame(t *testing.T) {
 		}
 
 		actions := svc.availablePlayerActions()
+		// Rift retune (19 §6.3 裂隙局压恐慌): the amplified order volatility
+		// pushes rebellion hotter than the baseline route ever saw; when it
+		// runs hot the Mayor's own public address calms the panic that feeds
+		// the spiral before the exposure engine resumes.
+		if svc.silo.Rebellion >= 0.7 && svc.agent.ActionPoints >= 15 {
+			if address := actionByID(actions, "MAYOR_PUBLIC_ADDRESS"); address != nil && address.Enabled {
+				execute(model.AgentAction{Type: model.ActionProfession, ProfessionAction: "MAYOR_PUBLIC_ADDRESS"})
+				continue
+			}
+		}
 		if infiltrations == 0 {
 			infiltrate := actionByID(actions, StationOpInfiltrate)
 			if infiltrate != nil && infiltrate.Enabled && svc.agent.ActionPoints >= float64(infiltrate.APCost) {

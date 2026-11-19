@@ -80,6 +80,9 @@ const (
 //     FOUND_FACTION 创立，成员资格持久，筹备期解散与领袖死亡接任上线。
 //     v16 存档的聚类派系/归属是已废除算法的产物，语义不可延续，拒载
 //     (ADR-0017 硬切断，无升级步)。开局零派系 (仅无阵营桶)。
+//
+// 19-opening-variability：Silo 另携带驻地原型标识 (Archetype)，建局时
+// 写入；零值 = 无原型。旧档按 ADR-0017 硬切断拒载，不设原型升级步。
 const CurrentSaveVersion = 17
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
@@ -733,11 +736,15 @@ type ShadowAuthority struct {
 
 // Silo 地堡核心模型
 type Silo struct {
-	ID            uint     `gorm:"primarykey" json:"id"`
-	WorldID       uint     `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
-	Name          string   `gorm:"size:100" json:"name"`
-	Traits        []string `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
-	SafeguardRisk float64  `gorm:"default:0.0" json:"safeguard_risk"`       // IT 专属风险系数
+	ID      uint     `gorm:"primarykey" json:"id"`
+	WorldID uint     `gorm:"index;default:1" json:"world_id"` // 所属世界 (世界模型 v2 起)
+	Name    string   `gorm:"size:100" json:"name"`
+	Traits  []string `gorm:"type:text;serializer:json" json:"traits"` // 地堡特质 (abundant/leak/psychoactive_meds)
+	// Archetype 驻地原型 (19-opening-variability §3)：建档时写入的既成事实
+	// (号数确定性查表派生或请求覆写)，月度结算据此读档间旋钮。零值 = 无
+	// 原型 = 旧档/空配置行为逐位不变。
+	Archetype     string  `gorm:"size:20" json:"archetype,omitempty"`
+	SafeguardRisk float64 `gorm:"default:0.0" json:"safeguard_risk"` // IT 专属风险系数
 	// BlackBox 每堡黑箱状态 (22 黑箱学习系列 01 卷 §8)：真值 Theta 与信念 Belief
 	// 分字段存放。零值 = 功能未启用 = 旧档语义。
 	BlackBox Silo1BlackBoxState `gorm:"type:text;serializer:json" json:"black_box"`
@@ -1357,14 +1364,14 @@ type Profession struct {
 	// Beliefs 部门层信念 (§3.3 的部门×阶层层，本轮以部门为聚合单元)。
 	Beliefs []FactBelief `gorm:"type:text;serializer:json" json:"beliefs,omitempty"`
 	// ---- 统一 Actor 经济体系 (与 Agent 同构) ----
-	ActionPoints      float64   `gorm:"default:0" json:"action_points"`                    // 行动点数 (AP)
-	SuspicionLevel    float64   `gorm:"default:0" json:"suspicion_level"`                  // 怀疑度
-	Ambition          float64   `gorm:"default:0" json:"ambition"`                         // 部门野心 (开局定死，仅事件可改)
-	Influence         float64   `gorm:"default:0" json:"influence"`                        // 部门影响力
-	PropagandaLevel   float64   `gorm:"default:0" json:"propaganda_level"`                 // 宣传力度
-	Traits            []string  `gorm:"type:text;serializer:json" json:"traits,omitempty"` // 特质
-	Relics            []Relic   `gorm:"foreignKey:ProfessionID" json:"relics,omitempty"`   // 部门保管的遗物 (如司法部)
-	UpdatedAt         time.Time `json:"updated_at"`
+	ActionPoints    float64   `gorm:"default:0" json:"action_points"`                    // 行动点数 (AP)
+	SuspicionLevel  float64   `gorm:"default:0" json:"suspicion_level"`                  // 怀疑度
+	Ambition        float64   `gorm:"default:0" json:"ambition"`                         // 部门野心 (开局定死，仅事件可改)
+	Influence       float64   `gorm:"default:0" json:"influence"`                        // 部门影响力
+	PropagandaLevel float64   `gorm:"default:0" json:"propaganda_level"`                 // 宣传力度
+	Traits          []string  `gorm:"type:text;serializer:json" json:"traits,omitempty"` // 特质
+	Relics          []Relic   `gorm:"foreignKey:ProfessionID" json:"relics,omitempty"`   // 部门保管的遗物 (如司法部)
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // Floor 楼层模型 (Silo 核心空间)
@@ -1381,22 +1388,22 @@ type Floor struct {
 
 // PopulationCohort 聚合人口单元：以职业为首要维度，按意识形态组合划分。
 type PopulationCohort struct {
-	ID                uint               `gorm:"primarykey" json:"id"`
-	SiloID            uint               `gorm:"index" json:"silo_id"`
-	ProfessionID      uint               `gorm:"index" json:"profession_id"`
-	FactionID         *uint              `gorm:"index" json:"faction_id,omitempty"`
-	Name              string             `gorm:"size:100" json:"name"`
-	Count             int                `gorm:"default:0" json:"count"`
-	IdeologyProfile   []string           `gorm:"type:text;serializer:json" json:"ideology_profile"` // 核心意识形态组合 (1-2个)
-	HomeZone          string             `gorm:"size:20" json:"home_zone"`
-	Loyalty           float64            `gorm:"default:0.5" json:"loyalty"`
-	Influence         float64            `gorm:"default:0.0" json:"influence"`
-	ActionPoints      float64            `gorm:"default:0.0" json:"action_points"`
-	PanicSensitivity  float64            `gorm:"default:1.0" json:"panic_sensitivity"`
-	Ideologies        map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
-	KnownFragments    []string           `gorm:"type:text;serializer:json" json:"known_fragments,omitempty"`
-	Tags              []string           `gorm:"type:text;serializer:json" json:"tags,omitempty"`
-	UpdatedAt         time.Time          `json:"updated_at"`
+	ID               uint               `gorm:"primarykey" json:"id"`
+	SiloID           uint               `gorm:"index" json:"silo_id"`
+	ProfessionID     uint               `gorm:"index" json:"profession_id"`
+	FactionID        *uint              `gorm:"index" json:"faction_id,omitempty"`
+	Name             string             `gorm:"size:100" json:"name"`
+	Count            int                `gorm:"default:0" json:"count"`
+	IdeologyProfile  []string           `gorm:"type:text;serializer:json" json:"ideology_profile"` // 核心意识形态组合 (1-2个)
+	HomeZone         string             `gorm:"size:20" json:"home_zone"`
+	Loyalty          float64            `gorm:"default:0.5" json:"loyalty"`
+	Influence        float64            `gorm:"default:0.0" json:"influence"`
+	ActionPoints     float64            `gorm:"default:0.0" json:"action_points"`
+	PanicSensitivity float64            `gorm:"default:1.0" json:"panic_sensitivity"`
+	Ideologies       map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
+	KnownFragments   []string           `gorm:"type:text;serializer:json" json:"known_fragments,omitempty"`
+	Tags             []string           `gorm:"type:text;serializer:json" json:"tags,omitempty"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 // Resident 显式居民/单位模型：每个 NPC unit 都有自己的 tags 与状态
@@ -1552,7 +1559,11 @@ type ContentEventState struct {
 type AgentActionType string
 
 const (
-	ActionGatherInfo        AgentActionType = "GATHER_INFO"
+	ActionGatherInfo AgentActionType = "GATHER_INFO"
+	// ActionSilentProbe 无声探查 (19-opening-variability §4.2)：隐秘行事特质
+	// 解锁的探查变体——效果同 GATHER_INFO，但检测分类强制 UNSAMPLED (不进
+	// 抽样、无怀疑增量)，AP 成本为普通探查的 2 倍。
+	ActionSilentProbe       AgentActionType = "SILENT_PROBE"
 	ActionShareInfo         AgentActionType = "SHARE_INFO"
 	ActionBuildConnection   AgentActionType = "BUILD_CONNECTION"
 	ActionInciteRebellion   AgentActionType = "INCITE_REBELLION"
@@ -1611,6 +1622,7 @@ type CreateGameRequest struct {
 	AgentName    string              `json:"agent_name"`
 	Profession   string              `json:"profession"`
 	Seed         int64               `json:"seed,omitempty"`          // 可选：显式指定本局 RNG 种子 (0 = 按 SILO40_SEED/随机决议)
+	Archetype    string              `json:"archetype,omitempty"`     // 可选：驻地原型覆写 (19 §3.3，同 Seed/Pacing 口径)；缺省 = 按号数确定性查表派生
 	Pacing       *WorldPacing        `json:"pacing,omitempty"`        // 可选：节奏定制 (缺省 = 全 1.0，行为与历史逐位一致)
 	Neighbor     *NeighborSiloConfig `json:"neighbor,omitempty"`      // Optional Silo 18; nil preserves the legacy path.
 	IncludeSilo1 bool                `json:"include_silo1,omitempty"` // Opt in to a fully simulated peer Silo 1.
@@ -2007,7 +2019,10 @@ type FragmentTemplateMeta struct {
 // 跑赢恒定淡忘。戏剧性动作 (煽动/宣传/公开化) 保持高成本不变。
 // TODO(balance): 全部为 sim 起点。
 var ACTION_COSTS = map[AgentActionType]float64{
-	ActionGatherInfo:        2, // TODO(balance): 10 → 2
+	ActionGatherInfo: 2, // TODO(balance): 10 → 2
+	// 无声探查基准 = 普通探查 ×2 (免怀疑的定价，19 §4.2，TODO(balance))；
+	// 服务端实际成本在 resolveActionCost 里按 2×(探查成本含规范冲突上浮) 结算。
+	ActionSilentProbe:       4,
 	ActionShareInfo:         3, // TODO(balance): 20 → 3
 	ActionBuildConnection:   4, // TODO(balance): 15 → 4
 	ActionInciteRebellion:   30,
@@ -2025,6 +2040,7 @@ var ACTION_COSTS = map[AgentActionType]float64{
 // ACTION_DURATIONS 通用动作耗时 (月)
 var ACTION_DURATIONS = map[AgentActionType]int{
 	ActionGatherInfo:        0,
+	ActionSilentProbe:       0,
 	ActionShareInfo:         0,
 	ActionBuildConnection:   1,
 	ActionInciteRebellion:   2,

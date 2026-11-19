@@ -41,11 +41,11 @@ func TestProductivityClampedOnContentEffectPath(t *testing.T) {
 	dept := findDept(silo, "Mines")
 	dept.Productivity = 0.9
 
-	applyProfessionMetricDelta(dept, "productivity", 0.5)
+	applyProfessionMetricDelta(silo, dept, "productivity", 0.5)
 	if dept.Productivity != 1.0 {
 		t.Errorf("expected content effect productivity clamped to 1.0, got %v", dept.Productivity)
 	}
-	applyProfessionMetricDelta(dept, "productivity", -1.5)
+	applyProfessionMetricDelta(silo, dept, "productivity", -1.5)
 	if dept.Productivity != 0 {
 		t.Errorf("expected content effect productivity clamped to 0, got %v", dept.Productivity)
 	}

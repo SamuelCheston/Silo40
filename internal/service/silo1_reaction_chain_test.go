@@ -284,8 +284,12 @@ func selectsFlagGuard(def engine.ContentEventDefinition, flag string) bool {
 // scheduled strike lands. No metric, content fact, escape group, ending status,
 // or delay task is seeded by the test.
 func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testDeathPhysicalStrikePlayableFromNewGame)
+}
+
+func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "death-physical-strike.db"))
-	req := threeSiloRequest(2103)
+	req := threeSiloArchetypeRequest(2103, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
@@ -358,11 +362,35 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 		}
 
 		buildupOpen := svc.silo.CurrentYear >= 128
-		buildingRebellion := buildupOpen && svc.silo.Rebellion < 0.82
+		// Famine retune (19 §6.3 荒年局): milder famine water levels slow the
+		// early order-pressure ladder (cross/omen fire two years later than on
+		// the harsher draw), so the bombing lands while rebellion is still low
+		// (0.43) and the post-strike snowball overshoots into FRACTURE. The
+		// harsher draw won with rebellion ≈0.75 at the bombing: open the buildup
+		// a year earlier and stop at 0.6 so two real deceives plus the natural
+		// growth land the bombing near that peak without overshooting the 0.9
+		// fracture feed on the way there.
+		deceiveCap := 2
+		rebellionBuildCap := 0.82
+		if svc.silo.Archetype == engine.ArchetypeFamine {
+			buildupOpen = svc.silo.CurrentYear >= 127
+			rebellionBuildCap = 0.6
+		}
+		buildingRebellion := buildupOpen && svc.silo.Rebellion < rebellionBuildCap
 		pending := deceivePending()
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
-		energyGuard := svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500
-		if buildingRebellion && deceives < 2 && !pending && !energyGuard && deceive != nil && deceive.Enabled &&
+		// Famine retune (19 §6.3 荒年局多配给): the physical channel only opens
+		// to a station that is still running (Energy ≥ 1), and reconnaissance
+		// must land within one month of its first eligible slot or the physical
+		// delivery overshoots the scheduled remote termination. Famine drains
+		// energy to zero earlier and more often, so once the channel test is
+		// lit the energy floor is defended regardless of rebellion — the old
+		// rebellion-gated guard alone woke up too late on the famine draw.
+		strikeChannelLive := contentTriggered(svc, "special:termination_channel_test") &&
+			!contentTriggered(svc, "special:strike_reconnaissance")
+		energyGuard := (svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500) ||
+			(strikeChannelLive && resourceAmount(svc.silo, "Energy") < 500)
+		if buildingRebellion && deceives < deceiveCap && !pending && !energyGuard && deceive != nil && deceive.Enabled &&
 			svc.agent.ActionPoints >= float64(deceive.APCost+15) {
 			execute(model.AgentAction{Type: model.ActionStationOperation, ActionID: StationOpDeceive})
 			deceives++
@@ -375,7 +403,17 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 
 		// Once the repeatable underground-coordination node can snowball
 		// rebellion, keep Energy positive so it cannot confirm FRACTURE.
-		if energyGuard && svc.agent.ActionPoints >= 15 {
+		// Famine retune (19 §6.3 荒年局): after the bombing lands, continuous
+		// rationing on milder water levels keeps the population alive long
+		// enough for the rebellion snowball to cross the fracture feed, while
+		// no rationing at all feeds panic into the same feed — ration only as
+		// emergency suppression when rebellion nears the threshold, and let the
+		// strike's attrition settle DEATH in between.
+		rationGuard := energyGuard
+		if contentTriggered(svc, "crisis:bombing_terminal") && svc.silo.Archetype == engine.ArchetypeFamine {
+			rationGuard = svc.silo.Rebellion >= 0.8 && resourceAmount(svc.silo, "Energy") < 1500
+		}
+		if rationGuard && svc.agent.ActionPoints >= 15 {
 			outcome, err := svc.ExecuteAction(model.AgentAction{
 				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Energy",
 			})
@@ -479,8 +517,12 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 // maintenance-night action. The jam lands a month later; the physical channel
 // still kills the silo, which is the point of the per-channel discipline.
 func TestTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testTerminationChannelCountermeasurePlayableFromNewGame)
+}
+
+func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "termination-jam.db"))
-	req := threeSiloRequest(2101)
+	req := threeSiloArchetypeRequest(2101, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
@@ -546,6 +588,20 @@ func TestTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T) {
 		}
 
 		buildupOpen := svc.silo.CurrentYear >= 128
+		switch svc.silo.Archetype {
+		case engine.ArchetypeFamine:
+			// 荒年的危机驱动恐慌把一号堡阶梯整体提前，信道自检早于基线约一年
+			// 到达；积累窗口相应前移，保证自检仍由真实叛乱 (玩家策反) 达到，
+			// 而不是被动等来自饥荒压力的阶梯 (19 §6.3 策略时机迁移)。
+			buildupOpen = svc.silo.CurrentYear >= 126
+		case engine.ArchetypeRift:
+			// 裂隙的波动放大同样提前自检；在真实自检窗口前先使用既有策反。
+			buildupOpen = svc.silo.CurrentYear >= 127
+		case engine.ArchetypeBedrock:
+			// 磐石档的阶梯轨迹实测把自检推到 126-06 (高 W 改变早期事件时序)，
+			// 积累窗口同荒年前移，保证自检经真实叛乱达到。
+			buildupOpen = svc.silo.CurrentYear >= 126
+		}
 		buildingRebellion := buildupOpen && svc.silo.Rebellion < 0.82
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
 		energyGuard := svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500
@@ -729,8 +785,12 @@ func TestPurgeExecutionIntensityModulatesShare(t *testing.T) {
 // The execution's graded toll is locked separately in
 // TestPurgeExecutionGradesOnCountermeasure.
 func TestPurgeCountermeasurePlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testPurgeCountermeasurePlayableFromNewGame)
+}
+
+func testPurgeCountermeasurePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "purge-countermeasure.db"))
-	req := threeSiloRequest(2101)
+	req := threeSiloArchetypeRequest(2101, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
@@ -817,8 +877,12 @@ func TestPurgeCountermeasurePlayableFromNewGame(t *testing.T) {
 // count times" action after the omen. It records silo1_purge_exposed, which grades
 // the execution at the middle tier (see TestPurgeExecutionGradesOnCountermeasure).
 func TestPurgePlotLeakPlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testPurgePlotLeakPlayableFromNewGame)
+}
+
+func testPurgePlotLeakPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "purge-plot-leak.db"))
-	req := threeSiloRequest(2103)
+	req := threeSiloArchetypeRequest(2103, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)

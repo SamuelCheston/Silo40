@@ -17,6 +17,12 @@
       "reason": "例行核查期间不便前往"
     },
     {
+      "id": "action_silent_probe",
+      "unlock": { "trait": "隐秘行事" },
+      "available": {},
+      "reason": "需要特质：隐秘行事"
+    },
+    {
       "id": "action_share_info",
       "unlock": { "stage_at_least": "first_signal" },
       "available": { "metric": "known_fragments", "min": 1 },

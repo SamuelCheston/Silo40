@@ -1238,6 +1238,17 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 	silo.RNGSeed = seed
 	silo.WorldID = ActiveWorldID
 	silo.ID = ActiveSiloID
+	// 驻地原型 (19 §3.3)：请求覆写 > 号数确定性查表派生。派生复用号数的
+	// 独立确定性流，不消耗游戏内 RNG；原型是建档时写入存档的既成事实。
+	archetype := strings.TrimSpace(req.Archetype)
+	if archetype == "" {
+		archetype = engine.ArchetypeForStation(assignedStationNumber(seed))
+	}
+	if _, ok := engine.ArchetypeByID(archetype); !ok {
+		return nil, fmt.Errorf("unknown archetype %q", archetype)
+	}
+	silo.Archetype = archetype
+	engine.ApplyArchetypeOpening(silo)
 	// 遗物实例化：仅注入玩家被分配堡（一号/十八号受保护堡不注入），在
 	// 特工初始化之前按清单声明顺序消费单一 RNG 流，保证同种子可复现。
 	s.seedStationRelics(silo, startYear)
@@ -1537,7 +1548,8 @@ func (s *GameService) completePlayerAction(action model.AgentAction) {
 // tightens to "first valid local Observation produced by the hook" and the gate
 // itself stays on observation:first_local unchanged.
 func (s *GameService) recordFirstLocalObservation(action model.AgentAction) {
-	if action.Type != model.ActionProfession && action.Type != model.ActionGatherInfo {
+	// 无声探查与探查同效 (19 §4.2)：同样产出本地观察材料，计入首观察键。
+	if action.Type != model.ActionProfession && action.Type != model.ActionGatherInfo && action.Type != model.ActionSilentProbe {
 		return
 	}
 	states := s.statesMapFor(s.silo.ID)
@@ -2690,9 +2702,10 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 			return fmt.Errorf("unknown profession action %q", action.ProfessionAction)
 		}
 		action.Cost = def.APCost
-	case model.ActionGatherInfo:
+	case model.ActionGatherInfo, model.ActionSilentProbe:
 		// §8.1：AP 与怀疑独立。探查成本随目标部门规范冲突上浮
 		// (ceil(base·(1+0.5·mismatch)))，与检测/怀疑结算分离。
+		// 无声探查 (19 §4.2) = 同口径成本的 2 倍 (免怀疑的定价)。
 		base, ok := model.ACTION_COSTS[model.ActionGatherInfo]
 		if !ok {
 			return fmt.Errorf("unknown action type %q", action.Type)
@@ -2711,6 +2724,9 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 			mismatch = engine.Mismatch(cfg.GatherDeviation, engine.DeptNorm(target))
 		}
 		action.Cost = engine.APCostWithMismatch(cfg, base, mismatch)
+		if action.Type == model.ActionSilentProbe {
+			action.Cost *= 2
+		}
 	case model.ActionShareInfo, model.ActionBuildConnection:
 		// T3-2 联系人监视：目标部门的联系人被调离/问话期间，接触类动作
 		// 暂时不可用 (3 月窗口，到期自动恢复)。叙事口径见 20 分册 §5.1。

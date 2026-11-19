@@ -8,8 +8,12 @@ import (
 )
 
 func TestExclusionistEndingPlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testExclusionistEndingPlayableFromNewGame)
+}
+
+func testExclusionistEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "exclusionist-playable.db"))
-	if _, err := svc.CreateGame(threeSiloRequest(2801)); err != nil {
+	if _, err := svc.CreateGame(threeSiloArchetypeRequest(2801, archetype)); err != nil {
 		t.Fatalf("create game: %v", err)
 	}
 	for month := 1; month <= 120 && !svc.gameOver(); month++ {

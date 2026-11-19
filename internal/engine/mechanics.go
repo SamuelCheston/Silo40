@@ -404,6 +404,12 @@ function unknownFragmentsFrom(ctx, profession) {
   var known = actorKnownSet(ctx);
   return (prof.all_fragments || []).filter(function(fragment) { return !known[fragment]; });
 }
+// archetypeDetectionFactor 原型档间 SAMPLED 检测系数 (19 §3.2)：只乘 SAMPLED
+// 路径的怀疑增量，不改变检测分类结构；空原型恒为 1，行为逐位不变。
+function archetypeDetectionFactor(ctx) {
+  var factor = ctx.silo ? ctx.silo.archetype_detection_factor : 1;
+  return factor > 0 ? factor : 1;
+}
 // suspicionDelta 结构化检测 (§8.2/§8.3)：UNSAMPLED (矿工结构性不采样) 与
 // DIRECT_PROTOCOL (触及条款) 不产生普通怀疑；SAMPLED 按身份可见度折算。
 // 旧的"统一职业倍率"已被设计裁决替换 (10-it-control-credibility §1.3)。
@@ -414,7 +420,7 @@ function suspicionDelta(ctx, base) {
   }
   var trait = ((ctx.actor && ctx.actor.traits) || []).indexOf("隐秘行事") !== -1 ? INFO_CFG.trait_stealth : 1.0;
   var profession = ctx.actor ? ctx.actor.profession : "";
-  return { type: "actor_metric_delta", field: "suspicion_level", value: base * vIdentityFor(profession) * trait };
+  return { type: "actor_metric_delta", field: "suspicion_level", value: base * vIdentityFor(profession) * trait * archetypeDetectionFactor(ctx) };
 }
 `
 
@@ -595,6 +601,9 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			"silo1_destroyed":  ctx.Silo.Silo1Destroyed,
 			"pact_locked":      ctx.Silo.Authority.Judicial.PactLocked,
 			"traits":           append([]string(nil), ctx.Silo.Traits...),
+			// 原型 (19 §3)：JS 侧只读档间检测系数；空原型恒为 1，行为逐位不变。
+			"archetype":                    ctx.Silo.Archetype,
+			"archetype_detection_factor":   ArchetypeDetectionFactor(ctx.Silo),
 			// G5: victory_check reads the escape group to apply the DEATH exception.
 			"escaped_population": ctx.Silo.EscapedGroup.Population,
 			"escaped_surviving":  ctx.Silo.EscapedGroup.Initialized && ctx.Silo.EscapedGroup.Surviving,
@@ -926,7 +935,7 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 		}
 	case "profession_metric_delta":
 		if prof := findDept(silo, mutation.Profession); prof != nil {
-			e.applyProfessionMetricDelta(prof, mutation.Field, mutation.Value)
+			e.applyProfessionMetricDelta(silo, prof, mutation.Field, mutation.Value)
 		}
 	case "profession_metric_set":
 		if prof := findDept(silo, mutation.Profession); prof != nil {
@@ -1226,10 +1235,11 @@ func (e *GameEngine) applyActorFragmentAdd(actor *ActorView, fragment string) {
 	}
 }
 
-func (e *GameEngine) applyProfessionMetricDelta(prof *model.Profession, field string, delta float64) {
+func (e *GameEngine) applyProfessionMetricDelta(silo *model.Silo, prof *model.Profession, field string, delta float64) {
 	switch field {
 	case "panic_value":
-		prof.PanicValue = clampUnit(prof.PanicValue + delta)
+		// 裂隙档放大恐慌抬升的正向增量 (19 §3.2)；回落与空原型恒等。
+		prof.PanicValue = clampUnit(prof.PanicValue + AmplifyOrderDelta(silo, field, delta))
 	case "productivity":
 		// Clamp to [0,1]: the Go action fallback always clamped productivity;
 		// the mutation path must not diverge (unbounded growth was observed).

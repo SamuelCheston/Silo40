@@ -125,12 +125,16 @@ type escapeRunner struct {
 	orderlyDone   bool
 	guaranteeDone bool
 	lastRepair    int
+
+	// monthHook, when set, samples state after each monthly settlement and
+	// at month end (evidence tests use it for resource trajectories).
+	monthHook func()
 }
 
-func newEscapeRunner(t *testing.T, line string, seed int64, prepLevel string) *escapeRunner {
+func newEscapeRunner(t *testing.T, line string, seed int64, prepLevel string, archetype string) *escapeRunner {
 	t.Helper()
 	svc := newGatedService(t, filepath.Join(t.TempDir(), line+"-escape.db"))
-	req := threeSiloRequest(seed)
+	req := threeSiloArchetypeRequest(seed, archetype)
 	req.Profession = "Mechanical"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game %s seed %d: %v", line, seed, err)
@@ -478,6 +482,21 @@ func (r *escapeRunner) rebellionEngine() bool {
 	if svc.silo.CurrentYear >= 126 {
 		target = 0.62 // underground's own +0.10 carries the snowball to the window
 	}
+	famineFullPrep := svc.silo.Archetype == engine.ArchetypeFamine && r.rec.PrepLevel == "full"
+	if famineFullPrep &&
+		(svc.silo.EscapePrep.SuitsFunctional < 20 ||
+			(svc.silo.EscapePrep.ReceptionStage != model.ReceptionConfirmed && svc.silo.EscapePrep.ReceptionStage != model.ReceptionStocked)) {
+		// 荒年 (19 §6.3)：先修齐最低出发规模并完成安全先遣，再把叛乱推过窗口
+		// 阈值；窗口后的反噬日历不足以修复防护服或受损路线。
+		target = 0
+	}
+	if famineFullPrep && r.actions["station_infiltrate"] < 3 &&
+		r.cardEnabled("STATION_INFILTRATE") && svc.agent.ActionPoints >= 25 {
+		// 小规模队伍承受不起市长阻挠的追缉折减。筹备期用真实策反削弱
+		// 现任正统性，改变既有立场权重；不直接指定或覆写立场抽签。
+		// 只在 AP 富余时策反：荒年筹备 (修服/照护/生产) 优先吃 AP。
+		return r.execute("station_infiltrate", model.AgentAction{Type: model.ActionStationOperation, ActionID: "STATION_INFILTRATE"})
+	}
 	if svc.silo.Rebellion < target && r.cardEnabled("STATION_DECEIVE") && svc.agent.ActionPoints >= 22 {
 		return r.execute("station_deceive", model.AgentAction{Type: model.ActionStationOperation, ActionID: "STATION_DECEIVE"})
 	}
@@ -511,8 +530,36 @@ func (r *escapeRunner) routeActions() {
 	// Sparse preparation skips the vanguard: the route stays unconfirmed, the
 	// departure falls to the forced channel (capacity 30) and the survival
 	// rate to its floor — preparation must be visible in the headcount.
+	if r.rec.PrepLevel == "full" && svc.silo.Archetype == engine.ArchetypeFamine &&
+		r.rec.AdvanceDispatch == 0 && r.cardEnabled("ADVANCE_PARTY_DISPATCH") {
+		states := svc.contentStates[svc.silo.ID]
+		cannibalization := states["special:materials_cannibalization"]
+		collapse := states["crisis:lower_deck_collapse"]
+		// 荒年 (19 §6.3)：材料拆用会固定调度四个月后的下层坍塌；等这次真实
+		// 损害落地后再派遣，利用其冷却覆盖先遣往返期，避免安全路线被同来源
+		// 重复判损。
+		if !cannibalization.Triggered || collapse.LastTriggeredTimestamp < cannibalization.LastTriggeredTimestamp {
+			return
+		}
+	}
 	if r.rec.PrepLevel != "sparse" && r.cardEnabled("ADVANCE_PARTY_DISPATCH") && svc.agent.ActionPoints >= 6 {
-		r.execute("advance_party_dispatch", r.playerEvent("ADVANCE_PARTY_DISPATCH"))
+		// Famine retune (19 §6.3 荒年局): the vanguard report confirms the
+		// route only when no lower-deck collapse lands between dispatch and
+		// report (+4 months). The famine crisis cadence renews
+		// cannibalization-driven collapses every few months, so the dispatch
+		// waits for the quiet window right after a collapse instead of
+		// marching the vanguard into a route that is damaged before the
+		// report returns (a damaged report keeps reception at surveyed and the
+		// departure on the survival-floor channel). The damaged reading
+		// compares timestamps inclusively, so the dispatch must land strictly
+		// after the collapse month and before the next one is due.
+		collapse := svc.contentStates[svc.silo.ID]["crisis:lower_deck_collapse"]
+		sinceCollapse := gameTimestamp(svc.silo.CurrentYear, svc.silo.CurrentMonth) - collapse.LastTriggeredTimestamp
+		quiet := !collapse.Triggered ||
+			(sinceCollapse >= daysPerMonth && sinceCollapse <= 3*daysPerMonth)
+		if quiet {
+			r.execute("advance_party_dispatch", r.playerEvent("ADVANCE_PARTY_DISPATCH"))
+		}
 	}
 }
 
@@ -572,9 +619,18 @@ func (r *escapeRunner) settle() {
 	}
 }
 
-func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeRecord {
+func runEscapeLine(t *testing.T, line string, seed int64, level string, archetype string) *escapeRecord {
 	t.Helper()
-	r := newEscapeRunner(t, line, seed, level)
+	r := newEscapeRunner(t, line, seed, level, archetype)
+	r.playLine(level)
+	return r.rec
+}
+
+// playLine plays the line end to end on an existing runner: opening
+// observation, the monthly loop and settlement. Shared by runEscapeLine and
+// the per-archetype evidence tests so evidence always tracks the tuned
+// strategy instead of a drifting copy.
+func (r *escapeRunner) playLine(level string) {
 	svc := r.svc
 	r.beat("game created (profession=Mechanical, prep=" + level + ")")
 
@@ -591,6 +647,9 @@ func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeR
 
 	for m := 1; m <= acceptanceMaxMonths && !svc.gameOver(); m++ {
 		r.passTime()
+		if r.monthHook != nil {
+			r.monthHook()
+		}
 		if svc.gameOver() {
 			break
 		}
@@ -605,24 +664,37 @@ func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeR
 		// month's actions. So once rebellion runs hot, keep a preemptive
 		// energy buffer above the line; this runs after launch too, because
 		// every month the silo holds is a month the group lives outside.
-		if svc.silo.Rebellion >= 0.85 && resourceAmount(svc.silo, "Energy") < 400 &&
+		// 裂隙 (19 §6.2)：发射前的生存值班会吃掉整个窗口月 (duration>0
+		// 自动推进一个月)，把保障/有序/发射挤到断裂带更深的下一个月。
+		// 裂隙满筹备在窗口当月落地保障/有序、在断裂带内发射；原堡随后
+		// 断裂是可接受的惨胜 (仲裁读存续群体，原堡崩坏只作尾声)。
+		// 发射后值班照常。
+		riftPreLaunch := svc.silo.Archetype == engine.ArchetypeRift && !r.launched
+		if !riftPreLaunch && svc.silo.Rebellion >= 0.85 && resourceAmount(svc.silo, "Energy") < 400 &&
 			svc.agent.ActionPoints >= 18 {
 			r.execute("mechanical_overhaul", model.AgentAction{Type: model.ActionProfession, ProfessionAction: "MECHANICAL_OVERHAUL"})
 		}
 
 		if !r.launched {
 			// Window choices and the guarantee (once each) — both shape the
-			// launch draw, so they outrank the launch itself.
-			if r.window && !r.orderlyDone && r.cardEnabled("ESCAPE_WINDOW_ORDERLY") {
-				if r.execute("window_orderly", r.playerEvent("ESCAPE_WINDOW_ORDERLY")) {
-					r.orderlyDone = true
-				}
-			}
-			if r.window && !r.guaranteeDone && r.cardEnabled("ESCAPE_NEGOTIATION_GUARANTEE") &&
-				svc.agent.ActionPoints >= 6 {
+			// launch draw, so they outrank the launch itself. Famine retune
+			// (19 §6.3 荒年局): the guarantee is secured first — the famine
+			// silo has no months to spend on the window itself, so the
+			// negotiation that shapes the stances goes before the orderly
+			// choice, and the departure rides the same month the window opens.
+			famineTermsSettled := svc.silo.Archetype == engine.ArchetypeFamine && level == "full" &&
+				svc.silo.TopStance.MayorStance() == model.TopStanceCooperate &&
+				svc.silo.TopStance.ITStance() == model.TopStanceCooperate
+			if r.window && !r.guaranteeDone && !famineTermsSettled &&
+				r.cardEnabled("ESCAPE_NEGOTIATION_GUARANTEE") && svc.agent.ActionPoints >= 6 {
 				r.stanceTrigger = "guarantee"
 				if r.execute("negotiation_guarantee", r.playerEvent("ESCAPE_NEGOTIATION_GUARANTEE")) {
 					r.guaranteeDone = true
+				}
+			}
+			if r.window && !r.orderlyDone && r.cardEnabled("ESCAPE_WINDOW_ORDERLY") {
+				if r.execute("window_orderly", r.playerEvent("ESCAPE_WINDOW_ORDERLY")) {
+					r.orderlyDone = true
 				}
 			}
 			// IT cooperation opens the suit warehouse: draw it down while it
@@ -644,18 +716,53 @@ func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeR
 			// survivors — the repair campaign is cooldown-limited (one suit
 			// per 2 months) — so at most two warehouse months are worth it;
 			// without cooperation waiting only feeds fracture.
-			if r.window && r.orderlyDone && r.guaranteeDone && r.cardEnabled("ESCAPE_DEPARTURE_LAUNCH") {
+			if r.window && r.orderlyDone && (r.guaranteeDone || famineTermsSettled) && r.cardEnabled("ESCAPE_DEPARTURE_LAUNCH") {
 				prep := svc.silo.EscapePrep
 				itCoop := svc.silo.TopStance.ITStance() == model.TopStanceCooperate
 				sinceWindow := r.month() - r.rec.WindowMonth
+				minimumLaunchSuits := 0
+				famineFullLaunch := svc.silo.Archetype == engine.ArchetypeFamine && level == "full"
+				if famineFullLaunch {
+					// 荒年 (19 §6.3) 的非合作窗口不能以 16 套防护服仓促出发：
+					// 先通过真实修复备齐最低成规模群体，再接受出发时的立场抽签。
+					minimumLaunchSuits = 20
+				}
 				ready := false
+				// 裂隙 (19 §6.2)：波动放大让叛乱在窗口开启当月就冲进断裂带
+				// (>=0.85)，下一个月 passTime 即越过 0.9。服库蓄积 (+4/月)
+				// 跑不赢断裂时钟，所以裂隙满筹备在断裂带内出发，不再囤积：
+				// IT 配合的服体翻倍让 16 套也足以撑起 20+ 人的群体。显示已
+				// 配合则当月出发；否则让保障重估先落地，隔一个月再发射——
+				// 保障与发射是两次独立抽签，实测种子下窗口当月直发抽到
+				// 非合作，16 套 nonblock 出发经追踪损耗后跌破 20 人解散线。
+				riftFull := svc.silo.Archetype == engine.ArchetypeRift && level == "full"
+				riftFractureBand := riftFull && svc.silo.Rebellion >= 0.85
 				switch {
-				case itCoop && (prep.SuitsFunctional >= 18 || sinceWindow >= 3):
+				case riftFractureBand && itCoop:
+					ready = true
+				case famineFullLaunch && prep.SuitsFunctional >= minimumLaunchSuits:
+					// 荒年在备齐前已压住主动叛乱；安全接应和防护服一旦完成，
+					// 就接收当月服库并出发，不再给反噬留下额外空月。
+					ready = true
+				case !famineFullLaunch && itCoop && (prep.SuitsFunctional >= 18 || sinceWindow >= 3):
 					ready = true // two warehouse months at most: 20+ survivors vs months outside
-				case !itCoop && sinceWindow >= 1:
+				case !famineFullLaunch && !itCoop && (!riftFull || sinceWindow >= 1):
+					// Famine retune (19 §6.3 荒年局): the famine silo is already
+					// inside the fracture band when the window opens, so the
+					// route departs the same month the guarantee and the orderly
+					// choice land — every hoarded month is a month the fracture
+					// point of no return can preempt, and the group needs a full
+					// outside month before the terminal evaluation. Rift full
+					// is the exception: it departs one month after the window
+					// opens so the guarantee re-evaluation lands first (see the
+					// rift note above).
 					ready = true
-				case r.calIndex() >= 128*12+9:
+				case !famineFullLaunch && r.calIndex() >= 128*12+9:
 					ready = true
+				}
+				if famineFullLaunch &&
+					prep.ReceptionStage != model.ReceptionConfirmed && prep.ReceptionStage != model.ReceptionStocked {
+					ready = false // 受损路线不能靠“先遣回报已发生”冒充已确认接应。
 				}
 				if ready && prep.SuppliesPacked >= 50 && prep.PlanCompleteness >= 0.5 {
 					r.stanceTrigger = "launch"
@@ -686,7 +793,7 @@ func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeR
 			// month, so the branches below fall through.
 			if r.willingness && svc.silo.EscapePrep.SuitsFunctional < suitTarget(level) &&
 				r.cardEnabled("ESCAPE_PREP_SUIT_REPAIR") && r.month()-r.lastRepair >= 2 &&
-				svc.agent.ActionPoints >= 6 {
+				svc.agent.ActionPoints >= 2 {
 				if r.execute("suit_repair", r.playerEvent("ESCAPE_PREP_SUIT_REPAIR")) {
 					r.lastRepair = r.month()
 				}
@@ -717,9 +824,11 @@ func runEscapeLine(t *testing.T, line string, seed int64, level string) *escapeR
 				}
 			}
 		}
+		if r.monthHook != nil {
+			r.monthHook()
+		}
 	}
 	r.settle()
-	return r.rec
 }
 
 // TestEscapeAcceptanceDump plays the 《越岭》 line end to end and dumps the
@@ -733,11 +842,11 @@ func TestEscapeAcceptanceDump(t *testing.T) {
 	// Full vs sparse pairs share the seed (not the RNG path: the strategies
 	// diverge it), so preparation must show against each pair's own draws.
 	var records []*escapeRecord
-	records = append(records, runEscapeLine(t, "escapefull", 2401, "full"))
-	records = append(records, runEscapeLine(t, "escapesparse", 2401, "sparse"))
+	records = append(records, runEscapeLine(t, "escapefull", 2401, "full", ""))
+	records = append(records, runEscapeLine(t, "escapesparse", 2401, "sparse", ""))
 	for _, seed := range []int64{2402, 2403, 2404, 2405, 2406, 2407, 2408, 2409, 2411, 2412, 2413, 2414, 2415, 2416, 2417, 2418, 2419, 2420, 2421, 2422, 2423, 2424, 2425, 2426, 2427, 2428, 2429, 2430} {
-		records = append(records, runEscapeLine(t, fmt.Sprintf("sweep-%d", seed), seed, "full"))
-		records = append(records, runEscapeLine(t, fmt.Sprintf("sparse-%d", seed), seed, "sparse"))
+		records = append(records, runEscapeLine(t, fmt.Sprintf("sweep-%d", seed), seed, "full", ""))
+		records = append(records, runEscapeLine(t, fmt.Sprintf("sparse-%d", seed), seed, "sparse", ""))
 	}
 
 	for _, rec := range records {

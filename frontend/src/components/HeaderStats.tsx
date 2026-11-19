@@ -13,6 +13,27 @@ interface HeaderStatsProps {
     deathNote?: string | null;
 }
 
+// 驻地原型 (19-opening-variability §3)：档名与一句话机制说明随顶栏原生呈现，
+// 界面本身说清"这局你面对什么"，不用引导弹窗。文案与后端
+// engine/archetype.go 的 ArchetypeConfig 保持一致。
+const ARCHETYPE_INFO: Record<string, { name: string; description: string; color: string }> = {
+    bedrock: {
+        name: '磐石',
+        description: 'IT 控制强化：幕后威势更高且退得更慢，探查更容易被抽样怀疑——信息线变贵，磨 W 期更长。',
+        color: 'gray',
+    },
+    rift: {
+        name: '裂隙',
+        description: '控制松弛、秩序波动放大：幕后威势更低、探查更不易被抽样，但恐慌与叛乱更容易抬升——容易传话，不容易稳住。',
+        color: 'purple',
+    },
+    famine: {
+        name: '荒年',
+        description: '资源匮乏：初始资源水位更低、短缺危机更早且更密——日历与 AP 被维生挤占，留给流通与组织的时间变少。',
+        color: 'orange',
+    },
+};
+
 export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats, deathNote }: HeaderStatsProps) {
     if (!agent || !silo || !agentStats) return null;
 
@@ -38,6 +59,13 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats, 
                         </Text>
                     </HStack>
                     <Badge colorPalette="blue" variant="subtle">{silo.name}</Badge>
+                    {silo.archetype && ARCHETYPE_INFO[silo.archetype] && (
+                        <Tooltip content={ARCHETYPE_INFO[silo.archetype].description}>
+                            <Badge colorPalette={ARCHETYPE_INFO[silo.archetype].color} variant="subtle" cursor="help">
+                                驻地原型：{ARCHETYPE_INFO[silo.archetype].name}
+                            </Badge>
+                        </Tooltip>
+                    )}
                 </HStack>
 
                 {/* Global Stats */}

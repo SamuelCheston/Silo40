@@ -11,9 +11,9 @@ export interface TraitOption {
 }
 
 export const AVAILABLE_TRAITS: TraitOption[] = [
-    { id: 'shadowy', name: '隐秘行事 (Shadowy)', description: '适用身份可见度的行动产生的怀疑度降低 20%。', cost: 3, type: 'AGENT' },
-    { id: 'charismatic', name: '魅力非凡 (Charismatic)', description: '增加初始威望，建立人脉时获得额外增益。', cost: 4, type: 'AGENT' },
-    { id: 'native', name: '地堡土著 (Silo Native)', description: '开局与同阶层的其他部门建立 10–15% 的人脉。', cost: 3, type: 'AGENT' },
+    { id: 'shadowy', name: '隐秘行事 (Shadowy)', description: '解锁专属动作「无声探查」：与普通探查同效，但不进入监控抽样、不产生怀疑增量，代价是 2 倍 AP。此外行动产生的怀疑度降低 20%。', cost: 3, type: 'AGENT' },
+    { id: 'charismatic', name: '魅力非凡 (Charismatic)', description: '增加初始威望和人脉建立速度，并在建立组织化力量时获得额外增益。', cost: 4, type: 'AGENT' },
+    { id: 'native', name: '地堡土著 (Silo Native)', description: '同阶层免引荐：以关系阈值为门的动作与接触卡，目标部门与你同阶层时关系门视为已满足。此外开局获得自己所在阶层各部门随机 10-15% 的人脉值。', cost: 3, type: 'AGENT' },
     { id: 'abundant', name: '资源充沛 (Abundant Resources)', description: '初始地堡食物与能源资源翻倍。', cost: 3, type: 'SILO' },
     { id: 'leak', name: '信息泄漏 (Information Leak)', description: '平民阶层初始亲外度 (Pro-Foreign) 增加。', cost: 2, type: 'SILO' },
     { id: 'psychoactive_meds', name: '精神药物常态化投放 (Psychoactive Meds)', description: '所有部门的思潮会随时间推移缓慢偏向 IT 部门的思潮。', cost: 3, type: 'SILO' },

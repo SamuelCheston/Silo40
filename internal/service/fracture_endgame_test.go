@@ -9,8 +9,12 @@ import (
 )
 
 func TestFractureEndingPlayableFromNewGame(t *testing.T) {
+	runPlayableArchetypeMatrix(t, testFractureEndingPlayableFromNewGame)
+}
+
+func testFractureEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "fracture-playable.db"))
-	req := threeSiloRequest(2601)
+	req := threeSiloArchetypeRequest(2601, archetype)
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)
 	}
