@@ -152,4 +152,4 @@ curl http://127.0.0.1:18080/debug/agent/export?format=jsonl
 - 改事件未生效：检查二进制旁旧 events；action_gates.json 源改动需要重新构建嵌入副本。
 - 行动按钮缺失：先查 World.UnlockedActions、ProgressStage、disabled_reason 和注册表，不要先改前端。
 - Agent 卡住：查 status 是否 awaiting_choice，以及 decision_id/candidate scores 是否完整。
-- 读档被拒绝：核对是否 v5/v6/高于当前 v14；v7–v13 应先经启动链逐级迁移。不要删版本标记伪兼容。
+- 读档被拒绝：核对是否 v5/v6、v15/v16 或高于当前 v17；v7–v14 应先经启动链逐级迁移（链尾 v15 会被 v17 闸拒绝）。不要删版本标记伪兼容。

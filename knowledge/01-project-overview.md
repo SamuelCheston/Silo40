@@ -36,7 +36,7 @@ Silo40 是基于《羊毛战记》世界观的单机策略原型，技术栈为 
 - **秘密 operation**：驻地情报/策反/欺骗/黑市，Silo 1 情报/欺骗；AP 成本、1–2 月延迟、目标实测 delta、Exposure 和反间谍。
 - **多实体结局**：硬失败护栏（DEATH→RESET→FRACTURE→AGENT_COMPROMISED，先读逃出群体），加上玩家、驻地派系、关键人物和 Silo 1 共同贡献的六个候选 INFORMATION/REBELLION/RULE_OF_LAW/TIME/PERSONAL_RULE/EXCLUSIONIST 加权仲裁（`internal/service/weighted_endings.go` `endingOutcomeOrder`）。
 - **历史引导附加分**：按已结算 operation 的目标 before/after 实测变化计分，不把自然演化或正典覆写冒充玩家贡献。
-- **存档**：v14 单槽存档（`CurrentSaveVersion = 14`，v7→v14 逐级升级器），保存三堡、阶段、永久解锁、operation、历史影响和仲裁记录；v5/v6 存档被拒绝载入（`internal/model/models.go`、`internal/service/game_service.go` 版本校验）。
+- **存档**：v17 单槽存档（`CurrentSaveVersion = 17`，v7→v14 逐级调试迁移链但链尾 v15 被 v17 闸拒绝），保存三堡、阶段、永久解锁、operation、历史影响、仲裁记录、部门信念渗透、黑箱/盲区状态与事件驱动派系；v5/v6 与 v15/v16 存档被拒绝载入（`internal/model/models.go`、`internal/service/game_service.go` 版本校验）。
 - **外部操作员**：`/debug/agent/*` 让 AI 在 NPC 决策点真实选择并导出样本；`cmd/agenthost` 提供无 GUI 宿主。
 - **可选 LLM 顾问**：默认关闭，支持 shadow/on 和决策日志回放，不是 Agent 操作员模式的替代品。
 
