@@ -5,8 +5,10 @@ defineEvent({
   type: "SOCIAL",
   fire_mode: "ONCE",
   // T-2 defer (26-nodes §2, 27-spec §1): the line does not start; the offer
-  // key stays consumed, so re-approaching needs a new contact (not modeled
-  // this round). Same PERSONAL_RULE reroute dependency as the decline branch.
+  // key stays consumed. The crack in the door promised by the copy is honored
+  // by charter_defer_knock (+6 months), which unlocks the second-contact
+  // choices CHARTER_SECOND_ACCEPT / CHARTER_SECOND_DECLINE (fresh keys,
+  // momentum rebuilt from zero).
   player_action: {
     id: "CHARTER_CONTACT_DEFER",
     label: "暂缓回应",

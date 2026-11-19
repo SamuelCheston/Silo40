@@ -5,10 +5,9 @@ defineEvent({
   type: "SOCIAL",
   fire_mode: "ONCE",
   // T-2 decline (26-nodes §2, 27-spec §1): closes the charter line. The
-  // designed reroute of the materials into Mayor circles belongs to the
-  // PERSONAL_RULE node group, which is not written yet.
-  // DEPENDENCY NOTE: wire the Mayor-circle feed when the PERSONAL_RULE chain
-  // lands; until then the decline only records its completion key.
+  // designed reroute of the materials into Mayor circles (30-nodes §6) is
+  // wired: mayor_evidence_step subscribes to this key (feeding heartbeat via
+  // Share Info), and charter_decline_reroute echoes the refusal at +4 months.
   player_action: {
     id: "CHARTER_CONTACT_DECLINE",
     label: "拒绝接触",
