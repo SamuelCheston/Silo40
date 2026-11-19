@@ -181,6 +181,9 @@ func validateActionCondition(condition actionCondition) error {
 func supportedActionMetric(metric string) bool {
 	switch metric {
 	case "action_points", "political_prestige", "propaganda_level", "suspicion_level", "known_fragments",
+		"ideology_intensity",
+		// 24 篇 C9/C10：政治派系数量——加入/合并动作在有政治派系后才暴露。
+		"political_faction_count",
 		"legitimacy", "cohesion", "rebellion", "history_burden",
 		// 21 设计卷：谈判层 0/1 门控指标。
 		"negotiation_channel", "negotiation_compromise", "negotiation_takeover_decided",
@@ -373,6 +376,18 @@ func (s *GameService) actionConditionValue(condition actionCondition) (float64, 
 		return s.agent.ActionPoints, true
 	case "political_prestige":
 		return engine.DerivedPrestige(s.agent.Ambition, s.agent.Influence), true
+	case "ideology_intensity":
+		// 玩家读所属部门的 pro_foreign 思潮 (与 ActorView.Ideologies 同口径)。
+		for _, profession := range s.silo.Professions {
+			if profession.Name == s.agent.Profession {
+				intensity := profession.Ideologies[model.IdeologyProForeign] - 0.5
+				if intensity < 0 {
+					intensity = -intensity
+				}
+				return intensity, true
+			}
+		}
+		return 0, true
 	case "propaganda_level":
 		return s.agent.PropagandaLevel, true
 	case "suspicion_level":
@@ -426,6 +441,16 @@ func (s *GameService) actionConditionValue(condition actionCondition) (float64, 
 			return 1, true
 		}
 		return 0, true
+	case "political_faction_count":
+		// 24 篇 C9/C10：政治派系 (非无阵营桶) 数量。开局零派系 → 加入/合并
+		// 动作隐藏，维持「开局只暴露 Gather Info」不变量。
+		count := 0
+		for i := range s.silo.Factions {
+			if s.silo.Factions[i].Signature != "special:unaffiliated" {
+				count++
+			}
+		}
+		return float64(count), true
 	default:
 		return 0, false
 	}

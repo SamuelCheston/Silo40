@@ -289,7 +289,7 @@ func TestDeathPhysicalStrikePlayableFromNewGame(t *testing.T) {
 
 func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "death-physical-strike.db"))
-	req := threeSiloArchetypeRequest(2101, archetype)
+	req := threeSiloArchetypeRequest(2103, archetype)
 	req.Profession = "Supply"
 	if _, err := svc.CreateGame(req); err != nil {
 		t.Fatalf("create game: %v", err)

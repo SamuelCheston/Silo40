@@ -342,7 +342,7 @@ func TestRuleOfLawLinePlayableFromNewGame(t *testing.T) {
 
 func testRuleOfLawLinePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "rule-of-law-playable.db"))
-	req := threeSiloArchetypeRequest(2401, archetype)
+	req := threeSiloArchetypeRequest(2420, archetype)
 	req.Profession = "Mines"
 	// Start before the fixed archive broadcast so real tunnel actions have time
 	// to build the resident support needed by weighted arbitration.

@@ -337,6 +337,67 @@ func TestOpeningCompletionWorksThroughQueuedAPI(t *testing.T) {
 	}
 }
 
+// C6：FOUND_FACTION 无阶段前置 (unlock {})，可用性由派生威望 + 意识形态
+// 强度双闸决定；执行走统一 mutation 管线创立零成员派系并扣 AP。
+func TestFoundFactionGateAndExecution(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "gate-found-faction.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(107)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	setPlayerIdeology := func(pf float64) {
+		for i := range svc.silo.Professions {
+			if svc.silo.Professions[i].Name == svc.agent.Profession {
+				if svc.silo.Professions[i].Ideologies == nil {
+					svc.silo.Professions[i].Ideologies = map[string]float64{}
+				}
+				svc.silo.Professions[i].Ideologies[model.IdeologyProForeign] = pf
+				return
+			}
+		}
+		t.Fatal("player profession not found")
+	}
+	svc.agent.Ambition = 0.6
+	svc.agent.Influence = 0.5 // prestige 55
+	setPlayerIdeology(0.9)    // intensity 0.4
+	svc.refreshActionProgress()
+	if action := actionByID(svc.availablePlayerActions(), "action_found_faction"); action == nil || !action.Enabled {
+		t.Fatalf("prestige 55 + intensity 0.4 must enable founding: %+v", action)
+	}
+
+	setPlayerIdeology(0.6) // intensity 0.1
+	svc.refreshActionProgress()
+	if action := actionByID(svc.availablePlayerActions(), "action_found_faction"); action != nil && action.Enabled {
+		t.Fatalf("low intensity must hide or disable founding: %+v", action)
+	}
+	setPlayerIdeology(0.9)
+	svc.agent.Ambition = 0.4 // prestige 45
+	svc.refreshActionProgress()
+	if action := actionByID(svc.availablePlayerActions(), "action_found_faction"); action != nil && action.Enabled {
+		t.Fatalf("low prestige must hide or disable founding: %+v", action)
+	}
+
+	svc.agent.Ambition = 0.6
+	svc.agent.ActionPoints = 25
+	svc.refreshActionProgress()
+	outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionFoundFaction})
+	if err != nil || !outcome.Result.Executed {
+		t.Fatalf("found faction execution failed: %+v err=%v", outcome, err)
+	}
+	var founded *model.Faction
+	for i := range svc.silo.Factions {
+		f := &svc.silo.Factions[i]
+		if f.RepresentativeKind == "PLAYER" && f.RepresentativeID == svc.agent.ID {
+			founded = f
+		}
+	}
+	if founded == nil || founded.MemberCount != 0 || founded.FounderKind != "PLAYER" {
+		t.Fatalf("execution must create a zero-member player-founded faction: %+v", founded)
+	}
+	if svc.agent.ActionPoints != 5 {
+		t.Fatalf("AP = %v, want 25-20=5", svc.agent.ActionPoints)
+	}
+}
+
 func TestActionGateAPReasonKeepsFraction(t *testing.T) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "gate-ap-fraction.db"))
 	if _, err := svc.CreateGame(threeSiloRequest(106)); err != nil {

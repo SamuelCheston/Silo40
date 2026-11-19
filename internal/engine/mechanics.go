@@ -719,6 +719,7 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			"known_fragments":    append([]string(nil), ctx.Actor.KnownFragments()...),
 			"is_representative":  ctx.Actor.IsRepresentative(),
 			"is_faction_leader":  actorLeadsFaction(ctx.Silo, ctx.Actor),
+			"ideologies":         cloneFloatMap(ctx.Actor.Ideologies()),
 			"connections":        []map[string]interface{}{},
 			"beliefs":            []map[string]interface{}{},
 		}
@@ -749,6 +750,7 @@ func mechanicScriptContext(ctx MechanicContext) map[string]interface{} {
 			actorPayload["faction"] = map[string]interface{}{
 				"id":        faction.ID,
 				"name":      faction.Name,
+				"signature": faction.Signature,
 				"influence": faction.Influence,
 				"cohesion":  faction.Cohesion,
 				"prestige":  faction.Prestige,
@@ -768,6 +770,7 @@ func actionContext(action model.AgentAction) map[string]interface{} {
 		"fragment_ids":      append([]string(nil), action.FragmentIds...),
 		"profession_action": action.ProfessionAction,
 		"resource_target":   action.ResourceTarget,
+		"target_faction_id": action.TargetFactionID,
 		"cost":              action.Cost,
 	}
 }
@@ -977,6 +980,15 @@ func (e *GameEngine) ApplyMutation(silo *model.Silo, agent *model.Agent, actorRe
 		e.applyActorFactionMetricDelta(silo, actor, mutation.Field, mutation.Value)
 	case "faction_is_public_actor":
 		e.applyActorFactionPublic(silo, actor, mutation.BoolValue)
+	case "faction_found_actor":
+		e.applyFactionFoundActor(silo, agent, actor)
+	case "faction_rumor_piggyback":
+		// C8 信息动作搭载：JS 成功路径只发 marker，掷骰与吸收在 Go 权威侧。
+		e.applyFactionRumorPiggyback(silo, actor)
+	case "faction_join_actor":
+		e.applyFactionJoinActor(silo, actor, agent, uint(mutation.IntValue))
+	case "faction_merge_actor":
+		e.applyFactionMergeActor(silo, actor, agent, uint(mutation.IntValue))
 	case "silo_flag_set":
 		writeSiloFlag(silo, mutation.Field, mutation.BoolValue)
 	case "victory_status_set":

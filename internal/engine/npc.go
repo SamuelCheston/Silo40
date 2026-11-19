@@ -167,8 +167,8 @@ func PredictCandidates(view *ActorView, silo *model.Silo) []CandidateInfo {
 }
 
 // DecisionActors enumerates every actor that may reach a decision point in
-// RunNpcTurn (profession NPCs except the player's, plus alive resident
-// representatives), in RunNpcTurn order. It does not consume rng. Used by
+// RunNpcTurn (profession NPCs except the player's, plus alive cohort
+// delegates), in RunNpcTurn order. It does not consume rng. Used by
 // the LLM prefetch layer to predict next month's decision points.
 func DecisionActors(silo *model.Silo, agent *model.Agent) []*ActorView {
 	if silo == nil {
@@ -186,7 +186,7 @@ func DecisionActors(silo *model.Silo, agent *model.Agent) []*ActorView {
 	}
 	for i := range silo.Residents {
 		res := &silo.Residents[i]
-		if !res.Alive || !res.IsRepresentative {
+		if !res.Alive || res.CohortID == nil {
 			continue
 		}
 		if view, err := CreateActorView(CreateActorRefForResident(res), silo, nil); err == nil {
@@ -369,6 +369,56 @@ func (NpcBrain) scoreCandidates(view *ActorView, silo *model.Silo, pick func(n i
 		if myFaction != nil && !myFaction.IsPublic {
 			// 领袖非常有动力公开自己的阵营
 			add(model.ActionPublicizeFaction, 2.5, "solemnly publicized the existence of "+myFaction.Name+" to the entire silo.", 1.0, "")
+		}
+	}
+
+	// --- FOUND_FACTION：无政治派系且三闸齐备时发起 (24 篇 §1, C6) ---
+	// 野心不是门槛，只是权重输入：weight = A + prestige/100 + 强度。
+	if ok, _ := foundFactionEligible(view, silo); ok {
+		weight := view.Ambition() + view.PoliticalPrestige()/100 + view.IdeologicalIntensity()
+		add(model.ActionFoundFaction, weight, "initiated a faction clustering event and founded their own faction.", 1.0, "")
+	}
+
+	// --- JOIN_FACTION：居民代表无政治派系且已感知可加入目标时 (24 篇 C9) ---
+	// 权重 = 意识形态相近度^k (与月度加入扫描同口径)；目标由 pick 随机选定。
+	if joinTargets := joinableFactionsForRepresentative(silo, view); len(joinTargets) > 0 {
+		target := joinTargets[pick(len(joinTargets))]
+		rep := residentActorRepresentative(view, silo)
+		cohort := cohortOfRepresentative(silo, rep)
+		centroid, _ := factionFeatureCentroid(silo, target, nil)
+		feat := cohortFeature(silo, cohort, getProfessionByID(silo, cohort.ProfessionID))
+		weight := joinProbability(featureDistance(feat, centroid))
+		cost := model.ACTION_COSTS[model.ActionJoinFaction]
+		if cost <= ap && weight > 0 {
+			candidates = append(candidates, WeightedDecision{
+				decision: NpcDecision{
+					Action:    model.AgentAction{Type: model.ActionJoinFaction, Cost: cost, TargetFactionID: target.ID},
+					Message:   "led their people into " + target.Name + ".",
+					LogChance: 0.6,
+				},
+				weight: weight,
+			})
+		}
+	}
+
+	// --- MERGE_FACTION：领袖把亲缘相近、关系达标的另一派系并入自己派系 (24 篇 C10) ---
+	// 权重 = 两派系质心相近度^k；目标由 pick 随机选定。三闸在候选筛选时已校验。
+	if mergeTargets := mergeableFactionsForLeader(silo, view); len(mergeTargets) > 0 {
+		target := mergeTargets[pick(len(mergeTargets))]
+		own := actorLedFaction(silo, view)
+		cOwn, _ := factionFeatureCentroid(silo, own, nil)
+		cTarget, _ := factionFeatureCentroid(silo, target, nil)
+		weight := joinProbability(featureDistance(cOwn, cTarget))
+		cost := model.ACTION_COSTS[model.ActionMergeFaction]
+		if cost <= ap && weight > 0 {
+			candidates = append(candidates, WeightedDecision{
+				decision: NpcDecision{
+					Action:    model.AgentAction{Type: model.ActionMergeFaction, Cost: cost, TargetFactionID: target.ID},
+					Message:   "merged " + target.Name + " into their own faction.",
+					LogChance: 0.6,
+				},
+				weight: weight,
+			})
 		}
 	}
 

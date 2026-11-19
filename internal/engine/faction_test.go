@@ -7,7 +7,9 @@ import (
 	"silo40/internal/model"
 )
 
-func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) {
+// C7 审计基线：距离聚类已废除——高亲外思潮的 cohort 不再自动政治化，
+// 零发起则零派系 (仅无阵营桶)。
+func TestMaintainFactionsDoesNotCluster(t *testing.T) {
 	silo := &model.Silo{
 		ID:         1,
 		Legitimacy: 0.65,
@@ -23,7 +25,7 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 					model.IdeologyProForeign: 0.75,
 					model.IdeologyLoyalty:    0.35,
 				},
-				Relations: map[string]float64{"Mechanical": 1.0, "Supply": 0.60, "Mines": 0.40},
+				Relations: map[string]float64{"Mechanical": 1.0, "Supply": 0.60},
 			},
 			{
 				ID:         2,
@@ -35,118 +37,71 @@ func TestFactionGroupingIgnoresLoyaltyWhenPoliticalProfileMatches(t *testing.T) 
 					model.IdeologyProForeign: 0.78,
 					model.IdeologyLoyalty:    0.80,
 				},
-				Relations: map[string]float64{"Supply": 1.0, "Mechanical": 0.60, "Mines": 0.40},
-			},
-			{
-				ID:         3,
-				Name:       "Mines",
-				ClassType:  "COMMONER",
-				PowerLevel: 4,
-				Zone:       "Lower",
-				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.10,
-					model.IdeologyLoyalty:    0.20,
-				},
-				Relations: map[string]float64{"Mines": 1.0, "Mechanical": 0.40, "Supply": 0.40},
+				Relations: map[string]float64{"Supply": 1.0, "Mechanical": 0.60},
 			},
 		},
 		Cohorts: []model.PopulationCohort{
 			{
-				ID:              1,
-				ProfessionID:    1,
-				Name:            "Mechanical Bloc",
-				Count:           260,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyLoyalty + ":Low"},
-				Influence:       0.72,
-				ActionPoints:    35,
+				ID:           1,
+				ProfessionID: 1,
+				Name:         "Mechanical Bloc",
+				Count:        260,
+				Influence:    0.72,
+				ActionPoints: 35,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.75,
 					model.IdeologyLoyalty:    0.25,
 				},
-				PanicSensitivity: 1.0,
 			},
 			{
-				ID:              2,
-				ProfessionID:    2,
-				Name:            "Supply Bloc",
-				Count:           260,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyLoyalty + ":High"},
-				Influence:       0.69,
-				ActionPoints:    34,
+				ID:           2,
+				ProfessionID: 2,
+				Name:         "Supply Bloc",
+				Count:        260,
+				Influence:    0.69,
+				ActionPoints: 34,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.78,
 					model.IdeologyLoyalty:    0.82,
 				},
-				PanicSensitivity: 1.0,
-			},
-			{
-				ID:              3,
-				ProfessionID:    3,
-				Name:            "Mines Crew",
-				Count:           260,
-				IdeologyProfile: []string{model.IdeologyLoyalty + ":Low"},
-				Influence:       0.42,
-				ActionPoints:    20,
-				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.10,
-					model.IdeologyLoyalty:    0.20,
-				},
-				PanicSensitivity: 1.0,
 			},
 		},
 	}
 
+	MaintainFactions(silo, nil)
+
+	if len(silo.Factions) != 1 || silo.Factions[0].Signature != unaffiliatedSignature {
+		t.Fatalf("zero founding must yield only the unaffiliated bucket, got %+v", silo.Factions)
+	}
 	for i := range silo.Cohorts {
-		prof := getProfessionByID(silo, silo.Cohorts[i].ProfessionID)
-		silo.Cohorts[i].Tags = buildCohortTags(&silo.Cohorts[i], prof, silo)
-	}
-
-	RebuildImplicitFactions(silo)
-
-	if len(silo.Factions) != 2 {
-		t.Fatalf("expected 2 factions, got %d", len(silo.Factions))
-	}
-
-	if silo.Cohorts[0].FactionID == nil || silo.Cohorts[1].FactionID == nil {
-		t.Fatalf("expected paired-ideology cohorts to be assigned to political factions")
-	}
-	if *silo.Cohorts[0].FactionID != *silo.Cohorts[1].FactionID {
-		t.Fatalf("expected cohorts with different loyalty but same political profile to share a faction")
-	}
-	if silo.Cohorts[2].FactionID == nil || *silo.Cohorts[2].FactionID == *silo.Cohorts[0].FactionID {
-		t.Fatalf("expected single-axis cohort to stay out of the political faction")
-	}
-
-	var political, unaffiliated *model.Faction
-	for i := range silo.Factions {
-		faction := &silo.Factions[i]
-		if faction.Signature == "special:unaffiliated" {
-			unaffiliated = faction
-		} else {
-			political = faction
+		c := &silo.Cohorts[i]
+		if c.FactionID == nil || *c.FactionID != silo.Factions[0].ID {
+			t.Fatalf("cohort %d must sit in the unaffiliated bucket: %v", c.ID, c.FactionID)
 		}
 	}
-
-	if political == nil || unaffiliated == nil {
-		t.Fatalf("expected both a political faction and an unaffiliated faction")
+	if silo.Factions[0].MemberCount != 520 {
+		t.Fatalf("unaffiliated bucket must aggregate all population, got %d", silo.Factions[0].MemberCount)
 	}
-	if political.MemberCount != 520 {
-		t.Fatalf("expected merged political faction size 520, got %d", political.MemberCount)
+	// 每个 cohort 都有代表 (人口算法不变)，但无派系代表标志。
+	if len(silo.Residents) != 2 {
+		t.Fatalf("expected one delegate per cohort, got %d", len(silo.Residents))
 	}
-	if unaffiliated.MemberCount != 260 {
-		t.Fatalf("expected unaffiliated size 260, got %d", unaffiliated.MemberCount)
-	}
-	if political.Signature != "pro_foreign:High|drive:solidarity" {
-		t.Fatalf("unexpected political signature: %s", political.Signature)
+	for _, r := range silo.Residents {
+		if r.IsRepresentative {
+			t.Fatalf("delegate without a faction must not carry the representative flag: %+v", r)
+		}
 	}
 }
 
-func TestFactionRebuildAppliesPostGroupingLoyaltyDynamics(t *testing.T) {
+// 忠诚动力学保留：维护管线只分组不演化；月度步骤施加派系压力。
+func TestFactionMaintenanceAppliesPostGroupingLoyaltyDynamics(t *testing.T) {
 	silo := &model.Silo{
-		ID:         1,
-		Legitimacy: 0.20,
-		Cohesion:   0.35,
-		Rebellion:  0.30,
+		ID:           1,
+		Legitimacy:   0.20,
+		Cohesion:     0.35,
+		Rebellion:    0.30,
+		CurrentYear:  122,
+		CurrentMonth: 5,
 		Professions: []model.Profession{
 			{
 				ID:         1,
@@ -163,95 +118,58 @@ func TestFactionRebuildAppliesPostGroupingLoyaltyDynamics(t *testing.T) {
 		},
 		Cohorts: []model.PopulationCohort{
 			{
-				ID:              1,
-				ProfessionID:    1,
-				Name:            "Restless Mechanics",
-				Count:           320,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High"},
-				Influence:       0.76,
-				ActionPoints:    38,
+				ID:           1,
+				ProfessionID: 1,
+				Name:         "Restless Mechanics",
+				Count:        320,
+				Influence:    0.76,
+				ActionPoints: 38,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.80,
 					model.IdeologyLoyalty:    0.58,
 				},
-				PanicSensitivity: 1.0,
+			},
+		},
+		Residents: []model.Resident{
+			{
+				ID: 1, Alive: true, CohortID: uintPtr(1), ProfessionID: 1, Profession: "Mechanical",
+				Ambition: 0.7, Influence: 0.6,
+				Ideologies: map[string]float64{model.IdeologyProForeign: 0.8, model.IdeologyLoyalty: 0.58},
+				Relations:  map[string]float64{"Mechanical": 1.0},
 			},
 		},
 	}
-
 	prof := &silo.Professions[0]
 	silo.Cohorts[0].Tags = buildCohortTags(&silo.Cohorts[0], prof, silo)
 
+	// 模拟已发起并加入的派系 (C9 前的手工成员资格)。
+	factionID := uint(7)
+	silo.Factions = []model.Faction{{
+		ID: factionID, SiloID: 1, Name: "发起的派系",
+		Signature: "founded:RESIDENT:1|" + model.IdeologyProForeign + ":High",
+		Tags:      []string{model.IdeologyProForeign + ":High", "stance:dissent"},
+		TagStats:  map[string]int{},
+		Stance:    "stance:dissent",
+		Memory:    []string{"founded:Y122M5"},
+		FoundedYear: 122, FoundedMonth: 5,
+		RepresentativeKind: string(ActorResident), RepresentativeID: 1, RepresentativeName: "Rep",
+	}}
+	silo.Cohorts[0].FactionID = uintPtr(factionID)
+	silo.Residents[0].FactionID = uintPtr(factionID)
+
 	before := silo.Cohorts[0].Ideologies[model.IdeologyLoyalty]
-	RebuildImplicitFactions(silo)
-	if len(silo.Factions) != 1 {
-		t.Fatalf("expected one political faction, got %d", len(silo.Factions))
-	}
-	// Rebuild is grouping-only: it must not mutate loyalty on its own.
+	MaintainFactions(silo, nil)
 	if got := silo.Cohorts[0].Ideologies[model.IdeologyLoyalty]; got != before {
-		t.Fatalf("rebuild must not change loyalty, before=%.3f after=%.3f", before, got)
+		t.Fatalf("maintenance must not change loyalty, before=%.3f after=%.3f", before, got)
 	}
-	// Zero-duration step (instant action resolution): no evolution either.
 	ApplyFactionLoyaltyDynamics(silo, 0)
 	if got := silo.Cohorts[0].Ideologies[model.IdeologyLoyalty]; got != before {
 		t.Fatalf("zero-duration dynamics must be a no-op, before=%.3f after=%.3f", before, got)
 	}
-	// One monthly step applies the post-grouping pressure.
 	ApplyFactionLoyaltyDynamics(silo, 1.0/12.0)
 	after := silo.Cohorts[0].Ideologies[model.IdeologyLoyalty]
-
 	if after >= before {
-		t.Fatalf("expected loyalty to drop after political faction pressure, before=%.3f after=%.3f", before, after)
-	}
-}
-
-func TestSingleIdeologyCannotFormPoliticalFaction(t *testing.T) {
-	silo := &model.Silo{
-		ID:         1,
-		Legitimacy: 0.55,
-		Cohesion:   0.55,
-		Professions: []model.Profession{
-			{
-				ID:         1,
-				Name:       "Mechanical",
-				ClassType:  "COMMONER",
-				PowerLevel: 8,
-				Zone:       "Lower",
-				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.10,
-					model.IdeologyLoyalty:    0.45,
-				},
-				Relations: map[string]float64{"Mechanical": 1.0},
-			},
-		},
-		Cohorts: []model.PopulationCohort{
-			{
-				ID:              1,
-				ProfessionID:    1,
-				Name:            "Status-Quo Bloc",
-				Count:           340,
-				IdeologyProfile: []string{model.IdeologyLoyalty + ":Medium"},
-				Influence:       0.74,
-				ActionPoints:    32,
-				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.10,
-					model.IdeologyLoyalty:    0.45,
-				},
-				PanicSensitivity: 1.0,
-			},
-		},
-	}
-
-	prof := &silo.Professions[0]
-	silo.Cohorts[0].Tags = buildCohortTags(&silo.Cohorts[0], prof, silo)
-
-	RebuildImplicitFactions(silo)
-
-	if len(silo.Factions) != 1 {
-		t.Fatalf("expected only unaffiliated faction, got %d factions", len(silo.Factions))
-	}
-	if silo.Factions[0].Signature != "special:unaffiliated" {
-		t.Fatalf("expected non-political cohort to stay unaffiliated, got %s", silo.Factions[0].Signature)
+		t.Fatalf("expected loyalty to drop after faction pressure, before=%.3f after=%.3f", before, after)
 	}
 }
 
@@ -307,18 +225,16 @@ func TestRepresentativeResidentGetsNativeFixedAmbition(t *testing.T) {
 		},
 		Cohorts: []model.PopulationCohort{
 			{
-				ID:                1,
-				ProfessionID:      1,
-				Name:              "Mechanics",
-				Count:             300,
-				IdeologyProfile:   []string{model.IdeologyProForeign + ":High"},
-				Influence:         0.72,
-				ActionPoints:      35,
+				ID:           1,
+				ProfessionID: 1,
+				Name:         "Mechanics",
+				Count:        300,
+				Influence:    0.72,
+				ActionPoints: 35,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.75,
 					model.IdeologyLoyalty:    0.55,
 				},
-				PanicSensitivity: 1.0,
 			},
 		},
 	}
@@ -341,108 +257,67 @@ func TestRepresentativeResidentGetsNativeFixedAmbition(t *testing.T) {
 	}
 }
 
-// TestPoliticalGateHysteresisPreventsFlipFlop locks the entry/exit band: a
-// cohort politicizes at pro_foreign >= 0.7, stays political while >= 0.6,
-// and must climb back to 0.7 to re-enter after falling below 0.6. Without
-// the band, cohorts hovering near the gate flip between political and
-// unaffiliated every tick (audit observed 4 flips in 5 months).
-func TestPoliticalGateHysteresisPreventsFlipFlop(t *testing.T) {
+// C7 成员资格持久：思潮漂移出旧聚类半径也不翻转归属 (无单月往返)。
+func TestMembershipPersistentAcrossIdeologyDrift(t *testing.T) {
 	silo := &model.Silo{
-		ID:         1,
-		Legitimacy: 0.55,
-		Cohesion:   0.55,
+		ID:           1,
+		Legitimacy:   0.55,
+		Cohesion:     0.55,
+		CurrentYear:  122,
+		CurrentMonth: 5,
 		Professions: []model.Profession{
 			{
 				ID:         1,
 				Name:       "Mechanical",
 				ClassType:  "COMMONER",
-				// PowerLevel 压低：代表野心 (0.22+PL/10×0.40+强度×0.30+噪声)
-				// 必须留在潜在领袖门 (0.62) 之下，否则领袖旁路会绕过本测试
-				// 要锁的进入/退出滞回带。
 				PowerLevel: 4,
 				Zone:       "Lower",
-				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.70,
-					model.IdeologyLoyalty:    0.50,
-				},
-				Relations: map[string]float64{"Mechanical": 1.0},
+				Ideologies: map[string]float64{model.IdeologyProForeign: 0.70, model.IdeologyLoyalty: 0.50},
+				Relations:  map[string]float64{"Mechanical": 1.0},
 			},
 		},
 		Cohorts: []model.PopulationCohort{
 			{
-				ID:              1,
-				ProfessionID:    1,
-				Name:            "Hovering Mechanics",
-				Count:           320,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High"},
-				Influence:       0.50,
-				ActionPoints:    30,
-				Ideologies: map[string]float64{
-					model.IdeologyProForeign: 0.72,
-					model.IdeologyLoyalty:    0.50,
-				},
-				PanicSensitivity: 1.0,
+				ID:           1,
+				ProfessionID: 1,
+				Name:         "Hovering Mechanics",
+				Count:        320,
+				Influence:    0.50,
+				ActionPoints: 30,
+				Ideologies: map[string]float64{model.IdeologyProForeign: 0.72, model.IdeologyLoyalty: 0.50},
 			},
 		},
 	}
+	factionID := uint(3)
+	silo.Factions = []model.Faction{{
+		ID: factionID, SiloID: 1, Name: "持久派系",
+		Signature: "founded:PLAYER:42|" + model.IdeologyProForeign + ":High",
+		Tags:      []string{model.IdeologyProForeign + ":High"},
+		TagStats:  map[string]int{},
+		Memory:    []string{"founded:Y122M5"},
+		FoundedYear: 122, FoundedMonth: 5,
+		RepresentativeKind: string(ActorPlayer), RepresentativeID: 42,
+	}}
+	silo.Cohorts[0].FactionID = uintPtr(factionID)
 
-	politicalFactions := func() int {
-		n := 0
-		for i := range silo.Factions {
-			if silo.Factions[i].Signature != "special:unaffiliated" {
-				n++
-			}
+	for _, pf := range []float64{0.65, 0.55, 0.65, 0.72} {
+		silo.Cohorts[0].Ideologies[model.IdeologyProForeign] = pf
+		MaintainFactions(silo, nil)
+		if silo.Cohorts[0].FactionID == nil || *silo.Cohorts[0].FactionID != factionID {
+			t.Fatalf("pf=%.2f: membership must persist, got %v", pf, silo.Cohorts[0].FactionID)
 		}
-		return n
-	}
-	setPF := func(v float64) {
-		silo.Cohorts[0].Ideologies[model.IdeologyProForeign] = v
-	}
-
-	// 0.72 >= entry 0.7 -> politicizes.
-	setPF(0.72)
-	RebuildImplicitFactions(silo)
-	if politicalFactions() != 1 {
-		t.Fatalf("pf=0.72: expected cohort to politicize, factions=%d", politicalFactions())
-	}
-
-	// Drops into the hysteresis band [0.6, 0.7) -> stays political.
-	setPF(0.65)
-	RebuildImplicitFactions(silo)
-	if politicalFactions() != 1 {
-		t.Fatalf("pf=0.65: expected cohort to stay political inside the band, factions=%d", politicalFactions())
-	}
-
-	// Falls below exit 0.6 -> depoliticizes.
-	setPF(0.55)
-	RebuildImplicitFactions(silo)
-	if politicalFactions() != 0 {
-		t.Fatalf("pf=0.55: expected cohort to depoliticize below exit threshold, factions=%d", politicalFactions())
-	}
-
-	// Back into the band from below -> still unaffiliated (entry needs 0.7).
-	setPF(0.65)
-	RebuildImplicitFactions(silo)
-	if politicalFactions() != 0 {
-		t.Fatalf("pf=0.65 from below: expected cohort to stay unaffiliated until entry threshold, factions=%d", politicalFactions())
-	}
-
-	// Reaches entry again -> politicizes.
-	setPF(0.72)
-	RebuildImplicitFactions(silo)
-	if politicalFactions() != 1 {
-		t.Fatalf("pf=0.72 again: expected cohort to re-politicize, factions=%d", politicalFactions())
 	}
 }
 
-// TestFactionIdentityStableAcrossRebuilds verifies P1-S3 persistent identity:
-// lineage factions keep their ID/name/memory across rebuilds, and a size
-// inversion swaps ranks without swapping identities.
-func TestFactionIdentityStableAcrossRebuilds(t *testing.T) {
+// C7 持久身份：发起派系的 ID/名称/立场/ founding 记忆跨维护不变，
+// 成员规模变化只改统计，不改身份。
+func TestFactionIdentityStableAcrossMaintenance(t *testing.T) {
 	silo := &model.Silo{
-		ID:         1,
-		Legitimacy: 0.60,
-		Cohesion:   0.60,
+		ID:           1,
+		Legitimacy:   0.60,
+		Cohesion:     0.60,
+		CurrentYear:  122,
+		CurrentMonth: 5,
 		Professions: []model.Profession{
 			{
 				ID:        1,
@@ -461,24 +336,22 @@ func TestFactionIdentityStableAcrossRebuilds(t *testing.T) {
 		},
 		Cohorts: []model.PopulationCohort{
 			{
-				ID:              1,
-				ProfessionID:    1,
-				Name:            "Mechanical Bloc",
-				Count:           400,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyLoyalty + ":Low"},
-				Influence:       0.70,
+				ID:           1,
+				ProfessionID: 1,
+				Name:         "Mechanical Bloc",
+				Count:        400,
+				Influence:    0.70,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.90,
 					model.IdeologyLoyalty:    0.20,
 				},
 			},
 			{
-				ID:              2,
-				ProfessionID:    2,
-				Name:            "Supply Bloc",
-				Count:           400,
-				IdeologyProfile: []string{model.IdeologyProForeign + ":High", model.IdeologyLoyalty + ":High"},
-				Influence:       0.70,
+				ID:           2,
+				ProfessionID: 2,
+				Name:         "Supply Bloc",
+				Count:        400,
+				Influence:    0.70,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.72,
 					model.IdeologyLoyalty:    0.85,
@@ -491,72 +364,43 @@ func TestFactionIdentityStableAcrossRebuilds(t *testing.T) {
 		silo.Cohorts[i].Tags = buildCohortTags(&silo.Cohorts[i], prof, silo)
 	}
 
-	factionOf := func(cohortID uint) *model.Faction {
-		for i := range silo.Cohorts {
-			if silo.Cohorts[i].ID != cohortID || silo.Cohorts[i].FactionID == nil {
-				continue
-			}
-			for j := range silo.Factions {
-				if silo.Factions[j].ID == *silo.Cohorts[i].FactionID {
-					return &silo.Factions[j]
-				}
-			}
-		}
-		return nil
+	agent := &model.Agent{ID: 42, Name: "Founder", Profession: "Mechanical", Ambition: 0.8, Influence: 0.6, ActionPoints: 30}
+	e := NewGameEngine()
+	e.ApplyMutation(silo, agent, CreateActorRefForAgent(agent, silo), MechanicMutation{Type: "faction_found_actor"})
+	if len(silo.Factions) != 1 {
+		t.Fatalf("expected the founded faction, got %d", len(silo.Factions))
 	}
+	founded := silo.Factions[0]
+	id, name, stance := founded.ID, founded.Name, founded.Stance
+	mem := append([]string(nil), founded.Memory...)
 
-	RebuildImplicitFactions(silo)
-	if len(silo.Factions) != 2 {
-		t.Fatalf("expected 2 political factions, got %d", len(silo.Factions))
+	// 两个 cohort 加入 (C9 前的手工成员资格)，随后思潮漂移 + 规模反转。
+	for i := range silo.Cohorts {
+		silo.Cohorts[i].FactionID = uintPtr(id)
 	}
-	fa, fb := factionOf(1), factionOf(2)
-	if fa == nil || fb == nil || fa.ID == fb.ID {
-		t.Fatalf("expected two distinct factions for the two distant cohorts")
-	}
-	idA, idB := fa.ID, fb.ID
-	nameA, nameB := fa.Name, fb.Name
-	memA := append([]string(nil), fa.Memory...)
-	for _, f := range []*model.Faction{fa, fb} {
-		if f.Stance == "" {
-			t.Fatalf("faction %d: expected non-empty stance", f.ID)
-		}
-		if len(f.Demands) == 0 {
-			t.Fatalf("faction %d: expected non-empty demands", f.ID)
-		}
-		if len(f.Memory) == 0 || !strings.HasPrefix(f.Memory[0], "founded:") {
-			t.Fatalf("faction %d: expected founding memory, got %v", f.ID, f.Memory)
-		}
-	}
-
-	// Small ideological drift: identity (ID/name/memory) must not change.
 	silo.Cohorts[0].Ideologies[model.IdeologyProForeign] = 0.89
-	RebuildImplicitFactions(silo)
-	fa, fb = factionOf(1), factionOf(2)
-	if fa == nil || fb == nil {
-		t.Fatalf("expected both factions to survive the drift rebuild")
-	}
-	if fa.ID != idA || fb.ID != idB {
-		t.Fatalf("expected stable IDs after drift, got %d/%d want %d/%d", fa.ID, fb.ID, idA, idB)
-	}
-	if fa.Name != nameA || fb.Name != nameB {
-		t.Fatalf("expected stable names after drift, got %q/%q", fa.Name, fb.Name)
-	}
-	if len(fa.Memory) != len(memA) || fa.Memory[0] != memA[0] {
-		t.Fatalf("expected inherited memory after drift, got %v want %v", fa.Memory, memA)
-	}
-
-	// Size inversion: rank swaps, but identity follows the ID, not the rank.
 	silo.Cohorts[1].Count = 600
-	RebuildImplicitFactions(silo)
-	if len(silo.Factions) != 2 {
-		t.Fatalf("expected 2 factions after size inversion, got %d", len(silo.Factions))
+	MaintainFactions(silo, nil)
+
+	var f *model.Faction
+	for i := range silo.Factions {
+		if silo.Factions[i].ID == id {
+			f = &silo.Factions[i]
+		}
 	}
-	if silo.Factions[0].ID != idB || silo.Factions[1].ID != idA {
-		t.Fatalf("expected size-descending rank with persistent IDs, got [%d %d] want [%d %d]",
-			silo.Factions[0].ID, silo.Factions[1].ID, idB, idA)
+	if f == nil {
+		t.Fatal("founded faction must survive maintenance")
 	}
-	if silo.Factions[0].Name != nameB || silo.Factions[1].Name != nameA {
-		t.Fatalf("expected names to follow identity after rank swap, got %q/%q",
-			silo.Factions[0].Name, silo.Factions[1].Name)
+	if f.Name != name || f.Stance != stance {
+		t.Fatalf("identity drifted: name=%q stance=%q want %q/%q", f.Name, f.Stance, name, stance)
+	}
+	if len(f.Memory) != len(mem) || f.Memory[0] != mem[0] {
+		t.Fatalf("founding memory changed: %v want %v", f.Memory, mem)
+	}
+	if f.MemberCount != 1000 {
+		t.Fatalf("member count must track cohorts, got %d", f.MemberCount)
+	}
+	if !strings.HasPrefix(f.Signature, foundedSignaturePrefix) {
+		t.Fatalf("signature vocabulary lost: %q", f.Signature)
 	}
 }

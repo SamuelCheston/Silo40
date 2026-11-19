@@ -76,10 +76,14 @@ const (
 //     50×(Ambition+Influence) 派生；Agent/Profession 补齐 Ambition/Influence。
 //     破坏性语义变更，无升级步：v15 及更早存档拒载 (ADR-0017 硬切断)。
 //     与 v15 黑箱层合并时顺延编号：黑箱升级链终点 v15 保留不动。
+//   - v17: 派系事件化 (24 篇 C7)。废除每 tick 距离聚类建派系：派系只能由
+//     FOUND_FACTION 创立，成员资格持久，筹备期解散与领袖死亡接任上线。
+//     v16 存档的聚类派系/归属是已废除算法的产物，语义不可延续，拒载
+//     (ADR-0017 硬切断，无升级步)。开局零派系 (仅无阵营桶)。
 //
 // 19-opening-variability：Silo 另携带驻地原型标识 (Archetype)，建局时
 // 写入；零值 = 无原型。旧档按 ADR-0017 硬切断拒载，不设原型升级步。
-const CurrentSaveVersion = 16
+const CurrentSaveVersion = 17
 
 // SaveMeta 存档级元数据，与具体游戏记录解耦的版本标记。
 type SaveMeta struct {
@@ -103,21 +107,25 @@ type User struct {
 
 // Agent 特工模型 (玩家角色)
 type Agent struct {
-	ID              uint         `gorm:"primarykey" json:"id"`
-	UserID          uint         `gorm:"index" json:"user_id"`
-	SiloID          uint         `gorm:"index" json:"silo_id"`                   // Current simulated silo; the player belongs to the assigned station.
-	StationSiloID   uint         `gorm:"index" json:"station_silo_id,omitempty"` // Player's assigned station; zero marks an incompatible pre-v6 save.
-	Name            string       `gorm:"size:64" json:"name"`
-	Profession      string       `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
-	Traits          []string     `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
-	Ambition        float64      `gorm:"default:0.0" json:"ambition"`             // 野心 (开局定死，仅事件可改)
-	Influence       float64      `gorm:"default:0.0" json:"influence"`            // 个人影响力
-	PoliticalPoints float64      `gorm:"default:0.0" json:"political_points"`     // 政治点数
-	ActionPoints    float64      `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
-	PropagandaLevel float64      `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
-	SuspicionLevel  float64      `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
-	Connections     []Connection `gorm:"foreignKey:AgentID" json:"connections"`
-	KnownFragments  []string     `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
+	ID                uint         `gorm:"primarykey" json:"id"`
+	UserID            uint         `gorm:"index" json:"user_id"`
+	SiloID            uint         `gorm:"index" json:"silo_id"`                   // Current simulated silo; the player belongs to the assigned station.
+	StationSiloID     uint         `gorm:"index" json:"station_silo_id,omitempty"` // Player's assigned station; zero marks an incompatible pre-v6 save.
+	Name              string       `gorm:"size:64" json:"name"`
+	Profession        string       `gorm:"size:50" json:"profession"`               // 职业 (如: Mayor, IT, Mechanical)
+	Traits            []string     `gorm:"type:text;serializer:json" json:"traits"` // 特质 (如: "地堡土著", "一号地堡密使")
+	Ambition          float64      `gorm:"default:0.0" json:"ambition"`             // 野心 (开局定死，仅事件可改)
+	Influence         float64      `gorm:"default:0.0" json:"influence"`            // 个人影响力
+	PoliticalPoints   float64      `gorm:"default:0.0" json:"political_points"`     // 政治点数
+	ActionPoints      float64      `gorm:"default:0.0" json:"action_points"`        // 行动点数 (AP)
+	PropagandaLevel   float64      `gorm:"default:0.0" json:"propaganda_level"`     // 宣传力度
+	SuspicionLevel    float64      `gorm:"default:0.0" json:"suspicion_level"`      // 怀疑度指数
+	// FactionID 玩家成员资格 (24 篇 C9, ADR-0018)：玩家 JOIN_FACTION 加入的派系。
+	// 与"任代表"(RepresentativeKind=PLAYER) 区分：发起/领导走代表引用，加入走
+	// 本字段。零值 (nil) = 无成员资格，旧档语义不变，存档版本不升。
+	FactionID         *uint        `gorm:"index" json:"faction_id,omitempty"`
+	Connections       []Connection `gorm:"foreignKey:AgentID" json:"connections"`
+	KnownFragments    []string     `gorm:"type:text;serializer:json" json:"known_fragments"` // 特工个人掌握的信息碎片
 	// Beliefs 分层信念层 (10-it-control-credibility §3.3/§3.5)：每个事实的连续
 	// 确信 B、解释版本分布 π 与去重观察记录。旧档没有该字段时为空，读取时按
 	// KnownFragments 保守补种 (engine.SeedLegacyBeliefs)，不升存档版本。
@@ -1400,24 +1408,28 @@ type PopulationCohort struct {
 
 // Resident 显式居民/单位模型：每个 NPC unit 都有自己的 tags 与状态
 type Resident struct {
-	ID              uint               `gorm:"primarykey" json:"id"`
-	SiloID          uint               `gorm:"index" json:"silo_id"`
-	Name            string             `gorm:"size:80" json:"name"`
-	CohortID        *uint              `gorm:"index" json:"cohort_id,omitempty"`
-	ProfessionID    uint               `gorm:"index" json:"profession_id"`
-	Profession      string             `gorm:"size:50" json:"profession"`
-	FactionID       *uint              `gorm:"index" json:"faction_id,omitempty"`
-	HomeFloor       int                `json:"home_floor"`
-	Tags            []string           `gorm:"type:text;serializer:json" json:"tags"`
-	Loyalty         float64            `gorm:"default:0.5" json:"loyalty"`
-	Ambition        float64            `gorm:"default:0.0" json:"ambition"`
-	Ideologies      map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
-	Influence       float64            `gorm:"default:0.0" json:"influence"`
-	ActionPoints    float64            `gorm:"default:0.0" json:"action_points"`
-	SuspicionLevel  float64            `gorm:"default:0.0" json:"suspicion_level"`
-	PropagandaLevel float64            `gorm:"default:0.0" json:"propaganda_level"`
-	KnownFragments  []string           `gorm:"type:text;serializer:json" json:"known_fragments"`
-	Relations       map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"`
+	ID                uint               `gorm:"primarykey" json:"id"`
+	SiloID            uint               `gorm:"index" json:"silo_id"`
+	Name              string             `gorm:"size:80" json:"name"`
+	CohortID          *uint              `gorm:"index" json:"cohort_id,omitempty"`
+	ProfessionID      uint               `gorm:"index" json:"profession_id"`
+	Profession        string             `gorm:"size:50" json:"profession"`
+	FactionID         *uint              `gorm:"index" json:"faction_id,omitempty"`
+	HomeFloor         int                `json:"home_floor"`
+	Tags              []string           `gorm:"type:text;serializer:json" json:"tags"`
+	Loyalty           float64            `gorm:"default:0.5" json:"loyalty"`
+	Ambition          float64            `gorm:"default:0.0" json:"ambition"`
+	Ideologies        map[string]float64 `gorm:"type:text;serializer:json" json:"ideologies"`
+	Influence         float64            `gorm:"default:0.0" json:"influence"`
+	ActionPoints      float64            `gorm:"default:0.0" json:"action_points"`
+	SuspicionLevel    float64            `gorm:"default:0.0" json:"suspicion_level"`
+	PropagandaLevel   float64            `gorm:"default:0.0" json:"propaganda_level"`
+	KnownFragments    []string           `gorm:"type:text;serializer:json" json:"known_fragments"`
+	Relations         map[string]float64 `gorm:"type:text;serializer:json" json:"relations,omitempty"`
+	// LeaderRelations 领袖↔代表个人关系子矩阵 (24 篇 §3, C9)：键 `res:<id>` /
+	// `agent:<id>`，与部门关系键 (Relations 按部门名) 隔离。加入/合并的个人关系
+	// 闸读这一层。增量字段零值安全，存档版本不升 (仍 v17)。
+	LeaderRelations map[string]float64 `gorm:"type:text;serializer:json" json:"leader_relations,omitempty"`
 	// Beliefs 具名人物层信念 (§3.3)：公开传播与关键人物确信进入 E 聚合。
 	Beliefs          []FactBelief `gorm:"type:text;serializer:json" json:"beliefs,omitempty"`
 	IsRepresentative bool         `gorm:"default:false" json:"is_representative"`
@@ -1458,9 +1470,18 @@ type Faction struct {
 	Tags                     []string       `gorm:"type:text;serializer:json" json:"tags"`
 	TagStats                 map[string]int `gorm:"type:text;serializer:json" json:"tag_stats,omitempty"` // 阵营内部标签分布统计
 	MemberCount              int            `gorm:"default:0" json:"member_count"`
-	RepresentativeResidentID uint           `gorm:"default:0" json:"representative_resident_id"`
+	// 代表 Actor 化 (24 篇 §3, ADR-0018)：代表可以是居民或玩家特工，
+	// Kind 取 ActorKind 词表 (PLAYER/RESIDENT)，空 = 无代表。
+	RepresentativeKind       string         `gorm:"size:16" json:"representative_kind,omitempty"`
+	RepresentativeID         uint           `gorm:"default:0" json:"representative_id"`
 	RepresentativeCohortID   *uint          `gorm:"index" json:"representative_cohort_id,omitempty"`
 	RepresentativeName       string         `gorm:"size:80" json:"representative_name"`
+	// 创始人与成立年月：FOUND_FACTION (C6) 写入；筹备期计时与
+	// 死亡接任 (C7) 读 FoundedYear/Month。亲缘继承随持久 ID 传递。
+	FounderKind              string         `gorm:"size:16" json:"founder_kind,omitempty"`
+	FounderID                uint           `gorm:"default:0" json:"founder_id"`
+	FoundedYear              int            `gorm:"default:0" json:"founded_year"`
+	FoundedMonth             int            `gorm:"default:0" json:"founded_month"`
 	Influence                float64        `gorm:"default:0.0" json:"influence"`
 	Cohesion                 float64        `gorm:"default:0.0" json:"cohesion"`
 	Prestige                 float64        `gorm:"default:0.0" json:"prestige"`    // 阵营威望
@@ -1550,6 +1571,9 @@ const (
 	ActionProfession        AgentActionType = "PROFESSION_ACTION"
 	ActionPlayerEvent       AgentActionType = "PLAYER_EVENT"
 	ActionPublicizeFaction  AgentActionType = "PUBLICIZE_FACTION"
+	ActionFoundFaction      AgentActionType = "FOUND_FACTION"
+	ActionJoinFaction       AgentActionType = "JOIN_FACTION"
+	ActionMergeFaction      AgentActionType = "MERGE_FACTION"
 	ActionSilo1Operation    AgentActionType = "SILO1_OPERATION"
 	ActionStationOperation  AgentActionType = "STATION_OPERATION"
 )
@@ -1562,6 +1586,9 @@ type AgentAction struct {
 	FragmentIds      []string        `json:"fragment_ids,omitempty"`
 	ProfessionAction string          `json:"profession_action,omitempty"`
 	ResourceTarget   string          `json:"resource_target,omitempty"`
+	// TargetFactionID JOIN_FACTION / MERGE_FACTION 的目标派系 ID (24 篇 C9/C10)。
+	// 零值 = 无目标；增量字段，旧动作不受影响。
+	TargetFactionID  uint            `json:"target_faction_id,omitempty"`
 	Cost             float64         `json:"cost"`
 }
 
@@ -1986,6 +2013,9 @@ var ACTION_COSTS = map[AgentActionType]float64{
 	ActionInciteRebellion:   30,
 	ActionConductPropaganda: 20,
 	ActionPublicizeFaction:  25,
+	ActionFoundFaction:      20, // 24 篇 §4：发起派系聚类事件的 AP 成本
+	ActionJoinFaction:       10, // 24 篇 C9：加入派系的 AP 成本 (方案留档自定值)
+	ActionMergeFaction:      15, // 24 篇 §4：合并派系的 AP 成本
 	ActionProfession:        0, // 实际成本由职业行动注册表决定
 	ActionPlayerEvent:       0, // 实际成本由 content event 元数据决定
 	ActionSilo1Operation:    0, // Actual cost comes from the operation definition.
@@ -2001,6 +2031,9 @@ var ACTION_DURATIONS = map[AgentActionType]int{
 	ActionInciteRebellion:   2,
 	ActionConductPropaganda: 1,
 	ActionPublicizeFaction:  0, // 立即生效
+	ActionFoundFaction:      0, // 立即生效
+	ActionJoinFaction:       0, // 立即生效
+	ActionMergeFaction:      0, // 立即生效
 	ActionProfession:        1,
 	ActionPlayerEvent:       0,
 	ActionSilo1Operation:    0,

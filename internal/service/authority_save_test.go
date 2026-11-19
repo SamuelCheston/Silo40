@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -34,7 +35,8 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 		t.Fatalf("meta version = %d, want %d", meta.SaveVersion, authoritySaveVersion)
 	}
 
-	// The startup chain continues v8 → v9 → v10 → v11 → v12 → v13 before Resume accepts the save.
+	// The startup chain continues v8 → v9 → v10 → v11 → v12 → v13 → v14 → v15;
+	// the v17 hard cut (ADR-0017) then rejects the chain-end save.
 	upgradedV9, err := UpgradeV8ToEndingsSave(svc.db, dbPath)
 	if err != nil || !upgradedV9 {
 		t.Fatalf("v8 endings upgrade failed: upgraded=%v err=%v", upgradedV9, err)
@@ -72,12 +74,11 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 		t.Fatalf("v14 black-box upgrade failed: upgraded=%v err=%v", upgradedV15, err)
 	}
 
+	// v17 硬切断 (ADR-0017)：升级链止于 v15，Resume 必须显式拒绝。
+	// 权威状态回读已由 assertAuthorityMigrationReadback 覆盖。
 	fresh := newVersionTestService(t, dbPath)
-	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v9 save: %v", err)
-	}
-	if len(fresh.silos) != 3 || fresh.silo.MayorLegitimacy() != legacy[fresh.silo.ID] {
-		t.Fatalf("resumed authority state mismatch: silos=%d Mayor=%+v", len(fresh.silos), fresh.silo.Mayor)
+	if err := fresh.Resume(); !errors.Is(err, ErrIncompatibleSave) {
+		t.Fatalf("v15 chain-end save must be rejected by the v17 hard cut: %v", err)
 	}
 
 	upgradedAgain, err := UpgradeV7ToAuthoritySave(svc.db, dbPath)

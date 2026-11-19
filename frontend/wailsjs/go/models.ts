@@ -424,6 +424,7 @@ export namespace model {
 	    action_points: number;
 	    propaganda_level: number;
 	    suspicion_level: number;
+	    faction_id?: number;
 	    connections: Connection[];
 	    known_fragments: string[];
 	    relics?: Relic[];
@@ -451,6 +452,7 @@ export namespace model {
 	        this.action_points = source["action_points"];
 	        this.propaganda_level = source["propaganda_level"];
 	        this.suspicion_level = source["suspicion_level"];
+	        this.faction_id = source["faction_id"];
 	        this.connections = this.convertValues(source["connections"], Connection);
 	        this.known_fragments = source["known_fragments"];
 	        this.relics = this.convertValues(source["relics"], Relic);
@@ -484,9 +486,14 @@ export namespace model {
 	    tags: string[];
 	    tag_stats?: Record<string, number>;
 	    member_count: number;
-	    representative_resident_id: number;
+	    representative_kind?: string;
+	    representative_id: number;
 	    representative_cohort_id?: number;
 	    representative_name: string;
+	    founder_kind?: string;
+	    founder_id: number;
+	    founded_year: number;
+	    founded_month: number;
 	    influence: number;
 	    cohesion: number;
 	    prestige: number;
@@ -510,9 +517,14 @@ export namespace model {
 	        this.tags = source["tags"];
 	        this.tag_stats = source["tag_stats"];
 	        this.member_count = source["member_count"];
-	        this.representative_resident_id = source["representative_resident_id"];
+	        this.representative_kind = source["representative_kind"];
+	        this.representative_id = source["representative_id"];
 	        this.representative_cohort_id = source["representative_cohort_id"];
 	        this.representative_name = source["representative_name"];
+	        this.founder_kind = source["founder_kind"];
+	        this.founder_id = source["founder_id"];
+	        this.founded_year = source["founded_year"];
+	        this.founded_month = source["founded_month"];
 	        this.influence = source["influence"];
 	        this.cohesion = source["cohesion"];
 	        this.prestige = source["prestige"];
@@ -560,6 +572,7 @@ export namespace model {
 	    propaganda_level: number;
 	    known_fragments: string[];
 	    relations?: Record<string, number>;
+	    leader_relations?: Record<string, number>;
 	    is_representative: boolean;
 	    alive: boolean;
 	    // Go type: time
@@ -589,6 +602,7 @@ export namespace model {
 	        this.propaganda_level = source["propaganda_level"];
 	        this.known_fragments = source["known_fragments"];
 	        this.relations = source["relations"];
+	        this.leader_relations = source["leader_relations"];
 	        this.is_representative = source["is_representative"];
 	        this.alive = source["alive"];
 	        this.updated_at = this.convertValues(source["updated_at"], null);
@@ -1475,6 +1489,7 @@ export namespace model {
 	    fragment_ids?: string[];
 	    profession_action?: string;
 	    resource_target?: string;
+	    target_faction_id?: number;
 	    cost: number;
 
 	    static createFrom(source: any = {}) {
@@ -1489,6 +1504,7 @@ export namespace model {
 	        this.fragment_ids = source["fragment_ids"];
 	        this.profession_action = source["profession_action"];
 	        this.resource_target = source["resource_target"];
+	        this.target_faction_id = source["target_faction_id"];
 	        this.cost = source["cost"];
 	    }
 	}

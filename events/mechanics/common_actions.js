@@ -115,6 +115,9 @@ defineMechanics([
           }
         }
       }
+      // C8 搭载：流通场合人多耳杂，分享成功可能顺带传出派系传闻
+      // (Go 权威侧掷骰；玩家确定性搭载不消耗 RNG)。
+      mutations.push({ type: "faction_rumor_piggyback" });
       return {
         mutations,
         action_result: {
@@ -274,6 +277,115 @@ defineMechanics([
       };
     },
   },
+  {
+    id: "action_found_faction",
+    action_type: "FOUND_FACTION",
+    label: "Found Faction",
+    description:
+      "发起派系聚类事件，创立自己的派系。需要政治威望 ≥ 50、意识形态强度 ≥ 0.25，消耗 20 AP。零成员派系合法，筹备期内凑不够人数则消亡。",
+    target_type: "NONE",
+    ap_cost: 20,
+    duration_months: 0,
+    apply(ctx) {
+      // 预检与 Go 侧 foundFactionEligible 同口径，只为给出失败文案；
+      // 权威判定与 AP 扣除在 faction_found_actor 处理器中原子完成。
+      const prestige = ctx.actor.political_prestige || 0;
+      if (prestige < 50) {
+        return { action_result: { executed: false, message: "政治威望不足 50，还没有人愿意追随你。" } };
+      }
+      const pf = (ctx.actor.ideologies || {}).pro_foreign || 0;
+      if (Math.abs(pf - 0.5) < 0.25) {
+        return { action_result: { executed: false, message: "意识形态立场不够鲜明，无法凝聚追随者 (强度需 ≥ 0.25)。" } };
+      }
+      const faction = ctx.actor.faction;
+      if (faction && faction.signature !== "special:unaffiliated") {
+        return { action_result: { executed: false, message: "你已身处政治派系，不能再发起新派系。" } };
+      }
+      if ((ctx.actor.action_points || 0) < 20) {
+        return { action_result: { executed: false, message: "AP 不足，发起派系聚类事件需要 20 AP。" } };
+      }
+      return {
+        mutations: [{ type: "faction_found_actor" }],
+        action_result: {
+          executed: true,
+          message: "你发起了派系聚类事件，「" + ctx.actor.label + "的派系」成立 (零成员筹备期)。",
+        },
+      };
+    },
+  },
+  {
+    id: "action_join_faction",
+    action_type: "JOIN_FACTION",
+    label: "Join Faction",
+    description:
+      "直选加入一个已感知的派系 (玩家不掷骰)。需无政治派系归属，消耗 10 AP。目标派系由 target_faction_id 指定。",
+    target_type: "NONE",
+    ap_cost: 10,
+    duration_months: 0,
+    apply(ctx) {
+      // 预检与 Go 侧 joinFactionEligible 同口径，只为给出失败文案；
+      // 权威判定 (含目标存在/无阵营桶排除) 与 AP 扣除在 faction_join_actor
+      // 处理器中原子完成。玩家直选不受感知地板/关系闸约束 (ADR-0010)。
+      const targetID = ctx.action.target_faction_id || 0;
+      if (!targetID) {
+        return { action_result: { executed: false, message: "未指定要加入的派系。" } };
+      }
+      const factions = ctx.silo.factions || [];
+      const target = factions.find((f) => f.id === targetID);
+      if (!target) {
+        return { action_result: { executed: false, message: "目标派系不存在。" } };
+      }
+      const faction = ctx.actor.faction;
+      if (faction && faction.signature !== "special:unaffiliated") {
+        return { action_result: { executed: false, message: "你已身处政治派系，不能再加入其他派系。" } };
+      }
+      if ((ctx.actor.action_points || 0) < 10) {
+        return { action_result: { executed: false, message: "AP 不足，加入派系需要 10 AP。" } };
+      }
+      return {
+        mutations: [{ type: "faction_join_actor", int_value: targetID }],
+        action_result: { executed: true, message: "你加入了「" + target.name + "」。" },
+      };
+    },
+  },
+  {
+    id: "action_merge_faction",
+    action_type: "MERGE_FACTION",
+    label: "Merge Faction",
+    description:
+      "把另一个派系并入你领导的派系。需双方领袖个人关系 ≥ 0.60、思潮距离在亲缘半径内、AP ≥ 15。存续方保留 ID，被并方成员转移、派系除名。零成员派系也可发起/被合并。",
+    target_type: "NONE",
+    ap_cost: 15,
+    duration_months: 0,
+    apply(ctx) {
+      // 预检与 Go 侧 mergeFactionEligible 同口径，只为给出失败文案；
+      // 权威判定 (领袖身份/关系/思潮/AP) 与成员转移在 faction_merge_actor
+      // 处理器中原子完成。合并是两位领袖的合意，关系闸对玩家同样生效。
+      const targetID = ctx.action.target_faction_id || 0;
+      if (!targetID) {
+        return { action_result: { executed: false, message: "未指定要合并的派系。" } };
+      }
+      const factions = ctx.silo.factions || [];
+      const target = factions.find((f) => f.id === targetID);
+      if (!target) {
+        return { action_result: { executed: false, message: "目标派系不存在。" } };
+      }
+      const faction = ctx.actor.faction;
+      if (!ctx.actor.is_representative || !faction || faction.signature === "special:unaffiliated") {
+        return { action_result: { executed: false, message: "只有派系领袖才能发起合并。" } };
+      }
+      if (faction.id === targetID) {
+        return { action_result: { executed: false, message: "不能与自身合并。" } };
+      }
+      if ((ctx.actor.action_points || 0) < 15) {
+        return { action_result: { executed: false, message: "AP 不足，合并派系需要 15 AP。" } };
+      }
+      return {
+        mutations: [{ type: "faction_merge_actor", int_value: targetID }],
+        action_result: { executed: true, message: "你把「" + target.name + "」并入「" + faction.name + "」。" },
+      };
+    },
+  },
 ]);
 
 // applyGatherProbe 是 GATHER_INFO 与 SILENT_PROBE 的共享结算体 (19 §4.2)：
@@ -363,6 +475,9 @@ function applyGatherProbe(ctx, silent) {
       value: sampledSuspicion(INFO_CFG.probe_base_suspicion, INFO_CFG.probe_visibility, fit, INFO_CFG.probe_witness, INFO_CFG.probe_record, mismatch) * archetypeDetectionFactor(ctx),
     });
   }
+  // C8 搭载：探查成功 (含复核) 可能顺带听到派系传闻；掷骰与吸收在
+  // Go 权威侧 (faction_rumor_piggyback)，无政治派系时零 RNG。
+  mutations.push({ type: "faction_rumor_piggyback" });
   return {
     mutations,
     action_result: {

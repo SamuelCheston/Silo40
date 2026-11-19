@@ -523,6 +523,8 @@ func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYe
 						addLog("[Medical Passive] " + view.Label() + " overheard rumors and gained intel on " + randomFragment + ".")
 					}
 				}
+				// C8：诊疗听闻搭载派系传闻 (与 JS agent_update 同口径)。
+				e.applyFactionRumorPiggyback(silo, view)
 			}
 		}
 	}
@@ -582,11 +584,19 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 	// decisions remain the active NPC production-side behavior.
 	updatePopulationCohorts(silo, deltaYears)
 	updateKeyResidents(silo, deltaYears)
-	RebuildImplicitFactions(silo)
+	MaintainFactions(silo, addLog)
 	// Faction-driven loyalty evolution is an explicit, time-scaled step: it
 	// advances on monthly ticks and is a no-op for zero-duration instant
 	// resolutions (deltaYears == 0), so instant actions cannot accelerate it.
 	ApplyFactionLoyaltyDynamics(silo, deltaYears)
+	// C8 月度口碑：高置信观察者沿关系网络扩散派系感知事实。与忠诚动力学
+	// 同为月度演化步，零时长即时结算 (deltaYears == 0) 不传播。
+	if deltaYears > 0 {
+		ApplyFactionGossip(silo, agent)
+	}
+	// 成员流动 (24 篇 C9)：已感知 cohort 的月度加权加入/退出，与忠诚动力学
+	// 同层、零月无操作。读 C8 写入的 faction: 信念事实，按 cohort ID 升序掷骰。
+	ApplyFactionJoinDynamics(silo, agent, deltaYears)
 
 	var npcProfs []*model.Profession
 	for i := range silo.Professions {
@@ -627,10 +637,11 @@ func (e *GameEngine) RunNpcTurn(silo *model.Silo, agent *model.Agent, deltaYears
 		}
 	}
 
-	// 3b. Resident Representative decisions (e.g., Faction Leaders)
+	// 3b. Resident delegate decisions：每个 cohort 代表都是决策节点
+	// (24 篇 C7：任何代表都可能发起派系，不限现任 faction 领袖)。
 	for i := range silo.Residents {
 		res := &silo.Residents[i]
-		if !res.Alive || !res.IsRepresentative {
+		if !res.Alive || res.CohortID == nil {
 			continue
 		}
 		view, err := CreateActorView(CreateActorRefForResident(res), silo, nil)

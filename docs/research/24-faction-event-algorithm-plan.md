@@ -82,6 +82,8 @@
 - CurrentSaveVersion = 16；旧档拒载（现有校验逻辑天然硬切断，不写迁移）。
   原拟 v15，与 22/23 黑箱系列合并时顺延：v15 已被黑箱学习层占用
   （含 v14→v15 升级步），威望派生硬切断改占 v16，黑箱升级链保留不动。
+  **C7 再顺延 v17**：v16 存档的聚类派系/归属是已废除算法的产物，
+  语义不可延续；C9 的 LeaderRelations 等新增字段零值安全，不再升版。
 
 ## 4. 参数表（FactionConfig 新增/变更）
 
@@ -90,6 +92,7 @@
 | FoundPrestigeThreshold | 50 | 发起所需派生威望 |
 | FoundIntensityThreshold | 0.25 | 发起所需意识形态强度 |
 | FoundAPCost | 20 | 发起 AP 成本 |
+| JoinAPCost | 10 | 玩家直选加入 AP 成本（C9 落地决策：低于发起 20，加入是轻动作；与 SHARE/PROBE 同量级，月收入可支撑） |
 | JoinAffinityExponent | 2.0 | 加入概率 = 相近度^k |
 | JoinRelationVeto | 0.10 | 关系一票否决 |
 | CrossTierPowerGap | 3 | PowerLevel 差 ≥ 此值算跨层级 |
@@ -102,6 +105,8 @@
 | GossipReliabilityDecay | 0.6 | 口碑每跳衰减 |
 | RumorPiggybackChance | 0.15 | 信息动作搭载传闻概率 |
 | AwarenessJoinFloor | QualRumor(0.30) | 可考虑加入的信念地板 |
+| AffinityRadius | 0.30 | 亲缘半径（沿用 14 篇旧聚类加入半径）；加入相近度=1−dist/半径，退出压力按超出部分 |
+| ExitInertiaFactor | 0.5 | 退出惯性系数：退出概率=超出度^k×(1−系数)，恒低于加入概率，防单月往返 |
 | AmbitionPowerWeight | 0.40 | 原 AmbitionPrestigeWeight 改名换轴 |
 | 删除 | — | AmbitionHighThreshold/LeaderInfluenceThreshold 硬门槛语义废除（标签阈值保留为纯 tagging 参数） |
 
@@ -143,12 +148,38 @@
   可玩性测试的预期内失败留档 [25-v16-test-debt.md](25-v16-test-debt.md)，
   种子重调建议等 C7/C9 落地后一次完成。
 - C5：玩家任代表/创始人的序列化与快照单测。
-- C6：发起资格门单测（威望/强度/AP 三闸、零成员派系合法）。
-- C7：零发起零派系；筹备期解散；死亡接任（含平局）；亲缘场不产生派系；双跑确定性。
+- C6：发起资格门单测（威望/强度/AP 三闸、零成员派系合法）✓；端到端执行单测
+  （门控 → JS 预检 → faction_found_actor → 建派系/扣 AP）✓；NPC 同构与
+  rebuild 保留单测 ✓。NPC 发起候选平移加权随机落点，新增 3 个种子调优
+  可玩性测试失败，留档 [25-v16-test-debt.md](25-v16-test-debt.md)，随 C7/C9 一并重调。
+- C7：零发起零派系；筹备期解散；死亡接任（含平局）；亲缘场不产生派系；双跑确定性 ✓
+  （faction_test.go / faction_lifecycle_test.go / faction_actor_test.go /
+  faction_found_test.go / faction_explain_test.go 重建；引擎全绿。
+  存档 v17；两处真实回归随修复闭合、5 个可玩性漂移留档
+  [25-v16-test-debt.md](25-v16-test-debt.md) §五，随 C9 重调）。
 - C8：三通道感知度单调性（关系/思潮/层级越近感知越高）；faction: 事实不成熟、不计共证门；
-  搭载传播可让远端观测者逐步获知。
-- C9：加入概率意识形态主导；三档关系门槛与跨层级/跨阶级闸；玩家直选不掷骰；退出惯性。
-- C10：合并资格与成员转移、ID 存续。
+  搭载传播可让远端观测者逐步获知 ✓（faction_awareness.go + engine/service 两侧测试；
+  发起播种零 RNG、口碑按 (派系, 源, 目标) 固定序、玩家搭载不掷骰、无派系零消耗；
+  引擎全绿，service 全量失败清单与 §五相同，漂移留档
+  [25-v16-test-debt.md](25-v16-test-debt.md) §六）。
+  C9 合并后接线已闭合：居民观察者的 LeaderRelations 个人关系并入关系通道
+  （取部门人脉与个人关系的高者，§1.2），事实键统一走 FactionFoundedFactID。
+- C9：加入概率意识形态主导；三档关系门槛与跨层级/跨阶级闸；玩家直选不掷骰；退出惯性 ✓
+  （faction_join_test.go 9 项；引擎全绿、前端 tsc 通过。感知读取走引擎 BeliefIn 直读
+  model 信念层 `faction:<id>:founded`，无 service 回调；C8 未落地时该事实缺省 B=0，
+  NPC 加入不触发，单测直接播种信念事实。玩家成员资格新增 Agent.FactionID（零值安全，
+  存档仍 v17）；月度加入/退出挂 RunNpcTurn 的 ApplyFactionLoyaltyDynamics 之后，
+  退出相先于加入相、退出 cohort 当月不再加入，杜绝单月往返）。
+- C10：合并资格与成员转移、ID 存续 ✓（faction_merge_test.go 4 项：三闸 + 领袖身份/
+  自身排除、成员转移 + 存续 ID 不变 + 被并方除名 + Memory 追加 + 领袖降级、玩家领袖
+  读 agent:<id> 键且不掷骰、零成员派系可合并。合并关系闸对玩家同样生效——合意需双方
+  领袖达标，ADR-0010 直选豁免只适用加入。引擎全绿、前端 tsc 通过；service 全量复测
+  仍为 13 个已知失败，无新增漂移。开局门控回归随 political_faction_count 指标修复，
+  留档 [25-v16-test-debt.md](25-v16-test-debt.md) §七）。
+- C11：下游重锚 ✓（balance.md 政治派系节改事件驱动生命周期 + Ambition/Influence 节；
+  knowledge/03 §5 派系叙事与门控表；knowledge/07 版本链重锚 v15/v16/v17；
+  14 篇 §5/§6.6 取代标注）。合并态全量复测 13 失败构成更新（Covenant 恢复、
+  DeathPhysicalStrike 新漂移），留档 25 篇 §八；种子重调批次以合并态为准。
 
 ## 8. 下游影响清单
 

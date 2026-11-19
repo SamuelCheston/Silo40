@@ -45,30 +45,32 @@ func TestPredictCandidatesDoesNotConsumeRng(t *testing.T) {
 }
 
 // DecisionActors must enumerate exactly the RunNpcTurn decision population:
-// every profession except the player's, plus alive representatives.
+// every profession except the player's, plus every alive cohort delegate
+// (C7: any delegate may found a faction; residents are individuals, so the
+// player-profession exclusion applies only to NPC department actors).
 func TestDecisionActorsEnumeration(t *testing.T) {
 	silo := CreateInitialSilo("Enumerate", 122, nil)
 	// The player profession must be an existing one for the exclusion to apply.
 	agent := CreateInitialAgent("Agent", silo.Professions[0].Name, nil, silo)
 	views := DecisionActors(silo, agent)
-	reps := 0
+	delegates := 0
 	for i := range silo.Residents {
-		if silo.Residents[i].Alive && silo.Residents[i].IsRepresentative {
-			reps++
+		if silo.Residents[i].Alive && silo.Residents[i].CohortID != nil {
+			delegates++
 		}
 	}
-	want := len(silo.Professions) - 1 + reps // player profession excluded
+	want := len(silo.Professions) - 1 + delegates // player profession excluded
 	if len(views) != want {
-		t.Fatalf("DecisionActors: got %d views, want %d (%d profs + %d reps)",
-			len(views), want, len(silo.Professions)-1, reps)
+		t.Fatalf("DecisionActors: got %d views, want %d (%d profs + %d delegates)",
+			len(views), want, len(silo.Professions)-1, delegates)
 	}
 	for _, v := range views {
-		if v.Profession() == agent.Profession {
-			t.Fatalf("player profession %q must not be enumerated", agent.Profession)
+		if v.Ref.Kind == ActorNPC && v.Profession() == agent.Profession {
+			t.Fatalf("player profession %q must not be enumerated as an NPC actor", agent.Profession)
 		}
 	}
 	// A nil agent enumerates every profession.
-	if got := DecisionActors(silo, nil); len(got) != len(silo.Professions)+reps {
-		t.Fatalf("nil agent: got %d views, want %d", len(got), len(silo.Professions)+reps)
+	if got := DecisionActors(silo, nil); len(got) != len(silo.Professions)+delegates {
+		t.Fatalf("nil agent: got %d views, want %d", len(got), len(silo.Professions)+delegates)
 	}
 }

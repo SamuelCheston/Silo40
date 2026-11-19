@@ -34,15 +34,14 @@ func TestEngineSmoke(t *testing.T) {
 	if len(silo.Residents) == 0 {
 		t.Fatalf("expected key residents to be generated")
 	}
-	if len(silo.Factions) == 0 {
-		t.Fatalf("expected implicit factions to be generated")
+	// C7：开局零发起 → 仅无阵营桶，所有 cohort 落入其中。
+	if len(silo.Factions) != 1 || silo.Factions[0].Signature != unaffiliatedSignature {
+		t.Fatalf("opening must yield only the unaffiliated bucket, got %+v", silo.Factions)
 	}
-	for _, faction := range silo.Factions {
-		if faction.RepresentativeResidentID == 0 {
-			t.Fatalf("faction %s has no representative", faction.Name)
-		}
-		if faction.RepresentativeCohortID == nil {
-			t.Fatalf("faction %s has no representative cohort", faction.Name)
+	for i := range silo.Cohorts {
+		c := &silo.Cohorts[i]
+		if c.FactionID == nil || *c.FactionID != silo.Factions[0].ID {
+			t.Fatalf("cohort %d must start in the unaffiliated bucket: %v", c.ID, c.FactionID)
 		}
 	}
 

@@ -658,7 +658,7 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v10 → v11 → v12 → v13 → v14 → v15，Resume 才接受存档。
+	// 启动链继续 v10 → v11 → v12 → v13 → v14 → v15；链尾 v15 被 v17 硬切断拒绝。
 	upgradedV11, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
 	if err != nil || !upgradedV11 {
 		t.Fatalf("v10 outside upgrade failed: upgraded=%v err=%v", upgradedV11, err)
@@ -680,9 +680,10 @@ func TestUpgradeV9ToPreparationSave(t *testing.T) {
 		t.Fatalf("v14 black-box upgrade failed: upgraded=%v err=%v", upgradedV15, err)
 	}
 
+	// v17 硬切断 (ADR-0017)：升级链止于 v15，Resume 必须显式拒绝。
 	fresh := newVersionTestService(t, dbPath)
-	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v15 save: %v", err)
+	if err := fresh.Resume(); !errors.Is(err, ErrIncompatibleSave) {
+		t.Fatalf("v15 chain-end save must be rejected by the v17 hard cut: %v", err)
 	}
 
 	again, err := UpgradeV9ToPreparationSave(svc.db, dbPath)
@@ -723,7 +724,7 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v11 → v12 → v13 → v14 → v15，Resume 才接受存档。
+	// 启动链继续 v11 → v12 → v13 → v14 → v15；链尾 v15 被 v17 硬切断拒绝。
 	upgradedV12, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
 	if err != nil || !upgradedV12 {
 		t.Fatalf("v11 line-shift upgrade failed: upgraded=%v err=%v", upgradedV12, err)
@@ -741,9 +742,10 @@ func TestUpgradeV10ToOutsideSave(t *testing.T) {
 		t.Fatalf("v14 black-box upgrade failed: upgraded=%v err=%v", upgradedV15, err)
 	}
 
+	// v17 硬切断 (ADR-0017)：升级链止于 v15，Resume 必须显式拒绝。
 	fresh := newVersionTestService(t, dbPath)
-	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v15 save: %v", err)
+	if err := fresh.Resume(); !errors.Is(err, ErrIncompatibleSave) {
+		t.Fatalf("v15 chain-end save must be rejected by the v17 hard cut: %v", err)
 	}
 
 	again, err := UpgradeV10ToOutsideSave(svc.db, dbPath)
@@ -782,7 +784,7 @@ func TestUpgradeV11ToLineShiftsSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v12 → v13 → v14 → v15，Resume 才接受存档。
+	// 启动链继续 v12 → v13 → v14 → v15；链尾 v15 被 v17 硬切断拒绝。
 	upgradedV13, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
 	if err != nil || !upgradedV13 {
 		t.Fatalf("v12 negotiation upgrade failed: upgraded=%v err=%v", upgradedV13, err)
@@ -796,9 +798,10 @@ func TestUpgradeV11ToLineShiftsSave(t *testing.T) {
 		t.Fatalf("v14 black-box upgrade failed: upgraded=%v err=%v", upgradedV15, err)
 	}
 
+	// v17 硬切断 (ADR-0017)：升级链止于 v15，Resume 必须显式拒绝。
 	fresh := newVersionTestService(t, dbPath)
-	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v15 save: %v", err)
+	if err := fresh.Resume(); !errors.Is(err, ErrIncompatibleSave) {
+		t.Fatalf("v15 chain-end save must be rejected by the v17 hard cut: %v", err)
 	}
 
 	again, err := UpgradeV11ToLineShiftsSave(svc.db, dbPath)
@@ -845,7 +848,7 @@ func TestUpgradeV12ToNegotiationSave(t *testing.T) {
 		}
 	}
 
-	// 启动链继续 v13 → v14 → v15，Resume 才接受存档。
+	// 启动链继续 v13 → v14 → v15；链尾 v15 被 v17 硬切断拒绝。
 	upgradedV14, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
 	if err != nil || !upgradedV14 {
 		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
@@ -855,9 +858,10 @@ func TestUpgradeV12ToNegotiationSave(t *testing.T) {
 		t.Fatalf("v14 black-box upgrade failed: upgraded=%v err=%v", upgradedV15, err)
 	}
 
+	// v17 硬切断 (ADR-0017)：升级链止于 v15，Resume 必须显式拒绝。
 	fresh := newVersionTestService(t, dbPath)
-	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v15 save: %v", err)
+	if err := fresh.Resume(); !errors.Is(err, ErrIncompatibleSave) {
+		t.Fatalf("v15 chain-end save must be rejected by the v17 hard cut: %v", err)
 	}
 
 	again, err := UpgradeV12ToNegotiationSave(svc.db, dbPath)
@@ -916,15 +920,16 @@ func TestUpgradeV13ToPermeationSave(t *testing.T) {
 		t.Fatalf("seeded belief lost during migration: found %d", seeded)
 	}
 
-	// 启动链继续 v14 → v15，Resume 才接受存档。
+	// 启动链继续 v14 → v15；链尾 v15 被 v17 硬切断拒绝。
 	upgradedV15, err := UpgradeV14ToBlackBoxSave(svc.db, dbPath)
 	if err != nil || !upgradedV15 {
 		t.Fatalf("v14 black-box upgrade failed: upgraded=%v err=%v", upgradedV15, err)
 	}
 
+	// v17 硬切断 (ADR-0017)：升级链止于 v15，Resume 必须显式拒绝。
 	fresh := newVersionTestService(t, dbPath)
-	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v15 save: %v", err)
+	if err := fresh.Resume(); !errors.Is(err, ErrIncompatibleSave) {
+		t.Fatalf("v15 chain-end save must be rejected by the v17 hard cut: %v", err)
 	}
 
 	again, err := UpgradeV13ToPermeationSave(svc.db, dbPath)
@@ -937,7 +942,7 @@ func TestUpgradeV13ToPermeationSave(t *testing.T) {
 // 状态在 v14 时代没有任何写入方，升级不回填推测状态：新字段零值 = 未启用 =
 // 旧档逐位不变 (开关关闭 → 黑箱回合跳过、零 RNG 消耗；盲区零覆盖 → 观测注入
 // 恒等映射)。SafeguardRisk 数值逐堡不动 (自此语义为「1 号指派基线 + 内容
-// 增量」)。三堡档：升级、备份、既有字段无损、Resume 成功、重复升级跳过。
+// 增量」)。三堡档：升级、备份、既有字段无损、链尾 v15 被 v17 硬切断拒绝、重复升级跳过。
 func TestUpgradeV14ToBlackBoxSave(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "v15blackbox.db")
 	svc := newVersionTestService(t, dbPath)
@@ -1034,9 +1039,10 @@ func TestUpgradeV14ToBlackBoxSave(t *testing.T) {
 		}
 	}
 
+	// v17 硬切断 (ADR-0017)：升级链止于 v15，Resume 必须显式拒绝。
 	fresh := newVersionTestService(t, dbPath)
-	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume migrated v15 save: %v", err)
+	if err := fresh.Resume(); !errors.Is(err, ErrIncompatibleSave) {
+		t.Fatalf("v15 chain-end save must be rejected by the v17 hard cut: %v", err)
 	}
 
 	again, err := UpgradeV14ToBlackBoxSave(svc.db, dbPath)
@@ -1048,7 +1054,7 @@ func TestUpgradeV14ToBlackBoxSave(t *testing.T) {
 // 迁移链连续性：v12 存档一路升到 v15 (v12→v13→v14→v15 逐跳断言)，证明
 // 前两段迁移器 (谈判层/时间渗透) 未被破坏——每一跳都真实执行、写入各自的
 // 固定目标版本，且各自的新字段保持零值语义；SafeguardRisk 逐跳数值不动；
-// 三跳各留一份带后缀的备份；全程结束后 Resume 接受存档。
+// 三跳各留一份带后缀的备份；全程结束后链尾 v15 被 v17 硬切断拒绝。
 func TestUpgradeChainV12ToV15Continuous(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "v12to15chain.db")
 	svc := newVersionTestService(t, dbPath)
@@ -1170,8 +1176,9 @@ func TestUpgradeChainV12ToV15Continuous(t *testing.T) {
 		}
 	}
 
+	// v17 硬切断 (ADR-0017)：链尾 v15 不可 Resume，必须显式拒绝。
 	fresh := newVersionTestService(t, dbPath)
-	if err := fresh.Resume(); err != nil {
-		t.Fatalf("resume v12→v15 chain-migrated save: %v", err)
+	if err := fresh.Resume(); !errors.Is(err, ErrIncompatibleSave) {
+		t.Fatalf("v12→v15 chain-end save must be rejected by the v17 hard cut: %v", err)
 	}
 }

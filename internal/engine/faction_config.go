@@ -17,24 +17,10 @@ type FactionTuning struct {
 	// NonFactionName: display name of the unaffiliated bucket.
 	NonFactionName string
 
-	// ---- political participation gate ----
-
-	// PoliticalEntryThreshold: an unaffiliated cohort politicizes when its
-	// pro_foreign reaches this value (or a potential leader emerges).
-	PoliticalEntryThreshold float64
-	// PoliticalExitThreshold: a political cohort de-politicizes only when its
-	// pro_foreign falls below this value (and it has no potential leader).
-	// Kept below PoliticalEntryThreshold as hysteresis so cohorts hovering
-	// near the gate do not flip every tick. Equal to the entry threshold
-	// disables hysteresis.
-	PoliticalExitThreshold float64
-
 	// AmbitionHighThreshold: ambition at or above this marks a resident as
-	// "ambitious" (drive:ambition / status:ambitious) and is the ambition
-	// half of the potential-leader gate.
+	// "ambitious" (drive:ambition / status:ambitious)。纯 tagging 参数——
+	// 潜在领袖硬门槛已废除 (24 篇 C7)，野心只进加权决策权重。
 	AmbitionHighThreshold float64
-	// LeaderInfluenceThreshold: influence half of the potential-leader gate.
-	LeaderInfluenceThreshold float64
 
 	// ---- drive tag selection ----
 
@@ -83,11 +69,11 @@ type FactionTuning struct {
 	FormationBiasLeader float64 // leader-formed (no formation tier) factions
 	// FormationNonPublicBase / FormationPrestigeDivisor: non-public factions
 	// keep only base + prestige/divisor of their organization strength.
-	FormationNonPublicBase     float64
-	FormationPrestigeDivisor   float64
-	UnrestDissentBase          float64 // target -= formation*unrest*(base + extra*dissent)
-	UnrestDissentExtra         float64
-	OrderLegitimacyGain        float64 // target += formation*legitimacy*gain*order
+	FormationNonPublicBase   float64
+	FormationPrestigeDivisor float64
+	UnrestDissentBase        float64 // target -= formation*unrest*(base + extra*dissent)
+	UnrestDissentExtra       float64
+	OrderLegitimacyGain      float64 // target += formation*legitimacy*gain*order
 
 	// ---- visibility model ----
 
@@ -102,11 +88,6 @@ type FactionTuning struct {
 	FeatureWeightProForeign float64
 	FeatureWeightLoyalty    float64
 	FeatureWeightClass      float64
-	// ClusterJoinRadius: cohort 与派系质心的距离不超过该半径才并入。
-	ClusterJoinRadius float64
-	// ClusterInertiaBonus: 归属惯性——留在上一 tick 所属派系时，半径放大为
-	// JoinRadius*(1+bonus)。压制临界往返 (A→B→A) 振荡。
-	ClusterInertiaBonus float64
 
 	// ---- representative ambition generation ----
 
@@ -114,6 +95,54 @@ type FactionTuning struct {
 	AmbitionPowerWeight     float64 // weight of min(PowerLevel,10)/10
 	AmbitionIntensityWeight float64 // weight of ideological intensity
 	AmbitionNoise           float64 // uniform noise amplitude
+
+	// ---- FOUND_FACTION 发起资格 (24 篇 §1/§4, C6) ----
+
+	FoundPrestigeThreshold  float64 // 发起所需派生威望 (50×(A+I))
+	FoundIntensityThreshold float64 // 发起所需意识形态强度 |pf−0.5|
+	FoundAPCost             float64 // 发起 AP 成本 (与 ACTION_COSTS 一致)
+
+	// ---- 派系生命周期 (24 篇 §1.5, C7) ----
+
+	FactionGraceMonths       int     // 筹备期月数：届满不足 MinFactionSize 即解散
+	SuccessionPrestigeWeight float64 // 接任评分威望权重 (ambition 占 1−w)
+
+	// ---- 三通道感知 (24 篇 §1.2/§4, C8) ----
+
+	AwarenessRelationWeight float64 // 关系通道权重 (观察者→发起者所属部门人脉)
+	AwarenessIdeologyWeight float64 // 思潮通道权重 (pf/loyalty 平面加权距离)
+	AwarenessTierWeight     float64 // 阶层通道权重 (权力级差 + 同阶层加成)
+	AwarenessSameClassBonus float64 // 同 ClassType 时阶层通道加成
+
+	// ---- 月度口碑传播 (24 篇 §1.3/§4, C8) ----
+
+	GossipReliabilityDecay float64 // 每跳可靠度折减 (接收强度 = 源 B × 折减)
+	GossipBeliefThreshold  float64 // 源置信度达到此值才传播
+	GossipRelationMin      float64 // 沿关系网络传播的最低关系值
+	GossipSpreadChance     float64 // 每 (源, 目标) 对的传播掷骰概率 TODO(balance)
+
+	// ---- 信息动作搭载 (24 篇 §1.3/§4, C8) ----
+
+	// RumorPiggybackChance: 信息动作成功时搭载派系传闻的概率。
+	// NPC/居民掷骰；玩家确定性搭载 (玩家动作不消耗 RNG，§6)。
+	RumorPiggybackChance float64
+
+	// ---- 加入/退出 (24 篇 §1.4/§4, C9) ----
+
+	JoinAPCost           float64 // JOIN_FACTION 动作 AP 成本 (与 ACTION_COSTS 一致)
+	JoinAffinityExponent float64 // 加入概率 = 相近度^k (意识形态主导)
+	JoinRelationVeto     float64 // 关系一票否决地板
+	CrossTierPowerGap    int     // PowerLevel 差 ≥ 此值算跨层级
+	CrossTierRelationMin float64 // 跨层级所需关系
+	CrossClassRelationMin float64 // 跨阶级所需关系
+	AwarenessJoinFloor   float64 // 可考虑加入的信念地板 (= QualRumor 0.30，C8 感知/C9 加入共用)
+	AffinityRadius       float64 // 亲缘半径：加权特征距离 ≤ 此值算亲缘圈内
+	ExitInertiaFactor    float64 // 退出惯性系数：退出概率 ×(1−此值)，低于加入概率
+
+	// ---- 合并 (24 篇 §1.6/§4, C10) ----
+
+	MergeRelationMin float64 // 合并所需双方领袖个人关系 (LeaderRelations 子矩阵)
+	MergeAPCost      float64 // MERGE_FACTION 动作 AP 成本 (与 ACTION_COSTS 一致)
 }
 
 // FactionConfig is the active tuning for faction clustering and the
@@ -124,11 +153,7 @@ var FactionConfig = FactionTuning{
 	BadRelationThreshold: 0.05,
 	NonFactionName:       "Unaffiliated",
 
-	PoliticalEntryThreshold: 0.7,
-	PoliticalExitThreshold:  0.6, // hysteresis band: exit only below 0.6
-
-	AmbitionHighThreshold:    0.62,
-	LeaderInfluenceThreshold: 0.25,
+	AmbitionHighThreshold: 0.62,
 
 	DriveStabilityPanicThreshold:    0.5,
 	DriveStabilityCohesionThreshold: 0.45,
@@ -164,11 +189,41 @@ var FactionConfig = FactionTuning{
 	FeatureWeightProForeign: 1.0,
 	FeatureWeightLoyalty:    0.5,
 	FeatureWeightClass:      0.4,
-	ClusterJoinRadius:       0.30,
-	ClusterInertiaBonus:     0.5,
 
 	AmbitionBase:            0.22,
 	AmbitionPowerWeight:     0.40,
 	AmbitionIntensityWeight: 0.30,
 	AmbitionNoise:           0.08,
+
+	FoundPrestigeThreshold:  50,
+	FoundIntensityThreshold: 0.25,
+	FoundAPCost:             20,
+
+	FactionGraceMonths:       18,
+	SuccessionPrestigeWeight: 0.5,
+
+	AwarenessRelationWeight: 0.40,
+	AwarenessIdeologyWeight: 0.35,
+	AwarenessTierWeight:     0.25,
+	AwarenessSameClassBonus: 0.15,
+
+	GossipReliabilityDecay: 0.6,
+	GossipBeliefThreshold:  0.50,
+	GossipRelationMin:      0.30,
+	GossipSpreadChance:     0.25,
+
+	RumorPiggybackChance: 0.15,
+
+	JoinAPCost:            10,
+	JoinAffinityExponent:  2.0,
+	JoinRelationVeto:      0.10,
+	CrossTierPowerGap:     3,
+	CrossTierRelationMin:  0.40,
+	CrossClassRelationMin: 0.60,
+	AwarenessJoinFloor:    0.30,
+	AffinityRadius:        0.30,
+	ExitInertiaFactor:     0.5,
+
+	MergeRelationMin: 0.60,
+	MergeAPCost:      15,
 }
