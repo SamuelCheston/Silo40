@@ -192,6 +192,20 @@
       "reason": "同一组抉择已选定其他项"
     },
     {
+      "id": "CHARTER_SECOND_ACCEPT",
+      "unlock": { "event_completed": "special:charter_defer_knock" },
+      "available": { "not": { "event_completed": "player_actions:charter_second_decline" } },
+      "hide_when_unavailable": true,
+      "reason": "第二次接触已选定其他项"
+    },
+    {
+      "id": "CHARTER_SECOND_DECLINE",
+      "unlock": { "event_completed": "special:charter_defer_knock" },
+      "available": { "not": { "event_completed": "player_actions:charter_second_accept" } },
+      "hide_when_unavailable": true,
+      "reason": "第二次接触已选定其他项"
+    },
+    {
       "id": "RESET_COUNTERMEASURE_OFFER",
       "unlock": { "event_completed": "crisis:reset_omen_requisition" },
       "available": {}
@@ -342,6 +356,13 @@
       },
       "hide_when_unavailable": true,
       "reason": "同一组抉择已选定其他项"
+    },
+    {
+      "id": "ROUTE_SURVEY_REACCEPT",
+      "unlock": { "event_completed": "special:route_second_window" },
+      "available": { "not": { "event_completed": "player_actions:route_survey_reaccept" } },
+      "hide_when_unavailable": true,
+      "reason": "重新勘察已委托"
     },
     {
       "id": "ADVANCE_PARTY_DISPATCH",

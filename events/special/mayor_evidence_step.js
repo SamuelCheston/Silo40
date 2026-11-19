@@ -8,10 +8,15 @@ defineEvent({
   // F-1 (30-nodes §2, 31-spec §1): feeding heartbeat, same wiring as
   // charter_draft_step / replication_progress. Lives in special/ on purpose:
   // a player_actions/ file firing on Share Info would intercept the share's
-  // own resolution. Choice P-B projection: only the "hand it to the Mayor"
-  // branch is mechanized; withholding evidence simply stalls the line.
+  // own resolution. Choice P-B projection: the "hand it to the Mayor" branch
+  // is mechanized; the charter-decline reroute (30-nodes §6) also feeds this
+  // heartbeat — refused charter materials flow into the Mayor circle.
   trigger: all(
-    eventTriggered("player_action", "mayor_ally_accept"),
+    any(
+      eventTriggered("player_action", "mayor_ally_accept"),
+      eventTriggered("player_action", "charter_contact_decline"),
+      eventTriggered("player_action", "charter_second_decline")
+    ),
     eventTriggered("player_action", "action_share_info")
   ),
   effects: [

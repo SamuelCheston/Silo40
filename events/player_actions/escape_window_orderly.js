@@ -6,6 +6,8 @@ defineEvent({
   fire_mode: "ONCE",
   // 抉择 R-D（02-rebellion §R-4）：有序占用＝低结构损耗、撤离秩序系数高。
   // 本键供出发结算读撤离秩序；与全面暴乱互斥呈现（门控无否定谓词，共用缺口）。
+  // 中途红利见 special/escape_window_orderly_yield.js（完成键 +3 月，
+  // 恐慌回落、凝聚上升）。
   player_action: {
     id: "ESCAPE_WINDOW_ORDERLY",
     label: "有序占用撤离通道",

@@ -7,6 +7,7 @@ defineEvent({
   // M-2 accept (30-nodes §1, 31-spec §1): choice P-A projection. Accepting
   // opens the evidence-feeding track; the line's rate levers run through the
   // legitimacy deltas of mayor_evidence_step and mayor_public_stand.
+  // mayor_ally_price (+4 months) bills the alliance to dept_tension.
   player_action: {
     id: "MAYOR_ALLY_ACCEPT",
     label: "接受：部分盟友",

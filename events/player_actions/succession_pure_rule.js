@@ -18,9 +18,12 @@ defineEvent({
     unavailable_behavior: "hide",
   },
   trigger: playerActionIs("SUCCESSION_PURE_RULE"),
-  script: {
-    apply: function(ctx) {
-      return { effects: [], emit: [] };
-    },
-  },
+  // 抉择即时后果（注释对账）：文案承诺"驻地得到了它现在能承受的最好的
+  // 统治者……被保护的睡眠"——当下稳住，凝聚 +0.02；文案同时承认"不是
+  // 一个答案"——继承问题被搁置不再追问，历史包袱小幅松绑 −0.02。
+  // 收束加分仍由 weighted_endings 的 PersonalRuleSuccessionBonus 读完成键。
+  effects: [
+    siloMetricDelta("cohesion", 0.02), // initial calibration, TODO(balance)
+    siloMetricDelta("history_burden", -0.02), // initial calibration, TODO(balance)
+  ],
 });

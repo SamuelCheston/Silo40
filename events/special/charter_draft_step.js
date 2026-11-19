@@ -12,7 +12,10 @@ defineEvent({
   // on purpose: a player_actions/ file firing on Share Info would intercept
   // and swallow the share's own resolution.
   trigger: all(
-    eventTriggered("player_action", "charter_contact_accept"),
+    any(
+      eventTriggered("player_action", "charter_contact_accept"),
+      eventTriggered("player_action", "charter_second_accept")
+    ),
     eventTriggered("player_action", "action_share_info")
   ),
   script: {

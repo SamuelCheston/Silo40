@@ -55,6 +55,36 @@ func negotiationDispositionLabel(disposition string) string {
 	}
 }
 
+// 谈判两类"非动作结局"的完成键：妥协成立与信道破裂。两类结局由引擎回合
+// 产出，没有玩家动作完成键；延迟回访事件需要 eventTriggered /
+// monthsSinceEventGte 的锚点，这里经既有 writeCompletionKey 通道补键
+// (写状态并发总线事件，与玩家动作完成键同口径)。键是纯增量事实记录，
+// 不进仲裁、不改资格。
+const (
+	negotiationCompromiseKey = "negotiation:compromise_established"
+	negotiationRuptureKey    = "negotiation:channel_rupture"
+)
+
+// recordNegotiationOutcomeKeys 把一个回合结果里的结局事实落成完成键。
+// 幂等：已点亮的键不重复写 (避免重复回合刷新时间戳/计数)。
+func (s *GameService) recordNegotiationOutcomeKeys(siloID uint, result *engine.NegotiationRoundResult) {
+	if result == nil {
+		return
+	}
+	write := func(key string) {
+		if state, ok := s.statesMapFor(siloID)[key]; ok && state.Triggered {
+			return
+		}
+		s.writeCompletionKey(siloID, key)
+	}
+	if result.CompromiseEstablished {
+		write(negotiationCompromiseKey)
+	}
+	if result.SuppressBrokeChannel || result.ITExposedChannel {
+		write(negotiationRuptureKey)
+	}
+}
+
 // runNegotiationMonth 月度低强度通气：仅当信道畅通、未崩塌、妥协未成立时
 // 执行一个回合。未开信道的堡不进入本函数，不消耗任何 RNG (18 §6)。
 func (s *GameService) runNegotiationMonth(silo *model.Silo) ([]string, []model.StoryEvent) {
@@ -65,6 +95,7 @@ func (s *GameService) runNegotiationMonth(silo *model.Silo) ([]string, []model.S
 	if result == nil {
 		return nil, nil
 	}
+	s.recordNegotiationOutcomeKeys(silo.ID, result)
 	stories := s.negotiationRoundStories(silo, result)
 	logs := []string{fmt.Sprintf("[Negotiation] %d-%d 回合#%d：市长路径=%s%s",
 		silo.CurrentYear, silo.CurrentMonth, silo.Negotiation.Rounds, result.MayorPath,

@@ -4,7 +4,8 @@ defineEvent({
   description: "你摇头。他并不意外：'路线不会自己长出来。那今天就谈到这里。'接触就此打住，想走的人仍在暗处互相打量。",
   type: "SOCIAL",
   fire_mode: "ONCE",
-  // 拒绝键：路线方向暂不推进；意愿事实仍在，后续可经其他路线事实接续。
+  // 拒绝键：路线方向暂不推进。"我还在这儿"由 route_second_window（+8 月）
+  // 兑现——拖延的暴露记入准备账本，并解锁 ROUTE_SURVEY_REACCEPT 新完成键。
   player_action: {
     id: "ROUTE_SURVEY_DECLINE",
     label: "拒绝勘察",
