@@ -170,6 +170,10 @@ func (m *MechanicEngine) CommonActionDefinitions() []MechanicDefinition {
 func (m *MechanicEngine) Run(def MechanicDefinition, ctx MechanicContext) (MechanicResult, error) {
 	runtime := goja.New()
 	runtime.SetRandSource(rng.Float64)
+	// 碎片标题表 (纯展示)：只供消息拼接按键查找，不遍历、不消费 RNG。
+	if err := runtime.Set("__fragmentTitles", FragmentTitleSnapshot()); err != nil {
+		return MechanicResult{}, err
+	}
 	if m.preludeProgram != nil {
 		if _, err := runtime.RunProgram(m.preludeProgram); err != nil {
 			return MechanicResult{}, err
@@ -292,6 +296,14 @@ function randomInt(max) {
 function fragmentDomain(fragment) {
   var idx = String(fragment).indexOf("_");
   return idx > 0 ? String(fragment).slice(0, idx) : String(fragment);
+}
+// fragmentTitle 碎片展示标题 (events/fragments.json 注册表，Go 侧经
+// engine.RegisterFragmentTitles 注入 __fragmentTitles)。纯消息可读化：
+// 未注入时回退原键，行为与改造前一致。
+function fragmentTitle(fragment) {
+  var table = (typeof __fragmentTitles !== "undefined" && __fragmentTitles) || {};
+  var title = table[String(fragment)];
+  return title ? title : String(fragment);
 }
 function beliefOf(ctx, fragment) {
   var list = (ctx.actor && ctx.actor.beliefs) || [];

@@ -65,7 +65,7 @@ defineMechanics([
       for (const fragment of fragmentIds) {
         // §3.6 行动资格：B < 0.30 的材料只是私人笔记，不能作为事实分享。
         if (beliefB(ctx, fragment) < INFO_CFG.qual_rumor) {
-          return { action_result: { executed: false, message: fragment + " 仍是私人猜测（确信 B 低于 " + INFO_CFG.qual_rumor + "），不能作为事实分享。" } };
+          return { action_result: { executed: false, message: "「" + fragmentTitle(fragment) + "」(" + fragment + ") 仍是私人猜测（确信 B 低于 " + INFO_CFG.qual_rumor + "），不能作为事实分享。" } };
         }
       }
       // §3.6 分享接收：强度 = B_player·transmit_c·receptivity_g。接收方得到的是
@@ -452,7 +452,7 @@ function applyGatherProbe(ctx, silent) {
     }
     return {
       mutations,
-      action_result: { executed: true, message: "这次对 " + target + " 的" + probeName + "一无所获（概率 " + Math.round(p * 100) + "%）。该部门戒备上升。" },
+      action_result: { executed: true, message: "这次对 " + target + " 的" + probeName + "一无所获（原成功率 " + Math.round(p * 100) + "%）。" + ((profession.alertness || 0) < 1 ? "该部门戒备上升。" : "该部门戒备已达上限。") },
     };
   }
   mutations.push({
@@ -483,8 +483,8 @@ function applyGatherProbe(ctx, silent) {
     action_result: {
       executed: true,
       message: recheck
-        ? "经 " + channel.id + " 把材料 " + fragment + " 对照 " + target + " 的记录复核了一遍。你的确信加深。"
-        : "经 " + channel.id + " 从 " + target + " 观察到新材料 " + fragment + "（概率 " + Math.round(p * 100) + "%）。",
+        ? "经 " + channel.id + " 把材料「" + fragmentTitle(fragment) + "」(" + fragment + ") 对照 " + target + " 的记录复核了一遍。你的确信加深。"
+        : "经 " + channel.id + " 从 " + target + " 观察到新材料「" + fragmentTitle(fragment) + "」(" + fragment + ")（概率 " + Math.round(p * 100) + "%）。",
     },
   };
 }

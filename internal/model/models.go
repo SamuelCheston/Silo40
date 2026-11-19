@@ -1998,6 +1998,21 @@ var ALL_FRAGMENTS = []string{
 	"Agricultural_1",
 }
 
+// FragmentTemplateMeta 碎片内容库的只读展示元数据 (11 分册 §2.2 的
+// FragmentTemplate 展示子集)：权威内容在 events/fragments.json，由
+// service 层 fail-closed 装载后经绑定暴露给前端。纯展示，不参与判定。
+type FragmentTemplateMeta struct {
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Department   string   `json:"department"`
+	Tier         string   `json:"tier"`
+	Theme        string   `json:"theme"`
+	DocumentForm string   `json:"document_form"`
+	Body         string   `json:"body_template"`
+	LockedClaims []string `json:"locked_claims"`
+	NextLeads    string   `json:"next_leads"`
+}
+
 // ACTION_COSTS 通用动作 AP 成本。
 // 流通三动词 (收集/分享/建立关系) 的成本按 17 号经济文档 §3 的推导下调：
 // AP 月收入约 3 点时，分享每 ~1 月一次、收集/建联穿插其间，流通才可能

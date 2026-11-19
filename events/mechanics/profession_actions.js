@@ -64,7 +64,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.02),
         ],
-        action_result: { executed: true, message: "Search warrant executed. Seized intel on " + fragment + " from " + target.name + "." },
+        action_result: { executed: true, message: "Search warrant executed. Seized 「" + fragmentTitle(fragment) + "」(" + fragment + ") from " + target.name + "." },
       };
     },
   }),
@@ -141,7 +141,7 @@ defineMechanics([
           { type: "silo_metric_delta", metric: "safeguard_risk", value: 0.03 },
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
         ],
-        action_result: { executed: true, message: "Records erased from " + target.name + ": " + fragments.join(", ") + ". Safeguard risk grows..." },
+        action_result: { executed: true, message: "Records erased from " + target.name + ": " + fragments.map(function (fragment) { return "「" + fragmentTitle(fragment) + "」(" + fragment + ")"; }).join(", ") + ". Safeguard risk grows..." },
       };
     },
   }),
