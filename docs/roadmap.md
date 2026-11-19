@@ -74,11 +74,12 @@
 
 ### 开局可变性剩余（19 号）
 
-**状态：部分完成。** 设计见 [19-opening-variability-design.md](research/19-opening-variability-design.md)。
+**状态：已合入 main（5c59842），原型 × 线矩阵待重调。** 设计见 [19-opening-variability-design.md](research/19-opening-variability-design.md)。
 
 - 已落地：门控型特质「地堡土著」与「隐秘行事」——[initializer.go](../internal/engine/initializer.go) 特质赋值，「隐秘行事」经 [mechanics.go](../internal/engine/mechanics.go) `trait_stealth=0.8` 影响检测。
-- 未实现：驻地三档原型（磐石/裂隙/荒年）、号数→原型的确定性映射与配套初始资源/部门构成差异。
-- 纪律：上一版开局可变性原型因未先算测试账被回退——开局偏向必须与可玩路线测试重调同时落地，见 [ADR-0011](../knowledge/adr/0011-opening-bias-needs-test-retuning.md)。本地工作分支 `feat/opening-variability-current`（worktree `silo40-opening-variability`）在进行中、未合入 main，接手前先与该会话对齐。
+- 已落地：驻地三档原型（磐石/裂隙/荒年）、号数→原型的确定性映射与开局旋钮（`CreateGame` 按 `ArchetypeForStation` 派生；显式 `ArchetypeNone` 供夹具复现空原型基线）。
+- **未闭合**：原型 × 结局线的可玩矩阵仍红（10 组），清单与根因见 [25-v16-test-debt.md](research/25-v16-test-debt.md) 第十一节。当前由 `retune/info-archetypes` 与 `retune/lines-archetypes` 两条独立分支并行重调。
+- 纪律：开局偏向必须与可玩路线测试重调同时落地，见 [ADR-0011](../knowledge/adr/0011-opening-bias-needs-test-retuning.md)；重调完成前不在红矩阵上继续叠加新机制。
 
 ### 见证者成就树（ADR-0004）
 
@@ -119,6 +120,6 @@
 | 1 | LLM 上下文档位 ✅ | 完全独立 | 已实装：四档 + 四开关沿参与度同一路径落地，见上文状态行 |
 | 2 | 见证者成就树（ADR-0004） ✅ | 独立 | 已实装：纯派生快照只读既有完成键与结局资格事实，不碰仲裁；「维持」无事实键按预留，其余节点含「离开」「外溢」均由真实事实点亮 |
 | 3 | 22 号黑箱学习 | 独立（1 号侧） | 设计定稿、参数已重算；不碰玩家侧，唯一新增确定性状态在 1 号侧 |
-| 4 | 19 号开局可变性剩余 | 独立但带测试账 | 必须与可玩路线测试重调同时落地（ADR-0011）；本地工作分支在进行中，接手前先对齐 |
+| 4 | 19 号开局可变性剩余 | 独立但带测试账 | 三档原型已合入 main（5c59842）；原型 × 线矩阵 10 组红，按 ADR-0011 冻结重调（`retune/info-archetypes`、`retune/lines-archetypes` 并行） |
 | 5 | 世界的反制剩余档（T1-3/T2-4/T3-1b/T3-2） | 独立但带测试账 | 四档须与 20 §7 测试账重调同批合并（§7.2 判据 6），接口全部既有；T2-2 信道审计已随《共证》外溢投递侧落地 |
 | 6 | 23 号盲区经营 | **依赖 22 号** | 被经营偏置注入 22 观测管线（23-05 卷），排在 22 号落地之后 |
