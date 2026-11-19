@@ -358,6 +358,13 @@
       "reason": "同一组抉择已选定其他项"
     },
     {
+      "id": "ROUTE_SURVEY_REACCEPT",
+      "unlock": { "event_completed": "special:route_second_window" },
+      "available": { "not": { "event_completed": "player_actions:route_survey_reaccept" } },
+      "hide_when_unavailable": true,
+      "reason": "重新勘察已委托"
+    },
+    {
       "id": "ADVANCE_PARTY_DISPATCH",
       "unlock": { "event_completed": "special:route_confirmed" },
       "available": {},

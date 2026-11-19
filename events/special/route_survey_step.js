@@ -7,7 +7,10 @@ defineEvent({
   // 路线勘察步骤（13 分册 §1）：接受键之后，由机械/矿业职务动作承载实地
   // 勘察。订阅既有职务动作的节点放 special/（不拦截宿主动作）。
   trigger: all(
-    eventTriggered("player_actions", "route_survey_accept"),
+    any(
+      eventTriggered("player_actions", "route_survey_accept"),
+      eventTriggered("player_actions", "route_survey_reaccept")
+    ),
     any(
       playerActionIs("MECHANICAL_OVERHAUL"),
       playerActionIs("MECHANICAL_PIPE_TAP"),
