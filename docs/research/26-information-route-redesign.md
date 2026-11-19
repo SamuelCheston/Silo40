@@ -1,6 +1,8 @@
 # 26 — INFORMATION 路线脚本层策略重设计
 
-> 状态：研究完成，待所有者裁决后实施。
+> 状态：已实施（2026-11-19）。A–F 全部落入 `info_endgame_test.go`，
+> 种子 2401 原断言通过；全量 `go test ./internal/...` 与内容扫描绿。
+> 实施结果见 §九。
 > 来源：25 篇 §九/§十 留档的唯一可玩性欠账
 > （TestInformationEndingPlayableFromNewGame，120 种子零命中）。
 > 日期：2026-11-19。所有者指令「先研究脚本层策略重设计」。
@@ -223,7 +225,6 @@ IT/Judicial 既是目标又是泄漏观察者：对它们的流通推高自身 l
   这些路径，只补成熟度缺口。
 
 ## 八、参考
-
 - 25 篇 §九（120 种子失败形态）/§十（唯一欠账）
 - 17-information-economy §3/§5（AP 预算与门深推导）
 - 18-time-permeation §3/§7（渗透窗、深填滑行、公平重调）
@@ -235,3 +236,38 @@ IT/Judicial 既是目标又是泄漏观察者：对它们的流通推高自身 l
   core_systems.js:49–59、initializer.go:204–235、
   publish_evidence.js / verify_evidence.js / investigate_dispatch.js /
   bailiff_dispatch_evidence_a.js、info_endgame_test.go:249–605
+
+## 九、实施结果（2026-11-19）
+
+A–F 全部落入 [info_endgame_test.go](../../internal/service/info_endgame_test.go)
+的 `TestInformationEndingPlayableFromNewGame`，零机制/数值/断言改动。
+
+| 方案 | 落地 |
+| --- | --- |
+| A 探针鲁棒性 | `shareCostFor`/`buildCostFor` 先查 `ContactUnderWatch` 返回 +∞；`attemptCirculation` 对「没有回应你的接触」跳过（3 月窗口自愈） |
+| B 双事实发布 | 发布循环改看动作可用性；无核验/发布可做时用 `investigate_dispatch` 把较弱链抬到发布地板，两条核心事实都公开发布 |
+| C 断流重置 | `shareAttempts ≥ 4` 的终身计数在「B 跌破地板且 counter=0」时解除，允许重播 |
+| D 深填集中 | 新槽同月连续分享到 B ≥ 0.45（同源递减 2–3 次到位），不再浅播 |
+| E 监视者排序 | IT/Judicial 优先、Mayor 次之；gather 默认打**本部门**（mismatch 0、FProfMatch 1.25），不再跨部门轮转复核 |
+| F 日历重构 | 第 60 月后停止新播种，只做断流维护 |
+
+### 与原方案的偏差（实测驱动，仍属脚本层）
+
+1. **建联整体移除**：Build 是 1 月时长动作，9 部门 × 4 次 = 144 AP +
+   36 月日历；吸收公式里 `B_player` 主导，关系 0.2 vs 0.5 的单次吸收只差
+   ≈0.1，远不如把 AP 直接换成分享。这是 §五杠杆排序的第一项。
+2. **gather 改打本部门**：跨部门轮转复核受同源递减，12 个月只把 B 抬
+   0.04；本部门探查才能把 Judicial_3/4/5 稳定抬到可分享强度，作为第三槽
+   的弹药。原方案只把「本部门 gather」写成补充，实测它是主通道。
+3. **最终不需要第四事实**：9 部门第三槽全部用本部门事实（Judicial_3/4/5）
+   深填，配合两条已发布核心事实正好 27 槽。
+
+### 验证
+
+- 种子 2401、原断言、无白盒短路：**PASS**（约 10s）。终局前 9 部门全部
+  ≥3 成熟事实，结算落 INFORMATION。
+- `go build ./...`、`go vet ./...`、`go test ./internal/... -count=1`
+  全绿（service 245s）。
+- `scripts/check_public_content.py`：654 文件零违禁内容。
+- 未做 120 种子大扫描（ADR-0020；本次是策略重设计验证，不是消耗品重调）。
+  未来机制改动若再次漂移，按 ADR-0020 只落欠账。

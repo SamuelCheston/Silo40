@@ -1,6 +1,7 @@
 package service
 
 import (
+	"math"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -296,7 +297,6 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 	// only absorption strong enough to seed every department at once, so both
 	// publishable core facts go out before the circulation window — this is a
 	// re-ordering of actions the route already uses, not a new action.
-	verifyReportFloor := engine.DefaultInformationConfig().QualReport
 	publishedFacts := func() map[string]bool {
 		out := map[string]bool{}
 		for _, record := range svc.silo.PublicEvidence {
@@ -304,35 +304,34 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		}
 		return out
 	}
-	for i := 0; i < 14; i++ {
+	// 双事实发布 (26 §四 B)：公开是全部门一次性深播，两条核心事实各占掉
+	// 9 个部门的一个免费粘性槽——27 槽里 18 槽不需要流通。Judicial_1 在
+	// 开局通常没有信念 (法警证据 A 依赖叛乱 ≥0.15，时机不可控)，
+	// investigate_dispatch (15 AP，确定性深挖较弱链) 是把它抬到发布地板
+	// 的现成手段，脚本此前完全没用。
+	eventReady := func(id string) bool {
+		meta := actionByID(svc.availablePlayerActions(), id)
+		return meta != nil && meta.Enabled
+	}
+	for i := 0; i < 40; i++ {
 		published := publishedFacts()
 		if published["Judicial_1"] && published["Judicial_2"] {
 			break
 		}
-		verifiable, publishable := false, false
-		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
-			belief := engine.BeliefFor(svc.agent, fact)
-			if belief == nil {
-				continue
-			}
-			verified := false
-			for _, v := range svc.silo.VerifiedEvidence {
-				if v == fact {
-					verified = true
-				}
-			}
-			if belief.B >= verifyReportFloor && !verified {
-				verifiable = true
-			}
-			if belief.B >= publishFloor && verified && !published[fact] {
-				publishable = true
-			}
+		if svc.gameOver() {
+			break
 		}
-		if verifiable && svc.agent.ActionPoints >= 15 {
+		acted := false
+		if eventReady("verify_evidence") && svc.agent.ActionPoints >= 15 {
 			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "verify_evidence"})
+			acted = true
 		}
-		if publishable && svc.agent.ActionPoints >= 20 {
+		if eventReady("publish_evidence") && svc.agent.ActionPoints >= 20 {
 			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "publish_evidence"})
+			acted = true
+		}
+		if !acted && eventReady("investigate_dispatch") && svc.agent.ActionPoints >= 15 {
+			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "investigate_dispatch"})
 		}
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance publication at step %d: %v", i, err)
@@ -393,6 +392,12 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 			if strings.Contains(err.Error(), "Action Points") {
 				return false
 			}
+			if strings.Contains(err.Error(), "没有回应你的接触") {
+				// T3-2 联系人监视 (3 月窗口)：本月跳过该部门，到期自愈。
+				// 探针把它当致命错误曾让 120 种子里的 33 个中途死亡
+				// (26 §四 A)，这不是路线断裂。
+				return false
+			}
 			t.Fatalf("circulate with %+v: %v", action, err)
 		}
 		if outcome.Result.Executed {
@@ -430,20 +435,24 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 		// 流通摩擦 (T1-2) 让戒备 ≥ 0.30 的部门更贵；路线按服务端权威成本决定
 		// 此刻付不付得起，避免把一整个月浪费在必被拒的尝试上。
 		shareCostFor := func(dept string) float64 {
+			if engine.ContactUnderWatch(svc.silo, dept) {
+				// 监视期间接触不可用：不是成本问题，直接让该部门本月跳过。
+				return math.Inf(1)
+			}
 			action := model.AgentAction{Type: model.ActionShareInfo, TargetDept: dept, FragmentIds: []string{"probe"}}
 			if err := svc.resolveActionCost(&action); err != nil {
 				t.Fatalf("resolve share cost: %v", err)
 			}
 			return action.Cost
 		}
-		buildCostFor := func(dept string) float64 {
-			action := model.AgentAction{Type: model.ActionBuildConnection, TargetDept: dept}
-			if err := svc.resolveActionCost(&action); err != nil {
-				t.Fatalf("resolve build cost: %v", err)
-			}
-			return action.Cost
+		// 本部门 gather (26 §四 E)：跨部门轮转的复核对同源递减最吃亏
+		// (12 个月只把 B 抬 0.04)，而本部门探查 mismatch 0、FProfMatch
+		// 1.25、ProbeFitOwn 0.6——它是把 Judicial_3/4/5 抬到可分享强度的
+		// 唯一稳定通道，也是第三槽的弹药来源。
+		gatherFrom := svc.agent.Profession
+		if gatherFrom == "" {
+			gatherFrom = rotation[month%len(rotation)]
 		}
-		gatherFrom := rotation[month%len(rotation)]
 		if svc.silo.Rebellion >= 0.7 {
 			// Lie low while rebellion runs hot.
 			continue
@@ -454,7 +463,23 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 			// healthy slots (a department mid-permeation is needier than one
 			// that already holds three running streaks).
 			order := append([]model.Profession(nil), svc.silo.Professions...)
+			// 监视者排序 (26 §四 E)：IT/Judicial 既是目标又是泄漏观察者，
+			// 高 leak 会触发接触封锁与建联减半；趁 leak 还低先填它们的
+			// 第三槽。Mayor 的 receptivity 最低 (pro_foreign 0.33) 紧随其后。
+			priority := func(name string) int {
+				switch name {
+				case "IT", "Judicial":
+					return 0
+				case "Mayor":
+					return 1
+				}
+				return 2
+			}
 			sort.SliceStable(order, func(i, j int) bool {
+				pi, pj := priority(order[i].Name), priority(order[j].Name)
+				if pi != pj {
+					return pi < pj
+				}
 				mi, mj := informationMaturedFacts(&order[i]), informationMaturedFacts(&order[j])
 				if mi != mj {
 					return mi < mj
@@ -487,25 +512,29 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 				if informationActiveSlots(dept) >= informationGateFactCount {
 					continue
 				}
-				// Build the pipe before seeding: a zero-connection share
-				// absorbs ≈ the floor itself and dies within months, so trust
-				// is invested first while the seeding window is still open
-				// (the share action's own contract: 没有信任的部门接不住事实).
-				if month <= 30 && svc.pendingOperation == nil &&
-					agentConnectionTo(svc, dept) < 0.3 && svc.agent.ActionPoints >= buildCostFor(dept.Name) {
-					if attemptCirculation(model.AgentAction{
-						Type: model.ActionBuildConnection, TargetDept: dept.Name,
-					}) {
-						shared = true
-						break
-					}
+				// 播种截止 (26 §四 F)：96 月结算前必须走完 30 月渗透窗，
+				// 第 60 月后新播种已来不及，只做上面的断流维护。
+				if month > 60 {
+					continue
 				}
+				// 建联是 1 月时长的动作 (4 AP + 整月)：9 部门 × 4 次 = 36 月
+				// 日历 + 144 AP，而吸收公式里 B_player(≈0.8) 主导，起始
+				// 关系 0.2 与 0.5 的单次吸收只差 ≈0.1。实测把建联预算全部
+				// 换成分享 (26 §五杠杆排序第一项)，否则种子窗口被日历吃光。
 				// New coverage: the strongest fact the department does not yet
 				// hold above the floor, skipping capped pairs. The cap stays an
 				// anti-deadlock bound (raised so a broken streak can be
 				// re-seeded once), never a play target.
 				if fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
-					return shareAttempts[dept.Name+":"+fact] >= 4
+					if shareAttempts[dept.Name+":"+fact] < 4 {
+						return false
+					}
+					// 断流重置 (26 §四 C)：终身计数只约束「连续无效吸收」。
+					// 槽已跌破地板且渗透计数归零 = 这条流已经死了；继续
+					// 封死该对会让日历上已投入的 30 月窗永远无法回收。
+					belief := professionBelief(dept, fact)
+					return !(belief != nil && belief.B < engine.DefaultInformationConfig().QualRumor &&
+						belief.PermeationCounter == 0)
 				}); ok {
 					// A seed only takes if the agent's own conviction is strong
 					// enough to absorb past the floor at this connection —
@@ -524,7 +553,13 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 						Type: model.ActionShareInfo, TargetDept: dept.Name,
 						FragmentIds: []string{fragment},
 					}
+					if engine.ContactUnderWatch(svc.silo, dept.Name) {
+						continue
+					}
 					if err := svc.resolveActionCost(&shareAction); err != nil {
+						if strings.Contains(err.Error(), "没有回应你的接触") {
+							continue
+						}
 						t.Fatalf("resolve share cost: %v", err)
 					}
 					if svc.agent.ActionPoints < shareAction.Cost {
@@ -535,6 +570,21 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 					shareAttempts[dept.Name+":"+fragment]++
 					if attemptCirculation(shareAction) {
 						shared = true
+						// 深填 (26 §四 D)：同月连续分享到 B ≥ 0.45（深填目标
+						// = 0.30 + 30×0.005，正好滑行整个渗透窗）。同源递减
+						// 使 2–3 次到位；浅播会在 10 月内断流，反而更贵。
+						for shareAttempts[dept.Name+":"+fragment] < 6 &&
+							svc.agent.ActionPoints >= shareCostFor(dept.Name) &&
+							!engine.ContactUnderWatch(svc.silo, dept.Name) {
+							belief := professionBelief(dept, fragment)
+							if belief == nil || belief.B >= 0.45 {
+								break
+							}
+							shareAttempts[dept.Name+":"+fragment]++
+							if !attemptCirculation(shareAction) {
+								break
+							}
+						}
 						break
 					}
 				}
@@ -548,8 +598,6 @@ func TestInformationEndingPlayableFromNewGame(t *testing.T) {
 			continue
 		}
 		switch {
-		case svc.agent.ActionPoints >= buildCostFor("Judicial") && month < 12:
-			attemptCirculation(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
 		case svc.agent.ActionPoints >= gatherCost:
 			// Nothing shareable: gather — the portfolio must keep growing, a
 			// stronger fourth fact is what the hardest department (zero-
@@ -622,6 +670,21 @@ func informationMaturedFacts(prof *model.Profession) int {
 	return engine.MaturedFactCount(prof)
 }
 
+// professionBelief reads one department's belief on a fact (nil when the
+// department has never been exposed). Used by the circulation strategy to
+// detect a broken streak (below floor, counter reset) for re-seeding.
+func professionBelief(dept *model.Profession, fact string) *model.FactBelief {
+	if dept == nil {
+		return nil
+	}
+	for i := range dept.Beliefs {
+		if dept.Beliefs[i].FactID == fact {
+			return &dept.Beliefs[i]
+		}
+	}
+	return nil
+}
+
 // endangeredStreakCandidate picks the department's running streak that is
 // about to break: B within the danger margin above the floor (≈6 months of
 // forgetting left). Among endangered streaks the highest counter wins — the
@@ -673,17 +736,6 @@ func fragmentDepartment(fragment string) string {
 		return fragment[:idx]
 	}
 	return fragment
-}
-
-// agentConnectionTo reads the agent's connection value for a department —
-// the transmit side of share absorption.
-func agentConnectionTo(svc *GameService, dept *model.Profession) float64 {
-	for _, connection := range svc.agent.Connections {
-		if connection.ProfessionID == dept.ID {
-			return connection.Value
-		}
-	}
-	return 0
 }
 
 // informationActiveSlots counts a department's healthy gate slots: matured
