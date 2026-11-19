@@ -58,6 +58,7 @@ type GameService struct {
 	contentUnsubscribes []func()
 	actionGates         actionGateRuntime
 	relicCatalog        relicCatalogRuntime
+	fragmentLibrary     fragmentLibraryRuntime
 	delayCounter        int
 	delayTasks          map[string]*delayTask
 	pendingOperation    *pendingOperation
@@ -314,6 +315,9 @@ func (s *GameService) BootstrapContent(events embed.FS) error {
 	if err := s.loadRelicCatalog(dirs); err != nil {
 		return err
 	}
+	if err := s.loadFragmentLibrary(dirs); err != nil {
+		return err
+	}
 	if err := s.loadProtocolClauses(dirs); err != nil {
 		return err
 	}
@@ -347,6 +351,9 @@ func (s *GameService) BootstrapContentFromDisk() error {
 		return err
 	}
 	if err := s.loadRelicCatalog(dirs); err != nil {
+		return err
+	}
+	if err := s.loadFragmentLibrary(dirs); err != nil {
 		return err
 	}
 	if err := s.loadProtocolClauses(dirs); err != nil {
