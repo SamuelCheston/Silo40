@@ -6,7 +6,8 @@ defineEvent({
   fire_mode: "ONCE",
   // M-2 bypass (30-nodes §1, §7): closes the line for this run (the contact
   // key is consumed). Landing: the station drifts toward EXCLUSIONIST inertia
-  // (normalcy_hardens keeps firing); no reroute back into this line.
+  // (normalcy_hardens keeps firing); mayor_bypass_drift (+6 months) echoes the
+  // bypass with a one-time inertial settle. No reroute back into this line.
   player_action: {
     id: "MAYOR_ALLY_BYPASS",
     label: "绕过 Mayor",
