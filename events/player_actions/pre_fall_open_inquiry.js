@@ -7,6 +7,7 @@ defineEvent({
   // T-2 open inquiry (33-nodes §3, 34-spec §1): the expected path. Minimum
   // order plus open inquiry; the snapshot qualification is earned by the
   // whole run's cohort ideology, not granted by this key.
+  // 延迟回声见 special/pre_fall_echo.js（完成键 +3 月：质询的风险继续到期）。
   player_action: {
     id: "PRE_FALL_OPEN_INQUIRY",
     label: "维持秩序，质询照常",

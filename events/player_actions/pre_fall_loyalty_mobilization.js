@@ -8,6 +8,7 @@ defineEvent({
   // total loyalty. The cohort loyalty write tilts the pre-fall snapshot
   // toward the pure-silo shape — TIME absolute disqualification is then a
   // snapshot fact, not a verdict of this key.
+  // 延迟回声见 special/pre_fall_echo.js（完成键 +3 月：忠诚惯性继续凝聚）。
   player_action: {
     id: "PRE_FALL_LOYALTY_MOBILIZATION",
     label: "忠诚动员换秩序",

@@ -7,6 +7,7 @@ defineEvent({
   // T-2 total riot (33-nodes §3, 34-spec §1): openness proven by force.
   // Sustenance damage is real; whether it crosses into FRACTURE is settled
   // by the existing social-state facts, not by this key.
+  // 延迟回声见 special/pre_fall_echo.js（完成键 +3 月：维存损耗第二期）。
   player_action: {
     id: "PRE_FALL_TOTAL_RIOT",
     label: "全面暴乱证明开放",
