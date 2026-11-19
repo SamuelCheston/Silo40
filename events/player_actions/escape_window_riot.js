@@ -6,6 +6,8 @@ defineEvent({
   fire_mode: "ONCE",
   // 抉择 R-D 的对立支：全面暴乱＝高损耗（楼层与资源），撤离秩序系数低；
   // 损耗进入《断层》节点群口径（13 分册 §2）。
+  // 文案「账单分两次到期」已兑现：第二期见 special/escape_window_riot_bill.js
+  // （完成键 +3 月，全楼层稳定再降、恐慌余波）。
   player_action: {
     id: "ESCAPE_WINDOW_RIOT",
     label: "把叛乱推到最高",
