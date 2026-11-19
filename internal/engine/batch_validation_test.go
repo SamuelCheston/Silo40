@@ -46,10 +46,13 @@ func TestPressureReleaseLetsAuthorityRebound(t *testing.T) {
 	}
 }
 
-// TestOrderDeviationSafeguardRaceEndsInDeath locks the Safeguard 竞赛 batch
-// scenario: accumulated Protocol deviations drive R_s to 1.0 and the hard
-// guardrail ends the silo in DEATH (§6.2/§6.3 tables).
-func TestOrderDeviationSafeguardRaceEndsInDeath(t *testing.T) {
+// TestOrderDeviationRegistersIncidentsAndHardLineHolds locks the Safeguard
+// 竞赛 batch scenario under ADR-0019: Protocol deviations no longer accumulate
+// into R_s — they register into the incident ledger by period, while the
+// retained intervention-chain override channel (Order 制度行动) still pushes
+// R_s to 1.0 and the hard guardrail ends the silo in DEATH (§6.2/§6.3 tables,
+// 22 系列 00 卷 §5.1).
+func TestOrderDeviationRegistersIncidentsAndHardLineHolds(t *testing.T) {
 	e, silo, clauses := protocolFixture(t)
 
 	RecordProtocolAction(silo, clauses, "unauthorized_cross_contact", true)
@@ -57,17 +60,31 @@ func TestOrderDeviationSafeguardRaceEndsInDeath(t *testing.T) {
 	RecordProtocolAction(silo, clauses, "unauthorized_disappearance", false)
 	RecordProtocolAction(silo, clauses, "evidence_forgery", false)
 
+	// 偏离登记进事件簿，不再直接改写风险度 (每条违反一期)。
+	if got := silo.SafeguardIncidents[SafeguardIncidentDeviation]; got != 4 {
+		t.Fatalf("four violations must register four deviation incidents: %d", got)
+	}
+	if silo.SafeguardRisk != 0 {
+		t.Fatalf("deviations must not accumulate into safeguard risk: R_s=%.3f", silo.SafeguardRisk)
+	}
+
 	// Sustained bad outcomes: unmet reviews (rebellion/cohesion) and an
-	// overdue required report keep adding R_s every month.
+	// overdue required report keep registering deviations every period.
 	silo.Rebellion = 0.9
 	silo.Cohesion = 0.05
 	silo.EventTrigger = 2
+	deviationsBefore := silo.SafeguardIncidents[SafeguardIncidentDeviation]
 	for i := 0; i < 60 && silo.SafeguardRisk < 1.0; i++ {
 		AdvanceSiloClock(silo)
 		e.AdvanceProtocolMonthly(silo)
 	}
+	if silo.SafeguardIncidents[SafeguardIncidentDeviation] <= deviationsBefore {
+		t.Fatalf("sustained bad outcomes must keep registering deviations: %d -> %d",
+			deviationsBefore, silo.SafeguardIncidents[SafeguardIncidentDeviation])
+	}
+	// 硬线保留：介入链权威覆写渠道仍把风险度推过 1.0。
 	if silo.SafeguardRisk < 1.0 {
-		t.Fatalf("safeguard race did not reach the hard fail: R_s=%.3f", silo.SafeguardRisk)
+		t.Fatalf("intervention override channel did not reach the hard fail: R_s=%.3f", silo.SafeguardRisk)
 	}
 
 	e.checkVictoryConditions(silo, nil)

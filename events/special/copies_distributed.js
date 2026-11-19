@@ -1,7 +1,7 @@
 defineEvent({
   id: "copies_distributed",
   title: "副本离手",
-  description: "第二批副本已经进入另一组接收者手中。它们不依赖同一间档案室，也不依赖同一个人继续记得；清洗名单即使收走你手上的材料，也无法同时收回这些副本。",
+  description: "材料经过了多次分享，分发托管的反制已经就位。档案室之外终于有人接过材料，清洗队来时，抵抗有了依托。",
   type: "INTERNAL",
   fire_mode: "ONCE",
   trigger: all(

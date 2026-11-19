@@ -314,7 +314,6 @@ func TestRepresentativeResidentGetsNativeFixedAmbition(t *testing.T) {
 				IdeologyProfile:   []string{model.IdeologyProForeign + ":High"},
 				Influence:         0.72,
 				ActionPoints:      35,
-				PoliticalPrestige: 18,
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.75,
 					model.IdeologyLoyalty:    0.55,
@@ -334,7 +333,6 @@ func TestRepresentativeResidentGetsNativeFixedAmbition(t *testing.T) {
 
 	before := rep.Ambition
 	silo.Cohorts[0].Influence = 0.10
-	silo.Cohorts[0].PoliticalPrestige = 90
 	silo.Cohorts[0].Ideologies[model.IdeologyProForeign] = 0.10
 	updateKeyResidents(silo, 1.0)
 
@@ -358,7 +356,10 @@ func TestPoliticalGateHysteresisPreventsFlipFlop(t *testing.T) {
 				ID:         1,
 				Name:       "Mechanical",
 				ClassType:  "COMMONER",
-				PowerLevel: 8,
+				// PowerLevel 压低：代表野心 (0.22+PL/10×0.40+强度×0.30+噪声)
+				// 必须留在潜在领袖门 (0.62) 之下，否则领袖旁路会绕过本测试
+				// 要锁的进入/退出滞回带。
+				PowerLevel: 4,
 				Zone:       "Lower",
 				Ideologies: map[string]float64{
 					model.IdeologyProForeign: 0.70,

@@ -47,12 +47,14 @@ type GameEngine struct {
 	tickStories  []*model.StoryEvent
 	actionResult *model.ActionResult
 	logs         []string
+	// pendingDeathParts 本批 mutation 的死因拆分快照：JS 突变流可能先覆写
+	// rebellion 再投递 apply_population_deaths，归因必须按批前状态读取才与
+	// metrics_update 的死亡率口径一致 (见 deathRateBreakdown)。
+	pendingDeathParts []deathCausePart
 
 	// 配置常量
 	perCapitaConsumption map[string]float64
 	resourceProducers    map[string][]string
-	professionFactors    map[string]float64
-	traitFactors         map[string]float64
 
 	// NpcPolicy optionally advises NPC decisions (LLM layer). nil keeps the
 	// original algorithm bit-for-bit; the service layer injects it.
@@ -80,20 +82,6 @@ func NewGameEngine() *GameEngine {
 			"Energy":    {"Mechanical"},
 			"Materials": {"Mines"},
 			"Supplies":  {"Supply", "Agricultural"},
-		},
-		professionFactors: map[string]float64{
-			"Mayor":      0.5,
-			"Judicial":   0.4,
-			"IT":         0.3,
-			"Police":     0.3,
-			"Mechanical": 0.2,
-			"Medical":    0.2,
-		},
-		traitFactors: map[string]float64{
-			"地堡土著":   0.1,
-			"一号地堡密使": 0.5,
-			"煽动者":    0.2,
-			"守旧派":    -0.1,
 		},
 	}
 	e.RuleEngine = NewRuleEngine(e.ConditionEngine, e.ScriptEngine, e.Bus)
@@ -343,8 +331,20 @@ func (e *GameEngine) RunLocalPhase(silo *model.Silo, agent *model.Agent, deltaYe
 	// 4.5 Order 条款结算：三类偏离、J 与介入链 (确定性，无 RNG)。
 	e.AdvanceProtocolMonthly(silo)
 
+	// 4.55 黑箱 Θ/E 结算 (22 黑箱学习系列 01 卷 §2.2)：读上月指派 LastAssignedRisk，
+	// 结算 Θ 并计算本月执行强度 E 写入生效槽。功能关闭时跳过，零 RNG。
+	UpdateBlackBoxMonthly(silo)
+
 	// 4.6 IT 权威回合：二元联盟维护与隐蔽动作 (§5)。
 	e.RunITAuthorityMonthly(silo, agent)
+
+	// 4.62 盲区经营决策 (23 系列 03 卷)：六因子连乘权重 + ε 地板的三级抽取，
+	// 先花 R_op 后看余额，先于 4.65 定下本月伪装部署。门控：功能关闭零 RNG。
+	RunBlindSpotCultivationMonthly(silo)
+
+	// 4.65 黑箱观测产生 (22 黑箱学习系列 01 卷 §2.2)：反映结算后的 Θ，按延迟入队。
+	// 唯一 RNG 消耗点 (门控：功能关闭或信号当月不产生则零消耗)。
+	GenerateBlackBoxObservations(silo)
 
 	// 4.7 部门戒备月度冷却：严查会过去 (20 分册 §4.4)，T2-3/T1-2 的
 	// 拒绝与摩擦随回落自动解除。
@@ -527,49 +527,23 @@ func (e *GameEngine) UpdateActorState(view *ActorView, silo *model.Silo, deltaYe
 		}
 	}
 
-	// 1. 计算平均人脉值 (0.0 - 1.0)
-	connValues := view.ConnectionValues()
-	totalConnection := 0.0
-	if len(connValues) > 0 {
-		for _, v := range connValues {
-			totalConnection += v
-		}
-		totalConnection /= float64(len(connValues))
-	}
-
-	// 2. 计算职业修正系数
-	profFactor := e.professionFactors[view.Profession()]
-
-	// 3. 计算特质修正系数
-	traitFactor := 0.0
-	for _, trait := range view.Traits() {
-		traitFactor += e.traitFactors[trait]
-	}
-
-	// 4. 计算政治威望：整合人脉、职业背景、权力等级和阶层偏见
-	// 获取职业对象以提取权力等级和阶层信息
-	var powerLevel int
-	var classType string
-	for _, p := range silo.Professions {
-		if p.Name == view.Profession() {
-			powerLevel = p.PowerLevel
-			classType = p.ClassType
-			break
+	// 政治威望全层派生 (24 篇 §2)：prestige = 50×(Ambition+Influence)。
+	// 影响力演化：玩家由野心驱动缓慢增长 (与 updateKeyResidents 同构)；
+	// 年度结算以期初威望为口径 (与 agent_stats 展示一致)；影响力演化
+	// 只影响下一期。部门向 PowerLevel/10 收敛 (与 updatePopulationCohorts
+	// 同构)。RESIDENT 的影响力由 updateKeyResidents 独占，避免双重结算。
+	prestige := view.PoliticalPrestige()
+	if view.IsPlayer() {
+		view.SetInfluence(clamp01(view.Influence() + (0.005+view.Ambition()*0.05)*deltaYears))
+	} else if view.Ref.Kind == ActorNPC {
+		for _, p := range silo.Professions {
+			if p.Name == view.Profession() {
+				target := clamp01(float64(p.PowerLevel) / 10.0)
+				view.SetInfluence(clamp01(view.Influence() + (target-view.Influence())*0.15*deltaYears))
+				break
+			}
 		}
 	}
-
-	// 基础威望来源于人脉积累
-	basePrestige := totalConnection * 100
-	// 职业背景加成
-	careerBonus := (1 + profFactor) * (1 + traitFactor)
-	// 权力等级和阶层偏见对威望的直接贡献 (取代独立的影响力参数)
-	structuralPrestige := float64(powerLevel)*1.5 + classBias(classType, 2.0)
-
-	prestige := basePrestige*careerBonus + structuralPrestige
-	if prestige < 0 {
-		prestige = 0
-	}
-	view.SetPoliticalPrestige(prestige)
 
 	// 5. 给予政治点数 (仅玩家特工) 和行动点数 (AP)
 	const pointGainRate = 0.1
@@ -799,7 +773,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       false,
 			Type:        "DEATH",
-			Description: "Safeguard 协议被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
+			Description: "保障程序被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
 		}
 		return
 	}
@@ -821,7 +795,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 			silo.VictoryStatus = &model.VictoryStatus{
 				IsWon:       false,
 				Type:        "AGENT_COMPROMISED",
-				Description: "由于传播过多掺杂了个人意图的虚假信息，你的特工身份彻底暴露。司法部已经下达了逮捕令。",
+				Description: "一次次行动留下的痕迹终于被串了起来。你的特工身份彻底暴露，司法部已经下达逮捕令。",
 			}
 			return
 		}
@@ -996,10 +970,9 @@ func (e *GameEngine) updateResources(silo *model.Silo, deltaYears float64) {
 		if prof == nil {
 			return 0
 		}
-		// 效率默认 1.0
-		eff := 1.0
+		eff := clampUnit(prof.Productivity)
 		if isRebelling {
-			eff = 0.3
+			eff *= 0.3
 		}
 		return eff * float64(prof.Population)
 	}
@@ -1105,9 +1078,10 @@ func (e *GameEngine) updateSiloMetrics(silo *model.Silo, deltaYears float64) {
 		silo.Rebellion = 0
 	}
 
-	// 叛乱侵蚀现任市长个人正统性 (ADR-0007 后果条、18 §4)：接既有
-	// MayorLegitimacy，不新造状态；纯算术不消耗 RNG，叛乱为 0 时逐位不变。
-	ApplyRebellionLegitimacyErosion(silo, deltaYears)
+	// 叛乱侵蚀现任市长个人正统性 (ADR-0007 后果条、18 §4) 已移到
+	// runMonthlyPoliticalDispatch：JS 成功路与 Go 兜底路共用的唯一月度
+	// 路径。此处曾直接调用，但本函数只在 JS 机制失败时进入（真实流程
+	// 不可达），侵蚀从未发生；不要在这里恢复它，否则会双跑。
 
 	// DeptTension must not depend on Go map iteration or DB preload order.
 	// Sort a copy by persistent profession ID, then sort each Relations map by key.

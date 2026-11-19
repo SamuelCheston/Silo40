@@ -30,26 +30,34 @@ RULES = (
     (
         "adaptation-only full name",
         re.compile(
-            r"\b(?:Ron\s+Tucker|Russell\s+Conroy|Paul\s+Billings|"
-            r"Patrick\s+Kennedy|Danny\s+Bly|Pete\s+Nichols)\b",
+            r"(?<![A-Za-z0-9])(?:Ron[\s_-]+Tucker|Russell[\s_-]+Conroy|"
+            r"Paul[\s_-]+Billings|Patrick[\s_-]+Kennedy|"
+            r"Danny[\s_-]+Bly|Pete[\s_-]+Nichols)(?![A-Za-z0-9])",
             re.IGNORECASE,
         ),
     ),
     (
         "adaptation-only named entity",
         re.compile(
-            r"\b(?:Silo\s+Council|Mission\s+Diary|"
-            r"Amazing\s+Adventures\s+in\s+Georgia)\b",
+            r"(?<![A-Za-z0-9])(?:Silo[\s_-]+Council|Mission[\s_-]+Diary|"
+            r"Amazing[\s_-]+Adventures[\s_-]+in[\s_-]+Georgia)(?![A-Za-z0-9])",
             re.IGNORECASE,
         ),
     ),
     (
         "adaptation-only command entity",
-        re.compile(r"\b(?:The|the)\s+" + "Leg" + r"acy\b(?!\s+of\s+Frostpunk)"),
+        re.compile(
+            r"(?<![A-Za-z0-9])(?:The|the)[\s_-]+" + "Leg"
+            + r"acy(?![A-Za-z0-9])(?![\s_-]+of[\s_-]+Frostpunk)"
+        ),
     ),
     (
         "adaptation-only command channel",
-        re.compile(r"\b" + "Leg" + r"acy\s+(?:voice|terminal|room|vault)\b", re.IGNORECASE),
+        re.compile(
+            r"(?<![A-Za-z0-9])" + "Leg"
+            + r"acy[\s_-]+(?:voice|terminal|room|vault)(?![A-Za-z0-9])",
+            re.IGNORECASE,
+        ),
     ),
     (
         "adaptation-only watcher role",
@@ -57,13 +65,16 @@ RULES = (
     ),
     (
         "adaptation-only chronology",
-        re.compile(r"\b(?:(?:Year|Y)\s*)?(?:109|143)\s*AR\b", re.IGNORECASE),
+        re.compile(
+            r"(?<![A-Za-z0-9])(?:(?:Year|Y)[\s_-]*)?(?:109|143)[\s_-]*AR(?![A-Za-z0-9])",
+            re.IGNORECASE,
+        ),
     ),
     (
         "adaptation-only relic or cipher plot",
         re.compile(
             "密码" + r"信|情书" + r"转密码|第\s*77\s*页|"
-            + r"Amazing\s+Adventures\s+in\s+Georgia",
+            + r"Amazing[\s_-]+Adventures[\s_-]+in[\s_-]+Georgia",
             re.IGNORECASE,
         ),
     ),
@@ -73,8 +84,10 @@ RULES = (
     ),
     (
         "adaptation-only termination craft",
+        # Separator variants (underscore/hyphen, not only whitespace) and the
+        # mixed Chinese rendering of the blocked phrase are caught as well.
         re.compile(
-            r"Safeguard\s+Protocol|"
+            r"Safeguard[\s_-]+Protocol|Safeguard[\s_-]*协议|"
             + "实体" + "管道|毒气" + "管道|组" + "中心堡|中心堡" + "拓扑",
             re.IGNORECASE,
         ),
@@ -82,7 +95,7 @@ RULES = (
     (
         "adaptation-only external pursuit",
         re.compile(
-            r"drone\s+pursuit|"
+            r"drone[\s_-]+pursuit|"
             + "无人机" + "追杀|外部" + "追杀|"
             + ("外" + "逃者") + r".{0,20}(?:" + ("追" + "杀") + "|追击)|(?:"
             + ("追" + "杀") + r"|追击).{0,20}" + ("外" + "逃者"),
@@ -100,7 +113,8 @@ RULES = (
     (
         "adaptation-specific external reference",
         re.compile(
-            r"Apple\s*TV\+?|Wool\s+Books\s+vs\s+Silo\s+TV\s+Show|"
+            r"Apple[\s_-]*TV\+?|"
+            r"Wool[\s_-]+Books[\s_-]+vs[\s_-]+Silo[\s_-]+TV[\s_-]+Show|"
             r"silo\.fandom\.com",
             re.IGNORECASE,
         ),
@@ -192,6 +206,16 @@ def self_test():
         _, bad_findings = scan(root, use_all_files=True)
         if not any("bad.md" in finding for finding in bad_findings):
             raise AssertionError("forbidden-name fixture was not detected")
+        separator_variant = "Safe" + "guard_Proto" + "col"
+        (root / "bad.md").write_text(separator_variant + "\n", encoding="utf-8")
+        _, variant_findings = scan(root, use_all_files=True)
+        if not any("bad.md" in finding for finding in variant_findings):
+            raise AssertionError("separator-variant fixture was not detected")
+        translated_variant = "Safe" + "guard 协议"
+        (root / "bad.md").write_text(translated_variant + "\n", encoding="utf-8")
+        _, translated_findings = scan(root, use_all_files=True)
+        if not any("bad.md" in finding for finding in translated_findings):
+            raise AssertionError("translated-variant fixture was not detected")
         (root / "bad.md").unlink()
         local_file = root / "docs" / "research" / "local" / "note.md"
         local_file.parent.mkdir(parents=True)

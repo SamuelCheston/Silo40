@@ -13,7 +13,8 @@
     {
       "id": "action_gather_info",
       "unlock": {},
-      "available": {}
+      "available": { "metric": "identity_location_lock", "max": 0 },
+      "reason": "例行核查期间不便前往"
     },
     {
       "id": "action_silent_probe",
@@ -53,36 +54,58 @@
     {
       "action_type": "PROFESSION_ACTION",
       "unlock": { "stage_at_least": "first_signal" },
-      "available": {}
+      "available": { "metric": "identity_profession_lock", "max": 0 },
+      "reason": "职务暂时交接"
     },
     {
       "id": "STATION_INTEL",
       "unlock": { "stage_at_least": "first_signal" },
-      "available": {}
+      "available": { "metric": "identity_erasure_stage", "max": 0 },
+      "reason": "身份已进入抹除准备期，秘密行动不再安全"
     },
     {
       "id": "STATION_INFILTRATE",
       "unlock": { "stage_at_least": "archive_awakened" },
-      "available": { "relation": "Mechanical", "min": 0.2 },
-      "reason": "需要 Mechanical 关系达到 0.20"
+      "available": {
+        "all": [
+          { "relation": "Mechanical", "min": 0.2 },
+          { "metric": "identity_erasure_stage", "max": 0 }
+        ]
+      },
+      "reason": "需要 Mechanical 关系达到 0.20；身份已进入抹除准备期"
     },
     {
       "id": "STATION_DECEIVE",
       "unlock": { "stage_at_least": "archive_awakened" },
-      "available": { "metric": "propaganda_level", "min": 1 },
-      "reason": "需要宣传力度达到 1"
+      "available": {
+        "all": [
+          { "metric": "propaganda_level", "min": 1 },
+          { "metric": "identity_erasure_stage", "max": 0 }
+        ]
+      },
+      "reason": "需要宣传力度达到 1；身份已进入抹除准备期"
     },
     {
       "id": "STATION_TRADE",
       "unlock": { "relation": "Supply", "min": 0.2 },
-      "available": { "stage_at_least": "first_signal" },
-      "reason": "需要先建立驻地阶段进度"
+      "available": {
+        "all": [
+          { "stage_at_least": "first_signal" },
+          { "metric": "identity_erasure_stage", "max": 0 }
+        ]
+      },
+      "reason": "需要先建立驻地阶段进度；身份已进入抹除准备期"
     },
     {
       "id": "SILO1_DECEIVE",
       "unlock": { "stage_at_least": "archive_awakened" },
-      "available": { "metric": "propaganda_level", "min": 1 },
-      "reason": "需要宣传力度达到 1"
+      "available": {
+        "all": [
+          { "metric": "propaganda_level", "min": 1 },
+          { "metric": "identity_erasure_stage", "max": 0 }
+        ]
+      },
+      "reason": "需要宣传力度达到 1；身份已进入抹除准备期"
     },
     {
       "id": "RECEIVER_VERIFY_ACCOMPANY",

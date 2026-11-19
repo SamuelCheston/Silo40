@@ -238,7 +238,7 @@ p_flip = p_g0 + p_gφ·φ,  起点 p_g0=0.15, p_gφ=0.25
 | (c) 执行反馈 | `E(r,Θ)` 本身是 r 的函数（单峰） | 这是信号也是干扰：峰形即 r 响应 |
 | (d) 人口外流 | 弱：高 r 推高出逃动机（经 Θ） | 间接、慢 |
 | (e) 通牒反馈 | 通牒本身是 r 的极端形式 | 测量即干预（§5.3） |
-| (g) 稳定报告 | 高 r 推恐慌（`safeguard_protocol_warming.js`：safeguard_risk≥0.6 时全部门恐慌 +0.03 即为实例） | 恐慌读数被自己的政策污染 |
+| (g) 稳定报告 | 高 r 推恐慌（`last_interlock_warming.js`：safeguard_risk≥0.6 时全部门恐慌 +0.03 即为实例） | 恐慌读数被自己的政策污染 |
 
 ## 4. 伪装模型
 
@@ -434,6 +434,6 @@ f(Θ) = (1 − E(Θ)) · (1 − φ(Θ)·q_fc)        // 在 1 号指派最优 r 
 
 ## 资料来源
 
-- 代码锚点（本 worktree 67bedaa 实测）：`internal/service/world.go`、`internal/service/silo1.go`、`internal/service/silo1_operations.go`、`internal/service/station_operations.go`、`internal/service/perception.go`、`internal/service/escape_settlement.go`、`internal/service/escape_outside.go`、`internal/engine/it_authority.go`、`internal/engine/information.go`、`internal/engine/protocol.go`、`internal/engine/content_events.go`、`internal/model/models.go`、`events/protocol/order.json`、`events/special/silo1_ultimatum_cross.js`、`events/special/strike_reconnaissance.js`、`events/special/safeguard_protocol_warming.js`。
+- 代码锚点（本 worktree 67bedaa 实测）：`internal/service/world.go`、`internal/service/silo1.go`、`internal/service/silo1_operations.go`、`internal/service/station_operations.go`、`internal/service/perception.go`、`internal/service/escape_settlement.go`、`internal/service/escape_outside.go`、`internal/engine/it_authority.go`、`internal/engine/information.go`、`internal/engine/protocol.go`、`internal/engine/content_events.go`、`internal/model/models.go`、`events/protocol/order.json`、`events/special/silo1_ultimatum_cross.js`、`events/special/strike_reconnaissance.js`、`events/special/last_interlock_warming.js`。
 - 设计文档：`docs/research/10-it-control-credibility/05-alliance-and-maintenance-actions.md`（R_op、七类隐蔽动作）、`06-protocol-assets-and-deviation.md`（三类偏离与真值审判）、`07-cognition-gradient.md`（认知梯度 G）、`docs/research/16-preparation-outcome-design.md` §2.3（外溢信道与异常观察）、`references/silo1-control-design.md` §2.2/§2.3（o_s,m 与 I=o(1-ρk)）、`knowledge/08-determinism-known-issues.md`（单 RNG 流与月度顺序）。
 - 前提裁决：22 号专题任务书（旧静态单峰模型作废、Θ 动态、E 单峰由 Θ 间接决定、1 号只能靠延迟带噪可伪装信号估计）。

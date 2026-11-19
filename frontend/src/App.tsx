@@ -62,8 +62,20 @@ const endingTitle: Record<string, string> = {
     AGENT_COMPROMISED: '《除名》',
 };
 
+// 结局回读的线名：与 endingTitle 同一套正典书名，键是服务端下发的线 ID。
+// Line 为空的条目（失败征兆、跨线反制）不显示线徽章。
+const recapLineTitle: Record<string, string> = {
+    information: '《共证》',
+    rebellion: '《越岭》',
+    rule_of_law: '《公议》',
+    time: '《无人裁决》',
+    personal_rule: '《人治》',
+};
+
 function App() {
     const [resultText, setResultText] = useState("在下方输入特工代号 👇");
+    // 最近一次结算的死亡归因行（后端 [人口] 月度日志），挂在人口读数上。
+    const [deathNote, setDeathNote] = useState<string | null>(null);
     const [name, setName] = useState('');
     const [gameStarted, setGameStarted] = useState(false);
     const [showSetup, setShowSetup] = useState(false);
@@ -80,6 +92,7 @@ function App() {
     const [busy, setBusy] = useState(false);
     const [infoProgress, setInfoProgress] = useState<any>(null);
     const [linesProgress, setLinesProgress] = useState<any>(null);
+    const [witnessTree, setWitnessTree] = useState<any>(null);
     const [moments, setMoments] = useState<{ title: string; body: string }[]>([]);
     const prevStageRef = useRef<string | null>(null);
     const prevAbsorbedRef = useRef<number | null>(null);
@@ -224,6 +237,7 @@ function App() {
         setWorld(state.world || null);
         setInfoProgress(state.information_progress || null);
         setLinesProgress(state.lines_progress || null);
+        setWitnessTree(state.witness_tree || null);
         setPendingEvents(0);
         setPendingOperation('');
         setGameStarted(true);
@@ -239,6 +253,7 @@ function App() {
         setWorld(state.world || null);
         setInfoProgress(state.information_progress || null);
         setLinesProgress(state.lines_progress || null);
+        setWitnessTree(state.witness_tree || null);
         setPendingEvents(state.pending_events || 0);
         setPendingOperation(state.pending_operation || '');
         setGameStarted(true);
@@ -297,15 +312,21 @@ function App() {
 
     const drainOperation = useCallback(async () => {
         let last: any = null;
+        let deathLine: string | null = null;
         for (let i = 0; i < 256; i++) {
             const step = await ProcessNextEvent();
             last = step;
+            // 死亡归因行由后端月度结算写入 logs；一次操作可能跨多步，取最后一条。
+            for (const line of step.logs || []) {
+                if (line.startsWith('[人口]')) deathLine = line;
+            }
             if (step.operation_complete) break;
         }
         if (!last || !last.operation_complete) {
             throw new Error('Operation exceeded 256 event steps; save was not attempted.');
         }
         // 只在最终步应用状态：中间事件步不触发整树重渲染，避免一次操作多次重渲染。
+        setDeathNote(deathLine);
         applyEventState(last);
         await refreshEventHistory();
         return last;
@@ -317,9 +338,11 @@ function App() {
         setSilo(null);
         setAgent(null);
         setWorld(null);
+        setDeathNote(null);
         setEventHistory([]);
         setMoments([]);
         setLinesProgress(null);
+        setWitnessTree(null);
         prevStageRef.current = null;
         prevAbsorbedRef.current = null;
         prevMainLineRef.current = null;
@@ -477,7 +500,7 @@ function App() {
 
     return (
         <Box minH="100vh" bg="white" color="gray.800" display="flex" flexDirection="column">
-            {gameStarted && <HeaderStats agent={agent} silo={silo} agentStats={agentStats} />}
+            {gameStarted && <HeaderStats agent={agent} silo={silo} agentStats={agentStats} deathNote={deathNote} />}
             
             <HStack align="stretch" flex={1} w="full" gap={0} overflow="hidden">
                 {/* Sidebar */}
@@ -541,6 +564,32 @@ function App() {
                                     结局：{endingTitle[silo.victory_status.type] || silo.victory_status.type} · {silo.victory_status.is_won ? '任务成功' : '任务失败'}
                                 </Heading>
                                 <Text mt={2}>{silo.victory_status.description}</Text>
+                                {/* 本局关键抉择回读：服务端投影的 3–6 条因果条目（何时/哪条线/
+                                    哪一支/后果）。缺料时 recap 为空，整块不渲染，退化为既有结算行。 */}
+                                {silo.victory_status.decision?.recap && silo.victory_status.decision.recap.length > 0 && (
+                                    <Box mt={3} p={3} bg="white" borderRadius="md">
+                                        <Text fontSize="sm" fontWeight="bold">本局关键抉择回读</Text>
+                                        <VStack align="stretch" gap={2} mt={2}>
+                                            {silo.victory_status.decision.recap.map((entry: any, idx: number) => (
+                                                <Box key={`${entry.key}-${idx}`} p={2} bg="gray.50" borderRadius="md">
+                                                    <HStack gap={2} wrap="wrap">
+                                                        <Badge colorPalette="gray">{entry.year} 年 {entry.month} 月</Badge>
+                                                        {entry.line && (
+                                                            <Badge colorPalette="purple">{recapLineTitle[entry.line] || entry.line}</Badge>
+                                                        )}
+                                                        <Text fontSize="sm" fontWeight="bold">{entry.title}</Text>
+                                                    </HStack>
+                                                    {entry.description && (
+                                                        <Text fontSize="sm" color="gray.600" mt={1}>{entry.description}</Text>
+                                                    )}
+                                                    {entry.consequence && (
+                                                        <Text fontSize="sm" color="gray.800" mt={1}>{entry.consequence}</Text>
+                                                    )}
+                                                </Box>
+                                            ))}
+                                        </VStack>
+                                    </Box>
+                                )}
                                 {silo.victory_status.score && (
                                     <Box mt={2}>
                                         <Text fontWeight="bold">总分：{silo.victory_status.score.total}（含历史引导 +{silo.victory_status.score.history_influence?.total || 0}）</Text>
@@ -619,7 +668,7 @@ function App() {
                                             <Text fontSize="sm" color="gray.700" mt={1}>{moment.body}</Text>
                                         </Box>
                                     ))}
-                                    <LinesPanel lines={linesProgress} progress={infoProgress} silo={silo} world={world} agent={agent} />
+                                    <LinesPanel lines={linesProgress} progress={infoProgress} silo={silo} world={world} agent={agent} tree={witnessTree} />
                                     <WorldPanel world={world} agent={agent} />
                                     {activeView === 'map' ? (
                                         silo && <BunkerMap silo={silo} agent={agent} />

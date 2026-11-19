@@ -156,23 +156,55 @@ func (v *ActorView) SetSuspicionLevel(val float64) {
 	}
 }
 
-func (v *ActorView) PoliticalPrestige() float64 {
-	if v.agent != nil {
-		return v.agent.PoliticalPrestige
-	}
-	if v.resident != nil {
-		return v.resident.PoliticalPrestige
-	}
-	return v.prof.PoliticalPrestige
+// DerivedPrestige 政治威望全层派生公式 (24 篇 §2)：prestige = 50×(A+I)，
+// 值域 0–100。Agent / Profession / Resident 同构，不再持有独立威望字段。
+func DerivedPrestige(ambition, influence float64) float64 {
+	return 50 * (ambition + influence)
 }
 
-func (v *ActorView) SetPoliticalPrestige(val float64) {
+func (v *ActorView) PoliticalPrestige() float64 {
+	return DerivedPrestige(v.Ambition(), v.Influence())
+}
+
+// Ambition 野心：开局定死，仅事件可改 (读写穿透到 Agent / Profession / Resident)
+func (v *ActorView) Ambition() float64 {
 	if v.agent != nil {
-		v.agent.PoliticalPrestige = val
+		return v.agent.Ambition
+	}
+	if v.resident != nil {
+		return v.resident.Ambition
+	}
+	return v.prof.Ambition
+}
+
+func (v *ActorView) SetAmbition(val float64) {
+	if v.agent != nil {
+		v.agent.Ambition = val
 	} else if v.resident != nil {
-		v.resident.PoliticalPrestige = val
+		v.resident.Ambition = val
 	} else {
-		v.prof.PoliticalPrestige = val
+		v.prof.Ambition = val
+	}
+}
+
+// Influence 个人/部门影响力
+func (v *ActorView) Influence() float64 {
+	if v.agent != nil {
+		return v.agent.Influence
+	}
+	if v.resident != nil {
+		return v.resident.Influence
+	}
+	return v.prof.Influence
+}
+
+func (v *ActorView) SetInfluence(val float64) {
+	if v.agent != nil {
+		v.agent.Influence = val
+	} else if v.resident != nil {
+		v.resident.Influence = val
+	} else {
+		v.prof.Influence = val
 	}
 }
 

@@ -2,6 +2,7 @@ package service
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
@@ -413,9 +414,24 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 			rationGuard = svc.silo.Rebellion >= 0.8 && resourceAmount(svc.silo, "Energy") < 1500
 		}
 		if rationGuard && svc.agent.ActionPoints >= 15 {
-			execute(model.AgentAction{
+			outcome, err := svc.ExecuteAction(model.AgentAction{
 				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Energy",
 			})
+			// T3-1b 复查期会把职务动作灰置一个月；像玩家一样等窗口过去，
+			// 不用白盒状态让测试变绿。
+			if err != nil && strings.Contains(err.Error(), "职务暂时交接") {
+				if _, err := svc.PassTime(1); err != nil {
+					t.Fatalf("advance through profession lock at month %d: %v", month, err)
+				}
+				observe()
+				continue
+			}
+			if err != nil {
+				t.Fatalf("execute ration at month %d: %v", month, err)
+			}
+			if !outcome.Result.Executed {
+				t.Fatalf("execute ration at month %d rejected: %+v", month, outcome.Result)
+			}
 			rations++
 			t.Logf("ration %d at %d-%02d: rebellion=%.3f energy=%.0f supplies=%.0f materials=%.0f population=%d AP=%.1f",
 				rations, svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.Rebellion,
@@ -596,9 +612,22 @@ func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, arche
 			continue
 		}
 		if energyGuard && svc.agent.ActionPoints >= 15 {
-			execute(model.AgentAction{
+			outcome, err := svc.ExecuteAction(model.AgentAction{
 				Type: model.ActionProfession, ProfessionAction: "SUPPLY_RATION", ResourceTarget: "Energy",
 			})
+			// T3-1b 复查期会把职务动作灰置一个月；像玩家一样等窗口过去。
+			if err != nil && strings.Contains(err.Error(), "职务暂时交接") {
+				if _, err := svc.PassTime(1); err != nil {
+					t.Fatalf("advance through profession lock at month %d: %v", month, err)
+				}
+				continue
+			}
+			if err != nil {
+				t.Fatalf("execute ration at month %d: %v", month, err)
+			}
+			if !outcome.Result.Executed {
+				t.Fatalf("execute ration at month %d rejected: %+v", month, outcome.Result)
+			}
 			rations++
 			continue
 		}
@@ -688,6 +717,65 @@ func TestPurgeExecutionGradesOnCountermeasure(t *testing.T) {
 	}
 	if effectValue(heavy, "silo_metric_delta", "cohesion") >= effectValue(soft, "silo_metric_delta", "cohesion") {
 		t.Fatal("heavy purge must cost more cohesion than the softened one")
+	}
+}
+
+// TestPurgeExecutionIntensityModulatesShare locks E 次消费点 (22-00 裁决 1)：
+// 反应链触发判定不读 E，但触发后的落实烈度按本堡执行强度折算——整肃 share 乘
+// execution_intensity；功能未启用时为 1.0，结算逐位不变。
+func TestPurgeExecutionIntensityModulatesShare(t *testing.T) {
+	svc := bootstrapRealContent(t)
+	def := findContentDefinitionByKey(t, svc, "crisis:silo1_purge_execution")
+	grade := func(initialized bool, execution float64) engine.ContentScriptApplyResult {
+		t.Helper()
+		silo := &model.Silo{ID: 1, TotalPopulation: 8000, CurrentYear: 128, CurrentMonth: 1}
+		if initialized {
+			silo.BlackBox.Initialized = true
+			silo.BlackBox.CurrentExecution = execution
+		}
+		result, err := engine.RunContentEventApplyScript(def, engine.ContentEvaluationContext{
+			Silo: silo, States: map[string]engine.ContentEventRuntime{},
+		})
+		if err != nil {
+			t.Fatalf("purge apply: %v", err)
+		}
+		return result
+	}
+	popDelta := func(result engine.ContentScriptApplyResult) float64 {
+		for _, effect := range result.Effects {
+			if effect.Type == "silo_population_delta" {
+				return effect.Value
+			}
+		}
+		return 0
+	}
+	burden := func(result engine.ContentScriptApplyResult) float64 {
+		for _, effect := range result.Effects {
+			if effect.Type == "silo_metric_delta" && effect.Metric == "history_burden" {
+				return effect.Value
+			}
+		}
+		return 0
+	}
+
+	baseline := grade(false, 0)
+	if got := popDelta(baseline); got != -640 { // 8000 × 0.08 × 1.0
+		t.Fatalf("uninitialized purge must settle at the full toll: %v", got)
+	}
+
+	half := grade(true, 0.5)
+	if got := popDelta(half); got != -320 { // share 乘执行强度 0.5
+		t.Fatalf("execution intensity 0.5 must halve the purge share: %v", got)
+	}
+	// 烈度只调制 share：负担与恐慌等其他档位后果不随 E 缩放。
+	if burden(half) != burden(baseline) {
+		t.Fatalf("intensity must only scale the share: burden %v vs %v",
+			burden(half), burden(baseline))
+	}
+
+	// E=0：整肃名义上触发，实际落实力度为零。
+	if got := popDelta(grade(true, 0)); got != 0 {
+		t.Fatalf("execution intensity 0 must zero the purge share: %v", got)
 	}
 }
 

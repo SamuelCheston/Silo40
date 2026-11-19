@@ -3,7 +3,7 @@ defineMechanics([
     id: "MAYOR_PUBLIC_ADDRESS",
     profession: "Mayor",
     label: "Public Address",
-    description: "Deliver a rousing speech to the silo. Population loyalty +6%, all departments panic -4%.",
+    description: "Deliver a rousing speech to the silo. Population loyalty up to +6 percentage points; department panic up to -4.",
     ap_cost: 15,
     target_type: "NONE",
     suspicion_penalty: 0.01,
@@ -15,7 +15,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.01),
         ],
-        action_result: { executed: true, message: "Public address delivered. Population loyalty increased and panic eased." },
+        action_result: { executed: true, message: "Public address delivered throughout the silo." },
       };
     },
   }),
@@ -23,7 +23,7 @@ defineMechanics([
     id: "MAYOR_DIRECT_ORDER",
     profession: "Mayor",
     label: "Direct Order",
-    description: "Issue an executive order to a department. Target productivity +10%, panic -5%.",
+    description: "Issue an executive order to a department. Restore up to 10 percentage points of department productivity and reduce panic by up to 5.",
     ap_cost: 20,
     target_type: "DEPT",
     suspicion_penalty: 0.02,
@@ -37,7 +37,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.02),
         ],
-        action_result: { executed: true, message: "Executive order issued. " + target.name + " productivity improved." },
+        action_result: { executed: true, message: "Executive order issued to " + target.name + ". " + productivityFeedback(target, 0.10) + " " + boundedFeedback("Panic", target.panic_value, -0.05) },
       };
     },
   }),
@@ -72,7 +72,7 @@ defineMechanics([
     id: "JUDICIAL_ARREST",
     profession: "Judicial",
     label: "Arrest",
-    description: "Arrest key figures in a department. Target action points -20, panic +10%, population loyalty +4%.",
+    description: "Arrest key figures in a department. Target loses up to 20 AP; target panic rises by up to 10 percentage points and population loyalty by up to 4.",
     ap_cost: 25,
     target_type: "DEPT",
     suspicion_penalty: 0.03,
@@ -95,7 +95,7 @@ defineMechanics([
     id: "IT_SURVEILLANCE",
     profession: "IT",
     label: "Surveillance",
-    description: "Place a department under full surveillance. Connection +15% with the target (leverage of fear).",
+    description: "Use department surveillance to gain up to 15 percentage points of connection with the target.",
     ap_cost: 15,
     target_type: "DEPT",
     suspicion_penalty: 0,
@@ -107,7 +107,7 @@ defineMechanics([
           { type: "actor_connection_delta", connection_dept: target.name, value: 0.15 },
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
         ],
-        action_result: { executed: true, message: target.name + " is now under surveillance. You hold leverage over them." },
+        action_result: { executed: true, message: "Surveillance report filed on " + target.name + ". " + boundedFeedback("Connection", actorConnectionTo(ctx, target.name), 0.15) },
       };
     },
   }),
@@ -115,7 +115,7 @@ defineMechanics([
     id: "IT_COVER_UP",
     profession: "IT",
     label: "Cover-Up",
-    description: "Erase sensitive records from a department. Remove 1-2 fragments; safeguard risk +3%.",
+    description: "Erase 1–2 fragments from a department. Target panic rises by up to 5 percentage points; Safeguard risk rises by 3.",
     ap_cost: 25,
     target_type: "DEPT",
     suspicion_penalty: 0,
@@ -176,7 +176,7 @@ defineMechanics([
     id: "POLICE_CRACKDOWN",
     profession: "Police",
     label: "Crackdown",
-    description: "Suppress a department by force. Target panic -15%, ideology -5%, productivity -3%.",
+    description: "Suppress a department by force. Reduce target panic by up to 15 percentage points, pro-foreign sentiment by up to 5, and productivity by up to 3.",
     ap_cost: 25,
     target_type: "DEPT",
     suspicion_penalty: 0.03,
@@ -191,7 +191,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.03),
         ],
-        action_result: { executed: true, message: "Crackdown executed in " + target.name + ". Order restored, at a cost." },
+        action_result: { executed: true, message: "Crackdown carried out in " + target.name + ". " + productivityFeedback(target, -0.03) + " " + boundedFeedback("Panic", target.panic_value, -0.15) },
       };
     },
   }),
@@ -199,7 +199,7 @@ defineMechanics([
     id: "MEDICAL_TREAT",
     profession: "Medical",
     label: "Community Treatment",
-    description: "Deploy medics to a department. Target panic -12%, productivity +5%.",
+    description: "Deploy medics to a department. Reduce target panic by up to 12 percentage points and restore up to 5 points of productivity.",
     ap_cost: 15,
     target_type: "DEPT",
     suspicion_penalty: 0.01,
@@ -213,7 +213,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.01),
         ],
-        action_result: { executed: true, message: "Medics deployed to " + target.name + ". Panic eased and health improved." },
+        action_result: { executed: true, message: "Medics deployed to " + target.name + ". " + boundedFeedback("Panic", target.panic_value, -0.12) + " " + productivityFeedback(target, 0.05) },
       };
     },
   }),
@@ -221,7 +221,7 @@ defineMechanics([
     id: "MEDICAL_QUARANTINE",
     profession: "Medical",
     label: "Quarantine",
-    description: "Quarantine a department for its own safety. Target panic -20%, productivity -12% and ideology -4%.",
+    description: "Quarantine a department for its own safety. Reduce target panic by up to 20 percentage points, productivity by up to 12, and pro-foreign sentiment by up to 4.",
     ap_cost: 20,
     target_type: "DEPT",
     suspicion_penalty: 0.02,
@@ -236,7 +236,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.02),
         ],
-        action_result: { executed: true, message: target.name + " placed under quarantine. The silence is oppressive." },
+        action_result: { executed: true, message: target.name + " placed under quarantine. " + productivityFeedback(target, -0.12) + " " + boundedFeedback("Panic", target.panic_value, -0.20) },
       };
     },
   }),
@@ -267,7 +267,7 @@ defineMechanics([
     id: "SUPPLY_SHELTER",
     profession: "Supply",
     label: "Shelter",
-    description: "Smuggle a department under your protection. Target panic -10%, connection +15%, productivity +5%.",
+    description: "Offer shelter through the Supply network. Reduce target panic by up to 10 percentage points, gain up to 15 points of connection and restore up to 5 points of productivity.",
     ap_cost: 20,
     target_type: "DEPT",
     suspicion_penalty: 0.01,
@@ -282,7 +282,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.01),
         ],
-        action_result: { executed: true, message: target.name + " is now sheltered by the Supply network." },
+        action_result: { executed: true, message: "The Supply network offered shelter to " + target.name + ". " + boundedFeedback("Panic", target.panic_value, -0.10) + " " + boundedFeedback("Connection", actorConnectionTo(ctx, target.name), 0.15) + " " + productivityFeedback(target, 0.05) },
       };
     },
   }),
@@ -290,7 +290,7 @@ defineMechanics([
     id: "MECHANICAL_OVERHAUL",
     profession: "Mechanical",
     label: "Overhaul",
-    description: "Overhaul the silo machinery. Energy +500, Materials +200, own productivity +5%.",
+    description: "Overhaul the silo machinery. Add 500 Energy and 200 Materials to stockpiles. Restore up to 5 percentage points of Mechanical productivity.",
     ap_cost: 15,
     target_type: "NONE",
     suspicion_penalty: 0.01,
@@ -303,7 +303,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.01),
         ],
-        action_result: { executed: true, message: "Machinery overhauled. Energy and materials production improved." },
+        action_result: { executed: true, message: "Machinery overhauled. Stockpiles received 500 Energy and 200 Materials. " + productivityFeedback(professionByName(ctx, ctx.actor.profession), 0.05) },
       };
     },
   }),
@@ -337,7 +337,7 @@ defineMechanics([
     id: "MINES_DEEP_EXCAVATION",
     profession: "Mines",
     label: "Deep Excavation",
-    description: "Push the mines deeper. Materials +800, own productivity +5%.",
+    description: "Push the mines deeper. Add 800 Materials to stockpiles and restore up to 5 percentage points of Mines productivity.",
     ap_cost: 15,
     target_type: "NONE",
     suspicion_penalty: 0.005,
@@ -349,7 +349,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.005),
         ],
-        action_result: { executed: true, message: "Deep excavation completed. Materials reserves increased." },
+        action_result: { executed: true, message: "Deep excavation completed. Stockpiles received 800 Materials. " + productivityFeedback(professionByName(ctx, ctx.actor.profession), 0.05) },
       };
     },
   }),
@@ -382,7 +382,7 @@ defineMechanics([
     id: "AGRICULTURAL_INTENSIVE_HARVEST",
     profession: "Agricultural",
     label: "Intensive Harvest",
-    description: "Work the hydroponics around the clock. Supplies +1500, own productivity +8%.",
+    description: "Work the hydroponics around the clock. Add 1500 Supplies to stockpiles and restore up to 8 percentage points of Agricultural productivity.",
     ap_cost: 15,
     target_type: "NONE",
     suspicion_penalty: 0.01,
@@ -394,7 +394,7 @@ defineMechanics([
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.01),
         ],
-        action_result: { executed: true, message: "Intensive harvest completed. Supplies increased." },
+        action_result: { executed: true, message: "Intensive harvest completed. Stockpiles received 1500 Supplies. " + productivityFeedback(professionByName(ctx, ctx.actor.profession), 0.08) },
       };
     },
   }),
@@ -457,4 +457,19 @@ function allProfessionMutations(ctx, field, value) {
     field,
     value,
   }));
+}
+
+function boundedFeedback(label, current, delta) {
+  const next = clampUnit(current + delta);
+  if (next === current) {
+    return label + (delta > 0 ? " is already at its maximum." : " is already at its minimum.");
+  }
+  return label + (next > current ? " rose to " : " fell to ") + (next * 100).toFixed(1) + "%.";
+}
+
+function productivityFeedback(profession, delta) {
+  if (!profession) return "";
+  const supplies = profession.name === "Agricultural" || profession.name === "Supply";
+  const produces = supplies || profession.name === "Mines" || profession.name === "Mechanical";
+  return boundedFeedback(produces ? "Production capacity factor" : "Department productivity rating", profession.productivity, delta);
 }

@@ -15,6 +15,7 @@ interface Props {
     silo: any;
     world: any;
     agent: any;
+    tree: any;       // witness_tree (ADR-0004)
 }
 
 // 阶段是后端权威进度 (action_gates.json)；主线未定时，阶段简报就是"这一局在做什么"。
@@ -379,7 +380,75 @@ function SharedFacts({ silo, world, progress }: { silo: any; world: any; progres
     );
 }
 
-export const LinesPanel = memo(function LinesPanel({ lines, progress, silo, world, agent }: Props) {
+// 见证者成就树 (ADR-0004)：国策树即成就系统。点亮的是事实不是按钮；
+// 被锁节点保留在树上——"这条路已经关上了"是玩家可见的事实，不是消失。
+function WitnessNodeState({ node }: { node: any }) {
+    if (node.reserved) return <Badge colorPalette="gray" variant="outline">预留 · 不可点亮</Badge>;
+    if (node.lit) return <Badge colorPalette="green" variant="solid">已点亮</Badge>;
+    if (node.locked) return <Badge colorPalette="red" variant="outline">被事实锁定</Badge>;
+    return <Badge colorPalette="gray" variant="outline">未点亮</Badge>;
+}
+
+function WitnessNodeRow({ node }: { node: any }) {
+    return (
+        <Box p={2} bg={node.lit ? "green.50" : node.locked ? "red.50" : "white"}
+            borderRadius="sm" border="1px solid"
+            borderColor={node.lit ? "green.200" : node.locked ? "red.200" : "gray.200"}>
+            <HStack justify="space-between" align="center" wrap="wrap" gap={2}>
+                <Text fontSize="xs" fontWeight="bold" color={node.locked ? "red.700" : "gray.800"}
+                    textDecoration={node.locked && !node.lit ? "line-through" : undefined}>
+                    {node.title}{node.count > 1 ? ` ×${node.count}` : ""}
+                </Text>
+                <WitnessNodeState node={node} />
+            </HStack>
+            {node.note && <Text fontSize="xs" color={node.lit ? "green.700" : "gray.600"} mt={0.5}>{node.note}</Text>}
+            {node.locked && node.lock_note && <Text fontSize="xs" color="red.700" mt={0.5}>{node.lock_note}</Text>}
+            {!node.locked && !node.lit && (node.missing || []).length > 0 && (
+                <Text fontSize="xs" color="orange.700" mt={0.5}>还差：{(node.missing as string[]).join("；")}</Text>
+            )}
+            {(node.choices || []).length > 0 && (
+                <HStack wrap="wrap" gap={2} mt={1}>
+                    {(node.choices as any[]).map(choice => (
+                        <Badge key={choice.id}
+                            colorPalette={choice.lit ? "green" : choice.locked ? "red" : "gray"}
+                            variant={choice.lit ? "solid" : choice.locked ? "outline" : "subtle"}
+                            textDecoration={choice.locked && !choice.lit ? "line-through" : undefined}>
+                            {choice.title}{choice.locked && !choice.lit ? "（已锁）" : ""}
+                        </Badge>
+                    ))}
+                </HStack>
+            )}
+            {node.guide && <Text fontSize="xs" color="gray.400" mt={0.5}>指南：{node.guide}</Text>}
+        </Box>
+    );
+}
+
+function WitnessTreeSection({ tree }: { tree: any }) {
+    if (!tree) return null;
+    return (
+        <Box p={2} mb={3} bg="gray.100" borderRadius="sm" border="1px solid" borderColor="gray.300">
+            <Text fontSize="xs" fontWeight="bold" color="gray.800" mb={0.5}>《见证》国策树 · 你点亮的是事实，不是奖励</Text>
+            <Text fontSize="xs" color="gray.500" mb={2}>
+                节点由驻地里真实发生的成就点亮；互斥点二选一后另一支同局永久锁定，被锁的路保留在树上。
+                走向由过程中的选择与事实逐渐倾斜，不是开局定死一条分支。
+            </Text>
+            <VStack align="stretch" gap={2}>
+                {(tree.branches || []).map((branch: any) => (
+                    <Box key={branch.branch} p={2} bg="white" borderRadius="sm" border="1px solid" borderColor="gray.200">
+                        <Text fontSize="xs" fontWeight="bold" color="purple.800">{branch.title}</Text>
+                        {branch.note && <Text fontSize="xs" color={branch.note.includes("锁定") || branch.note.includes("倒下") ? "red.700" : "gray.600"} mt={0.5}>{branch.note}</Text>}
+                        <VStack align="stretch" gap={1} mt={1}>
+                            {(branch.nodes || []).map((node: any) => <WitnessNodeRow key={node.id} node={node} />)}
+                        </VStack>
+                    </Box>
+                ))}
+            </VStack>
+            {tree.shadow && <Text fontSize="xs" color="gray.500" mt={2}>{tree.shadow}</Text>}
+        </Box>
+    );
+}
+
+export const LinesPanel = memo(function LinesPanel({ lines, progress, silo, world, agent, tree }: Props) {
     if (!lines) return null;
     const allLines: any[] = lines.lines || [];
     const mainLine = lines.main_line || "";
@@ -458,6 +527,9 @@ export const LinesPanel = memo(function LinesPanel({ lines, progress, silo, worl
                     尚未起步：{unstarted.map(l => l.title).join(" · ")}——没有脚印的路不占界面。
                 </Text>
             )}
+
+            {/* 见证者成就树：任务本身的形状——事实点亮，互斥可见 */}
+            <WitnessTreeSection tree={tree} />
 
             {/* 共享事实带：跨线事实只说一次 */}
             <Box mb={3}>

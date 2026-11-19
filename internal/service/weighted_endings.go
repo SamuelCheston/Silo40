@@ -162,7 +162,7 @@ var endingDescriptions = map[string]string{
 	endingInformation:  "核心真相已经成为跨部门、可独立复核的公共事实：它有了自己的来源说明、自己的核验路径、自己的保管人。你的沉默、离开或失忆，都不再能把它收回——链不再需要你，这正是任务要的结果。驻地之外是否有人接过这份事实，只写进结算，不改变这个结局。《共证》成立。",
 	endingRebellion:    "有组织的不满转化为了实际离开：一个成规模的群体沿着被证明过的路走了出去，在堡外继续存续。终局不是闸门打开的那一刻，而是抵达后的第二次公开清点——有人核对下一班物资，有人照顾伤者，有人开始安排第二天的维护与生产。新社会的轮班表由他们自己改写，表上没有你的名字。人真的走出去了，也真的开始过自己必须负责的生活——《越岭》成立。",
 	endingRuleOfLaw:    "裁决依据从隐蔽命令与个人正统性转向了可公开复核的规则。第一次按约章裁决的案件里，裁决者引用约章与公开证据，而不是等待上级指示；隐蔽调度不再能进入执行——法警第一次问'依据哪一条'。约章有本地主人，以不可被单方收回的程序锁定；你坐在旁听席，不在裁决席。约章法庭迟早会遇到一个它回答不了的问题——'这条命令到底从哪里来'——答案通向专线与控制网的另一端，但本结局停在这个问题被第一次提出之前。《公议》成立。",
-	endingTime:         "按 Protocol 应当到来的复核没有到来，控制通道不再给出下一项处置。桌上的旧命令第一次没有后续签批，谁也不能再用下一道外部指令推迟选择。在覆灭之前就已存在的公开质询场所里，有人把那份旧命令放到桌上，问它今天是否仍然适用；没有人能从控制网另一端得到答案。争论没有立即停止，外面也没有因此变得安全——但讨论继续下去，不需要谁替全堡批准。你坐在其中，不是新裁决者。《无人裁决》成立：不是世界终于给出正确答案，而是唯一垄断裁决权的来源消失时，这里已经具备不被另一套封闭答案立即吞没的公共条件。",
+	endingTime:         "按 Protocol 应当到来的复核没有到来，控制通道不再给出下一项处置。桌上的旧命令第一次没有后续签批，谁也不能再用下一道外部指令推迟选择。在覆灭之前就已存在的公开质询场所里，有人把那份旧命令放到桌上，问它今天是否仍然适用；没有人能从命令的来处得到答案。争论没有立即停止，外面也没有因此变得安全——但讨论继续下去，不需要谁替全堡批准。你坐在其中，不是新裁决者。《无人裁决》成立：不是世界终于给出正确答案，而是唯一垄断裁决权的来源消失时，这里已经具备不被另一套封闭答案立即吞没的公共条件。",
 	endingPersonalRule: "驻地秩序系于一位具备个人正统性的现任者。一次危机由他的个人判断收束：那道无人能解释来源的旧命令摆在桌上，他没有向居民解释全部，只以本地责任公开拒绝执行；法警没有去执行它——司法部没有站在 IT 一边，哪怕它也没有站到他一边。当夜驻地安静，居民安睡在他们并不完全理解的秩序里。这个秩序会随一个人老去，而居民此刻不需要知道更多：被保护的睡眠，与一个知道代价的守夜人。《人治》成立。",
 	endingExclusionist: "什么都没有毁灭，也什么都没有改变。封闭秩序不是靠镇压守住的，是靠习惯：证人老去，接收者调离，封闭的叙事逐年硬化，始终没有遇到它的对抗版本。危机到来时驻地集体选择了旧规则，是自愿的——提供可核验替代方案的最后窗口，就这样安静地关上了。任务没有战败，它失去了战场。《深闭》成立。",
 	endingReset:        "驻地安静而有序——重置总是伴随'恢复正常'。有人喊邻居的名字，对方迟疑了一下才应答；新刷的墙面盖住了旧刻痕；官方记录里只有一次'燃气事故'，或者什么都没有。减口、抹忆与清档系统性完成了：你的任务赖以继续的公共事实，与能核验它们的人，被一并拆除。征兆其实从未缺席——变长的档案'维护'窗口、远超平常的请领、深夜的人数清点——它们被当成了噪音，或者反制窗口被花在了别处。你输掉的不是一场对抗，是整块记忆。《遗忘》成立。",
@@ -350,10 +350,11 @@ func clampUnitIdeology(v float64) float64 {
 // department must hold at least this many MATURED facts in its belief layer.
 // TODO(balance): 5 → 3. Derivation (17-information-economy §5): one share
 // absorbs B_player·transmit·receptivity ≈ 0.22–0.34, so a fact needs ~2 shares
-// to cross the 0.30 floor and stay there against forgetting; 3 facts ×
-// 9 departments × ~2 shares ≈ 54 shares ≈ 162 AP, reachable inside the ~410 AP
-// lifetime income while 5 facts (≈270 AP + upkeep) is not. Permeation adds the
-// time dimension on top without changing this depth (18-time-permeation §2).
+// to cross the 0.30 floor; 3 facts × 9 departments keeps the fill cost inside
+// the ~410 AP lifetime income while 5 facts does not. With constant forgetting
+// live, staying above the floor is governed by the deep-fill/coast economy
+// (fill to B₀ = 0.30 + 30·r, then coast the permeation window); the depth is
+// unchanged. Permeation adds the time dimension without changing this depth.
 const informationGateFactCount = 3
 
 // allDepartmentsHoldFragments is the local public-fact structural bridge,
@@ -417,7 +418,7 @@ func ruleOfLawExplanation(station *model.Silo, agent *model.Agent) string {
 	}
 	prestige := 0.0
 	if agent != nil {
-		prestige = agent.PoliticalPrestige
+		prestige = engine.DerivedPrestige(agent.Ambition, agent.Influence)
 	}
 	motive := fmt.Sprintf("动机: 玩家威望=%.0f, 开放派系 %d 个", prestige, openFactions)
 	return motive + "; " + intervention + "; " + evidence + "; " + adhesion
@@ -505,25 +506,25 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	case deathFact && !escapeAlive:
 		decision.Selected = endingDeath
 		decision.Reason = deathNarrative(s, station, trigger, terminationFact, strikeFact)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	case resetFact && !escapeAlive:
 		decision.Selected = endingReset
 		decision.Reason = endingDescriptions[endingReset] + fmt.Sprintf("重置之后驻地仍有居民 %d 人，历史包袱降至 %.2f——人还在，记忆不在了；任务死于接收者的消失，不是死于镇压。",
 			station.TotalPopulation, station.HistoryBurden)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	case fractureFact && !escapeAlive:
 		decision.Selected = endingFracture
 		decision.Reason = endingDescriptions[endingFracture] + fractureSettlementLine(station)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	case trigger == endingCompromised:
 		decision.Selected = endingCompromised
 		decision.Reason = endingDescriptions[endingCompromised] + compromisedSettlementLine(station)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	case deathFact || resetFact || fractureFact:
 		// escapeAlive == true here: the local fall becomes a pyrrhic epilogue.
 		decision.Selected = endingRebellion
 		decision.Reason = "逃出群体已先成立并存续：原驻地的毁灭/重置/崩坏只作《越岭》惨胜尾声。" + rebellionSettlementLine(station)
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	}
 
 	// P1: build the qualification pool. Old triggers only request the terminal
@@ -580,14 +581,14 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if len(decision.Pool) == 0 {
 		decision.Selected = ""
 		decision.Reason = "无合格候选：继续模拟，不硬凑结局。"
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	}
 
 	// P2: four entity types weight only qualified candidates.
 	accumulator := &endingScoreAccumulator{decision: decision, pool: pool}
 	playerID := fmt.Sprintf("agent:%d", agent.ID)
 	accumulator.add("player", playerID, agent.Name, config.PlayerBase, 1)
-	prestige := agent.PoliticalPrestige / config.PrestigeScale
+	prestige := engine.DerivedPrestige(agent.Ambition, agent.Influence) / config.PrestigeScale
 	accumulator.add("player", playerID, agent.Name, config.PlayerPerPrestige, prestige)
 	// 修复7：碎片贡献重锚到信念覆盖 (beliefCoverageFactCount)。旧口径读
 	// agent.KnownFragments——该层不再被 Share Info 写入，低威望职业完成全部门
@@ -676,7 +677,7 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if best == "" {
 		decision.Selected = ""
 		decision.Reason = "合格候选均未达最低社会支撑分：继续模拟。"
-		return s.finishArbitration(decision)
+		return s.finishArbitration(decision, station)
 	}
 	decision.Selected = best
 	// Settlement narrative replaces the score formula on the ending screen:
@@ -739,12 +740,17 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 		narrative += rebellionSettlementLine(station)
 	}
 	decision.Reason = narrative
-	return s.finishArbitration(decision)
+	return s.finishArbitration(decision, station)
 }
 
 // finishArbitration records the audit copy on the world (结局体系 12 §9) and
-// returns the decision for the engine hook.
-func (s *GameService) finishArbitration(decision *model.EndingDecision) *model.EndingDecision {
+// returns the decision for the engine hook. 结局回读在此收口：只有裁决出
+// 具体结局 (Selected 非空) 时才投影本局关键抉择；空池"继续模拟"不生成。
+// 投影只读事实，不参与仲裁与加权。
+func (s *GameService) finishArbitration(decision *model.EndingDecision, station *model.Silo) *model.EndingDecision {
+	if decision != nil && decision.Selected != "" {
+		decision.Recap = s.buildEndingRecap(station, decision.Selected)
+	}
 	if s.world != nil {
 		s.world.LastEndingAudit = decision
 	}

@@ -7,7 +7,7 @@ import (
 // UpdateActorState applies the JS AGENT_UPDATE mutations by re-resolving the
 // actor ref through ApplyMutation. For PLAYER actors that resolution used to
 // fail (agent pointer not passed along), so every mutation was silently
-// dropped: no AP regeneration, no prestige recompute, no suspicion decay.
+// dropped: no AP regeneration, no influence growth, no suspicion decay.
 // Lock in that player updates actually land.
 func TestUpdateActorStatePlayerMutationsLand(t *testing.T) {
 	e := NewGameEngine()
@@ -20,7 +20,7 @@ func TestUpdateActorStatePlayerMutationsLand(t *testing.T) {
 	}
 
 	agent.ActionPoints = 0
-	initialPrestige := agent.PoliticalPrestige
+	initialInfluence := agent.Influence
 	agent.SuspicionLevel = 0.5
 
 	e.UpdateActorState(view, silo, 1.0, nil)
@@ -28,10 +28,10 @@ func TestUpdateActorStatePlayerMutationsLand(t *testing.T) {
 	if agent.ActionPoints <= 0 {
 		t.Errorf("expected AP regeneration to land, got %v", agent.ActionPoints)
 	}
-	// Prestige is recomputed from connections/structure, not left at the
-	// creation-time seed value.
-	if agent.PoliticalPrestige == initialPrestige {
-		t.Errorf("expected prestige to be recomputed, still %v", initialPrestige)
+	// 威望全层派生：玩家影响力由野心驱动增长 (0.005+A×0.05)/年，
+	// 派生威望随之上升，不再是 connections 重算。
+	if agent.Influence <= initialInfluence {
+		t.Errorf("expected influence growth to land, still %v", initialInfluence)
 	}
 	// Suspicion decays 0.05 per year.
 	if agent.SuspicionLevel >= 0.5 {

@@ -18,7 +18,8 @@ func TestRuleOfLawEndingNarrativeReplacesFormula(t *testing.T) {
 	station.Authority.Judicial.Regime = "PACT"
 	station.Authority.Judicial.IndependentPublicFacts = 2
 	station.Authority.Judicial.PublicEvidenceQ = 0.95
-	svc.agent.PoliticalPrestige = 100
+	svc.agent.Ambition = 1
+	svc.agent.Influence = 1
 
 	decision := svc.resolveWeightedEnding(station, svc.agent)
 	if decision == nil || decision.Selected != endingRuleOfLaw {
@@ -61,7 +62,8 @@ func TestRuleOfLawAndPersonalRuleCoexistInPool(t *testing.T) {
 		{ID: 3, Name: "Open Voice", Alive: true, Influence: 1,
 			Ideologies: map[string]float64{model.IdeologyProForeign: 1}},
 	}
-	svc.agent.PoliticalPrestige = 100
+	svc.agent.Ambition = 1
+	svc.agent.Influence = 1
 
 	decision := svc.resolveWeightedEnding(station, svc.agent)
 	if decision == nil {
@@ -517,7 +519,9 @@ func testRuleOfLawLinePlayableFromNewGame(t *testing.T, archetype string) {
 				}
 			}
 		}
-		for _, dept := range []string{"Mechanical", "Supply"} {
+		// Judicial is the covenant evidence reader: re-circulate there too so
+		// monthly forgetting cannot erase the two published qualifying facts.
+		for _, dept := range []string{"Judicial", "Mechanical", "Supply"} {
 			for _, fact := range []string{"Judicial_1", "Judicial_2"} {
 				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25+exposeReserve ||
 					shares[dept+":"+fact] >= 2 || (exposes >= 3 && !decisiveFired) {

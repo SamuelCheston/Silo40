@@ -58,8 +58,10 @@ func TestPermeationStickyAfterDecay(t *testing.T) {
 		t.Fatal("setup: the fact must mature on the first tick")
 	}
 
-	// Forget the fact to the floor and below; maturity must not regress.
-	for i := 0; i < 60; i++ {
+	// Forget the fact to the floor and below; maturity must not regress. The
+	// horizon derives from the configured rate so the lock survives retunes.
+	horizon := int(0.55/cfg.ForgetRateMonthly) + 5
+	for i := 0; i < horizon; i++ {
 		ApplyBeliefForgetting(silo, cfg)
 		ApplyPermeation(silo, cfg)
 	}

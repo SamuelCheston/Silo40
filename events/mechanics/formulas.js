@@ -3,24 +3,6 @@ defineMechanics([
     id: "agent_stats_formula",
     formula: "agent_stats",
     apply(ctx) {
-      function classBias(classType, delta) {
-        return classType === "ELITE" ? delta : -delta * 0.35;
-      }
-      const professionFactors = {
-        Mayor: 0.5,
-        Judicial: 0.4,
-        IT: 0.3,
-        Police: 0.3,
-        Mechanical: 0.2,
-        Medical: 0.2,
-      };
-      const traitFactors = {
-        "地堡土著": 0.1,
-        "一号地堡密使": 0.5,
-        "煽动者": 0.2,
-        "守旧派": -0.1,
-      };
-
       let avgConnection = 0;
       const connections = ctx.actor.connections || [];
       if (connections.length > 0) {
@@ -30,23 +12,16 @@ defineMechanics([
         avgConnection /= connections.length;
       }
 
-      const professionFactor = professionFactors[ctx.actor.profession] || 0;
-      let traitFactor = 0;
-      for (const trait of ctx.actor.traits || []) {
-        traitFactor += traitFactors[trait] || 0;
-      }
-      const prestigeBase = avgConnection * 100;
-      const structuralPrestige = (ctx.actor.power_level || 0) * 1.5 + classBias(ctx.actor.class_type || "", 2.0);
-      let prestige = prestigeBase * (1 + professionFactor) * (1 + traitFactor) + structuralPrestige;
-      if (prestige < 0) prestige = 0;
+      // 威望全层派生 (24 篇 §2)：50×(Ambition+Influence)，展示同口径。
+      const ambition = ctx.actor.ambition || 0;
+      const influence = ctx.actor.influence || 0;
+      const prestige = 50 * (ambition + influence);
 
       return {
         stats: {
           avg_connection: avgConnection,
-          prestige_base: prestigeBase,
-          profession_factor: professionFactor,
-          trait_factor: traitFactor,
-          structural_prestige: structuralPrestige,
+          ambition: ambition,
+          influence: influence,
           political_prestige: prestige,
           // 与 core_systems.js agent_update 的实际恢复公式逐位一致
           // (年恢复 36 + 威望*0.05，TODO(balance))；这是展示值，不是另一套经济。

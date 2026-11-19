@@ -185,16 +185,15 @@ func initKeyResidents(silo *model.Silo) []model.Resident {
 			Profession:   prof.Name,
 			HomeFloor:    randomFloorForZone(prof.Zone),
 			Ideologies:   copyIdeologies(cohort.Ideologies),
-			Ambition:     generateResidentAmbition(prof, cohort.PoliticalPrestige, cohort.Ideologies),
+			Ambition:     generateResidentAmbition(prof, cohort.Ideologies),
 			// 居民代表初始影响力跟随 Cohort 的“麻木”状态
-			Influence:         cohort.Influence,
-			ActionPoints:      cohort.ActionPoints,
-			SuspicionLevel:    0,
-			PoliticalPrestige: cohort.PoliticalPrestige,
-			PropagandaLevel:   0,
-			KnownFragments:    append([]string{}, cohort.KnownFragments...),
-			Relations:         initResidentRelations(silo, prof),
-			Alive:             true,
+			Influence:       cohort.Influence,
+			ActionPoints:    cohort.ActionPoints,
+			SuspicionLevel:  0,
+			PropagandaLevel: 0,
+			KnownFragments:  append([]string{}, cohort.KnownFragments...),
+			Relations:       initResidentRelations(silo, prof),
+			Alive:           true,
 		}
 		resident.Tags = buildResidentTags(&resident, prof, silo)
 		residents = append(residents, resident)
@@ -356,10 +355,9 @@ func buildResidentTags(resident *model.Resident, prof *model.Profession, silo *m
 
 func buildCohortTags(cohort *model.PopulationCohort, prof *model.Profession, silo *model.Silo) []string {
 	proxy := model.Resident{
-		Ideologies:        cohort.Ideologies,
-		Influence:         cohort.Influence,
-		ActionPoints:      cohort.ActionPoints,
-		PoliticalPrestige: cohort.PoliticalPrestige,
+		Ideologies:   cohort.Ideologies,
+		Influence:    cohort.Influence,
+		ActionPoints: cohort.ActionPoints,
 	}
 	return buildResidentTags(&proxy, prof, silo)
 }
@@ -368,14 +366,16 @@ func ideologicalIntensity(proForeign float64) float64 {
 	return clamp01(math.Abs(proForeign - 0.5))
 }
 
-func generateResidentAmbition(prof *model.Profession, prestige float64, ideologies map[string]float64) float64 {
+// generateResidentAmbition 开局定死的代表野心。输入轴为部门 PowerLevel
+// (24 篇 §2)：不再读 cohort 威望——威望派生自代表 ambition，会形成循环依赖。
+func generateResidentAmbition(prof *model.Profession, ideologies map[string]float64) float64 {
 	if prof == nil {
 		return 0
 	}
 	proForeign := ideologies[model.IdeologyProForeign]
 	return clamp01(
 		FactionConfig.AmbitionBase +
-			math.Min(prestige, 30)/30.0*FactionConfig.AmbitionPrestigeWeight +
+			math.Min(float64(prof.PowerLevel), 10)/10.0*FactionConfig.AmbitionPowerWeight +
 			ideologicalIntensity(proForeign)*FactionConfig.AmbitionIntensityWeight +
 			rng.Float64()*FactionConfig.AmbitionNoise,
 	)
@@ -580,7 +580,7 @@ func factionCohesion(silo *model.Silo, members []*model.PopulationCohort, leader
 	leaderBonus := 0.0
 	if leader != nil {
 		// 威望 (0-100) 转化为 0-CohesionLeaderMaxBonus 的修正项
-		leaderBonus = (leader.PoliticalPrestige / 100.0) * FactionConfig.CohesionLeaderMaxBonus
+		leaderBonus = (DerivedPrestige(leader.Ambition, leader.Influence) / 100.0) * FactionConfig.CohesionLeaderMaxBonus
 	}
 
 	// 3. 组织规模惩罚 (规模越大，凝聚力天然下降)
@@ -600,13 +600,25 @@ func representativeScore(resident *model.Resident) float64 {
 	return resident.Influence*0.40 +
 		resident.Ambition*0.20 +
 		resident.Ideologies[model.IdeologyLoyalty]*0.20 +
-		resident.PoliticalPrestige/100.0*0.15 +
+		DerivedPrestige(resident.Ambition, resident.Influence)/100.0*0.15 +
 		resident.ActionPoints/100.0*0.10
 }
 
-func representativeCohortScore(cohort *model.PopulationCohort) float64 {
+// cohortPrestige 聚合单元没有自己的野心/影响力人格：威望借其存活代表居民
+// 派生 (24 篇 §2)。无代表时为 0。
+func cohortPrestige(silo *model.Silo, cohort *model.PopulationCohort) float64 {
+	for i := range silo.Residents {
+		res := &silo.Residents[i]
+		if res.Alive && res.CohortID != nil && *res.CohortID == cohort.ID {
+			return DerivedPrestige(res.Ambition, res.Influence)
+		}
+	}
+	return 0
+}
+
+func representativeCohortScore(silo *model.Silo, cohort *model.PopulationCohort) float64 {
 	scale := math.Log(float64(cohort.Count) + 1)
-	return cohort.PoliticalPrestige/20.0*FactionConfig.RepScorePrestigeWeight +
+	return cohortPrestige(silo, cohort)/20.0*FactionConfig.RepScorePrestigeWeight +
 		cohort.Ideologies[model.IdeologyLoyalty]*FactionConfig.RepScoreLoyaltyWeight +
 		scale*FactionConfig.RepScoreSizeWeight
 }
@@ -913,7 +925,7 @@ func RebuildImplicitFactions(silo *model.Silo) {
 				faction.TagStats[t] += cohort.Count
 			}
 
-			score := representativeCohortScore(cohort)
+			score := representativeCohortScore(silo, cohort)
 			if score > bestScore {
 				bestScore = score
 				repCohort = cohort
@@ -987,14 +999,13 @@ func ensureRepresentativeResident(silo *model.Silo, cohort *model.PopulationCoho
 		Profession:   prof.Name,
 		HomeFloor:    randomFloorForZone(prof.Zone),
 		Ideologies:   copyIdeologies(cohort.Ideologies),
-		Ambition:     generateResidentAmbition(prof, cohort.PoliticalPrestige, cohort.Ideologies),
+		Ambition:     generateResidentAmbition(prof, cohort.Ideologies),
 		// 新代表初始影响力跟随 Cohort 的“麻木”状态
-		Influence:         cohort.Influence,
-		ActionPoints:      cohort.ActionPoints,
-		PoliticalPrestige: cohort.PoliticalPrestige,
-		KnownFragments:    append([]string{}, cohort.KnownFragments...),
-		Relations:         initResidentRelations(silo, prof),
-		Alive:             true,
+		Influence:      cohort.Influence,
+		ActionPoints:   cohort.ActionPoints,
+		KnownFragments: append([]string{}, cohort.KnownFragments...),
+		Relations:      initResidentRelations(silo, prof),
+		Alive:          true,
 	}
 	resident.Tags = buildResidentTags(&resident, prof, silo)
 	silo.Residents = append(silo.Residents, resident)
@@ -1048,8 +1059,6 @@ func updatePopulationCohorts(silo *model.Silo, deltaYears float64) {
 			// 持续流通局亲外到 ~0.65 稳定越线；不玩局亲外 ~0.26、忠诚天花板仍 ~0.8+，
 			// 差距 ~0.55 远未越线——侵蚀只奖励真实投入。
 			loyaltyTarget := clamp01(silo.MayorLegitimacy() - prof.PanicValue*0.35*cohort.PanicSensitivity + classBias(prof.ClassType, 0.08) - opennessLoyaltyErosion*cohort.Ideologies[model.IdeologyProForeign])
-			// 威望目标由权力等级、阶层偏见以及影响力（作为修正项）共同决定
-			prestigeTarget := (float64(prof.PowerLevel)*1.8 + classBias(prof.ClassType, 2.5) + cohort.Influence*5.0)
 
 			cohort.Ideologies[model.IdeologyLoyalty] += (loyaltyTarget - cohort.Ideologies[model.IdeologyLoyalty]) * 0.45 * deltaYears
 			for key := range cohort.Ideologies {
@@ -1067,7 +1076,6 @@ func updatePopulationCohorts(silo *model.Silo, deltaYears float64) {
 			cohort.Influence += (influenceTarget - cohort.Influence) * 0.15 * deltaYears
 
 			cohort.ActionPoints = math.Min(70, cohort.ActionPoints+6*deltaYears)
-			cohort.PoliticalPrestige = math.Max(0, cohort.PoliticalPrestige+(prestigeTarget-cohort.PoliticalPrestige)*0.30*deltaYears)
 			cohort.Tags = buildCohortTags(cohort, prof, silo)
 		}
 	}
@@ -1101,7 +1109,6 @@ func updateKeyResidents(silo *model.Silo, deltaYears float64) {
 		resident.Influence = clamp01(resident.Influence + influenceGrowth)
 
 		resident.ActionPoints = math.Min(70, resident.ActionPoints+6*deltaYears)
-		resident.PoliticalPrestige = math.Max(0, resident.PoliticalPrestige+(cohort.PoliticalPrestige-resident.PoliticalPrestige)*0.35*deltaYears)
 		resident.Tags = buildResidentTags(resident, prof, silo)
 	}
 }

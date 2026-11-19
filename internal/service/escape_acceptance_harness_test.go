@@ -572,7 +572,7 @@ func (r *escapeRunner) settle() {
 	r.rec.PopulationAtSettlement = silo.TotalPopulation
 	r.rec.GroupPopulationAtSettlement = group.Population
 	r.rec.GroupSurvivingAtSettlement = group.Surviving
-	r.rec.Prestige = r.svc.agent.PoliticalPrestige
+	r.rec.Prestige = engine.DerivedPrestige(r.svc.agent.Ambition, r.svc.agent.Influence)
 	r.rec.Suspicion = r.svc.agent.SuspicionLevel
 	r.rec.ReevaluationsTotal = silo.TopStance.Reevaluations
 	// The launch draw is recorded by the snapshot AFTER the launch action; at

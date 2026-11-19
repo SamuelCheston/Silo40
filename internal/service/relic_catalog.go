@@ -92,9 +92,10 @@ const (
 
 // supportedRelicEffectMetric 遗物 effects 允许引用的指标白名单。
 // 语义与 action gates 的 supportedActionMetric 一致：越表即校验失败。
+// 威望已全层派生 (24 篇 §2)：遗物效果写 influence，不写派生值。
 func supportedRelicEffectMetric(metric string) bool {
 	switch metric {
-	case "action_points", "suspicion_level", "political_prestige", "propaganda_level",
+	case "action_points", "suspicion_level", "influence", "propaganda_level",
 		"cohesion", "rebellion", "legitimacy", "history_burden":
 		return true
 	default:

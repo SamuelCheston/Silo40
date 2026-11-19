@@ -1,7 +1,7 @@
 defineEvent({
   id: "labor_conscription",
   title: "强制轮班",
-  description: "人口锐减之后，管理层签发强制轮班令，把丧亲者与伤员编入生产线。产量回来了，别的东西没有。",
+  description: "人口锐减之后，管理层签发强制轮班令，把丧亲者与伤员编入生产线。仓库紧急添了 600 补给，别的东西没有回来。",
   type: "SOCIAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 9,

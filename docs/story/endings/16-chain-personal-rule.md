@@ -36,4 +36,4 @@
 
 ## 5. 能力缺口
 
-G12（《人治》资格读取对齐裁决口径：警察服从＋正统性替换 Judicial 市长附着读取）、G8（尾声展示）。原 G1/G3 已随机制底座落地（候选入池、ctx 暴露 authority/actor）。Mayor 正统性的内容写入仍受限：`legitimacy` 属派生类指标，内容 delta 活不过下一 tick，正统性的实际变化只能经机制层与权威引擎。
+G12（《人治》资格读取对齐裁决口径：警察服从＋正统性替换 Judicial 市长附着读取）、G8（尾声展示）。原 G1/G3 已随机制底座落地（候选入池、ctx 暴露 authority/actor）。Mayor 正统性的内容写入不再受限：`legitimacy` 是持久状态，内容 delta（喂证 +0.02、担当 +0.05）跨月累积，唯一的月度连续项是叛乱侵蚀（引擎 `runMonthlyPoliticalDispatch`）；`mayor_public_stand` 的 legitimacy ≥ 0.5 门槛读的是真实正统性。

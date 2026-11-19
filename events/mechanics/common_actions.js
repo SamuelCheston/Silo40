@@ -75,13 +75,8 @@ defineMechanics([
       const transmit = 0.5 + 0.5 * connectionValue;
       const receptivity = 0.5 + 0.5 * ((profession.ideologies || {}).pro_foreign || 0);
       const mutations = [{ type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) }];
-      // 已持有计数：接收部门信念层已不低于本次传入强度的事实，本次分享不再
-      // 抬升它——反馈要说清楚，否则玩家看到的是"选了 3 份只吸收 2 份"。
-      let alreadyHeld = 0;
       for (const fragment of fragmentIds) {
         const absorbed = beliefB(ctx, fragment) * transmit * receptivity;
-        const existing = (profession.beliefs || []).find(function (b) { return b.fact_id === fragment; });
-        if (existing && (existing.b || 0) >= absorbed) alreadyHeld++;
         mutations.push({
           type: "profession_belief_absorb",
           profession: profession.name,
@@ -102,16 +97,30 @@ defineMechanics([
           ideology: "pro_foreign",
           value: absorbed * 0.12,
         });
+        // 20 分册 §3.2：玩家的一次流通会在反制方 (IT/Judicial) 心里留下
+        // "有人在传这个事实"的观察。走既有部门信念吸收与同源折减，只淡忘、
+        // 不计入成熟事实；T1-3/T3-2 读的正是这条泄漏确信。
+        if (ctx.actor.kind === "PLAYER") {
+          for (const watcher of ["IT", "Judicial"]) {
+            if (!professionByName(ctx, watcher)) {
+              continue;
+            }
+            mutations.push({
+              type: "profession_belief_absorb",
+              profession: watcher,
+              fragment: "leak:" + fragment,
+              source: "player",
+              value: absorbed,
+            });
+          }
+        }
       }
-      const heldNote = alreadyHeld > 0
-        ? "其中 " + alreadyHeld + " 份对方已以不低于本次强度的水平持有，未再抬升。"
-        : "";
       return {
         mutations,
         action_result: {
           executed: true,
           message:
-            profession.name + " 把 " + fragmentIds.length + " 份事实吸收进信念层（传输 " + transmit.toFixed(2) + "，接收 " + receptivity.toFixed(2) + "）。" + heldNote + "信念随时间淡忘——持续流通才守得住。",
+            "已向 " + profession.name + " 转交 " + fragmentIds.length + " 份材料（传输 " + transmit.toFixed(2) + "，接收 " + receptivity.toFixed(2) + "）。同源转述的增益会打折，部门信念也会随时间淡忘。",
         },
       };
     },
@@ -139,13 +148,26 @@ defineMechanics([
       if ((ctx.actor.traits || []).includes("魅力非凡")) {
         increase *= 1.5;
       }
+      // 20 分册 T1-3：部门对泄漏事实的确信越线后，关系推进减半 (12 月)。
+      // 冷却由月度反制账本维护；回执只描述"对方比上次谨慎"，不报数值。
+      const cooling = (profession.relation_cooldown || 0) > 0;
+      if (cooling) {
+        increase *= 0.5;
+      }
+      const current = actorConnectionTo(ctx, target);
+      const applied = clampUnit(current + increase) - current;
+      const message = applied <= 0
+        ? "与 " + profession.name + " 的人脉已达上限。"
+        : cooling
+          ? "与 " + profession.name + " 的人脉加深" + (applied >= 0.005 ? "（+" + applied.toFixed(2) + "）。" : "。") + "对方比上次谨慎，谈话一直停在例行的寒暄上。"
+          : "与 " + profession.name + " 的人脉加深" + (applied >= 0.005 ? "（+" + applied.toFixed(2) + "）。" : "。");
       return {
         mutations: [
           { type: "actor_connection_delta", connection_dept: target, value: increase },
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
           suspicionDelta(ctx, 0.01),
         ],
-        action_result: { executed: true, message: "与 " + profession.name + " 的关系建立成功（+" + increase.toFixed(2) + "）。" },
+        action_result: { executed: true, message },
       };
     },
   },
@@ -194,7 +216,7 @@ defineMechanics([
       } else if (applied <= 0) {
         message = commoners.length === 0
           ? "这一点没有起作用：驻地没有可被煽动的平民部门。"
-          : "这一点没有起作用：叛乱已经顶到上限，煽动只留下痕迹。";
+          : "煽动没有起作用于全局叛乱度，仍可能加剧平民部门的局部动荡。";
       } else {
         message = "Incited unrest among all commoner departments. Rebellion +" +
           applied.toFixed(3) + " (propaganda multiplier x" + propagandaMultiplier.toFixed(1) + ").";
@@ -210,7 +232,7 @@ defineMechanics([
     action_type: "CONDUCT_PROPAGANDA",
     label: "Propaganda",
     description:
-      "提高宣传力度，扩大你声音的触达。注意：声量不等于可核验性——宣传为事实开路，事实本身仍要交给能查账的人才算数。",
+      "提高宣传力度，让下一次煽动更有声势。可核验的材料仍需单独交给能查账的人。",
     target_type: "NONE",
     ap_cost: 20,
     duration_months: 1,
@@ -230,7 +252,7 @@ defineMechanics([
     action_type: "PUBLICIZE_FACTION",
     label: "Publicize Faction",
     description:
-      "公开你的派系，用隐匿换取威望与公开位置。这是一条单行道：公开后暴露与终止链风险随之上升，只有在公开位置能换来别处换不到的东西时才值得。",
+      "让驻地知道你的派系。公开后派系威望增加 15，派系不再隐匿。",
     target_type: "NONE",
     ap_cost: 25,
     duration_months: 0,
@@ -248,7 +270,7 @@ defineMechanics([
           { type: "faction_metric_delta_actor", field: "prestige", value: 15.0 },
           { type: "actor_metric_delta", field: "action_points", value: -(ctx.action.cost || 0) },
         ],
-        action_result: { executed: true, message: faction.name + " 已公开。地堡现在知道了你的存在。" },
+        action_result: { executed: true, message: faction.name + " 已公开。派系威望 +15。" },
       };
     },
   },

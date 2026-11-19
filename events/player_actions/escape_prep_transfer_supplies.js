@@ -1,7 +1,9 @@
+const transferAmount = 200; // TODO(balance)
+
 defineEvent({
   id: "escape_prep_transfer_supplies",
   title: "划拨：封存便携补给",
-  description: "补给从配给线上被截下一段，转进封存的账本。划拨的那一刻，堡内的物资短缺就真实地恶化了一分——准备是有代价的，代价记在每一个还没离开的人头上。",
+  description: "补给从配给线上被截下一段，转进封存的账本。堡内库存少了 200，准备的代价记在每一个还没离开的人头上。",
   type: "SOCIAL",
   fire_mode: "REPEATABLE",
   cooldown_months: 1, // TODO(balance)
@@ -11,7 +13,7 @@ defineEvent({
   player_action: {
     id: "ESCAPE_PREP_TRANSFER_SUPPLIES",
     label: "划拨封存补给",
-    description: "从堡内补给中划拨一份封存为便携补给（人·月）。立即扣减堡内资源。",
+    description: "从堡内库存划拨 200 补给，封存为便携补给（人·月）。",
     scope: "common",
     action_type: "PLAYER_EVENT",
     target_type: "NONE",
@@ -21,9 +23,12 @@ defineEvent({
   },
   trigger: playerActionIs("ESCAPE_PREP_TRANSFER_SUPPLIES"),
   script: {
+    canTrigger: function(ctx) {
+      return (ctx.resources || {}).Supplies >= transferAmount;
+    },
     apply: function(ctx) {
       var effects = [
-        preparationTransfer("Supplies", 200), // TODO(balance)：划拨量与人·月换算
+        preparationTransfer("Supplies", transferAmount), // TODO(balance)：划拨量与人·月换算
       ];
       var stance = ctx.top_stance || {};
       if (stance.mayor !== "cooperate") {

@@ -96,8 +96,12 @@ func CreateInitialSilo(name string, initialYear int, traitIds []string) *model.S
 		prof := &silo.Professions[i]
 		prof.ActionPoints = 50
 		prof.SuspicionLevel = 0
-		prof.PoliticalPrestige = 0
 		prof.PropagandaLevel = 0
+		// 部门野心开局定死 (仅事件可改)；影响力向 PowerLevel/10 收敛 (见
+		// updatePopulationCohorts 的同构公式)。开局不掷骰：新增 RNG 消耗会平移
+		// 共享随机流，破坏种子调优的可玩性测试。TODO(balance): 0.2/0.03 为 sim 起点。
+		prof.Ambition = clamp01(0.2 + 0.03*float64(prof.PowerLevel) + 0.025)
+		prof.Influence = 0.6 * float64(prof.PowerLevel) / 10.0
 		if prof.Traits == nil {
 			prof.Traits = []string{}
 		}
@@ -204,7 +208,8 @@ func CreateInitialAgent(name, profession string, traitIds []string, silo *model.
 		Name:              name,
 		Profession:        profession,
 		Traits:            []string{},
-		PoliticalPrestige: 10,
+		Ambition:          0.1,
+		Influence:         0.1,
 		PoliticalPoints:   0,
 		ActionPoints:      50,
 		PropagandaLevel:   0.0,
@@ -222,9 +227,11 @@ func CreateInitialAgent(name, profession string, traitIds []string, silo *model.
 		switch profession {
 		case "Mayor", "Judicial":
 			if profession == "Mayor" {
-				agent.PoliticalPrestige = 80
+				agent.Ambition = 0.8
+				agent.Influence = 0.8
 			} else {
-				agent.PoliticalPrestige = 5
+				agent.Ambition = 0.05
+				agent.Influence = 0.05
 			}
 			for i := range silo.Professions {
 				p := &silo.Professions[i]
@@ -239,7 +246,8 @@ func CreateInitialAgent(name, profession string, traitIds []string, silo *model.
 				})
 			}
 		case "IT":
-			agent.PoliticalPrestige = 5
+			agent.Ambition = 0.05
+			agent.Influence = 0.05
 			agent.KnownFragments = append([]string{}, model.ALL_FRAGMENTS...) // Knows all fragments
 			for i := range silo.Professions {
 				p := &silo.Professions[i]
@@ -263,7 +271,8 @@ func CreateInitialAgent(name, profession string, traitIds []string, silo *model.
 				agent.Connections = append(agent.Connections, model.Connection{AgentID: agent.ID, ProfessionID: p.ID, Value: connValue})
 			}
 		case "Medical":
-			agent.PoliticalPrestige = 5
+			agent.Ambition = 0.05
+			agent.Influence = 0.05
 			for i := range silo.Professions {
 				p := &silo.Professions[i]
 				val := 0.10
@@ -275,7 +284,8 @@ func CreateInitialAgent(name, profession string, traitIds []string, silo *model.
 		default:
 			isCommoner := profession == "Supply" || profession == "Mechanical" || profession == "Mines" || profession == "Agricultural"
 			if profession == "Mines" {
-				agent.PoliticalPrestige = 5
+				agent.Ambition = 0.05
+				agent.Influence = 0.05
 			}
 			for i := range silo.Professions {
 				p := &silo.Professions[i]
@@ -308,7 +318,8 @@ func CreateInitialAgent(name, profession string, traitIds []string, silo *model.
 			}
 		case "charismatic":
 			agent.Traits = append(agent.Traits, "魅力非凡")
-			agent.PoliticalPrestige += 20
+			agent.Ambition = clamp01(agent.Ambition + 0.2)
+			agent.Influence = clamp01(agent.Influence + 0.2)
 		case "shadowy":
 			agent.Traits = append(agent.Traits, "隐秘行事")
 		}

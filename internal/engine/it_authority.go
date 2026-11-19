@@ -218,6 +218,13 @@ func (e *GameEngine) RunITAuthorityMonthly(silo *model.Silo, agent *model.Agent)
 	}
 
 	// 3. 候选评估：utility>0 最高分，同分按 action ID (升序稳定)。
+	// E 主消费点 (22-00 裁决 1)：Order 意图方向的执行候选 (声明效果降低风险度，
+	// public 效用 > 0) 的效用乘本堡当月执行强度 E (4.55 写入生效槽)。未启用时
+	// 按 1.0 处理，行为逐位不变；反应链触发判定不读 E。
+	execution := 1.0
+	if silo.BlackBox.Initialized {
+		execution = silo.BlackBox.CurrentExecution
+	}
 	catalog := ItActionCatalog()
 	type scoredAction struct {
 		action ItAction
@@ -235,6 +242,9 @@ func (e *GameEngine) RunITAuthorityMonthly(silo *model.Silo, agent *model.Agent)
 			continue
 		}
 		score := itUtility(action, silo, cost)
+		if action.RSDelta < 0 {
+			score *= execution
+		}
 		if score <= 0 {
 			continue
 		}
@@ -306,12 +316,20 @@ func (e *GameEngine) executeItAction(silo *model.Silo, agent *model.Agent, actio
 		}
 	case "protocol_disposal":
 		// 恢复一项 Protocol 目标：关闭最早一条未达成偏离 (条款 ID 升序)。
+		// 保护性篡改风险度改登记 IT 过度干预事件 (ADR-0019)，不再直接写。
 		closeEarliestUnmet(silo)
-		silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+action.RSDelta)
+		applySafeguardConsequence(silo, SafeguardIncidentITOverreach, action.RSDelta, 1)
 	case "suppress_signal":
 		if hasPendingReporting(silo) {
-			silo.SafeguardRisk = math.Max(0, silo.SafeguardRisk+action.RSDelta)
+			applySafeguardConsequence(silo, SafeguardIncidentITOverreach, action.RSDelta, 1)
 		}
+		// G-01 监控设备最小承载 (23-01 §6)：suppress_signal 是「压本地监控/信号」
+		// 语义的功能载体，执行即为 equipment 通道世界侧簿记 +1。选
+		// SafeguardIncidents["equipment_use"] 而非 Traces(kind=calibration)：
+		// 本动作不依赖 BlindSpot.Initialized (Traces 属经营态、零值语义要求未启用
+		// 时不写)，而事件登记簿是初始化无关的事实层 (ADR-0019 同款)，供后续缺口
+		// 通道格按事实计数消费。
+		registerSafeguardIncident(silo, BlindSpotEquipmentUseKey, 1)
 	case "quiet_disappearance":
 		// Protocol 未授权即属违反 (隐蔽执行，联盟不完全知悉)。
 		RecordProtocolAction(silo, e.ProtocolClauses, "unauthorized_disappearance", false)

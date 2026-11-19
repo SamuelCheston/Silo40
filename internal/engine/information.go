@@ -49,9 +49,14 @@ type InformationConfig struct {
 	ChannelRumorRel        float64
 
 	// §3.5 多次吸收。
-	AbsorbBase      float64 // s_i = rel·(0.85+0.15·related_f)·independence
-	AbsorbRelated   float64
-	DiminishPerN    float64 // B 更新里的 1/(1+0.25·n)
+	AbsorbBase    float64 // s_i = rel·(0.85+0.15·related_f)·independence
+	AbsorbRelated float64
+	DiminishPerN  float64 // B 更新里的 1/(1+0.25·n)
+	// 递减分母计入的观察数上限 (TODO(balance)，见 18-time-permeation)：ObsCount 超过该值
+	// 时按该值算分母。恒定淡忘与无上限的 1/(1+0.25n) 数学上不相容——任何正淡
+	// 忘速率下都存在足够大的 n 使转述增量 < 淡忘量，流通结构性跑不赢淡忘；
+	// 封顶让维持成本有界。仅改 n>cap 的尾部，早期递减 (n≤cap) 逐位不变。
+	DiminishObsCap  int
 	IndependenceNew float64 // 独立来源
 	IndependenceRe  float64 // 同源转述
 
@@ -64,8 +69,9 @@ type InformationConfig struct {
 	// 恒定淡忘系数 (25-information-economy §修复A)：部门信念层每个事实的 B
 	// 每月减去该系数 (下限 0)。玩家的流通 (Share 吸收) 抵住淡忘——情报不会
 	// 自己站住，链必须被持续推动。仅部门层衰减：特工层不衰减 (见证者记得)，
-	// 具名人物层暂不衰减 (公开传播的再评估留给后续批次)。
-	// TODO(balance): sim 起点，见 17 号经济设计文档的推导。
+	// 具名人物层暂不衰减 (公开传播的再评估留给后续批次)。挂钩点在
+	// runMonthlyBeliefDispatch (真实月度路径)。
+	// TODO(balance): sim 起点，见 17/18 号设计文档与本配置处的推导。
 	ForgetRateMonthly float64
 
 	// 时间渗透月数 (18-time-permeation §4)：(部门, 事实) 的 B 连续不低于
@@ -146,29 +152,34 @@ func DefaultInformationConfig() InformationConfig {
 		ChannelRumorAccess:     0.60,
 		ChannelRumorRel:        0.35,
 
-		AbsorbBase:      0.85,
-		AbsorbRelated:   0.15,
-		DiminishPerN:    0.25,
+		AbsorbBase:    0.85,
+		AbsorbRelated: 0.15,
+		DiminishPerN:  0.25,
+		// TODO(balance): 递减分母封顶 4 (分母上限 2.0)。不封顶时任何正淡忘速率下
+		// 转述增量都渐近归零，流通结构性跑不赢淡忘；cap=4 保留 n≤4 的早期递减
+		// 手感，只把尾部维持成本压到有界。
+		DiminishObsCap:  4,
 		IndependenceNew: 1.0,
-		IndependenceRe:  0.25,
+		// TODO(balance): 同源转述折减 0.25 → 0.5。淡忘启用后转述是维持信念的
+		// 唯一常态手段；0.5 与 cap=4 使典型分享强度下持续流通能托住《公议》
+		// 的实时 0.85 证据水位，同时每次吸收仍有递减收益。
+		IndependenceRe: 0.5,
 
 		QualRumor:       0.30,
 		QualInvestigate: 0.60,
 		QualReport:      0.85,
 		QualPublish:     0.90,
 
-		// TODO(balance): 淡忘 sim 起点。推导：单次分享吸收约 0.2–0.7
-		// (B_player·transmit·receptivity)，0.01/月 使一次充分吸收的事实约
-		// 30 个月跌回分享地板，9 部门×5 事实的维持需求约 1.5 次分享/月，
-		// 与 AP 经济修复后的月收入 3/月、分享成本 3 相匹配 (17 号文档 §4)。
-		ForgetRateMonthly: 0.01,
+		// TODO(balance): 淡忘速率 0.005/月。INFORMATION 门需 27 槽 (9 部门×3
+		// 事实) 各连续 30 个月过地板，深填目标为 B₀ = 0.30 + 30r = 0.45；相比
+		// r=0.01 所需的 B₀=0.60，深填与补流通成本回到生涯 AP 预算内。0.005 下
+		// 深填事实约 30 个月滑回地板，《公议》的实时高水位也必须靠再流通维持。
+		ForgetRateMonthly: 0.005,
 
 		// TODO(balance): 渗透月数 sim 起点 (18-time-permeation §4)，推荐起点 30、
-		// 区间 [24, 36]，判据为"重调后保守结算 ≤ 94 的最大值"。当前真实流程里
-		// 恒定淡忘未生效 (见 runMonthlyBeliefDispatch 的发现项注记)，B 过地板后
-		// 不再回落，渗透退化为纯时间门：最早结算月 S_min = T_prep + 30 ≈ 42，
-		// 把压缩打法从实测 ~12 月后移 30 月，正典中段节点有日历空间点亮。若后续
-		// 评审启用淡忘，需按 §4/§7.2 判据 4 在本区间内重新标定 (补流通压力上升)。
+		// 区间 [24, 36]，判据为"重调后保守结算 ≤ 94 的最大值"。恒定淡忘在真实
+		// 月度路径先生效，B 过地板后仍会回落；只有当月衰减后仍被流通托在地板
+		// 以上的事实才累计渗透计数。渗透窗口压力上升，资格深度与 30 月窗不变。
 		PermeationMonths: 30,
 
 		APMismatchSlope: 0.5,
@@ -334,7 +345,11 @@ func ObserveFact(cfg InformationConfig, belief *model.FactBelief, spec FragmentS
 		belief.Versions = InitialVersions(spec)
 	}
 	s = clamp01(s)
-	denom := 1 + cfg.DiminishPerN*float64(belief.ObsCount)
+	obsN := belief.ObsCount
+	if cfg.DiminishObsCap > 0 && obsN > cfg.DiminishObsCap {
+		obsN = cfg.DiminishObsCap
+	}
+	denom := 1 + cfg.DiminishPerN*float64(obsN)
 	belief.B = clamp01(1 - (1-belief.B)*(1-s/denom))
 
 	// π 贝叶斯更新 (按目录版本序确定性累加)。
@@ -450,8 +465,10 @@ func RelatedF(agent *model.Agent, fragmentID string) float64 {
 }
 
 // AbsorbSharedFact §3.6 分享接收：分享强度作为观察强度进入接收方信念。
-// 同一来源首次分享按独立来源计，其后同源转述按 0.25 折减；观察 ID 按计数
-// 编号，重复分享仍有衰减收益而非完全无效。
+// 同一来源首次分享按独立来源计，其后同源转述按 IndependenceRe 折减；观察
+// ID 按计数编号，重复分享仍有衰减收益而非完全无效。递减分母按
+// DiminishObsCap 封顶——转述是淡忘启用后维持信念的常态手段，尾部递减必须
+// 有界 (见 18-time-permeation)。
 func AbsorbSharedFact(cfg InformationConfig, beliefs *[]model.FactBelief, factID, sourceTag string, strength float64) bool {
 	belief := EnsureBeliefIn(beliefs, factID)
 	if belief == nil {
@@ -492,17 +509,28 @@ func ApplyBeliefForgetting(silo *model.Silo, cfg InformationConfig) {
 	}
 }
 
+// LeakFactPrefix 20 分册 §3.2：反制方对"有人在传某事实"的观察事实前缀。
+// 泄漏事实只在反制方 (IT/Judicial) 的信念层累积、会淡忘，但永不成熟，也不
+// 计入《共证》资格门的成熟事实数。
+const LeakFactPrefix = "leak:"
+
+// IsLeakFact 判断一条部门信念是否为反制用的泄漏观察。
+func IsLeakFact(factID string) bool {
+	return strings.HasPrefix(factID, LeakFactPrefix)
+}
+
 // ApplyPermeation 部门信念层时间渗透 (18-time-permeation §3)。事实变成"可用
 // 证据"需要日历时间：当月淡忘结算后 B 仍不低于分享地板 (QualRumor) 则计数
 // +1，否则计数清零 (清零而非暂停——"断了就要重新渗透")；计数达到
 // PermeationMonths 当月置 Matured = true。成熟是粘性的：一旦成熟不回退，
-// 即使 B 此后跌破地板、淡忘到 0。
+// 即使 B 此后跌破地板、淡忘到 0。边界说明：地板比较发生在淡忘之后，故 B
+// 恰好为 QualRumor 的事实当月先衰减到地板下、不计入渗透数。
 //
 // 只读派生状态：只读 B 与日历，不改写 B/π，不引入随机源；部门切片与信念
 // 切片均按既有持久化顺序遍历 (确定性)。挂钩点与 ApplyBeliefForgetting 同一
 // 月度 dispatch (EVENT_METRICS_UPDATE)，顺序固定为先淡忘、再计数、再判成熟。
 // 仅部门层渗透：特工层与具名人物层不写入 (§3.2)。PermeationMonths <= 0 或
-// 空堡为无操作。
+// 空堡为无操作。泄漏观察 (leak:) 只淡忘、不计入渗透。
 func ApplyPermeation(silo *model.Silo, cfg InformationConfig) {
 	if silo == nil || cfg.PermeationMonths <= 0 {
 		return
@@ -510,7 +538,7 @@ func ApplyPermeation(silo *model.Silo, cfg InformationConfig) {
 	for i := range silo.Professions {
 		for j := range silo.Professions[i].Beliefs {
 			belief := &silo.Professions[i].Beliefs[j]
-			if belief.Matured {
+			if belief.Matured || IsLeakFact(belief.FactID) {
 				continue
 			}
 			if belief.B >= cfg.QualRumor {
@@ -533,7 +561,7 @@ func MaturedFactCount(prof *model.Profession) int {
 	}
 	count := 0
 	for _, belief := range prof.Beliefs {
-		if belief.Matured {
+		if belief.Matured && !IsLeakFact(belief.FactID) {
 			count++
 		}
 	}

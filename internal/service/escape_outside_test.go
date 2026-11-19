@@ -184,7 +184,8 @@ func TestOutsideGroupQualityWeightsNotGates(t *testing.T) {
 		svc, station, _ := weightedEndingFixture("REBELLION")
 		station.TotalPopulation = 5000
 		station.EscapedGroup = qualityGroup
-		svc.agent.PoliticalPrestige = 100
+		svc.agent.Ambition = 1
+		svc.agent.Influence = 1
 		return svc.resolveWeightedEnding(station, svc.agent)
 	}
 	group := model.EscapeGroup{

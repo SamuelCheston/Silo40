@@ -36,7 +36,8 @@ func TestExclusionistEndingNarrativeAndVariants(t *testing.T) {
 		}
 		station.TotalPopulation = 100
 		station.SetMayorLegitimacy(0.55)
-		svc.agent.PoliticalPrestige = 100
+		svc.agent.Ambition = 1
+		svc.agent.Influence = 1
 		return svc, station
 	}
 
@@ -256,25 +257,25 @@ func TestDeathEndingNarrativeVariants(t *testing.T) {
 	}
 }
 
-// TestSafeguardProtocolWarmingFires locks the DEATH safeguard omen
+// TestLastInterlockWarmingFires locks the DEATH safeguard omen
 // (29-failure-endings §2.5): the warning lights on the existing monthly
 // channel once safeguard risk crosses the bar, and stays silent below it.
-func TestSafeguardProtocolWarmingFires(t *testing.T) {
+func TestLastInterlockWarmingFires(t *testing.T) {
 	boot := bootstrapRealContent(t)
 
-	svc := chainTestService(pickContentDef(t, boot, "special:safeguard_protocol_warming"))
+	svc := chainTestService(pickContentDef(t, boot, "special:last_interlock_warming"))
 	svc.silo.SafeguardRisk = 0.65
 	svc.queueSystemContentEvents("TEST")
 	svc.drainQueuedEvents()
-	if !contentTriggered(svc, "special:safeguard_protocol_warming") {
+	if !contentTriggered(svc, "special:last_interlock_warming") {
 		t.Fatal("safeguard omen did not fire above the risk bar")
 	}
 
-	svc2 := chainTestService(pickContentDef(t, boot, "special:safeguard_protocol_warming"))
+	svc2 := chainTestService(pickContentDef(t, boot, "special:last_interlock_warming"))
 	svc2.silo.SafeguardRisk = 0.3
 	svc2.queueSystemContentEvents("TEST")
 	svc2.drainQueuedEvents()
-	if contentTriggered(svc2, "special:safeguard_protocol_warming") {
+	if contentTriggered(svc2, "special:last_interlock_warming") {
 		t.Fatal("safeguard omen fired below the risk bar")
 	}
 }

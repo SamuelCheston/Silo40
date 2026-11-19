@@ -1265,6 +1265,8 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 		Flags:           map[string]bool{},
 		ProgressStage:   s.initialProgressStage(),
 		UnlockedActions: []string{},
+		// 22 黑箱学习系列：权衡层功能开关持久化 (默认关闭 = 旧行为逐位一致)。
+		Silo1BlackBoxEnabled: req.Silo1BlackBox,
 	}
 
 	silos := []*model.Silo{silo}
@@ -1314,6 +1316,15 @@ func (s *GameService) CreateGame(req model.CreateGameRequest) (*model.GameState,
 
 	// The station already occupies ActiveSiloID; no fourth silo and no Silo 40
 	// entity are added. Silo 18 remains isolated from direct player action.
+
+	// 22/23 系列：功能开关开启时逐堡启用黑箱与盲区状态 (确定性，不消耗 RNG)。
+	// 关闭时零值 = 未启用，4.55/4.62/4.65 与黑箱回合全部早退。
+	if req.Silo1BlackBox {
+		for _, sl := range silos {
+			sl.BlackBox.Initialized = true
+			sl.BlindSpot.Initialized = true
+		}
+	}
 
 	// 初始化引擎 (清空旧调度器状态)
 	s.engine = engine.NewGameEngine()
@@ -2126,6 +2137,13 @@ func (s *GameService) runOneMonthSingle(source string) ([]string, []model.StoryE
 		st := responseStories[i]
 		stories = append(stories, &st)
 	}
+	// 20 分册第 5 批：T1-3/T2-4/T3-1b/T3-2 确定性状态反应。
+	counterLogs, counterStories := s.runCountermeasureMonth(s.silo)
+	logs = append(logs, counterLogs...)
+	for i := range counterStories {
+		st := counterStories[i]
+		stories = append(stories, &st)
+	}
 	// 世界时钟镜像玩家堡时钟。权威时钟仍在堡内流水线；多堡阶段 (P0.5+) 会把
 	// 时钟推进上移到世界 tick 编排，此处改为世界时钟下发到各堡。
 	if s.world != nil {
@@ -2695,6 +2713,12 @@ func (s *GameService) resolveActionCost(action *model.AgentAction) error {
 			action.Cost *= 2
 		}
 	case model.ActionShareInfo, model.ActionBuildConnection:
+		// T3-2 联系人监视：目标部门的联系人被调离/问话期间，接触类动作
+		// 暂时不可用 (3 月窗口，到期自动恢复)。叙事口径见 20 分册 §5.1。
+		if silo := s.playerActionSilo(); silo != nil && action.TargetDept != "" &&
+			engine.ContactUnderWatch(silo, action.TargetDept) {
+			return fmt.Errorf("该部门没有回应你的接触。")
+		}
 		// 20 分册流通摩擦，只贵不堵（效果、吸收、路径都不变）：
 		//   T2-3 交接收紧（Share）：戒备 ≥ 0.50 → ×2（3→6）
 		//   T1-2 建联摩擦（Build）：戒备 ≥ 0.30 → ceil(base·1.25)（4→5）
@@ -3389,6 +3413,7 @@ func (s *GameService) buildState() *model.GameState {
 		World:               s.publicWorldView(),
 		InformationProgress: s.informationProgress(),
 		LinesProgress:       s.linesProgress(),
+		WitnessTree:         s.witnessTree(),
 	}
 }
 
@@ -3415,7 +3440,7 @@ func (s *GameService) publicWorldView() *model.WorldView {
 			{ID: s.silo.ID, Name: s.silo.Name, IsPlayer: s.silo.ID == s.world.PlayerSiloID},
 		}
 	}
-	return &model.WorldView{
+	view := &model.WorldView{
 		ID:                       s.world.ID,
 		Seed:                     s.world.Seed,
 		CurrentYear:              s.world.CurrentYear,
@@ -3437,7 +3462,9 @@ func (s *GameService) publicWorldView() *model.WorldView {
 		StationOperations:        append([]model.Silo1Operation(nil), s.world.StationOps.Operations...),
 		Silos:                    siloRefs,
 		Neighbors:                s.buildRumorViews(),
+		StewardshipEnabled:       s.world.Silo1BlackBoxEnabled,
 	}
+	return view
 }
 
 func (s *GameService) pendingOperationName() string {
@@ -3536,6 +3563,7 @@ func (s *GameService) buildQueueState() *model.EventQueueState {
 		PendingOperation:    s.pendingOperationName(),
 		InformationProgress: s.informationProgress(),
 		LinesProgress:       s.linesProgress(),
+		WitnessTree:         s.witnessTree(),
 	}
 }
 
@@ -3556,6 +3584,7 @@ func (s *GameService) buildStepResult(processed *engine.GameEvent, logs []string
 
 		InformationProgress: s.informationProgress(),
 		LinesProgress:       s.linesProgress(),
+		WitnessTree:         s.witnessTree(),
 	}
 	if processed != nil {
 		result.ProcessedEventID = processed.ID

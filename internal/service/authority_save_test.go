@@ -67,10 +67,9 @@ func TestUpgradeV7ToAuthoritySaveReadbackAndResume(t *testing.T) {
 	if err != nil || !upgradedV14 {
 		t.Fatalf("v13 permeation upgrade failed: upgraded=%v err=%v", upgradedV14, err)
 	}
-	// The startup chain continues v14 → v15 before Resume accepts the save.
-	upgradedV15, err := UpgradeV14ToArchetypeSave(svc.db, dbPath)
+	upgradedV15, err := UpgradeV14ToBlackBoxSave(svc.db, dbPath)
 	if err != nil || !upgradedV15 {
-		t.Fatalf("v14 archetype upgrade failed: upgraded=%v err=%v", upgradedV15, err)
+		t.Fatalf("v14 black-box upgrade failed: upgraded=%v err=%v", upgradedV15, err)
 	}
 
 	fresh := newVersionTestService(t, dbPath)
@@ -128,8 +127,6 @@ func downgradeToV7AuthorityFixture(t *testing.T, svc *GameService) map[uint]floa
 		silo.Legitimacy = legacy[silo.ID]
 		silo.Mayor = model.MayorOffice{}
 		silo.Authority = model.ShadowAuthority{}
-		// v7 时代没有原型写入方：模拟旧档必须清掉 v15 字段。
-		silo.Archetype = ""
 		if err := svc.db.Save(silo).Error; err != nil {
 			t.Fatalf("downgrade silo %d: %v", silo.ID, err)
 		}

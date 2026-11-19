@@ -33,6 +33,9 @@
 | [0014](0014-countermeasures-cost-suspicion-org-only.md) | 反制只抬成本与风险、不困死玩家；怀疑度只由组织行为驱动，不由囤积驱动 | 已接受 | 2026-11-15 |
 | [0015](0015-silo1-blackbox-learning.md) | Silo 1 黑箱学习：风险度驱动隐藏量，1 号只凭信念摸索 | 已接受 | 2026-11-15 |
 | [0016](0016-it-blindspot-cultivation.md) | 底下 IT 盲区经营：带权重随机决策、偏置注入既有观测管线、拆穿慢累积 | 已接受 | 2026-11-15 |
+| [0017](0017-no-backward-compat-before-release.md) | 正式上线前不承担向后兼容义务（存档走硬切断） | 已接受 | 2026-11-15 |
+| [0018](0018-unified-actor-player-as-representative.md) | 后端无玩家/NPC 之分：共用 Actor 接口，玩家即代表人物 | 已接受 | 2026-11-17 |
+| [0019](0019-safeguard-from-accumulation-to-assignment.md) | safeguard 由后果累加改为 1 号指派基线（Go 累加点变观测输入，DEATH 硬线保留） | 已接受 | 2026-11-15 |
 
 ## 维护约定
 

@@ -117,10 +117,14 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := service.UpgradeV13ToPermeationSave(a.db, dbFileName); err != nil {
 		log.Fatalf("v13 permeation upgrade failed: %v", err)
 	}
-	// v14 permeation saves gain the station-archetype fact
-	// (19-opening-variability); zero = no archetype = behaviour unchanged.
-	if _, err := service.UpgradeV14ToArchetypeSave(a.db, dbFileName); err != nil {
-		log.Fatalf("v14 archetype upgrade failed: %v", err)
+	// v14 permeation saves gain the Silo 1 black-box learning layer (22 系列)
+	// and blind-spot cultivation (23 系列): per-silo black-box/blind-spot
+	// state, incident ledger, world-side stewardship ledger and switch;
+	// zero state = disabled = behaviour unchanged. SafeguardRisk keeps its
+	// value; only its semantics becomes the Silo 1 assignment baseline plus
+	// content increments.
+	if _, err := service.UpgradeV14ToBlackBoxSave(a.db, dbFileName); err != nil {
+		log.Fatalf("v14 black-box upgrade failed: %v", err)
 	}
 
 	// 有状态游戏会话服务 (后端为唯一事实来源)
@@ -139,6 +143,7 @@ func (a *App) startup(ctx context.Context) {
 	a.debugHTTPAPI = api.NewDebugHTTPServer(os.Getenv("SILO40_DEBUG_HTTP_ADDR"), a)
 	a.debugHTTPAPI.SetLlmAPI(llmAPIAdapter{app: a})
 	a.debugHTTPAPI.SetAgentAPI(agentAPIAdapter{app: a})
+	a.debugHTTPAPI.SetSilo1AuditAPI(silo1AuditAPIAdapter{app: a})
 	if err := a.debugHTTPAPI.Start(); err != nil {
 		log.Printf("failed to start debug HTTP server: %v", err)
 	}
@@ -325,6 +330,16 @@ func (a agentAPIAdapter) AgentExport() (any, error) { return a.app.gameService.A
 
 func (a agentAPIAdapter) AgentExportJSONL() (string, error) {
 	return a.app.gameService.AgentExportJSONL()
+}
+
+// silo1AuditAPIAdapter exposes the Silo 1 black-box audit surface on the debug
+// HTTP server (22 黑箱学习系列 00 卷裁决 12：决策日志是审计渠道)。刻意不经
+// App 方法：wails 会把 App 方法绑定到前端，而审计日志不进玩家界面 (04 卷
+// §3.d 纪律)。
+type silo1AuditAPIAdapter struct{ app *App }
+
+func (l silo1AuditAPIAdapter) Silo1BlackBoxAudit() (string, error) {
+	return l.app.gameService.GetSilo1BlackBoxAudit()
 }
 
 func (a agentAPIAdapter) AgentStop() (any, error) { return a.app.gameService.AgentStop() }

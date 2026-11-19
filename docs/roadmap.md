@@ -66,11 +66,11 @@
 
 ### 22 号 · Silo 1 黑箱学习
 
-**状态：仅设计，代码未实现。** 五卷系列 [22-silo1-blackbox-learning](research/22-silo1-blackbox-learning/00-index.md) 与 [ADR-0015](../knowledge/adr/0015-silo1-blackbox-learning.md) 已定稿：风险度驱动隐藏量自保（`self_preservation`）、执行强度单峰、1 号分箱后验信念、观测噪声与伪装、探索代价与决策日志；裁决 13「反应快暴露慢」已重算定稿（g_max=0.12/τ=15/θ_defy=0.70），主防线押观测伪装（q_fc=0.75）。代码中无黑箱/后验信念/分箱对应实现。1 号侧独立，不碰玩家侧结算。
+**状态：已实现（候选分支 `feat/stewardship-integration`，未合 main）。** 五卷系列 [22-silo1-blackbox-learning](research/22-silo1-blackbox-learning/00-index.md) 与 [ADR-0015](../knowledge/adr/0015-silo1-blackbox-learning.md) 已定稿：风险度驱动隐藏量自保（`self_preservation`）、执行强度单峰、1 号分箱后验信念、观测噪声与伪装、探索代价与决策日志；裁决 13「反应快暴露慢」已重算定稿（g_max=0.12/τ=15/θ_defy=0.70），主防线押观测伪装（q_fc=0.75）。落地为 [blackbox_physics.go](../internal/engine/blackbox_physics.go)/[blackbox_observations.go](../internal/engine/blackbox_observations.go)（物理与观测管线）与 [silo1_blackbox.go](../internal/service/silo1_blackbox.go)（零 RNG 决策、指派与审计日志）；[blackbox_channels.go](../internal/service/blackbox_channels.go) 提供 G1/G2/G3/G5/G7/G9 缺口通道最小真实版。功能由 `Silo.BlackBox.Initialized` 门控，关闭时行为与旧版逐位一致（三堡 parity 基线比对 0 差异）。门控验收 A2–A9 全绿；主动稽查的玩家动作与 parent-only 扩展仍按 22-03 待做。
 
 ### 23 号 · 底下 IT 盲区经营
 
-**状态：仅设计，代码未实现。** 六卷系列 [23-it-blindspot-cultivation](research/23-it-blindspot-cultivation/00-index.md) 与 [ADR-0016](../knowledge/adr/0016-it-blindspot-cultivation.md) 已定稿：监控设备/报表回执六通道手段谱系、带权重随机决策模型与审计日志、盲区厚度与被经营偏置的累积与慢累积拆穿。**依赖 22 号**：被经营偏置必须注入 22 的观测管线（23-05 卷接口规格），须待 22 号落地后排期。
+**状态：已实现最小真实版（候选分支 `feat/stewardship-integration`，未合 main）。** 六卷系列 [23-it-blindspot-cultivation](research/23-it-blindspot-cultivation/00-index.md) 与 [ADR-0016](../knowledge/adr/0016-it-blindspot-cultivation.md) 已定稿：监控设备/报表回执六通道手段谱系、带权重随机决策模型与审计日志、盲区厚度与被经营偏置的累积与慢累积拆穿。**依赖 22 号**已满足：被经营偏置经 [blindspot_cultivation.go](../internal/engine/blindspot_cultivation.go) 注入 22 的观测管线（23-05 卷接口），G1/G2/G3/G5/G7/G9 以事实计数最小版落地。玩家主动经营动作与界面尚未开放，按设计卷后续项排期。
 
 ### 开局可变性剩余（19 号）
 
@@ -82,7 +82,7 @@
 
 ### 见证者成就树（ADR-0004）
 
-**状态：已立项，未实现。** [ADR-0004](../knowledge/adr/0004-witness-achievement-tree.md)：国策树即成就系统——点亮节点的是可核验的成就（驻地里真实发生、别人也能确认的事实），冲突节点二选一永久锁死，本轮不做奖励，失败结局不上树，成就与事件链完成键一一对应，树不裁决结局。仓库中无任何成就树/节点树的前后端实现。依赖面只有既有的结局资格事实，不碰仲裁与结算。
+**状态：已实现。** [ADR-0004](../knowledge/adr/0004-witness-achievement-tree.md)：国策树即成就系统——点亮节点的是可核验的成就（驻地里真实发生、别人也能确认的事实），冲突节点二选一永久锁死，本轮不做奖励，失败结局不上树，成就与事件链完成键一一对应，树不裁决结局。落地为纯派生快照：[witness_tree.go](../internal/service/witness_tree.go) 只读既有完成键与结局资格事实（与仲裁 P0/P1 同一组），不另造计数器、不消耗 RNG、不引入新的持久化状态——锁＝资格否定的显形，同局天然永久，跨局事实重置树随之重置（口径已补录进 ADR-0004）。入口挂在既有主线面板 [LinesPanel.tsx](../frontend/src/components/LinesPanel.tsx)，节点四态（已点亮/被事实锁定/预留/未点亮）与缺口清单逐节点可见。「离开」「外溢」由真实事实点亮（逃离模型与外溢投递侧已落地）；「维持」暂无事实键，按预留处理。依赖面只有既有的结局资格事实，不碰仲裁与结算。
 
 ## 已完成（原 roadmap 标为待做，本次对账核实）
 
@@ -117,7 +117,7 @@
 | 序 | 批次 | 独立性 / 依赖 | 备注 |
 | --- | --- | --- | --- |
 | 1 | LLM 上下文档位 ✅ | 完全独立 | 已实装：四档 + 四开关沿参与度同一路径落地，见上文状态行 |
-| 2 | 见证者成就树（ADR-0004） | 独立 | 只读既有结局资格事实与完成键，不碰仲裁；逃离/外溢未落部分只预留节点 |
+| 2 | 见证者成就树（ADR-0004） ✅ | 独立 | 已实装：纯派生快照只读既有完成键与结局资格事实，不碰仲裁；「维持」无事实键按预留，其余节点含「离开」「外溢」均由真实事实点亮 |
 | 3 | 22 号黑箱学习 | 独立（1 号侧） | 设计定稿、参数已重算；不碰玩家侧，唯一新增确定性状态在 1 号侧 |
 | 4 | 19 号开局可变性剩余 | 独立但带测试账 | 必须与可玩路线测试重调同时落地（ADR-0011）；本地工作分支在进行中，接手前先对齐 |
 | 5 | 世界的反制剩余档（T1-3/T2-4/T3-1b/T3-2） | 独立但带测试账 | 四档须与 20 §7 测试账重调同批合并（§7.2 判据 6），接口全部既有；T2-2 信道审计已随《共证》外溢投递侧落地 |

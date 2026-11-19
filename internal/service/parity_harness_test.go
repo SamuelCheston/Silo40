@@ -38,6 +38,9 @@ type parityRecord struct {
 	AgentAP       float64          `json:"agent_ap"`
 	Suspicion     float64          `json:"suspicion"`
 	Fragments     int              `json:"fragments"`
+	// 20 分册 §7.1：新增反制账本必须进快照，双跑契约覆盖 T1-3/T2-4/
+	// T3-1b/T3-2 的窗口计数与一次性去重标记。
+	Countermeasure model.CountermeasureState `json:"countermeasure"`
 	Fires         map[string]int   `json:"fires"`
 	Resources     map[string]int64 `json:"resources"`
 }
@@ -163,6 +166,7 @@ func runParityGame(t *testing.T, seed int64) parityRecord {
 		AgentAP:       state.Agent.ActionPoints,
 		Suspicion:     state.Agent.SuspicionLevel,
 		Fragments:     len(state.Agent.KnownFragments),
+		Countermeasure: silo.Countermeasure,
 		Fires:         map[string]int{},
 		Resources:     map[string]int64{},
 	}
