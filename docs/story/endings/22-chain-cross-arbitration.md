@@ -10,7 +10,7 @@
 
 | 问题树节点 | 机制读取 | 现状 |
 | --- | --- | --- |
-| 还有可确认的幸存社会吗 | 人口 ≤0、`safeguard_risk ≥ 1.0` → victory_check DEATH | 既有；逃出群体例外已实现（最小状态基础 `EscapedGroup`；完整逃离模型未实装，见 roadmap） |
+| 还有可确认的幸存社会吗 | 人口 ≤0、`safeguard_risk ≥ 1.0` → victory_check DEATH | 既有；逃出群体例外已实现（`EscapedGroup` 存续结算已随 Layer 2 落地，`escape_outside.go`） |
 | 它被格式化了吗 | `special:reset_completed` 事实键 | 已实现：仲裁 P0.2 读取 |
 | 维存能力已不可逆崩溃 | `special:fracture_confirmed` 事实键 | 已实现：仲裁 P0.3 读取 |
 | 玩家还能继续任务吗 | `suspicion_level ≥ 1.0` → victory_check AGENT_COMPROMISED | 既有 |
@@ -49,7 +49,7 @@
 | --- | --- | --- |
 | 《遗忘》`reset_execution` 结算 | 《共证》宿主、《公议》锁定日 | 清洗完成键先于制度成就；未完成的接触卡随接收者消失而显式失效（行动设计 15 §5.1：接触方失效按显式失败处理） |
 | 《断层》`fracture_infrastructure` | 《越岭》路线 | 楼层稳定度损耗使 `advance_party_report` 走受损分支 |
-| 《寂堡》`bombing_terminal` | 一切本地线 | 该节点不写人口、不归零人口，只留完成键 `crisis:bombing_terminal`，由仲裁在 P0 读作 DEATH 事实；仅逃出群体例外（最小状态基础已落地，完整逃离模型未实装） |
+| 《寂堡》`bombing_terminal` | 一切本地线 | 该节点不写人口、不归零人口，只留完成键 `crisis:bombing_terminal`，由仲裁在 P0 读作 DEATH 事实；仅逃出群体例外（存续结算已随 Layer 2 落地） |
 | 《除名》封顶 | 玩家驱动的一切节点 | 封顶后玩家行动能力归零；已成立的本地事实仍可继续结算（尾声） |
 | 覆灭结算时的封闭主导 | 《无人裁决》 | 结算瞬间快照为纯堡主导即排除 TIME 资格；覆灭后不留内容窗口，无"死后"内容节点 |
 
@@ -64,7 +64,7 @@
 
 ## 6. 落地顺序建议
 
-> 本节保留下批次当时的落地顺序记录；第 2–3 步所列的节点群多数已随后续批次写入 `events/`，实际口径以各分册节点表为准。
+> 本节保留下批次当时的落地顺序记录；第 2–3 步所列的节点群已全部写入 `events/`，第 5 步的逃离模型与外溢投递也已随 Layer 2/3 落地（`escape_outside.go`／`spillover.go`），仅实体交接×逃出群体耦合与 Attention 承载未实装；实际口径以各分册节点表为准。
 
 1. 机制底座（G1–G11）已随 `dc6be5e` 落地：六候选仲裁、事实键读取、覆灭前夕快照、逃出群体最小状态、内容→Authority/cohort/safeguard 写入通路、出站信号日志、`first_signal` 迁移。
 2. 内容节点群尚未编写。先落无额外依赖的：《深闭》惯性节点、《断层》三节点、《遗忘》六节点（守卫范式）。

@@ -8,7 +8,7 @@
 
 | 节点 | 分组 | 触发 | 分岔与含义 | 效果（封闭集） | 后续 |
 | --- | --- | --- | --- | --- | --- |
-| `identity_trace_accumulates` | special，REPEATABLE cd2 | `any(event_triggered("player_action","station_infiltrate"), event_triggered("player_action","station_deceive"), event_triggered("player_action","silo1_deceive"))`（未来轮次可追加预留的 `spillover_attempt`） | `apply` 按 `trigger_count` 分支（第 N 次质变范式）：第 3 次=本地执法级叙事，第 5 次=本地 IT 级叙事 | 每次 `panic_value +0.02`（sim 校准起点） | 暴露层级递进 |
+| `identity_trace_accumulates` | special，REPEATABLE cd2 | `any(event_triggered("player_action","station_infiltrate"), event_triggered("player_action","station_deceive"), event_triggered("player_action","silo1_deceive"))`（可追加 `escape_spillover_send_*` 投递完成键） | `apply` 按 `trigger_count` 分支（第 N 次质变范式）：第 3 次=本地执法级叙事，第 5 次=本地 IT 级叙事 | 每次 `panic_value +0.02`（sim 校准起点） | 暴露层级递进 |
 | `identity_query_local` | special，ONCE | `script.canTrigger` 读 `ctx.runtime`：`identity_trace_accumulates` 的 `trigger_count ≥ 3`（经 `ctx.states` 读取） | 抉择 E-A 的机制投影：来历被本地执法复核 | `rebellion +0.02` | 烧关系或放慢 |
 | `archive_review_opened` | special，ONCE | `ctx.states` 中 `identity_trace_accumulates` 的 `trigger_count ≥ 5` | 本地 IT 开始复查档案：身份线与证据线同时燃烧；抉择 E-B：最后一击还是保护性拆解 | `history_burden +0.03` | 封顶前置 |
 | 封顶结算 | 机制层 | `victory_check`：`suspicion_level ≥ 1.0` | 既有硬护栏，内容不介入判定 | `AGENT_COMPROMISED` | 抹除演出 |

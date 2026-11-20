@@ -65,14 +65,14 @@ func (s *GameService) stationOperationActions() []model.PlayerActionMeta {
 func (s *GameService) scheduleStationOperation(action model.AgentAction) model.ActionResult {
 	def, ok := stationOperationDefinition(action.ActionID)
 	if !ok {
-		return model.ActionResult{Executed: false, Message: "Unknown station operation."}
+		return model.ActionResult{Executed: false, Message: "未知的驻地行动"}
 	}
 	target := s.stationSilo()
 	if target == nil || target.VictoryStatus != nil || s.world == nil {
-		return model.ActionResult{Executed: false, Message: "No valid assigned station target."}
+		return model.ActionResult{Executed: false, Message: "没有有效的指派驻地目标"}
 	}
 	if s.agent.ActionPoints < action.Cost {
-		return model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}
+		return model.ActionResult{Executed: false, Message: "AP 不足"}
 	}
 
 	s.agent.ActionPoints -= action.Cost
@@ -97,7 +97,7 @@ func (s *GameService) scheduleStationOperation(action model.AgentAction) model.A
 	s.recordStories([]*model.StoryEvent{story}, "ACTION:STATION_OPERATION")
 	return model.ActionResult{
 		Executed: true,
-		Message:  fmt.Sprintf("Operation #%d scheduled at %s; due Y%d M%d.", op.ID, target.Name, op.DueYear, op.DueMonth),
+		Message:  fmt.Sprintf("行动 #%d 已排定，将在 Y%d M%d 对驻地 %s 生效", op.ID, op.DueYear, op.DueMonth, target.Name),
 	}
 }
 
