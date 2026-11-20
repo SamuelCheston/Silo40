@@ -45,7 +45,7 @@ AVAILABLE（可执行，Enabled=true）
 }
 ```
 
-条件节点支持 `all` / `any` 递归组合，以及：
+条件节点支持 `all` / `any` / `not` 递归组合，以及：
 
 | 字段 | 含义 |
 | --- | --- |
@@ -53,6 +53,8 @@ AVAILABLE（可执行，Enabled=true）
 | `stage_at_least` | 当前阶段已达到声明数组中的指定阶段 |
 | `metric` + `min`/`max` | 属性阈值，如 `political_prestige`、`propaganda_level`、`known_fragments` |
 | `relation` + `min`/`max` | 玩家与指定部门的关系阈值，如 `relation:Mayor` |
+| `not` | 否定包裹条件，可嵌 `any`/`all`（internal/service/action_gates.go）；如 charter 接触三选一用 `available: { "not": { "any": [兄弟键] } }` 表达"兄弟动作均未完成" |
+| `hide_when_unavailable` | 动作级布尔：不可用时隐藏而非灰项；charter_contact／pre_fall／route_survey／escape_window 四组三选一均已接线 |
 
 阶段数组有序，`World.ProgressStage` 只前进；每次事件结算和快照前统一刷新。新增节点或动作只需增加声明，无需修改通用判定器。
 

@@ -2,7 +2,7 @@
 
 > [返回总索引](../silo40-good-endings.md) · [通用前提](./00-common.md) · [三线交叉](./04-crossovers.md) · [机制接口](./05-mechanics.md)
 >
-> 【裁决标注 · 部分取代】准备侧已按 [16 准备度换算设计](../../research/16-preparation-outcome-design.md) 的 Layer 0/1 落地：四节点事件链、顶层立场（三档带权随机）、准备账本与出发结算点的最小级联已实装（[36](../endings/36-rebellion-nodes.md)／[37](../endings/37-rebellion-event-spec.md) 分册）。R-5 之后的堡外月度维持、追踪四档与群体质量加权仍属 Layer 2（roadmap）；本分册台阶作为剧情设计不变。
+> 【裁决标注 · 部分取代】准备侧已按 [16 准备度换算设计](../../research/16-preparation-outcome-design.md) 的 Layer 0/1 落地：四节点事件链、顶层立场（三档带权随机）、准备账本与出发结算点的最小级联已实装（[36](../endings/36-rebellion-nodes.md)／[37](../endings/37-rebellion-event-spec.md) 分册）。R-5 之后的堡外月度维持、追踪四档与群体质量加权已随 Layer 2 落地（`escape_outside.go`）；本分册台阶作为剧情设计不变。
 
 ## 1. 路线命题与原著边界
 

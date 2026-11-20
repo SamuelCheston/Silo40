@@ -11,9 +11,9 @@
 | `order_chain_breach` | special，ONCE | `all(event_triggered("player_action","action_share_info"), siloMetricGte("history_burden", 0.10))` | 抉择 L-A 的机制投影：材料指向规则断点而非个人罪行 | `professionFragmentAdd()`（Judicial 侧第一份断点材料）、`history_burden +0.02`（sim 校准起点） | 接触解锁 |
 | `charter_contact_offer` | 门控接触卡 | 解锁：`event_completed order_chain_breach` + `relation Judicial min 0.2` | 接触方是 Judicial 程序派联系人；可接、拒、暂缓 | 完成键三选一 | 接受解锁步骤与窗口 |
 | `charter_contact_accept` | player_actions | 玩家选择 | — | 完成键 | `schedule_event(charter_window_expiry, 6)` |
-| `charter_draft_step` | player_actions | `all(event_triggered 接受键, playerActionIs(Share Info))`，需两次 | 抉择 L-C：约章由本地人起草，玩家供证不代笔 | 职务结果照常 | `charter_draft_convened` |
+| `charter_draft_step` | special，REPEATABLE | `all(event_triggered 接受键, event_triggered 分享键)`，冷却 2 月 | 抉择 L-C：约章由本地人起草，玩家供证不代笔 | 职务结果照常 | `charter_draft_convened` |
 | `charter_draft_convened` | special，ONCE | `event_triggered("player_action","charter_draft_step")`（`trigger_count ≥ 2`） | 起草会议召开 | `history_burden +0.03`（sim 校准起点） | 锁定日解锁 |
-| `charter_lock_day` | special，ONCE | `all(event_triggered charter_draft_convened, timestampAtOrAfter(5,1))`（相对 Y5 起） | 抉择 L-D：妥协版本对不可逆锁定 | `rebellion −0.04`、`panic_value −0.04`（sim 校准起点） | 锁定事实（`PactLocked`）经 `authority_pact_qualify` 等写入通路供给；具体供给事件待编写 |
+| `charter_lock_day` | special，ONCE | `all(event_triggered charter_draft_convened, timestampAtOrAfter(5,1))`（相对 Y5 起） | 抉择 L-D：妥协版本对不可逆锁定 | `rebellion −0.04`、`panic_value −0.04`（sim 校准起点） | 锁定事实（`PactLocked`）由引擎约章动力学写入；资格供给经共享法警证据链（见 26 §5） |
 | `charter_window_expiry` | crisis，纯调度 | `canTrigger: () => false` | 守卫：`charter_lock_day` 已触发则空转；未触发则动能流失 | 未锁定分支：`rebellion +0.04`、`panic_value +0.04`（sim 校准起点） | — |
 
 ## 2. 分支与改道
@@ -33,9 +33,9 @@
 ## 4. 与结局判定的对接
 
 - 引擎已有 Pact 附着动力学：`W ≤ 18` 且 `Q ≥ 0.85` 且独立公共事实 ≥2 且 `PactQualified` 时 Judicial 可附着约章并锁定（[authority.go](../../../internal/engine/authority.go)）。【裁决更新】司法部只附着两个对象：IT 或约章；市长对司法部只有影响力（施压、换人、个案松弛），不构成归属——《公议》与《人治》因此不构成附着层面的硬互斥。
-- 资格供给入口已由机制底座落地：`authority_evidence_delta / authority_public_fact / authority_pact_qualify` 内容写入通路；`RULE_OF_LAW` 已在仲裁候选，资格读 `PactLocked`。尚缺的是**具体供给事件**（哪份材料、经哪次公开核验、记为哪条独立事实），属内容编写。
+- 资格供给入口已由机制底座落地：`authority_evidence_delta / authority_public_fact / authority_pact_qualify` 内容写入通路；`RULE_OF_LAW` 已在仲裁候选，资格读 `PactLocked`。具体供给事件已编写：共享法警证据链（`bailiff_*`，公开侧已换为玩家发布动作 `publish_evidence`）登记两份核心事实 `Judicial_1`／`Judicial_2`（见 26 §5）。
 - 锁定是单向事实：Mayor 更替或普通威势回升不能随意撤销已锁定的约章。
 
 ## 5. 能力缺口
 
-G8（制度尾声展示）。原 G1/G2 的机制部分已随底座落地；剩余工作是供给事件的内容编写与 `W` 阈值、`Q` 权重的 sim 校准（TODO(balance)）。
+G8（制度尾声展示）。原 G1/G2 的机制部分已随底座落地；供给事件已编写，剩余工作是 `W` 阈值、`Q` 权重的 sim 校准（TODO(balance)）。

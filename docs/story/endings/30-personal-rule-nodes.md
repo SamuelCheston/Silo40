@@ -54,8 +54,8 @@
 | 形态 | 两个 `PLAYER_EVENT` 内容行动：部分盟友／绕过，各一键（抉择 P-A） |
 | 接受（部分盟友） | 线继续：他不需要知道全部真相也能做对的事；玩家用本地层证据与关系支持他，对他保留跨堡层（保留不是欺骗） |
 | 绕过 | 线关闭：他不知道真相所以不可用，玩家转入纯秘密路线。**下落**：驻地从此没有一个能公开承接秩序的本地人，局面按惯性滑向《深闭》（`normalcy_hardens` 征兆照常被点亮）；本局不再重开本线（接触键已消耗） |
-| 产出完成键 | `player_action:mayor_ally_accept`／`player_action:mayor_ally_bypass` |
-| 已知缺口 | 与《公议》接触卡同型：门控无否定谓词，选定后兄弟选择不能隐藏；下游只读接受键 |
+| 产出完成键 | `player_actions:mayor_ally_accept`／`player_actions:mayor_ally_bypass` |
+| 兄弟隐藏 | 与《公议》接触卡同型：`not`＋`hide_when_unavailable` 已实现并在用，选定后兄弟选择隐藏；下游只读接受键 |
 
 ## 2. 喂证簇：材料喂给制度内的另一种人
 
@@ -63,7 +63,7 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 触发条件 | `player_action:mayor_ally_accept` 与 `player_action:action_share_info` 两完成键均已触发；`REPEATABLE`，冷却 3 月（sim 校准起点） |
+| 触发条件 | `player_actions:mayor_ally_accept` 与 `player_actions:action_share_info` 两完成键均已触发；`REPEATABLE`，冷却 3 月（sim 校准起点） |
 | 心跳语义 | 与《公议》`charter_draft_step`、《共证》`replication_progress` 同型：完成键持久存在，月度持续评估使喂证按冷却节奏推进；不拦截、不替代 Share Info 本身的职务结算（放 `special/` 组，不放 `player_actions/`） |
 | 效果 | `siloMetricDelta("legitimacy", +0.02)`（sim 校准起点）：责任链材料垫高市长声望。**机制化身**：正统性是持久状态，delta 跨月累积，并被次月权威推进读取——警察服从按引擎响应率向正统性移动一次。喂证因此是"服从被逐月拉过去"的第一股力（§5） |
 | 产出完成键 | `special:mayor_evidence_step`（计数键） |
@@ -75,7 +75,7 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 触发条件 | `all`：接受键（`player_action:mayor_ally_accept`）已触发 ＋ `any`：`crisis:food_poisoning`／`crisis:water_leak`／`special:energy_rolling_blackout` 任一已触发，或 `rebellion ≥ 0.3`（sim 校准起点）；`REPEATABLE`，冷却 9 月（sim 校准起点）。舞台属于本线：未接受接触的市长不会自行开场（线是玩家可达的路径，不是后台进程；资格仍是引擎读数） |
+| 触发条件 | `all`：接受键（`player_actions:mayor_ally_accept`）已触发 ＋ `any`：`crisis:food_poisoning`／`crisis:water_leak`／`special:energy_rolling_blackout` 任一已触发，或 `rebellion ≥ 0.3`（sim 校准起点）；`REPEATABLE`，冷却 9 月（sim 校准起点）。舞台属于本线：未接受接触的市长不会自行开场（线是玩家可达的路径，不是后台进程；资格仍是引擎读数） |
 | 含义 | 危机给 Mayor 合法舞台（抉择 P-C：预期走向是等舞台而不是推他提前对抗）。机会窗口而非倒计时——同一危机也被《断层》《遗忘》消费，不设互斥闸 |
 | 效果 | 全部门 `panic_value +0.03`（sim 校准起点） |
 | 产出完成键 | `special:mayor_crisis_stage` |
@@ -108,7 +108,7 @@
 | 形态 | 两个 `PLAYER_EVENT` 内容行动，`event_completed special:mayor_public_stand` 后解锁（抉择 P-D） |
 | 纯粹人治 | 秩序与此人同寿；本线收束，等仲裁按事实读资格。效果：无（纯完成键） |
 | 埋程序种子 | 转《公议》节点群：`charter_contact_offer` 的解锁条件追加种子路径（`all(relation Judicial ≥ 0.2, any(order_chain_breach, 种子键))`）。效果：无机制效果；代价与下落见 §6 |
-| 产出完成键 | `player_action:succession_pure_rule`／`player_action:succession_seed_procedure` |
+| 产出完成键 | `player_actions:succession_pure_rule`／`player_actions:succession_seed_procedure` |
 
 ## 5. 警察服从与市长正统性：机制化身
 
@@ -134,7 +134,7 @@
 | 正统性不足（<0.5） | `mayor_public_stand` 永不点火；线停在喂证，局面按实际权力状态滑向《深闭》 |
 | W 回升、IT 重新接管 | 引擎事实：Regime 回摆 IT，资格失效；滑向《深闭》（既有仲裁口径） |
 | Mayor 死亡/更替且无继承安排 | 引擎 `refreshMayorHolder`／`resetJudicialForNewMayor` 接管：正统性与影响力重算；视后续状态入《深闭》（旧秩序回填）或《断层》（争夺空缺）。担当节点不绑持有者身份，新市长攒够正统性可重新点亮 |
-| Mayor 成为撤离公开领头 | 《越岭》节点群未编写；留依赖注释：持有者随队离开则本线失去承载（02 分册 §4 已定口径） |
+| Mayor 成为撤离公开领头 | 《越岭》节点群已落地；持有者随队离开的耦合仍未接线（撤离结算按聚合人数，不按名清退 holder）。留依赖注释：持有者随队离开则本线失去承载（02 分册 §4 已定口径）；持有者死亡/更替时引擎读现任 holder，资格自然失效 |
 | 埋程序种子 | 改道《公议》：代价与路径见 §6 |
 
 ## 8. 与树上成就的对应表

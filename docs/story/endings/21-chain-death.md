@@ -19,7 +19,7 @@
 
 | 事实 | 去向 |
 | --- | --- |
-| 独立逃出群体已先成立且存续 | 毁灭只作《越岭》惨胜尾声，不判《寂堡》；仲裁的例外读取已实现（最小状态基础），完整存续结算依赖逃离模型（roadmap，未实装） |
+| 独立逃出群体已先成立且存续 | 毁灭只作《越岭》惨胜尾声，不判《寂堡》；仲裁的例外读取与完整存续结算均已随 Layer 2 落地（`escape_outside.go`） |
 | 渠道反制成立后 Silo 1 改用物理手段 | 分渠道纪律的叙事时刻：反制成功不等于获救；`bombing_terminal` 不受 `termination_channel_disrupted` 影响 |
 | `fracture_confirmed` 之后人口耗尽 | 本线的维生死寂变体：不经终止节点，由人口杠杆自然抵达 0 |
 | 驻地活到覆灭结算 | 本线关闭：上游可用性归零，终止不再可能 |
@@ -27,7 +27,7 @@
 ## 3. 超时与失败结算
 
 - `bombing_terminal` 是纯调度终局事件：调度方已实现（`strike_reconnaissance`：终止自检后局势仍不收敛、`order_pressure ≥ 0.45` 且宣传到位时为物理投送校位，+3 月调度终局节点）。延迟链允许溢出，但覆灭结算是终局时钟：终局破坏节点必须在覆灭结算前成立，否则在本局不再有结算意义。
-- 无守卫：物理摧毁没有反制守卫（设计口径）；唯一的"守卫"是人已经离开（逃离模型，roadmap 未实装）。远程终止渠道则有守卫：`termination_release` 读 `network_jammed`，被干扰的渠道投放空转。
+- 无守卫：物理摧毁没有反制守卫（设计口径）；唯一的"守卫"是人已经离开（逃离模型，已随 Layer 0/1/2 落地）。远程终止渠道则有守卫：`termination_release` 读 `network_jammed`，被干扰的渠道投放空转。
 
 ## 4. 与结局判定的对接
 
@@ -37,7 +37,7 @@
 
 ## 5. 能力缺口
 
-- 逃出群体例外：仲裁读取已实现（最小状态基础）；完整存续结算依赖逃离模型（roadmap，未实装）。
+- 逃出群体例外：仲裁读取与完整存续结算均已随 Layer 2 落地（`escape_outside.go`）。
 - `network_jammed`：写入（`worldFlagSet`）与消费（通牒暂停、`termination_release` 守卫）均已实现。
 - G8（终局画面展示）。原 G6（内容→`safeguard_risk`）已随机制底座落地。
 - 本线的终止征兆→渠道反制→物理投送链已有内容实现（`termination_channel_test / termination_channel_jam / termination_channel_disrupted / termination_release / strike_reconnaissance / bombing_terminal`）；本分册原设计的接触卡（`termination_countermeasure_offer`）已由日常动作 `termination_channel_jam` 承载：同一门控（自检点亮＋Mechanical/IT 最低信任），效果改为 +1 月后信道干扰成立。

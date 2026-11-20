@@ -9,8 +9,8 @@
 - **完成键**：事件节点为 `special:<id>`；玩家动作为 `player_actions:<事件 id>`（内容完成键按 `组:事件 ID` 命名；门控 `event_completed` 引用须带组前缀）。一个键只记事实。
 - **布线事实**（与 27 号规格相同）：完成键写入即发总线事件；带 `event_triggered` 的定义参与月度持续评估；订阅既有动作（Share Info）的节点必须放 `special/`，不得放 `player_actions/`（否则宿主动作结算被吞）。
 - **机制事实（本线特有）**：`legitimacy` 是持久状态——由离散写入（内容效果、跨堡行动、谈判层、18 号链）与月度叛乱侵蚀（引擎 `runMonthlyPoliticalDispatch`，侵蚀量 = 0.10×叛乱×Δ年，TODO(balance)）维护；`metrics_update` 不再覆写它（曾每 tick 重设为派系加权凝聚力、内容 delta 活不过下一 tick，该缺陷已修复）。权威推进每月读取正统性，警察服从按引擎响应率（0.35，TODO(balance)）向其收敛一次。因此本线的正统性 delta 既是持久写入，也是**服从响应的月度杠杆**。资格读取（`personalRuleEligible`：现任 Mayor、W ≤ 30、正统性 ≥ 0.35、服从 ≥ 0.60、Regime ≠ IT）全在引擎侧，内容不写。
-- **ctx 可读**：`authority`（`w / police_obedience / regime / pact_locked`）、`silo_metrics.legitimacy`（即 `MayorLegitimacy()`）、`states`、silo 指标。
-- **门控**：条件节点支持 `event_completed / stage_at_least / metric / relation` 与 `all/any` 递归；无否定谓词（见 M-2 缺口）。
+- **ctx 可读**：`authority`（`w / police_obedience / regime / pact_qualified / pact_locked / public_evidence_q / independent_public_facts / a_it / a_pact`）、`silo_metrics.legitimacy`（即 `MayorLegitimacy()`）、`states`、silo 指标。
+- **门控**：条件节点支持 `event_completed / stage_at_least / metric / relation` 与 `all/any` 递归；`not` 否定谓词与 `hide_when_unavailable` 已实现并在用（M-2 兄弟隐藏已接线）。
 
 ## 1. 节点规格
 
@@ -35,10 +35,10 @@
 | 动作规格 | 各为 `PLAYER_EVENT`、`target_type: "NONE"`、`unavailable_behavior: "hide"`；`ap_cost: 0`、`duration_months: 0`（`TODO(balance)`） |
 | 触发条件 | 各自 `playerActionIs(<动作 ID>)`；`fire_mode: "ONCE"` |
 | 效果 | 均无机制效果（`apply` 返回空）；绕过键注释指依赖：线关闭后局面滑向《深闭》（`normalcy_hardens` 已实现） |
-| 完成键 | `player_action:mayor_ally_accept`／`player_action:mayor_ally_bypass` |
-| 门控 | 两键同解：`unlock: event_completed "player_actions:legitimacy_survey"` |
+| 完成键 | `player_actions:mayor_ally_accept`／`player_actions:mayor_ally_bypass` |
+| 门控 | 两键同 unlock：`event_completed "player_actions:legitimacy_survey"`；`available: not(event_completed 兄弟键)`＋`hide_when_unavailable`（选定后隐藏兄弟） |
 | DSL 能力 | 全部现有 |
-| 依赖 | **缺口**：门控无否定谓词，选定后兄弟选择不能隐藏；下游只读接受键 |
+| 依赖 | 无。兄弟隐藏已实现（`not`＋`hide_when_unavailable`）；下游只读接受键 |
 
 ### F-1 mayor_evidence_step（喂证心跳）
 
@@ -92,8 +92,8 @@
 | 动作规格 | 各为 `PLAYER_EVENT`、`target_type: "NONE"`、`unavailable_behavior: "hide"`；`ap_cost: 0`、`duration_months: 0`（`TODO(balance)`） |
 | 触发条件 | 各自 `playerActionIs(<动作 ID>)`；`fire_mode: "ONCE"` |
 | 效果 | 均无机制效果（`apply` 返回空）；种子键注释指依赖：《公议》接触卡为其追加解锁路径 |
-| 完成键 | `player_action:succession_pure_rule`／`player_action:succession_seed_procedure` |
-| 门控 | 两键同解：`unlock: event_completed "special:mayor_public_stand"` |
+| 完成键 | `player_actions:succession_pure_rule`／`player_actions:succession_seed_procedure` |
+| 门控 | 两键同 unlock：`event_completed "special:mayor_public_stand"`；`available: not(event_completed 兄弟键)`＋`hide_when_unavailable`（选定后隐藏兄弟） |
 | DSL 能力 | 全部现有 |
 | 依赖 | 无 |
 
@@ -102,7 +102,7 @@
 | 字段 | 规格 |
 | --- | --- |
 | 文件 | `events/action_gates.json` 既有 `CHARTER_CONTACT_OFFER` 条目 |
-| 改动 | `unlock` 改为 `all(relation Judicial min 0.2, any(event_completed "special:order_chain_breach", event_completed "player_actions:succession_seed_procedure"))`：规则断点或程序种子任一成立即可接触，关系门槛共用 |
+| 改动 | **已落地**。`unlock` 改为 `all(relation Judicial min 0.2, any(event_completed "special:order_chain_breach", event_completed "player_actions:succession_seed_procedure"))`：规则断点或程序种子任一成立即可接触，关系门槛共用 |
 | 依据 | 16 分册 §2"埋程序种子 → 转《公议》节点群"；关系门槛保留（接触方仍是司法侧程序派） |
 
 ## 2. 清单1：可直接写的节点
@@ -112,25 +112,25 @@
 | 节点 | 文件 | 备注 |
 | --- | --- | --- |
 | M-1 legitimacy_survey | `events/player_actions/legitimacy_survey.js` | 接触卡管线就绪 |
-| M-2 二选一 | `events/player_actions/mayor_ally_{accept,bypass}.js` | 兄弟选择隐藏是已知缺口 |
+| M-2 二选一 | `events/player_actions/mayor_ally_{accept,bypass}.js` | 兄弟选择隐藏已实现（`not`＋`hide_when_unavailable`） |
 | F-1 mayor_evidence_step | `events/special/mayor_evidence_step.js` | 心跳语义同 charter_draft_step |
 | S-1 mayor_crisis_stage | `events/special/mayor_crisis_stage.js` | 危机事件键均已存在 |
 | S-2 mayor_public_stand | `events/special/mayor_public_stand.js` | 全部现有能力 |
 | S-3 police_obedience_shift | `events/special/police_obedience_shift.js` | ctx.authority 已暴露 |
 | H-1 继承二选一 | `events/player_actions/succession_{pure_rule,seed_procedure}.js` | 种子路径改 charter 门控 |
-| 门控条目 | `events/action_gates.json` 新增 5 条＋改 1 条 | 见 §1 |
+| 门控条目 | `events/action_gates.json` 新增 5 条＋改 1 条 | 见 §1，均已落地 |
 
-## 3. 清单2：必须等机制的节点
+## 3. 清单2：依赖机制批次的节点（现状标注）
 
-| 节点/能力 | 等的机制 | 未到位前的处理 |
+| 节点/能力 | 等的机制 | 现状 |
 | --- | --- | --- |
-| 资格中 W ≤ 30 的稳定达成 | **W 离散负冲击通道**（并行轨：1 号覆灭／终止链失效／大规模公开证据） | 内容按现有接口读 `ctx.authority.w`，文档标依赖；不自造 W 判定。W ≤ 30 窗比约章窗（≤18）宽，E 自然累积更易达成，但仍不保 |
-| Mayor 成为撤离公开领头 | 《越岭》节点群（未编写） | 30 号 §7 留依赖注释；持有者离开后资格自然失效（引擎读现任 holder） |
-| M-2 兄弟选择隐藏 | 门控否定谓词 | 两键同解，下游只读接受键 |
+| 资格中 W ≤ 30 的稳定达成 | **W 离散负冲击通道**（1 号覆灭／终止链失效／大规模公开证据三类触发）——**已落地**（`decisive_shocks.go`） | 内容读 `ctx.authority.w`，不自造 W 判定，不用内容效果写 W。W ≤ 30 窗比约章窗（≤18）宽，冲击与自然累积叠加更易达成，但仍不保 |
+| Mayor 成为撤离公开领头 | 《越岭》节点群——**已落地**；持有者随队离开的耦合仍未接线（撤离结算按聚合人数，不按名清退 holder） | 30 号 §7 留依赖注释；持有者死亡/更替时资格自然失效（引擎读现任 holder） |
+| M-2 兄弟选择隐藏 | 门控否定谓词——**已实现**（`not`＋`hide_when_unavailable`） | 已接线，下游仍只读接受键 |
 | 继承空洞的剧情后果 | 无需等：引擎 `refreshMayorHolder`／`resetJudicialForNewMayor` 已是机制对应物 | 文档说明即可 |
 
 ## 4. 缺口汇总（给机制批次）
 
-1. W 离散负冲击通道（并行轨在做）：落地前 W ≤ 30 靠 E 自然累积，达成不保。
-2. 门控否定谓词：接触卡二选一的互斥呈现（与《公议》共用缺口）。
+1. W 离散负冲击通道：**已落地**（`decisive_shocks.go`），W ≤ 30 有稳定达成路径，仍不保。
+2. 门控否定谓词：**已实现**，接触卡二选一的互斥呈现已接线。
 3. ~~派生指标的内容写入语义~~（已关闭）：正统性不再是派生指标——`metrics_update` 停止覆写，内容 delta 跨月留存，叛乱侵蚀接到真实月度路径（引擎 `runMonthlyPoliticalDispatch`）。本线的正统性 delta 同时是持久写入与服从响应月度杠杆。

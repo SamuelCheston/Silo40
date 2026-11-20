@@ -50,7 +50,7 @@
 | 完成键 | `player_actions:route_survey_*` |
 | 门控 | offer：`all(stage first_signal, relation Mechanical 0.2, event_completed special:departure_willingness)`；三选择：`event_completed player_actions:route_survey_offer` |
 | DSL 能力 | 全部现有 |
-| 依赖 | 无（兄弟选择隐藏是已知缺口：门控无否定谓词） |
+| 依赖 | 无（兄弟选择互斥隐藏已接线：`not` 谓词＋`hide_when_unavailable`） |
 
 ### W-2 route_survey_step（勘察步骤）
 
@@ -95,7 +95,7 @@
 | 结算消费 | 出发结算读两键定秩序系数：orderly=1.0、riot=0.7、未选=0.85（`TODO(balance)`） |
 | 完成键 | `player_actions:escape_window_{orderly,riot}` |
 | 门控 | `event_completed special:escape_window_open` |
-| 依赖 | 兄弟选择隐藏是已知缺口（门控无否定谓词） |
+| 依赖 | 无（兄弟选择互斥隐藏已接线：`not` 谓词＋`hide_when_unavailable`） |
 
 ### W-4 escape_departure_launch（出发＝结算点）
 
@@ -105,10 +105,10 @@
 | 动作规格 | `ESCAPE_DEPARTURE_LAUNCH`、`PLAYER_EVENT`、`ap_cost: 3`（`TODO(balance)`） |
 | 触发条件 | `playerActionIs("ESCAPE_DEPARTURE_LAUNCH")`；`fire_mode: "ONCE"` |
 | 效果（按序） | `topStanceReeval("both")`（终局重估）→ `escapeDepartureSettle()`（服务层结算请求） |
-| 结算实现 | `internal/service/escape_settlement.go`：D=min(路线,组织,防护服) → N → S（服×路×练×序）→ M（补给/照护/生产/组织）→ T（暴露折减）→ 写 `EscapedGroup`（Population/Departed/Surviving/Fragile）。全部阈值 `TODO(balance)`；M4 延迟定性、追踪四档、堡外月度维持**属 Layer 2，注释预留** |
+| 结算实现 | `internal/service/escape_settlement.go`：D=min(路线,组织,防护服) → N → S（服×路×练×序）→ M（补给/照护/生产/组织）→ T（暴露折减）→ 写 `EscapedGroup`（Population/Departed/Surviving/Fragile）。全部阈值 `TODO(balance)`；追踪四档、堡外月度维持**已落地（Layer 2，`escape_outside.go`）**；M4 仍为出发时即时定性，延迟定性未实装（注释预留） |
 | 完成键 | `player_actions:escape_departure_launch`（出发尝试事实） |
 | 门控 | `all(event_completed special:escape_window_open, any(event_completed player_actions:escape_window_orderly, event_completed player_actions:escape_window_riot))` |
-| 依赖 | Layer 2（堡外维持／追踪四档／群体质量加权）未落地前，结算为最小形态 |
+| 依赖 | 无（Layer 2 堡外维持／追踪四档／群体质量加权已落地，`escape_outside.go`） |
 
 ### 立场生产者 escape_negotiation_guarantee（保障磋商）
 
@@ -134,7 +134,7 @@
 | `ESCAPE_PREP_CARE` | `escape_prep_care.js` | `care_ready +0.4`、`prep_exposure +0.03` | 意愿＋Medical 0.25 | ONCE |
 | `ESCAPE_PREP_PRODUCTION` | `escape_prep_production.js` | `production_start = true`、`prep_exposure +0.03` | 意愿＋Agricultural 0.25；触发器含 `preparationGte("materials_packed", 50)` | 材料门槛读账本 |
 | `ESCAPE_RECEPTION_STOCKING` | `escape_reception_stocking.js` | `preparationTransfer("Supplies", 150)`＋`preparationStage("stocked")` | 先遣派遣；`canTrigger` 读档位 confirmed/stocked | 已囤备不重复划拨 |
-| `ESCAPE_SPILLOVER_{IT_LINE,CROSS_SIGNAL,PHYSICAL}` | `escape_spillover_*.js` | `spilloverChannelAdd(kind, 3, 0.75/0.55/0.35)` | IT 专线：首档＋IT 0.3；跨堡信号：首档；实体：意愿 | 目标堡 3＝18 号（三堡布局）；投递属 Layer 3 |
+| `ESCAPE_SPILLOVER_{IT_LINE,CROSS_SIGNAL,PHYSICAL}` | `escape_spillover_*.js` | `spilloverChannelAdd(kind, 3, 0.75/0.55/0.35)` | IT 专线：首档＋IT 0.3；跨堡信号：首档；实体：意愿 | 目标堡 3＝18 号（三堡布局）；投递与独立接收已落地（`spillover.go`） |
 
 ### 反制层：审计没收已移除，改为组织怀疑度驱动的 IT 响应
 
@@ -158,23 +158,23 @@
 | 准备层十五动作 | 见 §1 准备层表 | 本批 `preparation_*` 全家；审计没收已移除，反制改由组织怀疑度驱动的 IT 响应层承担（§1 反制层） |
 | 门控条目 | `events/action_gates.json` 追加 26 条 | — |
 
-## 3. 清单2：必须等机制的节点
+## 3. 清单2：依赖机制批次的节点（现状标注）
 
 | 节点/能力 | 等的机制 | 未到位前的处理 |
 | --- | --- | --- |
 | ~~堡外月度维持检查~~ | **已落地（Layer 2）**：出发结算初始化 `OutsideState`，月度阶段 2c 结算补给/防护服/路线三侧面，覆没写明冻死/耗尽/被困 | — |
 | ~~追踪四档~~ | **已落地（Layer 2）**：没人注意/已被察觉/咬住痕迹/正在追捕，热度＝出发定档基数＋safeguard 风险项＋1 号注意力现值−距离衰减；咬住起弃置补给，追捕封觅食并逐月损耗 | 反制入口由组织怀疑度驱动的 IT 响应层承担（§1 反制层） |
 | ~~仲裁读群体质量~~ | **已落地（Layer 2）**：`PlayerEscapeGroupQuality` 玩家贡献项读组合事实（老人/伤者/工匠/领头人），只对合格候选计分；资格仍只读群体存续 | — |
-| 信道投递与独立接收 | Layer 3（外溢模型主体） | 信道只登记（建立侧），`PlayerPerSpilloverSilo` 口径收紧待 Layer 3 |
+| ~~信道投递与独立接收~~ | **已落地（Layer 3）**：三信道投递、接收方独立核验再复制、T2-2 信道审计降档/中断、`PlayerPerSpilloverSilo` 触达收紧（`spillover.go`） | 实体交接×逃出群体耦合未实装；暴露走组织怀疑度与 1 号 Exposure 反谍轨道，Attention 承载未实装 |
 | 回退规则（窗口关闭 → 外溢） | "撤离窗口关闭"事实的生产 | 口径已登记（Witness 回退规则），事实生产属后话 |
 | ~~完整谈判机制（市长三条路之"谈判"）~~ | **已落地（谈判层）**：21 设计卷＋ADR-0013；三方带权决策、月度通气、妥协后二选一 | — |
 | ~~散逃者尾声（小规模强行出发）~~ | **裁决已定：不做**（16 §3.2 裁决 3） | 逃出发生时原堡已被摧毁，没赶上队伍的人必死，没有尾声可写；阻挠下强行出发自然结算为人数 0/极小，不构成逃出群体 |
 | 立场的非叛乱生产路径 | 16 §3.2【待裁决】4 | 本批只按裁决基线由叛乱链供给立场事实 |
-| 三选一／二选一兄弟选择隐藏 | 门控否定谓词 | 各线共用缺口，下游只读各键事实 |
+| ~~三选一／二选一兄弟选择隐藏~~ | **已实现**：`not` 谓词＋`hide_when_unavailable`（`action_gates.go`） | — |
 
 ## 4. 缺口汇总（给机制批次）
 
-1. **Layer 2 逃离模型主体**：堡外月度维持、追踪四档、群体质量加权——出发结算的最小形态已固定输入输出契约（账本＋立场→`EscapedGroup`），Layer 2 只替换级联内部实现，不改资格接口。
-2. **Layer 3 外溢模型主体**：信道投递、独立接收、暴露进 Silo 1 注意力轨道。
-3. **门控否定谓词**：R-D 二选一与路线三选一的互斥呈现（多线共用缺口）。
+1. ~~**Layer 2 逃离模型主体**~~：**已落地**（`escape_outside.go`）——堡外月度维持、追踪四档、群体质量加权，资格接口不变。M4 仍为出发时即时定性，延迟定性未实装（注释预留）。
+2. ~~**Layer 3 外溢模型主体**~~：**投递侧已落地**（`spillover.go`）——信道投递、独立接收；暴露走组织怀疑度与 1 号 Exposure 反谍轨道，不进 Attention。未实装：实体交接×逃出群体耦合、Attention 承载。
+3. ~~**门控否定谓词**~~：**已实现**（`not` 谓词＋`hide_when_unavailable`，`action_gates.go`）——R-D 二选一与路线三选一的互斥呈现已接线。
 4. **回退规则的窗口关闭事实**：逃跑条件未达成时进展改道外溢，需要"撤离窗口关闭"的可生产事实。

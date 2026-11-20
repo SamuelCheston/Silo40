@@ -88,20 +88,20 @@
 | --- | --- | --- |
 | A-1 open_discourse_milestone | `events/special/open_discourse_milestone.js` | 全部现有能力 |
 | T-1 pre_fall_choice | `events/special/pre_fall_choice.js` | deadline 兜底已落地 |
-| T-2 三选一 | `events/player_actions/pre_fall_{loyalty_mobilization,total_riot,open_inquiry}.js` | 兄弟选择隐藏是已知缺口 |
-| 门控条目 | `events/action_gates.json` 追加 3 条 | 三选择同解 |
+| T-2 三选一 | `events/player_actions/pre_fall_{loyalty_mobilization,total_riot,open_inquiry}.js` | 兄弟选择隐藏已实现（`not`＋`hide_when_unavailable`） |
+| 门控条目 | `events/action_gates.json` 追加 3 条 | 兄弟隐藏已接线（`not`＋`hide_when_unavailable`） |
 
-## 3. 清单2：必须等机制的节点
+## 3. 清单2：依赖机制批次的节点（现状标注）
 
 | 节点/能力 | 等的机制 | 未到位前的处理 |
 | --- | --- | --- |
 | 终止来路的反制绑定 | 已落地：`termination_release` 读 `network_jammed` 守卫，玩家动作 `TERMINATION_CHANNEL_JAM` 调度 `termination_channel_disrupted` | — |
 | 整肃来路的反制绑定 | 已落地：名册调换动作 `PURGE_ROSTER_TAMPER` → `silo1_purge_softened`；执行节点按名册是否被动过分档（人口/历史包袱/凝聚/恐慌） | — |
-| 三选一兄弟选择隐藏 | 门控否定谓词 | 三键同解，下游只读各键事实（与《公议》《人治》共用缺口） |
-| 覆灭的更早来路（1 号正典链提前覆灭） | Silo 18 正典链进度节点（"警长上任"等实现缺口，机制底座 §3 已登记） | 本线只消费 `silo1_destroyed` 事实，不关心其来路时序 |
+| 三选一兄弟选择隐藏 | 门控否定谓词——**已实现**（`not`＋`hide_when_unavailable`） | 已接线，下游仍只读各键事实 |
+| 覆灭的更早来路（1 号正典链提前覆灭） | Silo 18 正典链 N1–N9 **已落地**（`silo18_chain.go`，按时间戳强制推进）；"警长上任"独立节点仍是实现缺口 | 本线只消费 `silo1_destroyed` 事实，不关心其来路时序 |
 
 ## 4. 缺口汇总（给机制批次）
 
-1. 反制绑定（终止／整肃两路）：等"日常动作中的反制"批次。
-2. 门控否定谓词：三选一互斥呈现（三线共用缺口）。
-3. 覆灭来路的提前化：1 号正典链进度节点落地前，覆灭只有结算时钟一条实际来路；终止/物理来路以 DEATH 事实形式存在（威胁成立，先于结算）。
+1. 反制绑定（终止／整肃两路）：**已落地**（`termination_channel_jam.js`／`silo1_purge_countermeasure.js`，执行节点按反制分档）。
+2. 门控否定谓词：**已实现**，三选一互斥呈现已接线。
+3. 覆灭来路的提前化：正典链 N1–N9 已落地，但 N9 与结算时钟合流（相对 Y8M1），覆灭并未提前；终止/物理来路以 DEATH 事实形式存在（威胁成立，先于结算）。"警长上任"独立节点仍缺。
