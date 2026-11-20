@@ -1488,7 +1488,7 @@ func (s *GameService) advancePendingOperationAfterDrain() {
 			op.ActionResult = s.engine.ConsumeActionResult()
 		}
 		if op.ActionResult == nil {
-			failed := model.ActionResult{Executed: false, Message: "Unknown error."}
+			failed := model.ActionResult{Executed: false, Message: "未知错误"}
 			op.ActionResult = &failed
 		}
 		if !op.ActionResult.Executed {
@@ -2260,7 +2260,7 @@ func (s *GameService) ExecuteAction(action model.AgentAction) (*model.ActionOutc
 		if consumed := s.engine.ConsumeActionResult(); consumed != nil {
 			result = *consumed
 		} else {
-			result = model.ActionResult{Executed: false, Message: "Unknown error."}
+			result = model.ActionResult{Executed: false, Message: "未知错误"}
 		}
 	}
 
@@ -2792,17 +2792,17 @@ func (s *GameService) queuePlayerActionEvents(action model.AgentAction) (bool, m
 	if action.Type == model.ActionPlayerEvent {
 		def, ok := s.playerActionDefinition(action.ActionID)
 		if !ok {
-			return true, model.ActionResult{Executed: false, Message: "Unknown player action."}, nil
+			return true, model.ActionResult{Executed: false, Message: "未知的玩家行动"}, nil
 		}
 		if err := validatePlayerActionTarget(def, action); err != nil {
 			return true, model.ActionResult{Executed: false, Message: err.Error()}, nil
 		}
 		if s.agent.ActionPoints < action.Cost {
-			return true, model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}, nil
+			return true, model.ActionResult{Executed: false, Message: "AP 不足"}, nil
 		}
 	}
 	if s.agent.ActionPoints < action.Cost {
-		return false, model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}, nil
+		return false, model.ActionResult{Executed: false, Message: "AP 不足"}, nil
 	}
 
 	count, logs, stories, fired := s.queueContentEvents("ACTION:"+string(action.Type)+":PLAYER_EVENT", &action, func(def engine.ContentEventDefinition) bool {
@@ -2822,7 +2822,7 @@ func (s *GameService) queuePlayerActionEvents(action model.AgentAction) (bool, m
 	_ = stories
 	if count == 0 {
 		if action.Type == model.ActionPlayerEvent {
-			return true, model.ActionResult{Executed: false, Message: "This player action is currently unavailable."}, nil
+			return true, model.ActionResult{Executed: false, Message: "该玩家行动当前不可用"}, nil
 		}
 		return false, model.ActionResult{}, nil
 	}

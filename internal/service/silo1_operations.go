@@ -70,14 +70,14 @@ func (s *GameService) silo1OperationActions() []model.PlayerActionMeta {
 func (s *GameService) scheduleSilo1Operation(action model.AgentAction) model.ActionResult {
 	def, ok := silo1OperationDefinition(action.ActionID)
 	if !ok || !silo1OperationAllowed(action.ActionID) {
-		return model.ActionResult{Executed: false, Message: "Silo 1 channel permits only deception."}
+		return model.ActionResult{Executed: false, Message: "1 号信道只允许欺骗"}
 	}
 	target := s.fullSilo1()
 	if target == nil || s.world == nil || !s.world.Silo1.Alive {
-		return model.ActionResult{Executed: false, Message: "Silo 1 is not available as a live target."}
+		return model.ActionResult{Executed: false, Message: "1 号当前不可作为行动目标"}
 	}
 	if s.agent.ActionPoints < action.Cost {
-		return model.ActionResult{Executed: false, Message: "Not enough Action Points (AP)."}
+		return model.ActionResult{Executed: false, Message: "AP 不足"}
 	}
 
 	s.agent.ActionPoints -= action.Cost
@@ -101,7 +101,7 @@ func (s *GameService) scheduleSilo1Operation(action model.AgentAction) model.Act
 	s.recordStories([]*model.StoryEvent{story}, "ACTION:SILO1_OPERATION")
 	return model.ActionResult{
 		Executed: true,
-		Message:  fmt.Sprintf("Operation #%d scheduled against Silo 1; due Y%d M%d.", op.ID, op.DueYear, op.DueMonth),
+		Message:  fmt.Sprintf("针对 1 号的行动 #%d 已排定，将在 Y%d M%d 生效", op.ID, op.DueYear, op.DueMonth),
 	}
 }
 
