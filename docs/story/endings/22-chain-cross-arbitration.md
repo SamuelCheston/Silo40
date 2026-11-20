@@ -64,10 +64,10 @@
 
 ## 6. 落地顺序建议
 
-> 本节保留下批次当时的落地顺序记录；第 2–3 步所列的节点群已全部写入 `events/`，第 5 步的逃离模型与外溢投递也已随 Layer 2/3 落地（`escape_outside.go`／`spillover.go`），仅实体交接×逃出群体耦合与 Attention 承载未实装；实际口径以各分册节点表为准。
+> 本节记录下批次的落地顺序，各步状态已按当前代码回写：第 2–3 步所列的节点群已全部写入 `events/`，第 5 步的逃离模型与外溢投递也已随 Layer 2/3 落地（`escape_outside.go`／`spillover.go`），仅实体交接×逃出群体耦合与 Attention 承载未实装；实际口径以各分册节点表为准。
 
 1. 机制底座（G1–G11）已随 `dc6be5e` 落地：六候选仲裁、事实键读取、覆灭前夕快照、逃出群体最小状态、内容→Authority/cohort/safeguard 写入通路、出站信号日志、`first_signal` 迁移。
-2. 内容节点群尚未编写。先落无额外依赖的：《深闭》惯性节点、《断层》三节点、《遗忘》六节点（守卫范式）。
-3. 再落政治接触链：《公议》《人治》节点群；约章资格供给已有内容写入入口（`authority_evidence_delta / authority_public_fact / authority_pact_qualify`），具体供给事件待编写。
+2. 内容节点群已写入 `events/`：《深闭》惯性节点、《断层》三节点、《遗忘》六节点（守卫范式）。
+3. 政治接触链《公议》《人治》节点群已写入；约章资格由既有公开证据链与引擎约章判据接通（`publish_evidence` → `public_evidence_q`／独立公开事实，`charter_lock_day` 同步读取），`authority_evidence_delta / authority_public_fact / authority_pact_qualify` 内容入口保留，当前无供给事件调用。
 4. 《人治》资格读取与裁决口径的对齐（司法部两附着，见 16 分册缺口）属引擎事项，内容层先按裁决口径写节点。
-5. 逃离模型与外溢准备工作本轮不做（roadmap）；依赖它们的节点只预留注释，不写成看似可运行的内容。
+5. 逃离模型与外溢准备已随 Layer 2/3 落地（`escape_outside.go`／`spillover.go`），相关批次节点已写入；仅实体交接×逃出群体耦合与 Attention 承载未实装。
