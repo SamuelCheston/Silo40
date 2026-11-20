@@ -4,7 +4,7 @@
 > 性质：研究与设计，不包含代码、事件、配置或数值改动。
 > 范围：玩家在逃跑（《越岭》路线）或外溢（《共证》评分项）之前的准备投入，如何换算为终局实际成果。
 > 本轮边界：确定准备度的量化口径、投入→产出的换算结构、失败与部分成功分级、与既有仲裁的接口和实现切入点。凡需平衡校准的阈值一律标 `TODO(balance)`，不给平衡数值。
-> 上游约束：[roadmap](../roadmap.md) 中"逃出群体与《越岭》逃离模型"与"《共证》外溢准备工作"两条未实装项；[结局体系 12 分册](./12-ending-system-design.md) 的资格先于加权与四类主体仲裁；[《越岭》剧情台阶](../story/good-endings/02-rebellion.md)、[《共证》剧情台阶](../story/good-endings/01-information.md) 与 [三线交叉](../story/good-endings/04-crossovers.md)。
+> 上游约束：[roadmap](../roadmap.md) 中"逃出群体与《越岭》逃离模型"与"《共证》外溢准备工作"两条（本册定稿时未实装，现已随 Layer 1–3 落地，见 §5 分层）；[结局体系 12 分册](./12-ending-system-design.md) 的资格先于加权与四类主体仲裁；[《越岭》剧情台阶](../story/good-endings/02-rebellion.md)、[《共证》剧情台阶](../story/good-endings/01-information.md) 与 [三线交叉](../story/good-endings/04-crossovers.md)。
 
 > **【用户裁决 · 2026-11-15，本册前提，醒目】**
 > **裁决一**：从原著看，逃跑只有一种成立路径——地堡的顶层必须齐心，最起码市长和 IT 要达成一致、都要跑。原型是书中 18 号地堡。
@@ -91,7 +91,7 @@
 **来源二：本地清洁服转化**【项目外推】：堡内清洁服总量稀缺（清洁是低频处刑，不是库存物资，`TODO(balance)`：全堡总量），且全部被 IT 做了必坏处理。转化链：
 
 1. 取得服体：接触 IT 管控的供应链（关系/黑市/职务便利），每次获取有暴露成本；
-2. 修复密封：Mechanical 关系门控下的换胶带动作（05 母题分册已预留"暗中改良防护服"动作位；原"IT 审计胶带库存"反制位随审计没收移除而作废，见下）；
+2. 修复密封：Mechanical 关系门控下的换胶带动作（05 母题分册的"暗中改良防护服"动作位已落地为 [escape_prep_suit_repair.js](../../events/player_actions/escape_prep_suit_repair.js)；原"IT 审计胶带库存"反制位随审计没收移除而作废，见下）；
 3. **囤积不被没收**（20 分册修订、ADR-0014）：原"审计没收已修服"造成反向梯度（准备越重被没收越多）已整体移除——修好的服不会被打回或没收；囤积的代价只剩暴露记账（喂出发追踪）。反制改由组织怀疑度驱动的 IT 响应层承担：惹眼的是组织行为（动员/通信），不是囤了多少物资。
 
 这两条来源保证：防护服数量天然受限、获取有部门依赖（Mechanical/IT 侧）、持有有暴露风险——与"地堡封闭、外界有毒、防护装备稀缺且有既有设定"的约束完全一致。
@@ -377,7 +377,7 @@ M4 组织留存（落地后）：预案完备度 ≥ 阈值_org 且 组织者存
 | 配合与否不是玩家按钮、也非显式判定闸，结算只看逃出人数【用户裁决 2026-11-15-F】 | §3.2 门降为结果层：立场为内部状态、不呈现为交互选项、不作仲裁前闸门；阻挠→人数 0 自然结算 |
 | 立场裁量＝带权重随机决策；市长三条路（镇压/谈判占位/妥协）；叛乱接既有 `MayorLegitimacy`；外溢是逃跑失败后的退路【用户裁决 2026-11-15】 | §3.2 立场决策与市长三条路；§3.5 外溢重定位（只登记，不动设计） |
 | 外溢不进胜负判定，外溢为零同样可以判胜，只影响结算分【既有裁决】 | §3.5/§4.3：准备度只进触达与接收计数，资格路径零新增 |
-| 逃离模型复杂、需单独设计，事件链只留注释预留【roadmap】 | 本设计是逃离模型的**准备侧接口**：§3.4 结算级联属逃离模型主体的第一段结算，账本字段与立场事实即其输入；落地前事件链维持注释预留现状 |
+| 逃离模型复杂、需单独设计，事件链只留注释预留【roadmap，已过期】 | 本设计是逃离模型的**准备侧接口**：§3.4 结算级联属逃离模型主体的第一段结算，账本字段与立场事实即其输入；Layer 2/3 落地后事件链已按批次节点写入（13／37 分册） |
 | 防护服稀缺、IT 管控、劣质胶带必坏、气闸纳米虫【世界观】 | §2.4 双来源：预置缓存劣化＋本地转化（不再被审计没收，只记暴露）；数量上限 `TODO(balance)`，不写成丰饶物资 |
 | 特工预置进入层会劣化【接枝设定】 | 初始防护服与路线知识来自预置缓存，发现需任务线，劣化按种子确定 |
 | 外界致命区环绕堡群、区外已恢复【世界观】 | 暴露段通行以防护服为硬需求；维生可能（补给＋生产起点有意义） |
@@ -478,7 +478,7 @@ Layer 3  外溢模型主体：信道投递 + 独立接收 + 暴露结算 + 仲�
 
 - **Layer 1 是最快的可见效果层**：准备度从此是有状态、有成本、有反制的真实投入（UI 可见账本与功能位缺口），且是 Layer 2/3 的接口前置。但必须遵守一条纪律：**Layer 1 阶段仲裁不读账本**——准备度在逃离/外溢结算落地前不产生任何结局影响，防止"囤准备"变成假胜利进度。
 - Layer 2 与 Layer 3 互相独立、可并行，都只依赖 Layer 1 的账本接口；两者的主体模型（路线与批次、外部接收方模拟）仍需各自的详细设计，本设计只固定输入输出契约。
-- Layer 0 的路线事实节点在 13 分册已经设计到"开窗"，其后的批次节点继续维持注释预留，等 Layer 2 落地。
+- Layer 0 的路线事实节点在 13 分册已经设计到"开窗"，其后的批次节点已随 Layer 2/3 落地写入 `events/`（13／37 分册）。
 
 ## 7. TODO(balance) 汇总
 
@@ -520,7 +520,7 @@ Layer 3  外溢模型主体：信道投递 + 独立接收 + 暴露结算 + 仲�
 - 既有仲裁与外溢计数：[weighted_endings.go](../../internal/service/weighted_endings.go)（P0–P3、`spilloverSiloCount`、`PlayerPerSpilloverSilo`）。
 - 逃出群体最小状态与效果：[models.go](../../internal/model/models.go)（`EscapeGroup`、`OutboundSignal`）、[content_events.go](../../internal/engine/content_events.go)（`escape_group_depart/status`）。
 - 结局体系与主体纪律：[12-ending-system-design.md](./12-ending-system-design.md)。
-- 《越岭》链预留与功能位：[13-chain-rebellion.md](../story/endings/13-chain-rebellion.md)、[02-rebellion.md](../story/good-endings/02-rebellion.md)。
+- 《越岭》链节点与功能位：[13-chain-rebellion.md](../story/endings/13-chain-rebellion.md)、[02-rebellion.md](../story/good-endings/02-rebellion.md)。
 - 《共证》外溢口径与五种能力：[01-information.md](../story/good-endings/01-information.md)、[04-crossovers.md](../story/good-endings/04-crossovers.md)、[05-mechanics.md](../story/good-endings/05-mechanics.md)。
 - 十线互斥与完成键纪律：[22-chain-cross-arbitration.md](../story/endings/22-chain-cross-arbitration.md)。
 - 防护服与外部世界观：[01-worldbuilding/04-outside-and-cleaning.md](./01-worldbuilding/04-outside-and-cleaning.md)、[05-game-adaptation-motifs/01-cleaning-and-outside.md](./05-game-adaptation-motifs/01-cleaning-and-outside.md)。
@@ -529,4 +529,4 @@ Layer 3  外溢模型主体：信道投递 + 独立接收 + 暴露结算 + 仲�
 - 顶层立场、三档、带权重随机裁量与门降为结果层诸裁决：用户裁决 2026-11-15（本册卷首与 §3.2 誊录）。
 - 预置进入层与劣化：[silo40-graft.md](../story/silo40-graft.md)（the Graft §2.3）。
 - 逃亡者生存口径：[07-escapee-lifetime.md](../story/silo40-backstory/07-escapee-lifetime.md)。
-- roadmap 两条未实装项：[roadmap.md](../roadmap.md)。
+- roadmap 两条（定稿时未实装，现已随 Layer 1–3 落地）：[roadmap.md](../roadmap.md)。
