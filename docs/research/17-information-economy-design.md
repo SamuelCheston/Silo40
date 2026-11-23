@@ -41,7 +41,7 @@
 - 部门信念层每个事实每月 `B -= ForgetRateMonthly`（下限 0）。确定性：无随机源，切片按持久化顺序遍历。
 - 仅部门层衰减。特工层不衰减（见证者记得）；具名人物层暂不衰减。
 - 挂钩点：`EVENT_METRICS_UPDATE` 月度 dispatch，每月恰好一次。
-- `ForgetRateMonthly = 0.01`【推导，TODO(balance)】：单次分享吸收 ≈ `B_player·transmit·receptivity` ≈ 0.22–0.34；0.01/月使一次充分吸收（~0.6）约 30 个月跌回分享地板 0.30，维持需求 ≈ 每事实每 30 个月一次再流通。
+- `ForgetRateMonthly = 0.005`【推导，TODO(balance)】（初评取 0.01，回评后下调）：单次分享吸收 ≈ `B_player·transmit·receptivity` ≈ 0.22–0.34。0.005/月下一次充分吸收（~0.6）约 60 个月跌回分享地板 0.30；`INFORMATION` 门需 27 槽（9 部门 × 3 事实）各连续 `PermeationMonths = 30` 个月过地板，深填目标因此收敛为 `B₀ = 0.30 + 30r = 0.45`——相比 r=0.01 所需 B₀≈0.60，深填与维持成本回到生涯 AP 预算内，维持需求仍为每事实每 30 个月一次再流通。
 
 ### 修复 B：INFORMATION 资格门重锚到信念层
 
@@ -82,7 +82,7 @@
 
 | 数值 | 位置 | 推导依据 |
 | --- | --- | --- |
-| `ForgetRateMonthly = 0.01` | `engine/information.go` | §3 修复 A：吸收量 0.22–0.34 对 0.30 地板的维持周期 ~30 月 |
+| `ForgetRateMonthly = 0.005` | `engine/information.go` | §3 修复 A：深填 `B₀ = 0.30 + 30r = 0.45` 对 30 月渗透窗的维持周期 ~30 月 |
 | `informationGateFactCount = 3` | `service/weighted_endings.go`（JS 门同步硬编码 3 与 0.30） | §3 修复 B：54 次分享 ≈ 162 AP 可达；5 不可达 |
 | `apGainRate = 36/年` | `events/mechanics/core_systems.js` | §3 修复 C：月收入 ≈ 流通成本，每月一个决策 |
 | Gather 2 / Share 3 / Build 4 | `events/mechanics/common_actions.js`＋`ACTION_COSTS` | 同上；戏剧动作不动 |
