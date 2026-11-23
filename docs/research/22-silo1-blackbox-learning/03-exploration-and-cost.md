@@ -249,7 +249,7 @@
 | 时间形态 | 连续的月度指派 | 阈值越线时的一次性爆发 |
 | 成本 | 每月注意力 + 折腾代价 | 极贵（注意力、问责量、政治成本） |
 | 信息角色 | 慢速信念维护 | 爆发即强观测（爆发中难以伪装） |
-| 现有实现 | 本设计新增（规格层） | 已实现：[world.go 状态机](../../../internal/service/world.go#L387-L437)、[ADR-0001](../../../knowledge/adr/0001-silo1-scripted-reaction.md) 三件套（征兆事件、反制窗口、结算钩子） |
+| 现有实现 | 本设计新增（规格层） | 已实现：[world.go 状态机](../../../internal/service/world.go#L411-L486)、[ADR-0001](../../../knowledge/adr/0001-silo1-scripted-reaction.md) 三件套（征兆事件、反制窗口、结算钩子） |
 
 ### 6.2 共存规则（尊重 ADR-0001）
 
