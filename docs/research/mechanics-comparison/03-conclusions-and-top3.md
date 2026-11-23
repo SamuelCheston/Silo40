@@ -8,14 +8,14 @@
 
 | # | 机制 | 对照标杆 | Silo40 现状（代码事实） |
 |---|---|---|---|
-| 1 | 群体级思潮/情绪计量 | Frostpunk Hope/Discontent [A1] | `Cohesion/Legitimacy/Rebellion` + 部门 `PanicValue`，cohort 粒度演化（`engine.go:1092-1180`） |
+| 1 | 群体级思潮/情绪计量 | Frostpunk Hope/Discontent [A1] | `Cohesion/Legitimacy/Rebellion` + 部门 `PanicValue`，cohort 粒度演化（`engine.go:880-969`） |
 | 2 | 派系自组织与诉求 | Frostpunk Londoners [A5]、CK3 factions [B2] | signature 聚类 + 代表选举 + 可见性模型 + 公开/威望（`residents.go:658-907`） |
-| 3 | 延迟后果原语 | RimWorld incident queue [C11]、Suzerain flag 链 [D5] | `schedule_event`（延迟 N 月）+ `event_triggered` 链（`content_events.go:421-427`）；实例：`panic_storm → delayed_riot` |
-| 4 | 冷却/火力模式 | RimWorld incident cooldown [C5] | `ONCE` / `REPEATABLE + cooldown_months`（`content_events.go:448-457`） |
-| 5 | 隐藏计量 + 极值即死 | Reigns 四计量 [D12] | `suspicion ≥ 1.0 → AGENT_COMPROMISED`、`SafeguardRisk ≥ 1.0 → DEATH`（`core_systems.js:333-388`） |
+| 3 | 延迟后果原语 | RimWorld incident queue [C11]、Suzerain flag 链 [D5] | `schedule_event`（延迟 N 月）+ `event_triggered` 链（`content_events.go:566-575`）；实例：`panic_storm → delayed_riot` |
+| 4 | 冷却/火力模式 | RimWorld incident cooldown [C5] | `ONCE` / `REPEATABLE + cooldown_months`（`content_events.go:379-382`、`790-791`） |
+| 5 | 隐藏计量 + 极值即死 | Reigns 四计量 [D12] | `suspicion ≥ 1.0 → AGENT_COMPROMISED`、`SafeguardRisk ≥ 1.0 → DEATH`（`core_systems.js:365-391`） |
 | 6 | 确定性复现 | CK3 存档种子 [B14]、RimWorld 世界种子 [C12] | 单一 RNG 源 + 种子随存档 + `cmd/sim` 批量验证——**比多数标杆更完整** |
 | 7 | 数据驱动事件/公式 | Democracy 4 CSV 对象-效果图 [B26] | `events/**/*.js` 免编译覆写数值/触发/公式（README"调内容"节） |
-| 8 | 结局回读雏形 | Frostpunk 法律审判 [A4]、TWoM Epilogue [A13] | 评分分项 + 结局叙事按思潮/历史包袱变体（`engine.go:897-987`） |
+| 8 | 结局回读雏形 | Frostpunk 法律审判 [A4]、TWoM Epilogue [A13] | 评分分项 + 结局叙事按思潮/历史包袱变体（`engine.go:666-762`） |
 
 ### 3.2 低成本可借鉴（按优先级）
 
@@ -48,10 +48,14 @@
 （财富/人口）的函数 [C4]，频率 = 周期 + 保底 + 冷却 [C3][C5][C8]；且导演既发危机也发
 礼物，不做纯恶意曲线 [C10]。Frostpunk 则证明主线压力应该脚本化、可预知 [A1]。
 
-**Silo40 现状缺口**（代码事实）：当前所有事件纯条件触发；旧随机剧情池已清空
-（`story_events.go:29`），`EventTrigger` 累积值（`(1−cohesion)×0.1/年`，
-`engine.go:1268`）没有任何事件消费，达到 1.0 会命中 `rng.Intn(0)` 空池采样（潜在
-崩溃）。即"压力在累积，但没有出口"。
+**Silo40 现状缺口**（代码事实）：当前事件全部纯条件触发；旧随机剧情池仍为空
+（`story_events.go:29`），但空池已被守卫——池为空时直接不触发、累积值保留，不再命中
+`rng.Intn(0)` 崩溃（`story_events.go:35-39`）。`EventTrigger`
+（`(1−cohesion)×0.1/年`）也已有出口：协议规则 R-01 以 `trigger_metric: event_trigger`
++ `trigger_at_least: 1.0` 读取（`events/protocol/order.json:44-47`），内容层可写
+（`events/special/silo18_digging_signal.js:15`）；累积本身走月度结算（Go 兜底
+`engine.go:1054`，内容路径 `events/mechanics/core_systems.js:234-238`）。
+即"压力有出口，但随机剧情池依旧无内容，加权导演仍不存在"。
 
 **建议形态**：主线里程碑（histories）保持脚本化；规则/危机事件引入加权随机选取——
 预算用现有 `EventTrigger`（低凝聚力攒得快，语义天然契合），规模按地堡状态缩放，
@@ -79,7 +83,7 @@
 结局给审判**。
 
 **Silo40 落点**：素材已齐——`StoryEventLog` 记录全部事件、评分已有四个分项与结局
-倍率（`engine.go:897-954`）、结局叙事已有思潮/历史包袱变体（`engine.go:957-987`）。
+倍率（`engine.go:666-729` `CalculateScore`）、结局叙事已有思潮/历史包袱变体（`engine.go:730-762` `GetEndingNarrative`）。
 缺的是"回读"：结局界面按类别汇总玩家关键行动（煽动/宣传/分享未解释知识）、触发过的
 规则事件、以及它们与最终结局的因果句。这是内容+前端工作，不动引擎。
 
