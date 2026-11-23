@@ -6,9 +6,16 @@
 
 状态标记：【已修复】/【判定：设计如此】/【方案待决】/【留待作者】。
 
+> 出处说明：本文记录的提交哈希（`8eec461`、`9923dce` 等）来自作者当时的克隆，在本仓
+> 不可解析。各条结论的现行代码证据已就地补注，判定以补注为准、不以哈希为准。
+
 1. 【已修复 `8eec461`】**`events/rules/` 不加载**：`contentEventDirectories` 白名单缺 `rules`，
    4 个规则事件是死内容。修复=白名单加入 `rules`；`delayed_riot` 补 `canTrigger: () => false`
    过校验（纯调度约定）。新增测试：规则组加载 + `panic_storm → delayed_riot` 时延链路。
+   **现行证据**：目录白名单机制已废弃，`events/` 由 `filepath.WalkDir` 递归加载
+   （[content_events.go:206](../../../internal/engine/content_events.go#L206)），`events/rules/`
+   现存 4 个规则事件齐备（`panic_storm`/`delayed_riot`/`rebellion_escalation`/`supplies_shortage`），
+   `rules` 也在类别白名单内（`game_service.go:2392`）——本条成立。
    **sim 对照（20 局，种子 7–26，IT）**：修复前 TIME 100%、avg pop 4486 → 修复后 TIME 100%、
    avg pop 4480——分布无变化（delayed_riot 的 panic+0.15 在基线已饱和，legitimacy 为派生值）。
 2. 【判定：设计如此，代码不动】**部门思潮每 tick 被 cohort 覆写**：git 考据确认这是有意设计——
@@ -40,6 +47,14 @@
    句式连显全部故事（无新交互）。日志端本就消费（`recordStories` → `eventLogs` → 落库 →
    `GetEventHistory`/`/debug/game/events`），无需改动。sim 分布无变化（纯反馈通道）。
 6. 【已实现（作者立项，`9923dce`/`393a385`/`18e3b47`）】**楼层/碎片对内容事件的可达性**：
+   **现行证据**：碎片桥两个效果在校验与派发两侧都在（`content_events.go:557`/`:560` 校验，
+   `:1466`/`:1468` 派发），楼层消费走 `applyContentFloorStabilityDelta`
+   （`content_events.go:1471`→`:1640`，0–1 截断）；可达性测试
+   `TestFragmentBridgeMakesInformationEndingReachable` 见
+   [content_fragment_effects_test.go:107](../../../internal/engine/content_fragment_effects_test.go#L107)；
+   引用的碎片/楼层事件文件（`network_data_cache`、`archive_salvage_operation`、
+   `structural_reinforcement`、`water_leak`、`blackout_cascade`、`lower_deck_collapse`、
+   `grief_release_ritual`）在 `events/` 下全部存在——本条成立。
 
    **碎片**：内容效果封闭集新增 `profession_fragment_add` / `profession_fragment_remove`
    （`Fragment` 字段；add 的 profession 空=补给碎片最少部门、fragment 空=种子随机抽未知碎片，
