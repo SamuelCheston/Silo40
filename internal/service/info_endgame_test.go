@@ -676,8 +676,14 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	}
 	if svc.silo.VictoryStatus == nil || svc.silo.VictoryStatus.Decision == nil ||
 		svc.silo.VictoryStatus.Decision.Selected != endingInformation {
-		t.Fatalf("playable line did not settle as INFORMATION at %d-%02d: status=%+v fragments=%+v evidence=%+v",
-			svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.VictoryStatus, svc.silo.Professions, svc.silo.PublicEvidence)
+		var excluded map[string]string
+		var pool []string
+		if svc.silo.VictoryStatus != nil && svc.silo.VictoryStatus.Decision != nil {
+			excluded = svc.silo.VictoryStatus.Decision.Excluded
+			pool = svc.silo.VictoryStatus.Decision.Pool
+		}
+		t.Fatalf("playable line did not settle as INFORMATION at %d-%02d: status=%+v excluded=%v pool=%v fragments=%+v evidence=%+v",
+			svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.VictoryStatus, excluded, pool, svc.silo.Professions, svc.silo.PublicEvidence)
 	}
 
 	t.Logf("real INFORMATION route: Judicial_2 B=%.6f observations=%d Q=%.6f at %d-%02d", judicialBelief.B, judicialBelief.ObsCount, svc.silo.Authority.Judicial.PublicEvidenceQ, svc.silo.CurrentYear, svc.silo.CurrentMonth)
