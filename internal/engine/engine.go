@@ -794,7 +794,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       false,
 			Type:        "DEATH",
-			Description: "地堡内已无生命迹象。人类最后的堡垒沦为了一座寂静的坟墓。",
+			Description: "地堡内已无生命迹象。曾经熙攘的分层街市，沦为了一座寂静的坟墓。",
 		}
 		return
 	}

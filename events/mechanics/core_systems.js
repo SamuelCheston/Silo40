@@ -379,7 +379,7 @@ defineMechanics([
             type: "victory_status_set",
             field: "DEATH",
             bool_value: false,
-            text: "地堡内已无生命迹象。人类最后的堡垒沦为了一座寂静的坟墓。",
+            text: "地堡内已无生命迹象。曾经熙攘的分层街市，沦为了一座寂静的坟墓。",
           }],
         };
       }
