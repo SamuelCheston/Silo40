@@ -17,7 +17,7 @@
     {
       "id": "sealed_hard_drive",
       "name": "封存硬盘",
-      "description": "大革命前加密存储介质，可能载有多堡技术资料与历史档案。最高违禁品，持有即重罪。",
+      "description": "数代人之前加密存储介质，可能载有多堡技术资料与历史档案。最高违禁品，持有即重罪。",
       "category": "storage_medium",
       "locations": ["sealed_vault", "old_warehouse", "recycling"],
       "weight": 1,
@@ -65,7 +65,7 @@
     {
       "id": "ration_tin",
       "name": "旧纪元口粮罐",
-      "description": "大革命前的密封口粮罐，印着已废止的配给标识。来源年代与私人关系的日常旁证。",
+      "description": "数代人之前的密封口粮罐，印着已废止的配给标识。来源年代与私人关系的日常旁证。",
       "category": "daily_goods",
       "locations": ["residential", "old_warehouse", "recycling"],
       "weight": 9,
@@ -113,7 +113,7 @@
     {
       "id": "old_world_atlas",
       "name": "旧世界地图册",
-      "description": "大革命前的地理图册，描绘的地名与现状叙事不符。支持「旧世界叙事被改写」，接触依赖民间保存网络。",
+      "description": "数代人之前的地理图册，描绘的地名与现状叙事不符。支持「旧世界叙事被改写」，接触依赖民间保存网络。",
       "category": "geography_book",
       "locations": ["folk_books", "book_depot", "sealed_vault"],
       "weight": 4,
