@@ -100,6 +100,15 @@ type escapeRecord struct {
 	Timeline               []acceptanceBeat `json:"timeline"`
 	Fires                  map[string]int   `json:"fires,omitempty"`
 	Actions                map[string]int   `json:"actions,omitempty"`
+
+	// T2-4 谈判可信度侵蚀观测账 (20 §7.3①④): 逐月采样
+	// silo.Countermeasure.GuaranteeEroded (one-shot 布尔), false→true 记一次
+	// 授侵蚀; 只读结算后的状态, 不写反制账本、不消耗 RNG。
+	GuaranteeErosions     int     `json:"guarantee_erosions"`
+	GuaranteeEroded       bool    `json:"guarantee_eroded"`
+	ErosionMonth          int     `json:"erosion_month"`
+	PrepExposureAtErosion float64 `json:"prep_exposure_at_erosion"`
+	PrepExposureAtSettle  float64 `json:"prep_exposure_at_settle"`
 }
 
 type escapeRunner struct {
@@ -129,6 +138,10 @@ type escapeRunner struct {
 	// monthHook, when set, samples state after each monthly settlement and
 	// at month end (evidence tests use it for resource trajectories).
 	monthHook func()
+
+	// prevEroded 追踪上一采样点的 T2-4 GuaranteeEroded 布尔, 用于识别
+	// false→true 的授侵蚀跳变 (授窗计量: 0→>0 记一次)。
+	prevEroded bool
 }
 
 func newEscapeRunner(t *testing.T, line string, seed int64, prepLevel string, archetype string) *escapeRunner {
@@ -225,6 +238,19 @@ func (r *escapeRunner) snapshot() {
 			r.lastRee, trigger, silo.TopStance.MayorStance(), silo.TopStance.ITStance(), silo.TopStance.Guarantee))
 		r.stanceTrigger = ""
 	}
+	// T2-4 谈判可信度侵蚀逐月采样 (20 §7.3①, 随反制落地同批并入): 只读月度
+	// 结算后的反制账本, 不写状态、不消耗 RNG。GuaranteeEroded 是 one-shot
+	// 布尔 (§6.4 同源去重), false→true 记一次授侵蚀, 全程上限 1。
+	eroded := silo.Countermeasure.GuaranteeEroded
+	if eroded && !r.prevEroded {
+		r.rec.GuaranteeErosions++
+		r.rec.ErosionMonth = r.month()
+		r.rec.PrepExposureAtErosion = silo.EscapePrep.PrepExposure
+		r.beat(fmt.Sprintf("T2-4 guarantee erosion (prep_exposure=%.2f)", silo.EscapePrep.PrepExposure))
+	}
+	r.prevEroded = eroded
+	r.rec.GuaranteeEroded = eroded
+	r.rec.PrepExposureAtSettle = silo.EscapePrep.PrepExposure
 }
 
 func (r *escapeRunner) execute(label string, action model.AgentAction) bool {
