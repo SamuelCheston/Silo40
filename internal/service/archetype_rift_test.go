@@ -362,6 +362,11 @@ func TestRiftRuleOfLawReachable(t *testing.T) {
 	tunnels := 0
 	decisiveFired := false
 	decisiveImpactDone := false
+	// 决定性发布 (−24 large_scale_evidence) 必须落在日常已经把 W 磨到 ≤42 的
+	// 月份，否则 −24 加 ±12 的日常夹取够不到约章窗 (W≤18)，"连续 3 月在窗"
+	// 永远攒不齐 (实测 W=33 收尾、pact 从不锁定)。压力曝光只做 3 次：裂隙的
+	// 探查与第二条核验要靠曝光基金之后的 AP 抢在螺旋之前落地。
+	const decisiveWGate = 42.0
 	attempt := func(actionID string, cost float64) bool {
 		if svc.agent.ActionPoints < cost {
 			return false
@@ -419,7 +424,7 @@ func TestRiftRuleOfLawReachable(t *testing.T) {
 		}
 		gameMonth := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth - startAbs
 		secondPublishReady := exposes >= 3 && gameMonth-lastExposeMonth >= 3 &&
-			svc.agent.ActionPoints >= 20
+			svc.agent.ActionPoints >= 20 && svc.silo.Authority.W <= decisiveWGate
 		if playerCoreBelief(svc, "Judicial_1") >= 0.85 && !factVerified(svc.silo, "Judicial_1") &&
 			svc.agent.ActionPoints >= 15 {
 			attempt("verify_evidence", 15)
