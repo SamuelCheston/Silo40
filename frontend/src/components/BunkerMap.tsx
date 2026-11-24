@@ -12,6 +12,7 @@ import {
 } from "@chakra-ui/react";
 import { ProgressBar, ProgressRoot } from './ui/progress';
 import { Profession, Silo, Agent } from '../logic/models';
+import { useFragmentLibrary, fragmentTitle, fragmentTooltip } from '../logic/fragmentLibrary';
 import { X, Network } from 'lucide-react';
 import './BunkerMap.css';
 
@@ -26,6 +27,7 @@ const CLASS_DATA = [
 ];
 
 export const BunkerMap = React.memo(function BunkerMap({ silo, agent }: BunkerMapProps) {
+    const fragmentLib = useFragmentLibrary();
     const [selectedDept, setSelectedDept] = useState<Profession | null>(null);
 
     const getConnValue = (profId: number) => {
@@ -214,7 +216,7 @@ export const BunkerMap = React.memo(function BunkerMap({ silo, agent }: BunkerMa
                                     <Text fontSize="xs" fontWeight="bold" mb={2} color="gray.700">INTEL FRAGMENTS ({selectedDept.known_fragments?.length || 0})</Text>
                                     <HStack wrap="wrap" gap={1.5}>
                                         {selectedDept.known_fragments?.map(f => (
-                                            <Badge key={f} colorPalette="cyan" variant="solid" size="xs" borderRadius="sm">{f}</Badge>
+                                            <Badge key={f} colorPalette="cyan" variant="solid" size="xs" borderRadius="sm" title={fragmentTooltip(fragmentLib, f)}>{fragmentTitle(fragmentLib, f)}</Badge>
                                         )) || <Text fontSize="xs" color="gray.400" fontStyle="italic">No fragments known</Text>}
                                     </HStack>
                                 </Box>
