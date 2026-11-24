@@ -1,15 +1,16 @@
 package engine
 
-// 22 黑箱学习系列 01 卷 §9 参数总表：全部数值集中定义于此。
+// 22 黑箱学习系列 01 卷 §9 参数总表：世界侧数值集中定义于此。
 // 所有数值为推荐初值，等待 sim 校准覆盖 (TODO(balance))。
 // 叙事与 UI 不得写死时间描述 (00 卷 §10 纪律)。
 //
 // 属格划分 (00 卷 §5.2 真值/信念隔离)：
-//   - 世界侧物理参数 (真值)：Θ 动力学、E(r,Θ) 曲线与服从脉冲——黑箱回合
-//     (信念与决策) 禁止引用 (01 卷 §5.5 禁止读心审计)。
-//   - 1 号内部参数 (信念/决策)：先验、观测信号特性、漂移上界假设、伪装率
-//     假设形式、决策菜单、压力代价、冷却与日志容量——属 1 号自己的理论，
-//     基线初值与真实参数同量级 (01 卷 §6.2)。
+//   - 世界侧物理参数 (真值)：Θ 动力学、E(r,Θ) 曲线、服从脉冲与观测信号
+//     特性——黑箱回合 (信念与决策) 禁止引用 (01 卷 §5.5 禁止读心审计)。
+//   - 1 号内部参数 (信念/决策)：先验、内部似然、漂移上界假设、伪装率
+//     假设形式、决策菜单、压力代价、冷却与日志容量——集中在
+//     service/silo1_blackbox_constants.go (黑箱壁禁止决策侧 import engine)，
+//     与本表保持独立同值基线 (01 卷 §6.2)。
 
 // —— 世界侧：Θ 动力学 (01 卷 §3.2 候选 A 分段线性加性) ——
 
@@ -73,19 +74,8 @@ const (
 	BlackBoxThetaDefy = 0.70
 )
 
-// —— 1 号内部：信念先验 (01 卷 §5.1) ——
-
-const (
-	// BlackBoxBeliefBins N：信念箱数。箱宽 0.05 ≤ 观测噪声；16–32 均可接受。
-	// TODO(balance)
-	BlackBoxBeliefBins = 20
-	// BlackBoxPriorLambda λ：先验衰减率。先验均值 ≈ 0.24：表面服从是常态。
-	// TODO(balance)
-	BlackBoxPriorLambda = 4.0
-	// BlackBoxPriorFloor ε：先验均匀地板。防零锁死：任何箱可被后续信号翻转。
-	// TODO(balance)
-	BlackBoxPriorFloor = 0.05
-)
+// —— 1 号内部：信念先验/漂移与伪装假设/月度决策 (01 卷 §5.1/§5.3/§5.4/§6) ——
+// 集中在 service/silo1_blackbox_constants.go (黑箱壁禁止决策侧 import engine)。
 
 // —— 观测信号特性 (01 卷 §5.2；信号类型键见 model.BlackBoxSignal*) ——
 
@@ -125,37 +115,4 @@ const (
 	BlackBoxDisguiseOnset = 0.30
 	// BlackBoxDisguiseSpan 伪装爬升跨度。TODO(balance)
 	BlackBoxDisguiseSpan = 0.40
-)
-
-// —— 1 号内部：漂移与伪装假设 (01 卷 §5.3/§5.4；属 1 号理论，非读心) ——
-
-const (
-	// BlackBoxDriftHat ρ̂：1 号对「主任立场每月最多能变多快」的上界假设。
-	// > 真实 g_max = 0.12 (保守过散)；1 号自己的经验参数。TODO(balance)
-	BlackBoxDriftHat = 0.15
-	// BlackBoxDisguiseHatOnset / BlackBoxDisguiseHatSpan π̂(θ) =
-	// clamp01((θ − onset)/span)：1 号内部伪装率假设，与产生侧同形式。
-	// TODO(balance)
-	BlackBoxDisguiseHatOnset = 0.30
-	BlackBoxDisguiseHatSpan  = 0.40
-)
-
-// —— 1 号内部：月度决策 (01 卷 §6) ——
-
-const (
-	// BlackBoxMenuMin / BlackBoxMenuMax / BlackBoxMenuStep 决策菜单
-	// R = {0.00, 0.05, ..., 0.95} (21 点)。上界 0.95 < 1.0：决策层不自愿触碰
-	// DEATH 线 (00 卷 §5.1)。TODO(balance)
-	BlackBoxMenuMin  = 0.00
-	BlackBoxMenuMax  = 0.95
-	BlackBoxMenuStep = 0.05
-	// BlackBoxPressureCostKappa κ：压力代价系数。阻止在 Ê 已塌的高 r 区
-	// 无意义施压。TODO(balance)
-	BlackBoxPressureCostKappa = 0.10
-	// BlackBoxProbeCooldownInitial 探索冷却初值 (月)：试探至多两月一次量级
-	// (01 卷 §6.4 接口预留)。TODO(balance)
-	BlackBoxProbeCooldownInitial = 6
-	// BlackBoxLogCap 决策日志环形容量：与谈判层 NegotiationLogCap 同口径
-	// (04 卷 §2)。TODO(balance)
-	BlackBoxLogCap = 24
 )
