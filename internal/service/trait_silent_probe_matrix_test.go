@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -171,11 +172,14 @@ func departmentAlertness(t *testing.T, svc *GameService, name string) float64 {
 //   - 全部门各 3 个健康槽位落齐后停手等待渗透成熟（淡忘未启用，渗透是纯
 //     时间门），把动作痕迹压到最低。
 //
-// 组合实测（种子/职业/原型/结算月）：
-//   - 2401 / Judicial / bedrock（磐石）→ 128-11（IT 反击怀疑压力最大，靠提速跑赢）
-//   - 2404 / Judicial / famine（荒年）→ 127-07
-//   - 2424 / Judicial / rift（裂隙）→ 127-10（裂隙叛乱放大轴下只有部分种子可赢，
+// 组合实测（种子/职业/原型/结算月，第 5 批反制落地重调后）：
+//   - 2401 / Judicial / bedrock（磐石）→ 129-05（IT 反击怀疑压力最大，靠提速跑赢）
+//   - 2404 / Judicial / famine（荒年）→ 129-09
+//   - 2424 / Judicial / rift（裂隙）→ 129-09（裂隙叛乱放大轴下只有部分种子可赢，
 //     见报告：秩序波动轴是裂隙档的卡点）
+//
+// 流通循环已移植参考路线同套门（成本门/维护优先/半成品续播/日历播种截止），
+// 结算月较反制前基线整体后移 ≈1-2 年，全部仍在 130-01 地平线内。
 func TestSilentProbeInformationEndingMatrix(t *testing.T) {
 	cases := []struct {
 		archetype string
@@ -264,8 +268,10 @@ func runSilentProbeInformationRoute(t *testing.T, archetype string, seed int64) 
 		t.Fatalf("special:bailiff_dispatch_evidence_b did not fire through real monthly progression")
 	}
 
-	// 核验与发布：两份核心事实都进公开登记；发布尊重 2 个月冷却。
-	verifyReportFloor := engine.DefaultInformationConfig().QualReport
+	// 核验与发布 (参考路线重调同口径)：双事实进公开登记；发布段扩到 40 步并
+	// 加待发布存蓄纪律——investigate_dispatch (15 AP) 是抬升 Judicial_1 的
+	// 确定性手段，但一旦有事实已核验只差 20 AP 发布，就必须存 AP 而不是继续
+	// 调查，否则月收入被吃干、第二条事实发布带来的免费粘性槽整段丢失。
 	publishedFacts := func() map[string]bool {
 		out := map[string]bool{}
 		for _, record := range svc.silo.PublicEvidence {
@@ -273,43 +279,45 @@ func runSilentProbeInformationRoute(t *testing.T, archetype string, seed int64) 
 		}
 		return out
 	}
-	publishCooldownReady := func() bool {
-		state := svc.contentStates[svc.silo.ID]["player_action:publish_evidence"]
-		if state.TriggerCount == 0 {
-			return true
-		}
-		now := gameTimestamp(svc.silo.CurrentYear, svc.silo.CurrentMonth)
-		return now-state.LastTriggeredTimestamp >= 2*daysPerMonth
+	eventReady := func(id string) bool {
+		meta := actionByID(svc.availablePlayerActions(), id)
+		return meta != nil && meta.Enabled
 	}
-	for i := 0; i < 20; i++ {
+	publishPending := func() bool {
+		verified := map[string]bool{}
+		for _, fact := range svc.silo.VerifiedEvidence {
+			verified[fact] = true
+		}
+		published := publishedFacts()
+		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+			if !verified[fact] || published[fact] {
+				continue
+			}
+			if belief := engine.BeliefFor(svc.agent, fact); belief != nil && belief.B >= publishFloor {
+				return true
+			}
+		}
+		return false
+	}
+	for i := 0; i < 40; i++ {
 		published := publishedFacts()
 		if published["Judicial_1"] && published["Judicial_2"] {
 			break
 		}
-		verifiable, publishable := false, false
-		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
-			belief := engine.BeliefFor(svc.agent, fact)
-			if belief == nil {
-				continue
-			}
-			verified := false
-			for _, v := range svc.silo.VerifiedEvidence {
-				if v == fact {
-					verified = true
-				}
-			}
-			if belief.B >= verifyReportFloor && !verified {
-				verifiable = true
-			}
-			if belief.B >= publishFloor && verified && !published[fact] {
-				publishable = true
-			}
+		if svc.gameOver() {
+			break
 		}
-		if verifiable && svc.agent.ActionPoints >= 15 {
+		acted := false
+		if eventReady("verify_evidence") && svc.agent.ActionPoints >= 15 {
 			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "verify_evidence"})
+			acted = true
 		}
-		if publishable && publishCooldownReady() && svc.agent.ActionPoints >= 20 {
+		if eventReady("publish_evidence") && svc.agent.ActionPoints >= 20 {
 			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "publish_evidence"})
+			acted = true
+		}
+		if !acted && !publishPending() && eventReady("investigate_dispatch") && svc.agent.ActionPoints >= 15 {
+			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "investigate_dispatch"})
 		}
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance publication at step %d: %v", i, err)
@@ -348,20 +356,40 @@ func runSilentProbeInformationRoute(t *testing.T, archetype string, seed int64) 
 	}
 	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY"})
 
-	// 流通循环：把 9 个部门各 3 个槽位尽快落齐（渗透是纯时间门，落齐即停手
-	// 等待成熟——动作越少，磐石档的 IT 反击怀疑越追不上结算）。加深确信优先
-	// 无声探查；叛乱过热时蛰伏。
+	// 流通循环 (info_endgame/rift 重调验证过的同一套机制, 无声探查变体)：
+	//   - 服务端权威成本门 shareCostFor/buildCostFor：戒备上浮更贵、T3-2 监视
+	//     期接触不可用 (resolveActionCost 报错→+Inf)，尝试不打在必拒动作上；
+	//   - 断流维护 (upkeep) 优先，优先部门 (IT/Judicial) 买不起时整月存 AP；
+	//   - 半成品种子续播不换种、陈源不播、深填到 B ≥ 0.45 滑行 30 月窗；
+	//   - 播种截止用日历 (结算地平线 130-01 前留足 30 月渗透窗)；部门循环内
+	//     建联预算全部换成分享 (建联自带 1 月时长，吸收差仅 ≈0.1)。
 	shareCost := model.ACTION_COSTS[model.ActionShareInfo]
-	buildCost := model.ACTION_COSTS[model.ActionBuildConnection]
+	gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
 	shareAttempts := map[string]int{}
-	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
-	allSeeded := func() bool {
-		for i := range svc.silo.Professions {
-			if informationActiveSlots(&svc.silo.Professions[i]) < informationGateFactCount {
-				return false
-			}
+	upkeepAttempts := map[string]int{}
+	pendingSeed := map[string]string{}
+	shareCostFor := func(dept string) float64 {
+		action := model.AgentAction{Type: model.ActionShareInfo, TargetDept: dept, FragmentIds: []string{"probe"}}
+		if err := svc.resolveActionCost(&action); err != nil {
+			return math.Inf(1)
 		}
-		return true
+		return action.Cost
+	}
+	buildCostFor := func(dept string) float64 {
+		action := model.AgentAction{Type: model.ActionBuildConnection, TargetDept: dept}
+		if err := svc.resolveActionCost(&action); err != nil {
+			return math.Inf(1)
+		}
+		return action.Cost
+	}
+	priority := func(name string) int {
+		switch name {
+		case "IT", "Judicial":
+			return 0
+		case "Mayor":
+			return 1
+		}
+		return 2
 	}
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
@@ -371,14 +399,18 @@ func runSilentProbeInformationRoute(t *testing.T, archetype string, seed int64) 
 			break
 		}
 		progressResetCountermeasureForRoute(t, svc, execute)
-		if allSeeded() || svc.silo.Rebellion >= 0.7 {
+		if svc.silo.Rebellion >= 0.7 {
 			continue
 		}
-		gatherFrom := rotation[month%len(rotation)]
 		circulated := false
+		saveForPriority := false
 		for svc.agent.ActionPoints >= shareCost {
 			order := append([]model.Profession(nil), svc.silo.Professions...)
 			sort.SliceStable(order, func(i, j int) bool {
+				pi, pj := priority(order[i].Name), priority(order[j].Name)
+				if pi != pj {
+					return pi < pj
+				}
 				mi, mj := informationMaturedFacts(&order[i]), informationMaturedFacts(&order[j])
 				if mi != mj {
 					return mi < mj
@@ -388,19 +420,79 @@ func runSilentProbeInformationRoute(t *testing.T, archetype string, seed int64) 
 			shared := false
 			for i := range order {
 				dept := &order[i]
-				if informationActiveSlots(dept) >= informationGateFactCount {
+				if informationMaturedFacts(dept) >= informationGateFactCount {
 					continue
 				}
-				if month <= 30 && svc.pendingOperation == nil &&
-					agentConnectionTo(svc, dept) < 0.3 && svc.agent.ActionPoints >= buildCost+shareCost {
-					if tryExecute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: dept.Name}) {
+				_, endangered := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts)
+				pendingFact, hasPending := pendingSeed[dept.Name]
+				pendingBelowFloor := false
+				if hasPending {
+					if belief := professionBelief(dept, pendingFact); belief == nil ||
+						belief.B < engine.DefaultInformationConfig().QualRumor {
+						pendingBelowFloor = true
+					}
+				}
+				if priority(dept.Name) == 0 &&
+					(informationActiveSlots(dept) < informationGateFactCount || endangered || pendingBelowFloor) &&
+					shareCostFor(dept.Name) > svc.agent.ActionPoints {
+					saveForPriority = true
+					break
+				}
+				if fragment, ok := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts); ok &&
+					svc.agent.ActionPoints >= shareCostFor(dept.Name) {
+					upkeepAttempts[dept.Name+":"+fragment]++
+					if tryExecute(model.AgentAction{
+						Type: model.ActionShareInfo, TargetDept: dept.Name,
+						FragmentIds: []string{fragment},
+					}) {
 						shared = true
 						break
 					}
 				}
-				if fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
-					return shareAttempts[dept.Name+":"+fact] >= 4
-				}); ok {
+				if informationActiveSlots(dept) >= informationGateFactCount {
+					if _, waiting := pendingSeed[dept.Name]; !waiting {
+						continue
+					}
+				}
+				if 130*12+1-(svc.silo.CurrentYear*12+svc.silo.CurrentMonth) <= 30 {
+					continue
+				}
+				fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
+					deadStreak := func(belief *model.FactBelief) bool {
+						return belief != nil && belief.B < engine.DefaultInformationConfig().QualRumor &&
+							belief.PermeationCounter == 0
+					}
+					if shareAttempts[dept.Name+":"+fact] < 4 {
+						// 陈源不播：部门对同源仍有活观察时，同源递减把再吸收
+						// 压在地板附近，30 月窗内必断流。豁免只给"玩家播过的
+						// 流已死"——看观察记录 (share:player) 而非 shareAttempts。
+						for j := range dept.Beliefs {
+							if dept.Beliefs[j].FactID == fact {
+								attempted := false
+								for _, obs := range dept.Beliefs[j].Observations {
+									if strings.HasPrefix(obs, "share:player:") {
+										attempted = true
+										break
+									}
+								}
+								return !(attempted && deadStreak(&dept.Beliefs[j]))
+							}
+						}
+						return false
+					}
+					return !deadStreak(professionBelief(dept, fact))
+				})
+				if pending, waiting := pendingSeed[dept.Name]; waiting {
+					belief := professionBelief(dept, pending)
+					if (belief == nil || (belief.B < engine.DefaultInformationConfig().QualRumor && belief.PermeationCounter == 0)) &&
+						shareAttempts[dept.Name+":"+pending] < 8 {
+						fragment, ok = pending, true
+					} else {
+						delete(pendingSeed, dept.Name)
+					}
+				}
+				if ok {
+					// 加深确信用无声探查 (免怀疑)，付不起时回退普通 gather。
 					if agentBelief := engine.BeliefFor(svc.agent, fragment); agentBelief != nil && agentBelief.B < 0.80 {
 						probeCost := resolvedCost(model.ActionSilentProbe, fragmentDepartment(fragment))
 						if svc.agent.ActionPoints >= probeCost+shareCost {
@@ -408,19 +500,40 @@ func runSilentProbeInformationRoute(t *testing.T, archetype string, seed int64) 
 								shared = true
 								break
 							}
-						} else if gatherCost := resolvedCost(model.ActionGatherInfo, fragmentDepartment(fragment)); svc.agent.ActionPoints >= gatherCost+shareCost {
+						} else if svc.agent.ActionPoints >= gatherCost+shareCost {
 							if tryExecute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: fragmentDepartment(fragment)}) {
 								shared = true
 								break
 							}
 						}
 					}
-					shareAttempts[dept.Name+":"+fragment]++
-					if tryExecute(model.AgentAction{
+					if math.IsInf(shareCostFor(dept.Name), 1) || svc.agent.ActionPoints < shareCostFor(dept.Name) {
+						continue
+					}
+					shareAction := model.AgentAction{
 						Type: model.ActionShareInfo, TargetDept: dept.Name,
 						FragmentIds: []string{fragment},
-					}) {
+					}
+					shareAttempts[dept.Name+":"+fragment]++
+					if tryExecute(shareAction) {
 						shared = true
+						for shareAttempts[dept.Name+":"+fragment] < 6 &&
+							svc.agent.ActionPoints >= shareCostFor(dept.Name) {
+							belief := professionBelief(dept, fragment)
+							if belief == nil || belief.B >= 0.45 {
+								break
+							}
+							shareAttempts[dept.Name+":"+fragment]++
+							if !tryExecute(shareAction) {
+								break
+							}
+						}
+						if belief := professionBelief(dept, fragment); belief == nil ||
+							belief.B < engine.DefaultInformationConfig().QualRumor {
+							pendingSeed[dept.Name] = fragment
+						} else {
+							delete(pendingSeed, dept.Name)
+						}
 						break
 					}
 				}
@@ -433,10 +546,18 @@ func runSilentProbeInformationRoute(t *testing.T, archetype string, seed int64) 
 		if circulated {
 			continue
 		}
+		if saveForPriority {
+			continue
+		}
+		if svc.agent.ActionPoints >= buildCostFor("Judicial") && month < 12 {
+			tryExecute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
+			continue
+		}
+		gatherFrom := svc.agent.Profession
 		probeCost := resolvedCost(model.ActionSilentProbe, gatherFrom)
 		if svc.agent.ActionPoints >= probeCost {
 			tryExecute(model.AgentAction{Type: model.ActionSilentProbe, TargetDept: gatherFrom})
-		} else if gatherCost := resolvedCost(model.ActionGatherInfo, gatherFrom); svc.agent.ActionPoints >= gatherCost {
+		} else if svc.agent.ActionPoints >= gatherCost {
 			tryExecute(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
 		}
 	}
@@ -480,8 +601,12 @@ func runSilentProbeInformationRoute(t *testing.T, archetype string, seed int64) 
 	}
 	if svc.silo.VictoryStatus == nil || svc.silo.VictoryStatus.Decision == nil ||
 		svc.silo.VictoryStatus.Decision.Selected != endingInformation {
-		t.Fatalf("silent route did not settle as INFORMATION at %d-%02d: status=%+v",
-			svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.VictoryStatus)
+		excluded := ""
+		if svc.silo.VictoryStatus != nil && svc.silo.VictoryStatus.Decision != nil {
+			excluded = svc.silo.VictoryStatus.Decision.Excluded[endingInformation]
+		}
+		t.Fatalf("silent route did not settle as INFORMATION at %d-%02d: excluded=%q status=%+v",
+			svc.silo.CurrentYear, svc.silo.CurrentMonth, excluded, svc.silo.VictoryStatus)
 	}
 	t.Logf("silent INFORMATION route on %s (seed %d): settled %d-%02d silentUses=%d suspicion=%.3f rebellion=%.3f",
 		archetype, seed, svc.silo.CurrentYear, svc.silo.CurrentMonth, silentUses, svc.agent.SuspicionLevel, svc.silo.Rebellion)
