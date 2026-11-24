@@ -22,6 +22,10 @@ export function GetAllFragments() {
   return window['go']['main']['App']['GetAllFragments']();
 }
 
+export function GetFragmentLibrary() {
+  return window['go']['main']['App']['GetFragmentLibrary']();
+}
+
 export function GetEndingNarrative() {
   return window['go']['main']['App']['GetEndingNarrative']();
 }

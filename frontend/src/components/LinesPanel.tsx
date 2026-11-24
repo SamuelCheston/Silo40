@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Box, Badge, Heading, HStack, Text, VStack } from "@chakra-ui/react";
 import { InformationProgressPanel } from "./InformationProgressPanel";
+import { useFragmentLibrary, fragmentTitle, fragmentTooltip } from "../logic/fragmentLibrary";
 
 // 线信息架构面板：一局只有一条主线，其余是"还开着的路"。
 //
@@ -331,6 +332,7 @@ function MissionBriefing({ world, agent, progress }: { world: any; agent: any; p
 
 // 共享事实带：被多条线消费的事实只在这里说一次。
 function SharedFacts({ silo, world, progress }: { silo: any; world: any; progress: any }) {
+    const fragmentLib = useFragmentLibrary();
     const authority = silo?.authority || {};
     const judicial = authority?.judicial || {};
     const departments = progress?.departments || [];
@@ -367,8 +369,8 @@ function SharedFacts({ silo, world, progress }: { silo: any; world: any; progres
             {evidence.length > 0 && (
                 <VStack align="stretch" gap={0.5} mt={1}>
                     {evidence.map((record: any) => (
-                        <Text key={record.fact_id} fontSize="xs" color="gray.600">
-                            登记 {record.fact_id} · 来源 {Number(record.provenance).toFixed(1)} · 覆盖 {Number(record.coverage).toFixed(1)}
+                        <Text key={record.fact_id} fontSize="xs" color="gray.600" title={fragmentTooltip(fragmentLib, record.fact_id)}>
+                            登记 {fragmentTitle(fragmentLib, record.fact_id)} · 来源 {Number(record.provenance).toFixed(1)} · 覆盖 {Number(record.coverage).toFixed(1)}
                         </Text>
                     ))}
                 </VStack>

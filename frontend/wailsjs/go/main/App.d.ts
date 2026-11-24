@@ -14,6 +14,8 @@ export function ExecuteAction(arg1:model.AgentAction):Promise<model.ActionOutcom
 
 export function GetAllFragments():Promise<Array<string>>;
 
+export function GetFragmentLibrary():Promise<Array<model.FragmentTemplateMeta>>;
+
 export function GetEndingNarrative():Promise<string>;
 
 export function GetEventHistory(arg1:number):Promise<model.EventHistoryResult>;

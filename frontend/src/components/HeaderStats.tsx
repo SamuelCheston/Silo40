@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Box, HStack, Text, VStack, Badge } from "@chakra-ui/react";
 import { Agent, AgentStats, Silo } from "../logic/models";
+import { useFragmentLibrary, fragmentTitle, fragmentTooltip } from "../logic/fragmentLibrary";
 import { Zap, Eye, Star, Megaphone, Users, Clock, Shield, Flame } from 'lucide-react';
 import { Tooltip } from "./ui/tooltip";
 import { ResourcePanel } from "./ResourcePanel";
@@ -35,6 +36,7 @@ const ARCHETYPE_INFO: Record<string, { name: string; description: string; color:
 };
 
 export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats, deathNote }: HeaderStatsProps) {
+    const fragmentLib = useFragmentLibrary();
     if (!agent || !silo || !agentStats) return null;
 
     return (
@@ -224,7 +226,7 @@ export const HeaderStats = memo(function HeaderStats({ agent, silo, agentStats, 
                                 <Text fontWeight="bold" fontSize="xs" mb={1}>已知碎片 (Known Fragments)</Text>
                                 <HStack wrap="wrap" gap={1}>
                                     {agent.known_fragments?.map(f => (
-                                        <Badge key={f} colorPalette="purple" size="xs" variant="solid">{f}</Badge>
+                                        <Badge key={f} colorPalette="purple" size="xs" variant="solid" title={fragmentTooltip(fragmentLib, f)}>{fragmentTitle(fragmentLib, f)}</Badge>
                                     ))}
                                 </HStack>
                             </Box>

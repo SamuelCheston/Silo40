@@ -1792,6 +1792,34 @@ export namespace model {
 	        this.suspicion_penalty = source["suspicion_penalty"];
 	    }
 	}
+	export class FragmentTemplateMeta {
+	    id: string;
+	    title: string;
+	    department: string;
+	    tier: string;
+	    theme: string;
+	    document_form: string;
+	    body_template: string;
+	    locked_claims: string[];
+	    next_leads: string;
+
+	    static createFrom(source: any = {}) {
+	        return new FragmentTemplateMeta(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.department = source["department"];
+	        this.tier = source["tier"];
+	        this.theme = source["theme"];
+	        this.document_form = source["document_form"];
+	        this.body_template = source["body_template"];
+	        this.locked_claims = source["locked_claims"];
+	        this.next_leads = source["next_leads"];
+	    }
+	}
 	export class GameState {
 	    silo: Silo;
 	    agent: Agent;

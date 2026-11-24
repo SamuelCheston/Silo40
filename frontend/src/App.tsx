@@ -12,6 +12,7 @@ import { HeaderStats } from './components/HeaderStats';
 import { WorldPanel } from './components/WorldPanel';
 import { LinesPanel } from './components/LinesPanel';
 import { Silo, Agent, AgentAction, AgentActionType, GameState, AgentStats, PlayerActionMeta, StoryEventLog } from './logic/models';
+import { useFragmentLibrary, fragmentTitle, fragmentTooltip } from './logic/fragmentLibrary';
 import { LayoutGrid, Users } from 'lucide-react';
 
 // 月度反馈里的故事带上来源堡前缀，多堡同月触发相同内容时玩家才分得清是谁家的事。
@@ -197,6 +198,8 @@ function App() {
         (agent?.beliefs || []).forEach((b: any) => { m[b.fact_id] = b.b; });
         return m;
     }, [agent?.beliefs]);
+    // 碎片内容库（标题/正文）：徽章显示可读标题，悬浮读正文。
+    const fragmentLib = useFragmentLibrary();
     // 与 events/mechanics 的 INFO_CFG.qual_rumor 保持一致的分享门槛。
     const SHARE_FLOOR = 0.30; // TODO(balance)
 
@@ -788,9 +791,9 @@ function App() {
                                                                 const shareable = isKnown && typeof b === 'number' && b >= SHARE_FLOOR;
                                                                 let palette: string;
                                                                 let title: string;
-                                                                let label = f;
+                                                                let label = fragmentTitle(fragmentLib, f);
                                                                 if (isKnown) {
-                                                                    label = `${f} · B ${(typeof b === 'number' ? b : 0).toFixed(2)}`;
+                                                                    label = `${fragmentTitle(fragmentLib, f)} · B ${(typeof b === 'number' ? b : 0).toFixed(2)}`;
                                                                     if (shareable) {
                                                                         palette = isSelected ? "blue" : "teal";
                                                                         title = `确信 B ${b.toFixed(2)} ≥ ${SHARE_FLOOR.toFixed(2)}：可作为事实分享`;
@@ -799,7 +802,7 @@ function App() {
                                                                         title = `确信 B ${(typeof b === 'number' ? b : 0).toFixed(2)} < ${SHARE_FLOOR.toFixed(2)}：仍是私人猜测，不能分享——继续对该线「Gather Info」加深确信`;
                                                                     }
                                                                 } else {
-                                                                    label = `${f}（假）`;
+                                                                    label = `${fragmentTitle(fragmentLib, f)}（假）`;
                                                                     palette = isSelected ? "red" : "orange";
                                                                     title = "假碎片：不在你手中。分享会大幅抬升怀疑并降低接收率";
                                                                 }
@@ -810,7 +813,7 @@ function App() {
                                                                         variant={isSelected ? "solid" : "subtle"}
                                                                         cursor="pointer"
                                                                         onClick={() => toggleFragment(f)}
-                                                                        title={title}
+                                                                        title={`${title}\n${fragmentTooltip(fragmentLib, f)}`}
                                                                     >
                                                                         {label}
                                                                     </Badge>

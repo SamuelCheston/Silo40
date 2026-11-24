@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { Box, Badge, Heading, HStack, Text, SimpleGrid } from "@chakra-ui/react";
+import { useFragmentLibrary, fragmentTitle, fragmentTooltip } from "../logic/fragmentLibrary";
 
 // 《共证》线进度面板 (修复3)：链节点点亮状态与部门事实覆盖。
 // 数据全部来自后端权威快照 (information_progress)，前端不复算引擎公式。
@@ -50,6 +51,7 @@ const nodeHint: Record<string, string> = {
 };
 
 export const InformationProgressPanel = memo(function InformationProgressPanel({ progress, finished }: Props) {
+    const fragmentLib = useFragmentLibrary();
     if (!progress) return null;
     const need = progress.gate_fact_count;
     const nothingLit = progress.nodes.every(node => !node.lit);
@@ -118,8 +120,9 @@ export const InformationProgressPanel = memo(function InformationProgressPanel({
                                 成熟 {Math.min(matured, need)}/{need}{matured > need ? ` (+${matured - need})` : ""}
                             </Text>
                             {!done && permeating.length > 0 && (
-                                <Text fontSize="2xs" color="blue.600" mt={0.5}>
-                                    渗透中：{permeating.slice(0, 3).map(p => `${p.fact_id} 差${p.months_left}月`).join("、")}
+                                <Text fontSize="2xs" color="blue.600" mt={0.5}
+                                    title={permeating.slice(0, 3).map(p => fragmentTooltip(fragmentLib, p.fact_id)).join("\n\n")}>
+                                    渗透中：{permeating.slice(0, 3).map(p => `${fragmentTitle(fragmentLib, p.fact_id)} 差${p.months_left}月`).join("、")}
                                     {permeating.length > 3 ? ` 等${permeating.length}项` : ""}
                                 </Text>
                             )}

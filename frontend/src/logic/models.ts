@@ -31,6 +31,7 @@ export type ActionResult = model.ActionResult;
 export type AgentStats = model.AgentStats;
 export type ProfessionActionMeta = model.ProfessionActionMeta;
 export type PlayerActionMeta = model.PlayerActionMeta;
+export type FragmentTemplateMeta = model.FragmentTemplateMeta;
 export type GameState = model.GameState;
 export type TickResult = model.TickResult;
 export type ActionOutcome = model.ActionOutcome;
