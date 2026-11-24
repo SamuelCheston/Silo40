@@ -533,7 +533,14 @@ func (s *GameService) resolveWeightedEnding(station *model.Silo, agent *model.Ag
 	if allDepartmentsHoldFragments(station) {
 		pool[endingInformation] = true
 	} else {
-		decision.Excluded[endingInformation] = "跨部门公共事实未成立（部门成熟证据不足）"
+		missing := ""
+		for _, prof := range station.Professions {
+			mc := engine.MaturedFactCount(&prof)
+			if mc < informationGateFactCount {
+				missing += fmt.Sprintf("%s=%d ", prof.Name, mc)
+			}
+		}
+		decision.Excluded[endingInformation] = "跨部门公共事实未成立（部门成熟证据不足: " + missing + ") " + fmt.Sprintf("gate=%d", informationGateFactCount)
 	}
 	if escapeAlive {
 		pool[endingRebellion] = true
