@@ -368,7 +368,7 @@ defineMechanics([
             type: "victory_status_set",
             field: "DEATH",
             bool_value: false,
-            text: "保障程序被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
+            text: "1 号远程启动了终止程序。致命毒剂经分层输送管网泵入驻地地堡，全堡被彻底清洗。",
           }],
         };
       }
