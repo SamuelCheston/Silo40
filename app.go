@@ -236,6 +236,23 @@ func (a *App) GetAllFragments() []string {
 	return model.ALL_FRAGMENTS
 }
 
+// GetFragmentLibrary 返回碎片内容库 (只读展示元数据：标题/正文/来源/指向)。
+// 权威内容在 events/fragments.json，Bootstrap 期 fail-closed 装载；
+// 前端用它把碎片徽章从裸键渲染为可读情报。
+func (a *App) GetFragmentLibrary() ([]model.FragmentTemplateMeta, error) {
+	if a.gameService == nil && a.ready != nil {
+		select {
+		case <-a.ready:
+		case <-time.After(5 * time.Second):
+			return nil, fmt.Errorf("game service initialization timed out")
+		}
+	}
+	if a.gameService == nil {
+		return nil, nil
+	}
+	return a.gameService.FragmentLibraryMeta(), nil
+}
+
 // GetProfessionActions 获取职业专属行动元数据 (前端渲染按钮用，不含执行逻辑)
 func (a *App) GetProfessionActions(profession string) ([]model.ProfessionActionMeta, error) {
 	return engine.GetProfessionActionMeta(profession), nil
