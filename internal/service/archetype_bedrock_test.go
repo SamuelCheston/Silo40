@@ -740,11 +740,36 @@ func TestBedrockInformationLinePlayable(t *testing.T) {
 				publishable = true
 			}
 		}
+		acted := false
 		if verifiable && svc.agent.ActionPoints >= 15 {
-			attempt("verify_evidence", 15)
+			acted = attempt("verify_evidence", 15)
 		}
 		if publishable && publishCooldownReady() && svc.agent.ActionPoints >= 20 {
-			attempt("publish_evidence", 20)
+			acted = attempt("publish_evidence", 20) || acted
+		}
+		// 双事实发布 (26 §四 B)：无核验/发布可做时，用官方调查把较弱链
+		// (Judicial_1) 抬到发布地板，而不是让路线只发一条事实、再靠流通
+		// 补 18 个槽。同时必须存蓄：待发布事实存在时不要再花 15 AP 调查，
+		// 否则 AP 被月收入钉在 20 以下，第二条事实永远发不出去 (裂隙档
+		// 实测 40 个月只发出一条)。
+		pendingPublish := false
+		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+			if published[fact] {
+				continue
+			}
+			verified := false
+			for _, v := range svc.silo.VerifiedEvidence {
+				if v == fact {
+					verified = true
+				}
+			}
+			belief := engine.BeliefFor(svc.agent, fact)
+			if verified && belief != nil && belief.B >= publishFloor {
+				pendingPublish = true
+			}
+		}
+		if !acted && !pendingPublish && !verifiable && svc.agent.ActionPoints >= 15 {
+			attempt("investigate_dispatch", 15)
 		}
 		passTime()
 		progressResetCountermeasureForRoute(t, svc, execute)
@@ -779,18 +804,36 @@ func TestBedrockInformationLinePlayable(t *testing.T) {
 	}
 	execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "RECEIVER_VERIFY_ACCOMPANY"})
 
-	// 流通循环：9 部门各 3 个槽位落齐后停手等待渗透成熟 (渗透是纯时间门，
-	// 落齐即停手——动作越少，磐石档的 IT 反击怀疑越追不上结算)。加深确信与
-	// 扩池探查优先无声探查；叛乱过热时蛰伏。
+	// 流通循环：9 部门各 3 个槽位成熟前持续推进 (渗透是纯时间门)；两条核心
+	// 事实发布后每个部门只差一个第三槽。加深确信与扩池探查优先无声探查；
+	// 叛乱过热时蛰伏。
 	shareCost := model.ACTION_COSTS[model.ActionShareInfo]
 	gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
-	buildCost := model.ACTION_COSTS[model.ActionBuildConnection]
 	shareAttempts := map[string]int{}
 	upkeepAttempts := map[string]int{}
+	// 半成品种子续播：同一事实没补过地板前不换种 (见 info_endgame 同名字段)。
+	pendingSeed := map[string]string{}
 	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
-	allSeeded := func() bool {
+	// 分享成本按服务端权威口径；监视期接触不可用视作无穷贵。
+	shareCostFor := func(name string) float64 {
+		if engine.ContactUnderWatch(svc.silo, name) {
+			return math.Inf(1)
+		}
+		return resolvedCost(model.ActionShareInfo, name)
+	}
+	// 监视者排序 (26 §四 E)：IT/Judicial 优先，Mayor 次之。
+	priority := func(name string) int {
+		switch name {
+		case "IT", "Judicial":
+			return 0
+		case "Mayor":
+			return 1
+		}
+		return 2
+	}
+	allMatured := func() bool {
 		for i := range svc.silo.Professions {
-			if informationActiveSlots(&svc.silo.Professions[i]) < informationGateFactCount {
+			if informationMaturedFacts(&svc.silo.Professions[i]) < informationGateFactCount {
 				return false
 			}
 		}
@@ -802,14 +845,19 @@ func TestBedrockInformationLinePlayable(t *testing.T) {
 			break
 		}
 		progressResetCountermeasureForRoute(t, svc, execute)
-		if allSeeded() || svc.silo.Rebellion >= 0.7 {
+		if allMatured() || svc.silo.Rebellion >= 0.7 {
 			continue
 		}
 		gatherFrom := rotation[month%len(rotation)]
 		circulated := false
+		saveForPriority := false
 		for svc.agent.ActionPoints >= shareCost {
 			order := append([]model.Profession(nil), svc.silo.Professions...)
 			sort.SliceStable(order, func(i, j int) bool {
+				pi, pj := priority(order[i].Name), priority(order[j].Name)
+				if pi != pj {
+					return pi < pj
+				}
 				mi, mj := informationMaturedFacts(&order[i]), informationMaturedFacts(&order[j])
 				if mi != mj {
 					return mi < mj
@@ -822,7 +870,26 @@ func TestBedrockInformationLinePlayable(t *testing.T) {
 				if informationMaturedFacts(dept) >= informationGateFactCount {
 					continue
 				}
-				if fragment, ok := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts); ok {
+				_, endangered := endangeredStreakCandidateWithin(svc.agent, dept, upkeepAttempts, 0.06)
+				pendingFact, hasPending := pendingSeed[dept.Name]
+				pendingBelowFloor := false
+				if hasPending {
+					if belief := professionBelief(dept, pendingFact); belief == nil ||
+						belief.B < engine.DefaultInformationConfig().QualRumor {
+						pendingBelowFloor = true
+					}
+				}
+				// AP 存蓄 (同 info_endgame)：IT/Judicial 的分享成本翻倍，
+				// 月收入却只有 ≈3；买不起时整月不花，留给优先部门，否则
+				// 刚过地板的槽会在维护前断流。
+				if priority(dept.Name) == 0 &&
+					(informationActiveSlots(dept) < informationGateFactCount || endangered || pendingBelowFloor) &&
+					shareCostFor(dept.Name) > svc.agent.ActionPoints {
+					saveForPriority = true
+					break
+				}
+				if fragment, ok := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts); ok &&
+					svc.agent.ActionPoints >= shareCostFor(dept.Name) {
 					upkeepAttempts[dept.Name+":"+fragment]++
 					if tryExecute(model.AgentAction{
 						Type: model.ActionShareInfo, TargetDept: dept.Name,
@@ -833,18 +900,31 @@ func TestBedrockInformationLinePlayable(t *testing.T) {
 					}
 				}
 				if informationActiveSlots(dept) >= informationGateFactCount {
-					continue
-				}
-				if month <= 30 && svc.pendingOperation == nil &&
-					agentConnectionTo(svc, dept) < 0.3 && svc.agent.ActionPoints >= buildCost+shareCost {
-					if tryExecute(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: dept.Name}) {
-						shared = true
-						break
+					if _, waiting := pendingSeed[dept.Name]; !waiting {
+						continue
 					}
 				}
-				if fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
+				// 播种截止：以日历为准——动作自带时长，循环序号会漂移；
+				// 结算 Y130M1 前不足 30 月的新种已无法成熟。
+				if 130*12+1-(svc.silo.CurrentYear*12+svc.silo.CurrentMonth) <= 30 {
+					continue
+				}
+				// 建联已整体移除 (26 §九 偏差 1)：1 月时长 × 36 次会把播种
+				// 窗口吃光，而吸收公式由 B_player 主导，关系 0.2→0.5 只差
+				// ≈0.1；把 AP/日历直接换成分享与深填。
+				fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
 					return shareAttempts[dept.Name+":"+fact] >= 4
-				}); ok {
+				})
+				if pending, waiting := pendingSeed[dept.Name]; waiting {
+					belief := professionBelief(dept, pending)
+					if (belief == nil || (belief.B < engine.DefaultInformationConfig().QualRumor && belief.PermeationCounter == 0)) &&
+						shareAttempts[dept.Name+":"+pending] < 8 {
+						fragment, ok = pending, true
+					} else {
+						delete(pendingSeed, dept.Name)
+					}
+				}
+				if ok {
 					if agentBelief := engine.BeliefFor(svc.agent, fragment); agentBelief != nil && agentBelief.B < 0.80 {
 						probeCost := resolvedCost(model.ActionSilentProbe, fragmentDepartment(fragment))
 						if svc.agent.ActionPoints >= probeCost+shareCost {
@@ -865,6 +945,29 @@ func TestBedrockInformationLinePlayable(t *testing.T) {
 						FragmentIds: []string{fragment},
 					}) {
 						shared = true
+						// 深填 (26 §四 D)：新槽连续分享到 B ≥ 0.45，正好滑行
+						// 完 30 月渗透窗；浅播会在 10 月内断流。
+						for shareAttempts[dept.Name+":"+fragment] < 6 &&
+							svc.agent.ActionPoints >= shareCostFor(dept.Name) &&
+							!engine.ContactUnderWatch(svc.silo, dept.Name) {
+							belief := professionBelief(dept, fragment)
+							if belief == nil || belief.B >= 0.45 {
+								break
+							}
+							shareAttempts[dept.Name+":"+fragment]++
+							if !tryExecute(model.AgentAction{
+								Type: model.ActionShareInfo, TargetDept: dept.Name,
+								FragmentIds: []string{fragment},
+							}) {
+								break
+							}
+						}
+						if belief := professionBelief(dept, fragment); belief == nil ||
+							belief.B < engine.DefaultInformationConfig().QualRumor {
+							pendingSeed[dept.Name] = fragment
+						} else {
+							delete(pendingSeed, dept.Name)
+						}
 						break
 					}
 				}
@@ -875,6 +978,9 @@ func TestBedrockInformationLinePlayable(t *testing.T) {
 			circulated = true
 		}
 		if circulated {
+			continue
+		}
+		if saveForPriority {
 			continue
 		}
 		probeCost := resolvedCost(model.ActionSilentProbe, gatherFrom)
@@ -905,8 +1011,12 @@ func TestBedrockInformationLinePlayable(t *testing.T) {
 	}
 	if svc.silo.VictoryStatus == nil || svc.silo.VictoryStatus.Decision == nil ||
 		svc.silo.VictoryStatus.Decision.Selected != endingInformation {
-		t.Fatalf("bedrock route did not settle as INFORMATION at %d-%02d: status=%+v",
-			svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.VictoryStatus)
+		excluded := ""
+		if svc.silo.VictoryStatus != nil && svc.silo.VictoryStatus.Decision != nil {
+			excluded = svc.silo.VictoryStatus.Decision.Excluded[endingInformation]
+		}
+		t.Fatalf("bedrock route did not settle as INFORMATION at %d-%02d: excluded=%q status=%+v",
+			svc.silo.CurrentYear, svc.silo.CurrentMonth, excluded, svc.silo.VictoryStatus)
 	}
 	t.Logf("bedrock INFORMATION (seed %d): settled %d-%02d in %d months, W_min=%.2f suspicion_peak=%.3f rebellion=%.3f silent_uses=%d",
 		seed, svc.silo.CurrentYear, svc.silo.CurrentMonth, tr.months(svc), tr.wMin, tr.susMax, svc.silo.Rebellion, silentUses)
