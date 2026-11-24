@@ -784,7 +784,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       false,
 			Type:        "DEATH",
-			Description: "保障程序被激活。IT部门的过度干预触发了底层核心逻辑，清理程序启动，驻地地堡被彻底清洗。",
+			Description: "1 号远程启动了终止程序。致命毒剂经分层输送管网泵入驻地地堡，全堡被彻底清洗。",
 		}
 		return
 	}
@@ -794,7 +794,7 @@ func (e *GameEngine) checkVictoryConditions(silo *model.Silo, agent *model.Agent
 		silo.VictoryStatus = &model.VictoryStatus{
 			IsWon:       false,
 			Type:        "DEATH",
-			Description: "地堡内已无生命迹象。人类最后的堡垒沦为了一座寂静的坟墓。",
+			Description: "地堡内已无生命迹象。曾经熙攘的分层街市，沦为了一座寂静的坟墓。",
 		}
 		return
 	}

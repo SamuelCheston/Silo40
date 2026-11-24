@@ -54,7 +54,7 @@ var silo18ChainNodes = []silo18ChainNode{
 	{
 		ID: "N2", DueYear: 122, DueMonth: 5,
 		Title:       "市长 Jahns 暴毙，Bernard 夺权",
-		Description: "市长 Jahns 下行招募机械师 Juliette；Bernard 毒杀 Jahns 与副手 Marnes，依 Pact 自任代理市长。",
+		Description: "市长 Jahns 下行招募机械师 Juliette；Bernard 下毒谋害副手 Marnes，Jahns 误饮同毒身亡，Bernard 依 Pact 自任代理市长。",
 		Apply: func(s *GameService, silo18 *model.Silo, logs *[]string) {
 			killSilo18Named(silo18, "Jahns", logs)
 			killSilo18Named(silo18, "Marnes", logs)
