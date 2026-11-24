@@ -17,7 +17,7 @@
     {
       "id": "sealed_hard_drive",
       "name": "封存硬盘",
-      "description": "数代人之前加密存储介质，可能载有多堡技术资料与历史档案。最高违禁品，持有即重罪。",
+      "description": "数代人之前的加密存储介质，封漆仍在，堡内没有人能确切说出里面装着什么。旧目录说，这类介质可能载有多堡的技术资料与历史档案，也因此被列为最高违禁品——持有即重罪，无论读不读得出。它偶尔出现在旧仓库与清库批次里，每次露面都很快被转移别处。对见过它的人来说，它更像一封被封死的信：重要的不是里面写了什么，而是它写给谁。",
       "category": "storage_medium",
       "locations": ["sealed_vault", "old_warehouse", "recycling"],
       "weight": 1,
@@ -29,7 +29,7 @@
     {
       "id": "archive_shard",
       "name": "多堡档案残片",
-      "description": "残损的只读存储片，内容指向其它地堡的存在。无法单独解读，需与旧版书籍组合鉴定。",
+      "description": "残损的只读存储片，内容大半无法读出，只有头部编号完整——那是跨堡通讯协议的格式。它无法单独解读，按 IT 的旧目录，要与旧版书籍组合鉴定。残片的存在本身说明这座堡不是孤岛：曾经有堡与堡之间互相说话。发件栏是空的，没有人知道它来自线路的哪一端。",
       "category": "storage_medium",
       "locations": ["sealed_vault", "old_warehouse"],
       "weight": 1,
@@ -41,7 +41,7 @@
     {
       "id": "registration_locket",
       "name": "登记挂坠盒",
-      "description": "旧时期随身饰品，内衬登记编号。登记制度存在的实物旁证，未登记持有按一般实物处理。",
+      "description": "旧时期的随身饰品，磨得发亮，内衬的登记编号仍可辨认。它是登记制度存在的实物旁证——如今每一次人员调动、每一件违禁品的编目，仍沿用同一套编号，而这套编号能在这种旧物上找到源头。未登记持有按一般实物处理，登记过便只算旧物。戴过它的人早已无迹可寻，只剩编号留在原处。",
       "category": "personal_item",
       "locations": ["residential", "old_warehouse", "private_stash"],
       "weight": 5,
@@ -53,7 +53,7 @@
     {
       "id": "engraved_watch",
       "name": "刻字旧表",
-      "description": "机械旧表，表背刻有私人赠言。可登记合法化的少数物品之一，本身不指向上层控制方。",
+      "description": "机械旧表，机芯还走，表背刻着一行私人赠言。它是少数可以登记合法化的物品之一，也因此常被人留着，当作人与人之间关系的凭证。赠言指向两个人的私交，不指向任何上层控制方，这是它能在禁令下幸存的原因。表针停在某个时刻，没有人再去校它。",
       "category": "personal_item",
       "locations": ["residential", "private_stash", "recycling"],
       "weight": 6,
@@ -65,7 +65,7 @@
     {
       "id": "ration_tin",
       "name": "旧纪元口粮罐",
-      "description": "数代人之前的密封口粮罐，印着已废止的配给标识。来源年代与私人关系的日常旁证。",
+      "description": "数代人之前的密封口粮罐，罐身印着早已废止的配给标识。它不承载任何上层秘密，只是那个年代配给制度与普通人日常往来的旁证。但旧标识的存在本身说明，补给编号至少被改写过一次，而旧体系的实物还散落在底层。这类罐子在居住区与旧仓库的清库中偶尔出现，大多被回炉，留下的是少数。",
       "category": "daily_goods",
       "locations": ["residential", "old_warehouse", "recycling"],
       "weight": 9,
@@ -77,7 +77,7 @@
     {
       "id": "prewar_packaging",
       "name": "前朝商品包装",
-      "description": "成批的旧时期商品包装纸，印有地表城市的商业图案。未登记持有可能违法，无直接上层信息。",
+      "description": "成批的旧时期商品包装纸，印着地表城市的商业图案——街道、招牌、货架上的货物，都是堡内人没见过的东西。未登记持有可能违法，但它本身不携带直接的上层信息。它的价值在于证明：数代人之前，地表有城市，城市里有买卖。这样一批包装纸从哪里入库、又流向哪里，台账上没有说。",
       "category": "daily_goods",
       "locations": ["residential", "recycling", "private_stash"],
       "weight": 10,
@@ -89,7 +89,7 @@
     {
       "id": "image_reader",
       "name": "影像读取器",
-      "description": "可读取旧影像的手持设备，具体内容取决于残留影像。需要可用设备与读取能力，未登记持有违法。",
+      "description": "可读取旧影像的手持设备，机身完好，残留的影像取决于它曾经录下过什么。要读出内容，需要可用的设备与懂得读取的人，两者都难得。未登记持有违法，禁令防的不是设备本身，而是它可能装着的东西。上一个使用它的人没有留下记录——他看到了什么，没人知道。",
       "category": "imaging_device",
       "locations": ["old_warehouse", "recycling", "sealed_vault"],
       "weight": 3,
@@ -101,7 +101,7 @@
     {
       "id": "maintenance_lens",
       "name": "检修记录仪",
-      "description": "旧时期设备检修用的记录镜头，残留片段可能拍到不应存在的区域活动。",
+      "description": "旧时期设备检修用的记录镜头，原本为核验维修过程而设。残留片段可能拍到不应存在的区域活动——这正是它成为违禁品的原因。机械部的老师傅听过这类东西：镜头拍下的不是故障，而是不在图纸上的门。影像可以被抹掉，但它曾经拍下过什么，这件事抹不掉。",
       "category": "imaging_device",
       "locations": ["old_warehouse", "sealed_vault"],
       "weight": 4,
@@ -113,7 +113,7 @@
     {
       "id": "old_world_atlas",
       "name": "旧世界地图册",
-      "description": "数代人之前的地理图册，描绘的地名与现状叙事不符。支持「旧世界叙事被改写」，接触依赖民间保存网络。",
+      "description": "数代人之前的地理图册，纸页发黄发脆，字迹仍然清楚。它描绘的地名与地形和如今的口径对不上——这正是它的罪状，也是它的价值。它支持「旧世界的叙事被改写过」这一说法，也因此，接触它依赖的是民间保存网络，而不是任何官方渠道。每一本存世的图册，都是对现行叙事的一份预印驳词。",
       "category": "geography_book",
       "locations": ["folk_books", "book_depot", "sealed_vault"],
       "weight": 4,
@@ -125,7 +125,7 @@
     {
       "id": "travel_journal",
       "name": "旅行手记",
-      "description": "旧时期旅行者的手写札记，记录地表日常生活细节。持有违法，可被司法部没收。",
+      "description": "旧时期旅行者的手写札记，记录的是地表日常生活的细节：天气、食物、路上遇到的人与告别。持有违法，可被司法部没收——禁令针对的不是文字本身，而是它证明地表曾经可以行走。手记没有留下作者的名字，只留下了一条走过的路线。对没见过天空的堡内人来说，它既是证据，也是伤口。",
       "category": "geography_book",
       "locations": ["folk_books", "private_stash", "book_depot"],
       "weight": 5,
@@ -137,7 +137,7 @@
     {
       "id": "banned_novel",
       "name": "禁毁小说",
-      "description": "登记清单之外的旧版文学作品，按本地书籍登记与关联案件判定，不预设一律违法。",
+      "description": "登记清单之外的旧版文学作品，书页完整，封皮磨旧。它是否违禁，按本地书籍登记与关联案件判定，并不预设一律违法——这是它少有的边界尚可争辩之处。小说写的不是堡内的秘密，只是旧时代人怎样生活、怎样相爱与失去。而仅仅是这些，也足够让它被写进案卷。",
       "category": "old_book",
       "locations": ["book_depot", "private_stash", "evidence_room"],
       "weight": 3,
@@ -149,7 +149,7 @@
     {
       "id": "decoding_reference",
       "name": "解码参考书",
-      "description": "旧版工具书，页边留有批注。与加密存储介质组合可产生解码观察，是鉴定链的关键材料。",
+      "description": "旧版工具书，页边留有批注，字迹细密，像是怕被人看见。它是鉴定链上的关键材料：与加密存储介质组合，可以产生解码观察，把读不出的东西变成可读的东西。批注本身也是证据——有人曾经系统地读过那些不该被读的内容。书可以被没收，批注却没法被收回。",
       "category": "old_book",
       "locations": ["book_depot", "it_archive", "evidence_room"],
       "weight": 2,
