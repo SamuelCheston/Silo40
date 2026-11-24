@@ -376,6 +376,13 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 			buildupOpen = svc.silo.CurrentYear >= 127
 			rebellionBuildCap = 0.6
 		}
+		if svc.silo.Archetype == engine.ArchetypeBedrock {
+			// 磐石档高 W 让 IT 反击成本更低，月度反查把怀疑度在 126 年前后推过
+			// 0.7——而 >0.7 会关闭 STATION_DECEIVE (identity_erasure_stage)。
+			// 因此把策反窗口提前到档案唤醒后的 123 年，赶在身份抹除准备期前把
+			// 两次真实策反排入队列；阶梯本身由时间戳驱动，不受这次提前影响。
+			buildupOpen = svc.silo.CurrentYear >= 123
+		}
 		buildingRebellion := buildupOpen && svc.silo.Rebellion < rebellionBuildCap
 		pending := deceivePending()
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
@@ -388,8 +395,12 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 		// rebellion-gated guard alone woke up too late on the famine draw.
 		strikeChannelLive := contentTriggered(svc, "special:termination_channel_test") &&
 			!contentTriggered(svc, "special:strike_reconnaissance")
-		energyGuard := (svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500) ||
-			(strikeChannelLive && resourceAmount(svc.silo, "Energy") < 500)
+		energyGuard := svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500
+		if svc.silo.Archetype == engine.ArchetypeFamine {
+			// 荒年档的资源枯竭才需要信道维护的额外能量底线 (见上)；磐石/裂隙
+			// 的能量轨迹不靠这条兜底，保留它会长期堵死策反 (磐石实测 deceives=0)。
+			energyGuard = energyGuard || (strikeChannelLive && resourceAmount(svc.silo, "Energy") < 500)
+		}
 		if buildingRebellion && deceives < deceiveCap && !pending && !energyGuard && deceive != nil && deceive.Enabled &&
 			svc.agent.ActionPoints >= float64(deceive.APCost+15) {
 			execute(model.AgentAction{Type: model.ActionStationOperation, ActionID: StationOpDeceive})
