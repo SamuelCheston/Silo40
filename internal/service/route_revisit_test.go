@@ -91,6 +91,10 @@ func TestRouteSecondWindowDeclinePath(t *testing.T) {
 	if meta := actionByID(svc.availablePlayerActions(), "ROUTE_SURVEY_REACCEPT"); meta != nil && meta.Enabled {
 		t.Fatalf("reaccept visible before the second window: %+v", meta)
 	}
+	// 即时后果：拒绝当下就把等待的暴露记账（喂出发追踪基数），不等第二扇窗。
+	if !charterRevisitAlmostEqual(svc.silo.EscapePrep.PrepExposure, 0.02) {
+		t.Fatalf("immediate decline exposure = %v, want 0.02", svc.silo.EscapePrep.PrepExposure)
+	}
 
 	if _, err := svc.PassTime(8); err != nil {
 		t.Fatalf("advance to the second window: %v", err)
@@ -98,8 +102,9 @@ func TestRouteSecondWindowDeclinePath(t *testing.T) {
 	if !contentTriggered(svc, "special:route_second_window") {
 		t.Fatal("route_second_window did not fire 8 months after the decline")
 	}
-	if !charterRevisitAlmostEqual(svc.silo.EscapePrep.PrepExposure, 0.03) {
-		t.Fatalf("delay exposure = %v, want 0.03", svc.silo.EscapePrep.PrepExposure)
+	// 即时 0.02 + 第二扇窗 0.03 = 0.05：拖延的暴露两段都真实落账。
+	if !charterRevisitAlmostEqual(svc.silo.EscapePrep.PrepExposure, 0.05) {
+		t.Fatalf("delay exposure = %v, want 0.05", svc.silo.EscapePrep.PrepExposure)
 	}
 	meta := actionByID(svc.availablePlayerActions(), "ROUTE_SURVEY_REACCEPT")
 	if meta == nil || !meta.Enabled {
@@ -153,6 +158,10 @@ func TestRouteSecondWindowDeferPath(t *testing.T) {
 	}
 	completeGateEvent(svc, "player_actions:route_survey_offer")
 	executePlayerEventAction(t, svc, "ROUTE_SURVEY_DEFER")
+	// 即时后果：暂缓当下记一笔更轻的暴露（等待短于拒绝）。
+	if !charterRevisitAlmostEqual(svc.silo.EscapePrep.PrepExposure, 0.01) {
+		t.Fatalf("immediate defer exposure = %v, want 0.01", svc.silo.EscapePrep.PrepExposure)
+	}
 
 	if _, err := svc.PassTime(3); err != nil {
 		t.Fatalf("advance 3 months: %v", err)
@@ -166,8 +175,9 @@ func TestRouteSecondWindowDeferPath(t *testing.T) {
 	if !contentTriggered(svc, "special:route_second_window") {
 		t.Fatal("route_second_window did not fire 4 months after the defer")
 	}
-	if !charterRevisitAlmostEqual(svc.silo.EscapePrep.PrepExposure, 0.03) {
-		t.Fatalf("delay exposure = %v, want 0.03", svc.silo.EscapePrep.PrepExposure)
+	// 即时 0.01 + 第二扇窗 0.03 = 0.04。
+	if !charterRevisitAlmostEqual(svc.silo.EscapePrep.PrepExposure, 0.04) {
+		t.Fatalf("delay exposure = %v, want 0.04", svc.silo.EscapePrep.PrepExposure)
 	}
 	if meta := actionByID(svc.availablePlayerActions(), "ROUTE_SURVEY_REACCEPT"); meta == nil || !meta.Enabled {
 		t.Fatalf("reaccept must unlock after the defer window: %+v", meta)
