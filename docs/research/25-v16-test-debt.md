@@ -352,3 +352,44 @@ test/seed-retune 已合并 main（b512691），合并态全量复测（238s）�
 3. **处置**（按 [ADR-0011](../../knowledge/adr/0011-opening-bias-needs-test-retuning.md)）：
    合并冻结在 `feat/opening-variability` 上待重调，不在红状态下继续叠加
    新机制；原分支与工作树保留。上述清单即重调批次的任务表。
+
+## 十二、反制第 5 批测试账清账（2026-11-25，feat/cm-ledger-retune）
+
+第十一节红名单随 20 分册第 5 批（T1-3/T2-4/T3-1b/T3-2）测试账重调**逐项清零**。
+纪律：全部修复走测试路线层（脚本时序/门控/种子），不改服务端机制、不新增
+随机源、不白盒设状态、不弱化断言；临时 env 换种子与诊断日志一律未进提交。
+
+### 清账提交表（逐档原子提交）
+
+| 提交 | 靶子 | 手段（全部路线层） |
+| --- | --- | --- |
+| `65ab84a` | TestSilentProbeInformationEndingMatrix 三原型 | 流通门移植参考路线（26 篇 3 事实 × 30 月口径） |
+| `7d0d047` | TestFamineReachabilityInformationLine | 同上移植 + resolvedCost 门控、播种截止日历口径，129-09 结算 |
+| `168b101` | TestDeathPhysicalStrikePlayableFromNewGame/{bedrock,rift} | 策反窗口与能量底线按原型分流 |
+| `133e1a0` | TestRiftRuleOfLawReachable + TestRuleOfLawLinePlayableFromNewGame/{bedrock,famine} | 决定性发布加 W≤42 谷底门（±12 日常夹取顶进约章窗）+ 曝光预算分档（裂隙第 3 次停手、灾荒曝光基金让路调查） |
+| `de7d393` | TestTerminationChannelCountermeasurePlayableFromNewGame/bedrock | 磐石开窗前移 ≥123（怀疑度 0.7 关策反/触顶除名之前），同批 T3-1b 观测账 |
+| `b51fbae` | TestRebellionLinePlayableFromNewGame/rift | 种子路线重校 2402→**2416**（原路由原断言；2402 发射抽签 mayor=block 注定破 20 人解散线，2402..2418 扫描首命中 2416：departed 32/存活 25/出堡 2 月），同批 T2-4 观测账 |
+
+另有 TestBedrockInformationLinePlayable、TestRiftInformationReachable、
+TestInformationEndingPlayableFromNewGame/{bedrock,rift} 随同批流通门重调恢复。
+
+### §7.3 观测账（同批并入，前缀 `[Countermeasure]`）
+
+- **rift-info（T1-3/T3-2）**：授窗计量 0→>0 记一次、到期再触发另起新窗；
+  最长单授窗 ≤24 月上界、摩擦 AP（建联+流通）≤36，全程零触发显式失败
+  （archetype_rift_test.go）。
+- **越岭（T2-4）**：GuaranteeEroded one-shot false→true 记一次授侵蚀；
+  三原型实测各 1 次（触发 prep_exposure=0.40/0.40/0.46），上限 >1 显式失败；
+  纯权重塑形直接摩擦 AP=0 ≤36；结算月实测 bedrock 83 / rift 50 / famine 65，
+  无同路由无反制对照，记实测月不做漂移断言（escape 链测试 + harness 采样）。
+- **寂堡死亡/终止信道（T3-1b）**：t31bLockLedger 逐月采样两类锁月数，授灰
+  各 ≤1（one-shot），灰置等待 ×3.0 AP 计摩擦 ≤36，全程零授灰显式失败
+  （silo1_reaction_chain_test.go）。
+
+### 结算月漂移对照账（§7.3③，漂移 ≤6 月）
+
+- 有固定时钟的宿主（无声探查/灾荒可达性/rift-info 的 129-09、共证系）：
+  流通门移植不改时钟，漂移 0 月。
+- 无固定时钟的宿主（越岭/法治/死亡/终止信道）：立场为带权随机抽签、
+  锁窗/灰置无同路由无反制基线，按 §7.3 口径记实测月入观测账，
+  不做漂移断言（避免把随机抽签当漂移噪声）。
