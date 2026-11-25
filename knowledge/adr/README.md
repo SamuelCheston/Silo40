@@ -37,6 +37,7 @@
 | [0018](0018-unified-actor-player-as-representative.md) | 后端无玩家/NPC 之分：共用 Actor 接口，玩家即代表人物 | 已接受 | 2026-11-17 |
 | [0019](0019-safeguard-from-accumulation-to-assignment.md) | safeguard 由后果累加改为 1 号指派基线（Go 累加点变观测输入，DEATH 硬线保留） | 已接受 | 2026-11-15 |
 | [0020](0020-pre-release-consumables-no-retune-obligation.md) | 上线前种子调优等消耗品不承担即时重调义务（漂移落欠账，重调须所有者裁决） | 已接受 | 2026-11-19 |
+| [0021](0021-forgetting-rate-adjudication.md) | 恒定淡忘速率定标 0.005/月（同种子双速率对照 47 项验收裁决，0.01 落选并清理对应分支与 worktree） | 已接受 | 2026-11-26 |
 
 ## 维护约定
 

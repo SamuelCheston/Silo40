@@ -174,7 +174,12 @@ func DefaultInformationConfig() InformationConfig {
 		// 事实) 各连续 30 个月过地板，深填目标为 B₀ = 0.30 + 30r = 0.45；相比
 		// r=0.01 所需的 B₀=0.60，深填与补流通成本回到生涯 AP 预算内。0.005 下
 		// 深填事实约 30 个月滑回地板，《公议》的实时高水位也必须靠再流通维持。
-		ForgetRateMonthly: 0.005,
+		// 速率裁决依据（ADR-0021）：同一 main 提交 (c61fb25) 单行差分、同固定种子
+		// 跑五组受影响验收共 47 项——0.005 全绿，0.01 挂 13 项（《共证》事实成熟
+		// 计数停在 2/3、《公议》决定性冲击不点火、争仲裁落 AGENT_COMPROMISED 除名）。
+		// 0.01 只作为 17 篇 §3 的初评值保留，不再作为实现口径；此值仍属待整体平衡
+		// 复核的初值，改动必须与深填锚 / PermeationMonths / IndependenceRe 同组重跑对照。
+		ForgetRateMonthly: 0.005, // TODO(balance)
 
 		// TODO(balance): 渗透月数 sim 起点 (18-time-permeation §4)，推荐起点 30、
 		// 区间 [24, 36]，判据为"重调后保守结算 ≤ 94 的最大值"。恒定淡忘在真实
