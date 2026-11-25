@@ -5,9 +5,10 @@ package service
 //  1. 只读既有事实——contentStates 的完成键/事实键 (何时、哪一支)、内容事件
 //     定义的既有文案 (标题/叙事)、StoryEventLog 的点火记录 (缺定义时的文案
 //     与时点兜底)、以及与仲裁同口径的堡内事实 (后果句)。不新造状态、不抽 RNG。
-//  2. 按对结局的因果相关度选材：每个结局一张候选键表 (本线里程碑与抉择支
-//     优先，失败结局读征兆与反制)，不足 3 条时用其余已点亮里程碑/征兆补齐，
-//     仍不足 3 条返回 nil——呈现端退化为既有结算行，不给空面板。
+//  2. 选材先回读"玩家做过的抉择"：窗口/路口/反制/资源投入四类抉择键跨线
+//     全量收齐 (recapDecisionKeys) 优先占位，再按结局候选键表补本线里程碑
+//     与征兆；不足 3 条时用其余已点亮里程碑/征兆补齐，仍不足 3 条返回 nil
+//     ——呈现端退化为既有结算行，不给空面板。总量仍夹在 6 条内。
 //  3. 后果句一律由完成键事实与结算事实拼成 (与仲裁读同一组事实)，不另写
 //     抒情模板。
 
@@ -31,6 +32,98 @@ var recapEndingNames = map[string]string{
 	endingFracture:     "《断层》",
 	endingDeath:        "《寂堡》",
 	endingCompromised:  "《除名》",
+}
+
+// recapDecisionKeys 本局关键抉择目录：玩家亲手做过选择的完成键，跨线全量
+// 回读 (不受结局候选表限制)。四类：
+//   - 窗口：抉择机会出现过 (窗本身也是事实)；
+//   - 路口：互斥支里实际点亮的那一支 (未点亮的支自然跳过)；
+//   - 反制：对重置/整肃/终止链条的玩家反制动作；
+//   - 资源投入：把补给/材料/工时花进准备账本的动作。
+//
+// 顺序即同刻排序的相关度序；全部是既有内容事件键/完成键，只读点亮状态。
+var recapDecisionKeys = []string{
+	// 窗口
+	"player_actions:charter_contact_offer",
+	"player_actions:route_survey_offer",
+	"special:route_second_window",
+	"crisis:charter_window_expiry",
+	"special:escape_window_open",
+	"player_actions:reset_countermeasure_offer",
+	// 路口：约章接触
+	"player_actions:charter_contact_accept",
+	"player_actions:charter_contact_decline",
+	"player_actions:charter_contact_defer",
+	"player_actions:charter_second_accept",
+	"player_actions:charter_second_decline",
+	// 路口：路线勘察
+	"player_actions:route_survey_accept",
+	"player_actions:route_survey_decline",
+	"player_actions:route_survey_defer",
+	"player_actions:route_survey_reaccept",
+	// 路口：继承与市长
+	"player_actions:succession_pure_rule",
+	"player_actions:succession_seed_procedure",
+	"player_actions:mayor_ally_accept",
+	"player_actions:mayor_ally_bypass",
+	// 路口：覆灭前夕
+	"player_actions:pre_fall_open_inquiry",
+	"player_actions:pre_fall_loyalty_mobilization",
+	"player_actions:pre_fall_total_riot",
+	// 路口：证据处置
+	"player_actions:publish_evidence",
+	"player_actions:verify_evidence",
+	// 路口：开窗方式
+	"player_actions:escape_window_orderly",
+	"player_actions:escape_window_riot",
+	// 路口：谈判层 (开信道/递条款/试探是过程抉择，接管/不接管互斥)
+	"player_actions:negotiation_open_channel",
+	"player_actions:negotiation_offer_terms",
+	"player_actions:negotiation_probe",
+	"player_actions:negotiation_hands_off",
+	"player_actions:negotiation_takeover",
+	// 反制
+	"player_action:reset_countermeasure_done",
+	"player_actions:silo1_purge_countermeasure",
+	"player_actions:silo1_purge_plot_leak",
+	"player_actions:termination_channel_jam",
+	// 资源投入：划拨与接应
+	"player_actions:escape_prep_transfer_supplies",
+	"player_actions:escape_prep_transfer_materials",
+	"player_actions:escape_reception_stocking",
+	// 资源投入：能力准备
+	"player_actions:escape_prep_care",
+	"player_actions:escape_prep_production",
+	"player_actions:escape_prep_suit_repair",
+	"player_actions:escape_prep_suit_warehouse",
+	"player_actions:escape_drill",
+	// 资源投入：预案功能位
+	"player_actions:escape_plan_agricultural",
+	"player_actions:escape_plan_mechanical",
+	"player_actions:escape_plan_medical",
+	"player_actions:escape_plan_mines",
+	"player_actions:escape_plan_order",
+	"player_actions:escape_plan_supply",
+	// 资源投入：先遣/出发/保障
+	"player_actions:advance_party_dispatch",
+	"player_actions:escape_departure_launch",
+	"player_actions:escape_negotiation_guarantee",
+}
+
+// recapCompletionTitles 完成键的人话标题：完成键没有内容定义，点火记录也
+// 可能缺位——回读时不给玩家看裸键名。
+var recapCompletionTitles = map[string]string{
+	"player_action:reset_countermeasure_done": "托管反制完成",
+}
+
+// recapPlanRoleNames 预案功能位键 → 人话部门名 (与内容定义标题同口径)。
+var recapPlanRoleNames = map[string]string{
+	"player_actions:escape_plan_agricultural": "农业",
+	"player_actions:escape_plan_mechanical":   "机械",
+	"player_actions:escape_plan_medical":      "医疗",
+	"player_actions:escape_plan_mines":        "矿业",
+	"player_actions:escape_plan_order":        "秩序",
+	"player_actions:escape_plan_supply":       "补给",
 }
 
 // recapCandidates 每个结局的候选键表，按因果相关度排序 (前面的先入选)。
@@ -126,6 +219,10 @@ func (s *GameService) buildEndingRecap(station *model.Silo, selected string) []m
 		}
 		picks = append(picks, recapPick{key: key, ts: state.LastTriggeredTimestamp, rank: len(picks)})
 	}
+	// 抉择优先：窗口/路口/反制/资源投入跨线全量回读，先占位。
+	for _, key := range recapDecisionKeys {
+		add(key)
+	}
 	for _, key := range recapCandidates(selected) {
 		add(key)
 	}
@@ -185,7 +282,11 @@ func (s *GameService) buildEndingRecap(station *model.Silo, selected string) []m
 			}
 		}
 		if entry.Title == p.key {
-			entry.Title = strings.SplitN(p.key, ":", 2)[1]
+			if title, ok := recapCompletionTitles[p.key]; ok {
+				entry.Title = title
+			} else {
+				entry.Title = strings.SplitN(p.key, ":", 2)[1]
+			}
 		}
 		entry.Consequence = s.recapConsequence(p.key, station, selected)
 		entries = append(entries, entry)
@@ -322,6 +423,51 @@ func (s *GameService) recapConsequence(key string, station *model.Silo, selected
 		return "选择公开证据；" + infoFact + "。"
 	case "player_actions:verify_evidence":
 		return "选择核验证据；" + infoFact + "。"
+	case "player_actions:charter_contact_offer":
+		return "程序派联系人出现过；" + pactFact + "。"
+	case "player_actions:charter_second_accept":
+		return "第二扇窗里接受了约章接触；" + pactFact + "。"
+	case "player_actions:charter_second_decline":
+		return "第二扇窗里拒绝了约章接触；" + pactFact + "。"
+	case "crisis:charter_window_expiry":
+		return "约章开窗期到期关闭；" + pactFact + "。"
+	case "player_actions:route_survey_offer":
+		return "路线勘察委托窗口出现过；" + s.recapRouteFact(station.ID) + "。"
+	case "player_actions:route_survey_accept":
+		return "接受了路线勘察委托；" + s.recapRouteFact(station.ID) + "。"
+	case "player_actions:route_survey_decline":
+		return "拒绝了路线勘察委托；" + s.recapRouteFact(station.ID) + "。"
+	case "player_actions:route_survey_defer":
+		return "推迟了路线勘察委托；" + s.recapRouteFact(station.ID) + "。"
+	case "player_actions:route_survey_reaccept":
+		return "在第二扇窗里重新委托勘察；" + s.recapRouteFact(station.ID) + "。"
+	case "special:route_second_window":
+		return "第二扇勘察窗在收窄后打开；" + s.recapRouteFact(station.ID) + "。"
+	case "special:escape_window_open":
+		return "逃离窗口打开：" + recapEscapeFact(station) + "。"
+	case "player_actions:negotiation_open_channel":
+		return "打开了与市长的谈判信道；" + recapNegotiationFact(station) + "。"
+	case "player_actions:negotiation_offer_terms":
+		return "把妥协条款摆上了桌面；" + recapNegotiationFact(station) + "。"
+	case "player_actions:negotiation_probe":
+		return fmt.Sprintf("试探市长底线 %d 次；%s。",
+			s.contentStates[station.ID][key].TriggerCount, recapNegotiationFact(station))
+	case "player_actions:negotiation_hands_off":
+		return "妥协后选择不接管、带组织离开；" + recapEscapeFact(station) + "。"
+	case "player_actions:negotiation_takeover":
+		return "妥协后选择接管市长职位；" + personalFact + "。"
+	case "player_actions:silo1_purge_countermeasure":
+		count := s.contentStates[station.ID][key].TriggerCount
+		if s.contentFactTriggered(station.ID, "special:silo1_purge_softened") {
+			return fmt.Sprintf("名册反制触发 %d 次并已生效：整肃降档执行，少带走了一些人。", count)
+		}
+		return fmt.Sprintf("名册反制触发 %d 次，但篡改尚未生效。", count)
+	case "player_actions:silo1_purge_plot_leak":
+		count := s.contentStates[station.ID][key].TriggerCount
+		if s.contentFactTriggered(station.ID, "special:silo1_purge_exposed") {
+			return fmt.Sprintf("信息反制触发 %d 次并已生效：整肃图谋被公开，执行失去突然性。", count)
+		}
+		return fmt.Sprintf("信息反制触发 %d 次，但图谋尚未被公开。", count)
 	case "player_actions:reset_countermeasure_offer":
 		return "反制窗口出现过；" + countermeasureFact + "。"
 	case "player_action:reset_countermeasure_done":
@@ -330,15 +476,54 @@ func (s *GameService) recapConsequence(key string, station *model.Silo, selected
 		}
 		return "反制已完成，重置没有发生。"
 	case "player_actions:termination_channel_jam":
-		if s.contentFactTriggered(station.ID, terminationFactKey) {
-			return "干扰了终止通道，但远程终止仍然执行。"
+		count := s.contentStates[station.ID][key].TriggerCount
+		jamFact := "信道干扰未生效"
+		if s.contentFactTriggered(station.ID, "special:termination_channel_disrupted") {
+			jamFact = "信道干扰已生效"
 		}
-		return "干扰了终止通道，远程终止没有执行。"
+		if s.contentFactTriggered(station.ID, terminationFactKey) {
+			return fmt.Sprintf("通道反制触发 %d 次，%s，但远程终止仍然执行。", count, jamFact)
+		}
+		return fmt.Sprintf("通道反制触发 %d 次，%s，远程终止没有执行。", count, jamFact)
 	case "player_actions:expose_execution_failure":
 		if s.agent != nil {
 			return fmt.Sprintf("执行失败被暴露，怀疑度升至 %.2f。", s.agent.SuspicionLevel)
 		}
 		return "执行失败被暴露。"
+	case "player_actions:escape_prep_transfer_supplies":
+		return fmt.Sprintf("累计划拨 %d 次；结算封存补给共 %.0f 人·月。",
+			s.contentStates[station.ID][key].TriggerCount, station.EscapePrep.SuppliesPacked)
+	case "player_actions:escape_prep_transfer_materials":
+		return fmt.Sprintf("累计划拨 %d 次；结算封存装备材料共 %.0f。",
+			s.contentStates[station.ID][key].TriggerCount, station.EscapePrep.MaterialsPacked)
+	case "player_actions:escape_reception_stocking":
+		return fmt.Sprintf("接应点完成囤备；结算接应档位为%s，封存补给共 %.0f 人·月。",
+			recapReceptionStageName(station.EscapePrep.ReceptionStage), station.EscapePrep.SuppliesPacked)
+	case "player_actions:escape_prep_care":
+		return fmt.Sprintf("照护储备已建立；结算照护能力 %.2f。", station.EscapePrep.CareReady)
+	case "player_actions:escape_prep_production":
+		fact := "未备"
+		if station.EscapePrep.ProductionStart {
+			fact = "已备"
+		}
+		return "生产起点动作完成；结算时生产起点" + fact + "。"
+	case "player_actions:escape_prep_suit_repair":
+		return fmt.Sprintf("累计修复 %d 次；结算可用防护服 %d 套。",
+			s.contentStates[station.ID][key].TriggerCount, station.EscapePrep.SuitsFunctional)
+	case "player_actions:escape_prep_suit_warehouse":
+		return fmt.Sprintf("累计启用预置缓存 %d 次；结算可用防护服 %d 套。",
+			s.contentStates[station.ID][key].TriggerCount, station.EscapePrep.SuitsFunctional)
+	case "player_actions:escape_drill":
+		return fmt.Sprintf("累计演练 %d 次；结算演练水平 %.2f。",
+			s.contentStates[station.ID][key].TriggerCount, station.EscapePrep.DrillLevel)
+	case "player_actions:advance_party_dispatch":
+		return fmt.Sprintf("先遣小组已派出；结算接应档位为%s。",
+			recapReceptionStageName(station.EscapePrep.ReceptionStage))
+	case "player_actions:escape_departure_launch":
+		return "出发已启动：" + recapEscapeFact(station) + "。"
+	case "player_actions:escape_negotiation_guarantee":
+		return fmt.Sprintf("向顶层递出了保障清单；结算时市长立场为%s。",
+			recapTopStanceName(station.TopStance.MayorStance()))
 	case resetFactKey:
 		return fmt.Sprintf("重置完成：驻地仍有居民 %d 人，历史包袱降至 %.2f。", station.TotalPopulation, station.HistoryBurden)
 	case fractureFactKey:
@@ -350,6 +535,13 @@ func (s *GameService) recapConsequence(key string, station *model.Silo, selected
 	case normalcyFactKey:
 		state := s.contentStates[station.ID][key]
 		return fmt.Sprintf("封闭叙事硬化已点亮 %d 次，封闭秩序主导了危机时刻的选择。", state.TriggerCount)
+	}
+
+	// 预案功能位：报告对接了哪个部门与结算预案完备度。
+	if role, ok := recapPlanRoleNames[key]; ok {
+		prep := station.EscapePrep
+		return fmt.Sprintf("完成%s预案功能位对接；结算预案完备度 %.2f（已对接 %d 个功能位）。",
+			role, prep.PlanCompleteness, len(prep.PlanRoles))
 	}
 
 	// 失败征兆：报告已发生的次数与该失败线的可归属事实。
@@ -400,4 +592,49 @@ func (s *GameService) recapConsequence(key string, station *model.Silo, selected
 		return fmt.Sprintf("点亮%s第 %d 格；结算时：%s。", recapLineTitle(line), depth, s.recapLineFact(line, station))
 	}
 	return fmt.Sprintf("该事实计入%s的结算。", recapEndingNames[selected])
+}
+
+// recapRouteFact 路线勘察的结算事实 (读既有路线确认键)。
+func (s *GameService) recapRouteFact(siloID uint) string {
+	if s.contentFactTriggered(siloID, "special:route_confirmed") {
+		return "路线已确认"
+	}
+	return "路线未确认"
+}
+
+// recapNegotiationFact 谈判层的结算事实 (只读既有谈判账本)。
+func recapNegotiationFact(station *model.Silo) string {
+	n := station.Negotiation
+	if !n.Initialized {
+		return "谈判层未开启"
+	}
+	compromise := "妥协未成立"
+	if n.CompromiseEstablished {
+		compromise = "妥协已成立"
+	}
+	return fmt.Sprintf("谈判已交换 %d 回合，%s", n.Rounds, compromise)
+}
+
+// recapReceptionStageName 接应档位的人话名。
+func recapReceptionStageName(stage string) string {
+	switch stage {
+	case "surveyed":
+		return "已勘察"
+	case "confirmed":
+		return "已确认"
+	case "stocked":
+		return "已囤备"
+	}
+	return "未建立"
+}
+
+// recapTopStanceName 顶层立场的人话名。
+func recapTopStanceName(stance string) string {
+	switch stance {
+	case model.TopStanceNonBlock:
+		return "不阻挠"
+	case model.TopStanceCooperate:
+		return "配合"
+	}
+	return "阻挠"
 }

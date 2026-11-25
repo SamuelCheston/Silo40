@@ -200,3 +200,114 @@ func TestFinishArbitrationRecapWiring(t *testing.T) {
 		t.Fatalf("continue-simulating decision must not grow recap: %+v", got.Recap)
 	}
 }
+
+// TestEndingRecapResourceSpending locks the resource-investment readback:
+// transfer counts and the sealed-ledger settlement facts are read back per
+// action; plan-role and reception entries carry their ledger facts.
+func TestEndingRecapResourceSpending(t *testing.T) {
+	svc := linesFixture()
+	states := svc.statesMapFor(svc.silo.ID)
+	states["player_actions:escape_prep_transfer_supplies"] = model.ContentEventState{
+		Triggered: true, TriggerCount: 3, LastTriggeredTimestamp: gameTimestamp(123, 2),
+	}
+	recapLit(svc, "player_actions:escape_plan_supply", 123, 4)
+	recapLit(svc, "player_actions:escape_reception_stocking", 123, 6)
+	svc.silo.EscapePrep = model.EscapePreparation{
+		Initialized: true, SuppliesPacked: 750, PlanRoles: []string{"supply"},
+		PlanCompleteness: 1.0 / 6, ReceptionStage: "stocked",
+	}
+
+	recap := svc.buildEndingRecap(svc.silo, endingRebellion)
+	byKey := map[string]model.EndingRecapEntry{}
+	for _, e := range recap {
+		byKey[e.Key] = e
+	}
+	transfer, ok := byKey["player_actions:escape_prep_transfer_supplies"]
+	if !ok {
+		t.Fatalf("resource spending must be read back: %+v", recap)
+	}
+	if !strings.Contains(transfer.Consequence, "3 次") || !strings.Contains(transfer.Consequence, "750 人·月") {
+		t.Fatalf("transfer consequence must read count and ledger: %+v", transfer)
+	}
+	plan := byKey["player_actions:escape_plan_supply"]
+	if !strings.Contains(plan.Consequence, "补给") || !strings.Contains(plan.Consequence, "功能位") {
+		t.Fatalf("plan-role consequence must read the role and completeness: %+v", plan)
+	}
+	reception := byKey["player_actions:escape_reception_stocking"]
+	if !strings.Contains(reception.Consequence, "已囤备") {
+		t.Fatalf("reception consequence must read the stage: %+v", reception)
+	}
+}
+
+// TestEndingRecapCrossLineJunctions locks the cross-line junction readback:
+// even when the settled ending is INFORMATION, branches actually taken on
+// other lines are read back, and untaken sides of each mutex group stay out.
+func TestEndingRecapCrossLineJunctions(t *testing.T) {
+	svc := linesFixture()
+	recapLit(svc, "player_actions:charter_contact_offer", 122, 4)
+	recapLit(svc, "player_actions:charter_contact_decline", 122, 5)
+	recapLit(svc, "player_actions:route_survey_defer", 123, 1)
+	recapLit(svc, "player_actions:pre_fall_total_riot", 124, 2)
+
+	recap := svc.buildEndingRecap(svc.silo, endingInformation)
+	byKey := map[string]model.EndingRecapEntry{}
+	for _, e := range recap {
+		byKey[e.Key] = e
+	}
+	for _, key := range []string{
+		"player_actions:charter_contact_offer", "player_actions:charter_contact_decline",
+		"player_actions:route_survey_defer", "player_actions:pre_fall_total_riot",
+	} {
+		if _, ok := byKey[key]; !ok {
+			t.Fatalf("cross-line decision %s missing from recap: %+v", key, recap)
+		}
+	}
+	for _, key := range []string{
+		"player_actions:charter_contact_accept", "player_actions:charter_contact_defer",
+		"player_actions:route_survey_accept", "player_actions:pre_fall_open_inquiry",
+	} {
+		if _, ok := byKey[key]; ok {
+			t.Fatalf("untaken branch must not be read back: %s", key)
+		}
+	}
+	if !strings.Contains(byKey["player_actions:charter_contact_decline"].Consequence, "拒绝") {
+		t.Fatalf("decline branch consequence wrong: %+v", byKey["player_actions:charter_contact_decline"])
+	}
+	if !strings.Contains(byKey["player_actions:route_survey_defer"].Consequence, "推迟") {
+		t.Fatalf("defer branch consequence wrong: %+v", byKey["player_actions:route_survey_defer"])
+	}
+	if !strings.Contains(byKey["player_actions:pre_fall_total_riot"].Consequence, "全面暴乱") {
+		t.Fatalf("riot branch consequence wrong: %+v", byKey["player_actions:pre_fall_total_riot"])
+	}
+}
+
+// TestEndingRecapCountermeasureCounts locks the countermeasure readback: each
+// countermeasure reports its trigger count and whether its effect fact landed.
+func TestEndingRecapCountermeasureCounts(t *testing.T) {
+	svc := linesFixture()
+	recapLit(svc, "player_actions:silo1_purge_countermeasure", 124, 3)
+	recapLit(svc, "special:silo1_purge_softened", 124, 4)
+	recapLit(svc, "player_actions:silo1_purge_plot_leak", 124, 5)
+	recapLit(svc, "player_actions:termination_channel_jam", 124, 6)
+
+	recap := svc.buildEndingRecap(svc.silo, endingReset)
+	byKey := map[string]model.EndingRecapEntry{}
+	for _, e := range recap {
+		byKey[e.Key] = e
+	}
+	roster, ok := byKey["player_actions:silo1_purge_countermeasure"]
+	if !ok {
+		t.Fatalf("roster countermeasure missing from recap: %+v", recap)
+	}
+	if !strings.Contains(roster.Consequence, "触发 1 次") || !strings.Contains(roster.Consequence, "已生效") {
+		t.Fatalf("roster consequence must read count and effect fact: %+v", roster)
+	}
+	leak := byKey["player_actions:silo1_purge_plot_leak"]
+	if !strings.Contains(leak.Consequence, "触发 1 次") || !strings.Contains(leak.Consequence, "尚未被公开") {
+		t.Fatalf("leak consequence must read count and pending fact: %+v", leak)
+	}
+	jam := byKey["player_actions:termination_channel_jam"]
+	if !strings.Contains(jam.Consequence, "触发 1 次") || !strings.Contains(jam.Consequence, "未生效") {
+		t.Fatalf("jam consequence must read count and pending fact: %+v", jam)
+	}
+}
