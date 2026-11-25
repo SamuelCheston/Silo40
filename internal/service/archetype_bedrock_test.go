@@ -497,7 +497,7 @@ func TestBedrockPersonalRuleLinePlayable(t *testing.T) {
 		})
 	}
 
-	for m := 1; m <= 132 && !svc.gameOver(); m++ {
+	for m := 1; m <= acceptanceMaxMonths && !svc.gameOver(); m++ {
 		passTime()
 		if svc.gameOver() {
 			break

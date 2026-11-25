@@ -517,7 +517,12 @@ func (r *acceptanceRunner) buildRelation(dept string, min float64, budget int) {
 	}
 }
 
-const acceptanceMaxMonths = 132
+// acceptanceMaxMonths 验收回路的防死循环护栏，不是游戏长度。单局的终止条件是
+// gameOver()（生产侧只看 VictoryStatus，没有月数上限），日历窗口以几十年为
+// 单位，本值与之对齐（取 cmd/sim --months 的默认 1200 = 100 年），只在结算
+// 永不来路时兜底退出。实测各线都在第 97 月（Y130M2 强制结算触发点）之前或
+// 当点结算，护栏从不咬人：「在 1200 月内没结算」的用例是缺陷，不是窗口不够长。
+const acceptanceMaxMonths = 1200
 
 func runRuleOfLawAcceptance(t *testing.T, seed int64) *acceptanceRecord {
 	return runRuleOfLawFamily(t, "ruleoflaw", seed, false)
