@@ -1,6 +1,7 @@
 package service
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -65,5 +66,23 @@ func TestMayorBypassDriftEcho(t *testing.T) {
 	advanceSweepMonths(svc, 3)
 	if state := svc.statesMapFor(svc.silo.ID)["special:mayor_bypass_drift"]; state.TriggerCount != 1 {
 		t.Fatalf("bypass drift must fire once, count = %d", state.TriggerCount)
+	}
+}
+
+// 绕过即时后果：失去公开承接秩序的人，常态硬化从当下开始——
+// history_burden 即刻 −0.01（+6 月 mayor_bypass_drift 另记惯性漂移）。
+func TestMayorBypassImmediateConsequence(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "mayor-bypass-immediate.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(4603)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("settle opening month: %v", err)
+	}
+	completeGateEvent(svc, "player_actions:legitimacy_survey")
+	svc.silo.HistoryBurden = 0.05 // 避开 drain 期间的包袱阈值事件
+	executePlayerEventAction(t, svc, "MAYOR_ALLY_BYPASS")
+	if !charterRevisitAlmostEqual(svc.silo.HistoryBurden, 0.04) {
+		t.Fatalf("history_burden = %v, want 0.04 (immediate normalcy cooling)", svc.silo.HistoryBurden)
 	}
 }
