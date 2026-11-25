@@ -10,8 +10,9 @@
 - `schedule_event(event_id, N)`：N 个月后**无条件**派发目标事件（不检查其触发条件），
   走 `delayTasks` 队列。用于延迟代价链：`silo1_ultimatum → ultimatum_aftermath(+3 月)`、
   `materials_cannibalization → lower_deck_collapse(+4 月)`。
-- **时间窗约束**：可玩窗口 = Y122M1 开局 → Y130M1 `silo1_destroyed_signal` → TIME 结局，
-  约 96 个月。所有事件与延迟落点必须在 Y130 前；延迟档用 2–3 月（短）/ 4–6 月（中），
+- **时间窗约束**：默认收局 = Y122M1 开局 → Y130M1 `silo1_destroyed_signal` → TIME 结局，
+  约第 97 个月。这是内容触发落点，不是游戏窗口长度（窗口以几十年为单位，单局以 VictoryStatus
+  收尾，验收循环上限只作防死循环护栏）。所有事件与延迟落点必须在 Y130 前；延迟档用 2–3 月（短）/ 4–6 月（中），
   且发起时机不晚于 ~Y128。
 - **第 N 次质变**：`script.apply` 读 `ctx.runtime.trigger_count`（本次触发后的累计次数，
   首次=1）分支，范例 `events/special/materials_cannibalization.js`（第 5 次起出事故）。

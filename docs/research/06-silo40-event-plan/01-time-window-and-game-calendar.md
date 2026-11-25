@@ -22,7 +22,7 @@
 
 - 开局 `CurrentYear = 122 / Month 1`（`game_service.go:500-503` 默认值；`cmd/debug`、各测试同）。
 - `histories` 既有锚点：`archive_truth_broadcast` Y122M1、`silo1_destroyed_signal` Y130M1。
-- `silo1_destroyed` flag 置位 → 下一 tick `victory_check` 请求终局评估，仲裁按六候选 P0→P3 结算（机制底座，save v9）。**无人干预的默认局在 Y130M2 结束，可玩窗口 ≈ 96 个月**。
+- `silo1_destroyed` flag 置位 → 下一 tick `victory_check` 请求终局评估，仲裁按六候选 P0→P3 结算（机制底座，save v9）。**无人干预的默认局在 Y130M2 结束，即第 97 月**——这是内容触发落点（覆灭标记在 N9 `timestampAtOrAfter(130,1)` 点火，其后首次仲裁必收局），不是游戏窗口长度：单局以 VictoryStatus 收尾、生产侧没有月数上限，游戏时长窗口以几十年为单位；验收回路的月数上限（`acceptanceMaxMonths`，现 1200 月）只是防死循环护栏，不得当作地平线引用（口径见 [18 落地注记 4](../18-time-permeation-design.md)）。
 - 500 年 `Countdown` 是叙事框架（每年 −1），不参与任何结局判定——不作为事件杠杆。
 - **相对历映射**（裁决口径）：相对年 = 代码年 − 122。Y0=Y122 … Y8=Y130。文档一律用相对历书写；代码时间戳迁移属实现事项。
 

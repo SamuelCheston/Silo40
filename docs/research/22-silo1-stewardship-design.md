@@ -64,7 +64,7 @@ r 采用指派月索引：月 t 指派、月 t+1 本地相生效（`LastAssigned
 - **登记（scheduled）**：通牒签发时登记 `(siloID, 月份)`。
 - **清除成立（cleared）**：被登记堡 `VictoryStatus.Type == DEATH`。
 - **miss**：登记满 `clearDeadlineMonths`（24，TODO(balance)）未覆灭 → `FulfillmentDeficit += missPenalty`（0.10，TODO(balance)），一次性。
-- 清除时 `DiversityLoss += clearPenalty × proximity`：`proximity = clamp01(monthsRemainingUntilY130M1 / 96)`，`clearPenalty` 0.15 TODO(balance)。
+- 清除时 `DiversityLoss += clearPenalty × proximity`：`proximity = clamp01(monthsRemainingUntilY130M1 / 本局跨度)`。跨度不写死：取权衡层首次运行时距 Y130M1 参照月的实际月数，由运行时开局历落数并记在 `Experiment.WindowMonths`（Y122M1 开局即 96，StartYear=120 开局即 120），落数后不再改动、读档复现；跨度缺失或倒计时已尽时 proximity 取 0。`clearPenalty` 0.15 TODO(balance)。
 - 每月两项各乘 `(1 − decayRate)`，`decayRate` 0.02 TODO(balance)。
 - 保留多样性读数 `RetentionDiversity = clamp01(alive/initial − 0.5·D − 0.5·F)`（权重 TODO(balance)）。
 
