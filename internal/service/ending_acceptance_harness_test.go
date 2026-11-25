@@ -53,27 +53,28 @@ type acceptanceBeat struct {
 }
 
 type acceptanceRecord struct {
-	Line            string             `json:"line"`
-	Seed            int64              `json:"seed"`
-	Profession      string             `json:"profession"`
-	Ending          string             `json:"ending"`
-	Won             bool               `json:"won"`
-	SettledMonth    int                `json:"settled_month"` // 0 = no settlement within the cap
-	Pool            []string           `json:"pool,omitempty"`
-	Excluded        map[string]string  `json:"excluded,omitempty"`
-	Scores          map[string]float64 `json:"scores,omitempty"`
-	PactLocked      bool               `json:"pact_locked"`
-	PactLockedMonth int                `json:"pact_locked_month,omitempty"`
-	WMin            float64            `json:"w_min"`
-	W30Month        int                `json:"w_le_30_month,omitempty"`
-	W18Month        int                `json:"w_le_18_month,omitempty"`
-	DecisiveShocks  []string           `json:"decisive_shocks,omitempty"`
-	MayorHolder     string             `json:"mayor_holder,omitempty"`
-	MayorHolderID   uint               `json:"mayor_holder_id,omitempty"`
-	Prestige        float64            `json:"prestige,omitempty"`
-	Timeline        []acceptanceBeat   `json:"timeline"`
-	Fires           map[string]int     `json:"fires,omitempty"`
-	Actions         map[string]int     `json:"actions,omitempty"`
+	Line            string                   `json:"line"`
+	Seed            int64                    `json:"seed"`
+	Profession      string                   `json:"profession"`
+	Ending          string                   `json:"ending"`
+	Won             bool                     `json:"won"`
+	SettledMonth    int                      `json:"settled_month"` // 0 = no settlement within the cap
+	Pool            []string                 `json:"pool,omitempty"`
+	Excluded        map[string]string        `json:"excluded,omitempty"`
+	Scores          map[string]float64       `json:"scores,omitempty"`
+	Recap           []model.EndingRecapEntry `json:"recap,omitempty"`
+	PactLocked      bool                     `json:"pact_locked"`
+	PactLockedMonth int                      `json:"pact_locked_month,omitempty"`
+	WMin            float64                  `json:"w_min"`
+	W30Month        int                      `json:"w_le_30_month,omitempty"`
+	W18Month        int                      `json:"w_le_18_month,omitempty"`
+	DecisiveShocks  []string                 `json:"decisive_shocks,omitempty"`
+	MayorHolder     string                   `json:"mayor_holder,omitempty"`
+	MayorHolderID   uint                     `json:"mayor_holder_id,omitempty"`
+	Prestige        float64                  `json:"prestige,omitempty"`
+	Timeline        []acceptanceBeat         `json:"timeline"`
+	Fires           map[string]int           `json:"fires,omitempty"`
+	Actions         map[string]int           `json:"actions,omitempty"`
 }
 
 type acceptanceRunner struct {
@@ -189,6 +190,7 @@ func (r *acceptanceRunner) settle() {
 			r.rec.Pool = decision.Pool
 			r.rec.Scores = decision.Scores
 			r.rec.Excluded = decision.Excluded
+			r.rec.Recap = decision.Recap
 		}
 		r.beat("settled: " + r.rec.Ending)
 	}
