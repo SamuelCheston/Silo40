@@ -253,3 +253,21 @@ func TestCharterDeferSecondKnockDeclineFeedsMayor(t *testing.T) {
 		t.Fatal("mayor_evidence_step must fire from the second decline reroute")
 	}
 }
+
+// 拒绝即时后果：材料改道不是空头回执——拒绝当下抄本就进入市长圈层，
+// legitimacy 即刻 +0.01（持续拉力仍由 +4 月回声与供证心跳承载）。
+func TestCharterDeclineImmediateReroute(t *testing.T) {
+	svc := newGatedService(t, filepath.Join(t.TempDir(), "charter-decline-immediate.db"))
+	if _, err := svc.CreateGame(threeSiloRequest(4503)); err != nil {
+		t.Fatalf("create game: %v", err)
+	}
+	if _, err := svc.PassTime(1); err != nil {
+		t.Fatalf("settle opening month: %v", err)
+	}
+	completeGateEvent(svc, "player_actions:charter_contact_offer")
+	svc.silo.SetMayorLegitimacy(0.5) // 市长个人权威与镜像读数一起置底，避开默认 1.0
+	executePlayerEventAction(t, svc, "CHARTER_CONTACT_DECLINE")
+	if !charterRevisitAlmostEqual(svc.silo.Legitimacy, 0.51) {
+		t.Fatalf("legitimacy = %v, want 0.51 (immediate material reroute)", svc.silo.Legitimacy)
+	}
+}
