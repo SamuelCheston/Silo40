@@ -357,8 +357,12 @@ func TestStewardshipAcceptanceA6DiversityLossAndDecay(t *testing.T) {
 	clearAt := func(year, month int) (loss, afterDecay float64) {
 		svc := newAcceptanceGame(t, seed)
 		svc.initSilo1Stewardship()
-		svc.world.CurrentYear, svc.world.CurrentMonth = year, month
 		exp := &svc.world.Silo1Stewardship.Experiment
+		// proximity 归一跨度按运行时开局历落数 (真实运行由权衡层首月落数)：先把
+		// 跨度锚在开局月，再搬时钟，否则跨度会跟着清除月一起搬走，早期/晚期
+		// 两次清除会算出同一个接近度。
+		svc.stewardshipExperimentEnsureWindowMonths(exp)
+		svc.world.CurrentYear, svc.world.CurrentMonth = year, month
 		victim := svc.siloByID(3)
 		if victim == nil {
 			t.Fatalf("A6: silo 3 missing")

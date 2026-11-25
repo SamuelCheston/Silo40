@@ -393,6 +393,10 @@ type ExperimentStewardship struct {
 	Misses []ExperimentMissRecord `json:"misses,omitempty"`
 	// Ledger 杂项台账 (防重复计费的已结算标记等)，键由实现定义。
 	Ledger map[string]int `json:"ledger,omitempty"`
+	// WindowMonths proximity 归一跨度：权衡层首次运行时距 Y130M1 实验结束参照
+	// 月的实际月数 (Y122M1 开局 = 96，StartYear=120 开局 = 120)。落数后不再
+	// 改动，读档复现；零值表示跨度未知/已尽，接近度按 0 处理。
+	WindowMonths int `json:"window_months,omitempty"`
 }
 
 // LifespanStewardship 指标二：剩余人员平均寿命 (1 号人员轮流休眠)。

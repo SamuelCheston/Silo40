@@ -127,6 +127,9 @@ func clearDiversityLossAt(clearYear, clearMonth int) float64 {
 	svc.stewardshipRegisterClearingObligation(station.ID)
 	svc.world.CurrentYear, svc.world.CurrentMonth = clearYear, clearMonth
 	station.VictoryStatus = &model.VictoryStatus{IsWon: false, Type: "DEATH"}
+	// 本局按 Y122M1 开局：归一跨度 = 距 Y130M1 的实际月数 (96)，由开局历落数
+	// 而不是写死常数。跨度在权衡层首次运行时落数，故这里先固化跨度再跳月。
+	svc.world.Silo1Stewardship.Experiment.WindowMonths = stewardshipExperimentMonthsRemaining(122, 1)
 	var logs []string
 	var stories []model.StoryEvent
 	svc.stewardshipExperimentMonth(&logs, &stories)
@@ -144,12 +147,22 @@ func TestStewardshipClearProximityWeighting(t *testing.T) {
 	if early <= late {
 		t.Fatalf("early clear must cost more diversity than a near-end clear: early=%v late=%v", early, late)
 	}
-	// proximity 归一：开局 (Y122M1) proximity=1，终局参照 (Y130M1) proximity=0。
-	if got := stewardshipExperimentProximity(122, 1); math.Abs(got-1.0) > 1e-9 {
+	// proximity 归一：以本局实际跨度归一，开局 (Y122M1, 跨度 96) proximity=1，
+	// 终局参照 (Y130M1) proximity=0。
+	if got := stewardshipExperimentProximity(122, 1, 96); math.Abs(got-1.0) > 1e-9 {
 		t.Fatalf("proximity at Y122M1 = %v, want 1.0", got)
 	}
-	if got := stewardshipExperimentProximity(130, 1); got != 0 {
+	if got := stewardshipExperimentProximity(130, 1, 96); got != 0 {
 		t.Fatalf("proximity at Y130M1 = %v, want 0", got)
+	}
+	// 跨度按运行时开局历落数：Y120M1 开局的跨度是 120，同月接近度按 96/120 折算
+	// (不再出现"跨度外月份被 clamp 成 1.0"的平段)。
+	if got := stewardshipExperimentProximity(122, 1, 120); math.Abs(got-96.0/120.0) > 1e-9 {
+		t.Fatalf("proximity with a 120-month span = %v, want %v", got, 96.0/120.0)
+	}
+	// 跨度未知 (旧档未落数) 时按 0 处理，不做无依据的惩罚。
+	if got := stewardshipExperimentProximity(122, 1, 0); got != 0 {
+		t.Fatalf("proximity with an unknown span = %v, want 0", got)
 	}
 }
 

@@ -31,10 +31,8 @@ const (
 	// 对两项指标的扣减权重 (wD / wF)。
 	stewardshipDiversityWeight   = 0.5 // TODO(balance)
 	stewardshipFulfillmentWeight = 0.5 // TODO(balance)
-	// stewardshipTotalWindowMonths proximity 归一窗口 (Y122M1 起至 Y130M1)。
-	stewardshipTotalWindowMonths = 96
 	// stewardshipEndReferenceYear/Month 实验结束参照 (18 号正典终局信号，
-	// 18-chain N9)：Y130M1。
+	// 18-chain N9)：Y130M1。它是倒计时锚点，不是"游戏窗口长度"的声明。
 	stewardshipEndReferenceYear  = 130
 	stewardshipEndReferenceMonth = 1
 )
@@ -60,9 +58,13 @@ func stewardshipExperimentMonthsRemaining(year, month int) int {
 }
 
 // stewardshipExperimentProximity 清除时点距实验结束的接近度：越接近 Y130M1
-// 越小 (候选本来就要收拢到一个，此时清除的多样性损耗越轻)。
-func stewardshipExperimentProximity(year, month int) float64 {
-	return clampUnit01(float64(stewardshipExperimentMonthsRemaining(year, month)) / float64(stewardshipTotalWindowMonths))
+// 越小 (候选本来就要收拢到一个，此时清除的多样性损耗越轻)。归一跨度取本局
+// 实际倒计时 (windowMonths)，跨度未知或已尽 (≤0) 时取 0。
+func stewardshipExperimentProximity(year, month, windowMonths int) float64 {
+	if windowMonths <= 0 {
+		return 0
+	}
+	return clampUnit01(float64(stewardshipExperimentMonthsRemaining(year, month)) / float64(windowMonths))
 }
 
 // stewardshipExperimentIsSilo1 判断某堡是否为 1 号地堡 (全模拟 peer)。
@@ -111,6 +113,32 @@ func (s *GameService) stewardshipExperimentEnsureInitialCandidates(exp *model.Ex
 	exp.Ledger[stewardshipExperimentLedgerInitialCandidates] = count
 }
 
+// stewardshipExperimentEnsureWindowMonths 惰性落数 proximity 归一跨度：权衡层
+// 首次运行时取当月 (开局月) 距 Y130M1 参照月的剩余月数——Y122M1 开局即 96、
+// StartYear=120 开局即 120，跨度由本局运行时日历决定，不再有写死的"总窗口"常数。
+// 无跨度的旧档回读时以登记簿里最早的登记月兜底 (跨度不因续玩被压缩)，落数后
+// 不再改动，读档复现。参照月已过 (跨度 ≤0) 时不落数，接近度按 0 处理。
+func (s *GameService) stewardshipExperimentEnsureWindowMonths(exp *model.ExperimentStewardship) {
+	stewardshipExperimentEnsureMaps(exp)
+	if exp.WindowMonths > 0 {
+		return
+	}
+	end := stewardshipExperimentMonthIndex(stewardshipEndReferenceYear, stewardshipEndReferenceMonth)
+	span := end - stewardshipExperimentMonthIndex(s.world.CurrentYear, s.world.CurrentMonth)
+	earliest := 0
+	for _, registered := range exp.Scheduled {
+		if earliest == 0 || registered < earliest {
+			earliest = registered
+		}
+	}
+	if earliest > 0 && end-earliest > span {
+		span = end - earliest
+	}
+	if span > 0 {
+		exp.WindowMonths = span
+	}
+}
+
 // stewardshipExperimentMonth 指标一月度回合 (格一实现)。
 // 职责：清除成立检测 (DEATH)、miss 结算、双指标衰减。按 SiloID 升序扫描
 // (确定性，22 设计卷 §3.2)。未启用 (零值) 早退，状态零值不变。
@@ -121,6 +149,7 @@ func (s *GameService) stewardshipExperimentMonth(logs *[]string, stories *[]mode
 	exp := &s.world.Silo1Stewardship.Experiment
 	stewardshipExperimentEnsureMaps(exp)
 	s.stewardshipExperimentEnsureInitialCandidates(exp)
+	s.stewardshipExperimentEnsureWindowMonths(exp)
 
 	now := stewardshipExperimentMonthIndex(s.world.CurrentYear, s.world.CurrentMonth)
 
@@ -139,7 +168,7 @@ func (s *GameService) stewardshipExperimentMonth(logs *[]string, stories *[]mode
 		// 清除成立：被登记堡覆灭 (任意来路都算候选减少)。
 		if stewardshipExperimentSiloDestroyed(silo) {
 			exp.Cleared[silo.ID] = now
-			proximity := stewardshipExperimentProximity(s.world.CurrentYear, s.world.CurrentMonth)
+			proximity := stewardshipExperimentProximity(s.world.CurrentYear, s.world.CurrentMonth, exp.WindowMonths)
 			loss := stewardshipClearPenalty * proximity
 			exp.DiversityLoss += loss
 			if logs != nil {
