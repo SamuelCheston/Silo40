@@ -6,7 +6,9 @@
 
 ### 世界的反制剩余档（原「追踪的反制入口」）
 
-**状态：部分完成。** 「反制藏进日常小动作」批次的主体已落地，剩五个档。设计与测试账见 [20-world-countermeasures-design.md](research/20-world-countermeasures-design.md) §4/§7，长期约束见 [ADR-0012](../knowledge/adr/0012-world-countermeasures-read-public-facts-only.md)，筹备侧口径见 [ADR-0014](../knowledge/adr/0014-countermeasures-cost-suspicion-org-only.md)。
+**状态：已完成（2026-11-25，分支 `feat/cm-ledger-retune` 收尾）。** 剩余四档（T1-3/T2-4/T3-1b/T3-2）引擎与叙事已落 main（`f2e7b22`/`7c695e8`/`034e6ac`/`d5108d5`），§7 测试账重调与 §7.3 观测账同批并入（`65ab84a`→`b51fbae`，逐档原子提交，见 [25 §12](research/25-v16-test-debt.md) 清账记录）。设计与测试账见 [20-world-countermeasures-design.md](research/20-world-countermeasures-design.md) §4/§7，长期约束见 [ADR-0012](../knowledge/adr/0012-world-countermeasures-read-public-facts-only.md)，筹备侧口径见 [ADR-0014](../knowledge/adr/0014-countermeasures-cost-suspicion-org-only.md)。
+
+§7.3③ 结算月对照账：rift-info 与无声探查/灾荒可达性共用 129-09 固定时钟（流通门移植不改时钟），漂移 0 月 ≤6；越岭/法治/寂堡三线无「同路由无反制」对照（立场为带权随机、锁窗/灰置无固定时钟），按 §7.3 口径记实测月，不做漂移断言（明细见 25 §12）。
 
 已落地（代码核实）：
 
@@ -15,17 +17,17 @@
 - **本地整肃反制**：`PURGE_ROSTER_TAMPER` → `silo1_purge_softened` 取轻档；信息侧 `PURGE_PLOT_LEAK` → `silo1_purge_exposed` 按中档，与轻档并存时按轻档。
 - **逃跑组织侧 IT 响应层**：[escape_response.go](../internal/engine/escape_response.go)——组织怀疑度（只由组织行为驱动）≥0.35 且冷却 4 月已过，带权随机三选一：镇压/蒙住 1 号/不作为，后果只抬成本与风险，囤积账本永不扣减。
 
-剩余四档（设计 §4 均标【项目外推】，逐项核实确未实现；T2-2 已随《共证》外溢投递侧落地）：
+四档落点（引擎 [countermeasures.go](../internal/engine/countermeasures.go) 月度结算 `AdvanceCountermeasures`，叙事 [countermeasures.go（服务）](../internal/service/countermeasures.go) `runCountermeasureMonth`，起点值均 TODO(balance)）：
 
-| 档 | 反制 | 形态要点（起点值均 TODO(balance)） |
+| 档 | 反制 | 形态要点 |
 | --- | --- | --- |
-| T1-3 | 关系冷却 | 部门对泄漏事实 `B ≥ 0.45` → 该部门关系增长减半、持续 12 月；Build 回执措辞变化 |
+| T1-3 ✅ | 关系冷却 | 部门对泄漏事实 `B ≥ 0.45` → 该部门关系增长减半、持续 12 月；冷却周期内不刷新不叠加 |
 | ~~T2-2~~ | ~~信道审计~~ | **已落地**（[spillover.go](../internal/service/spillover.go)）：外溢信道使用次数到档（专线类 3 次/信号类 5 次/实体类 8 次）→ 可靠度降档，跌破地板中断 |
-| T2-4 | 谈判可信度侵蚀 | `prep_exposure ≥ 0.4` → 保障可信度 `Guarantee −0.15`，经既有 `addTopStanceGuarantee` 接口（[top_stance.go](../internal/engine/top_stance.go)）→ 顶层立场权重自然偏向阻挠。注意：谈判层 IT 的 `undermine` 立场（[negotiation.go](../internal/engine/negotiation.go)）已会侵蚀保障可信度，但那是磋商铺位，不是本档由筹备暴露驱动的通道 |
-| T3-1b | 身份线「日常小动作」绑定 | 复核期＝地点类动作次月灰置；复查期＝职务动作当月灰置；抹除准备期＝秘密行动类动作灰置（`available: suspicion < 0.7`）。灰置机制既有；身份线四节点（T3-1）与 1 号反应链（T3-3）是既有档，不在剩余清单 |
-| T3-2 | 联系人被盯上 | 部门对泄漏事实 `B ≥ 0.60` → 匿名联系人被调离/问话：关系 −0.10、接触类动作 3 月不可用（cd 保护）＋月度故事。只动匿名联系人，不碰正典具名人物 |
+| T2-4 ✅ | 谈判可信度侵蚀 | `prep_exposure ≥ 0.4` → 保障可信度 `Guarantee −0.15`（one-shot），经既有 `addTopStanceGuarantee` 接口（[top_stance.go](../internal/engine/top_stance.go)）→ 顶层立场权重自然偏向阻挠；纯权重塑形不灰置不占 AP |
+| T3-1b ✅ | 身份线「日常小动作」绑定 | 复核期＝地点类动作次月灰置；复查期＝职务动作次月灰置（各 one-shot 1 月）。灰置机制既有 |
+| T3-2 ✅ | 联系人被盯上 | 部门对泄漏事实 `B ≥ 0.60` → 匿名联系人被调离/问话：关系 −0.10、接触类动作 3 月不可用＋怀疑度 +0.03＋月度故事；同源每部门只一次，不碰正典具名人物 |
 
-**批次纪律**：设计 §7.2 判据 6 要求反制不得单独落地——五档必须与 §7 测试账重调**同批合并**，不允许「先落反制、测试红了再说」的中间态进 main。
+**批次纪律（已履行）**：设计 §7.2 判据 6——四档与 §7 测试账重调、§7.3 观测账（rift-info T1-3/T3-2 授窗账、越岭 T2-4 侵蚀账、寂堡 T3-1b 授灰账，前缀 `[Countermeasure]`）同批合并，逐档原子提交后 --no-ff 合入 main。三条硬约束保持：怀疑度只由动员范围与通信规模驱动（囤积不驱动）；IT 响应带权随机三选一；无「审计没收」类直接剥夺。
 
 ### 《共证》外溢投递侧
 
@@ -121,5 +123,5 @@
 | 2 | 见证者成就树（ADR-0004） ✅ | 独立 | 已实装：纯派生快照只读既有完成键与结局资格事实，不碰仲裁；「维持」无事实键按预留，其余节点含「离开」「外溢」均由真实事实点亮 |
 | 3 | 22 号黑箱学习 | 独立（1 号侧） | 设计定稿、参数已重算；不碰玩家侧，唯一新增确定性状态在 1 号侧 |
 | 4 | 19 号开局可变性剩余 | 独立但带测试账 | 三档原型已合入 main（5c59842）；原型 × 线矩阵 10 组红，按 ADR-0011 冻结重调（`retune/info-archetypes`、`retune/lines-archetypes` 并行） |
-| 5 | 世界的反制剩余档（T1-3/T2-4/T3-1b/T3-2） | 独立但带测试账 | 四档须与 20 §7 测试账重调同批合并（§7.2 判据 6），接口全部既有；T2-2 信道审计已随《共证》外溢投递侧落地 |
+| 5 | 世界的反制剩余档（T1-3/T2-4/T3-1b/T3-2） ✅ | 独立但带测试账 | 已实装：四档 + 20 §7 测试账重调 + §7.3 观测账同批合并（feat/cm-ledger-retune），见上文状态行与 25 §12 |
 | 6 | 23 号盲区经营 | **依赖 22 号** | 被经营偏置注入 22 观测管线（23-05 卷），排在 22 号落地之后 |

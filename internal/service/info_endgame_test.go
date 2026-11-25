@@ -327,6 +327,27 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 		meta := actionByID(svc.availablePlayerActions(), id)
 		return meta != nil && meta.Enabled
 	}
+	// 待发布存蓄 (26 §四 B 实测补丁)：一旦某条核心事实已核验且 B 到发布
+	// 地板，只差 20 AP。此时若继续每月 investigate_dispatch (15 AP)，月收入
+	// (≈3 AP) 会被吃干，AP 永久钉在 20 以下——磐石/裂隙档实测 40 个月只发出
+	// 第一条，第二条的 9 个免费粘性槽整段丢失。待发布事实存在时必须存蓄，
+	// 把 AP 留给发布而不是调查。
+	publishPending := func() bool {
+		verified := map[string]bool{}
+		for _, fact := range svc.silo.VerifiedEvidence {
+			verified[fact] = true
+		}
+		published := publishedFacts()
+		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+			if !verified[fact] || published[fact] {
+				continue
+			}
+			if belief := engine.BeliefFor(svc.agent, fact); belief != nil && belief.B >= publishFloor {
+				return true
+			}
+		}
+		return false
+	}
 	for i := 0; i < 40; i++ {
 		published := publishedFacts()
 		if published["Judicial_1"] && published["Judicial_2"] {
@@ -344,7 +365,7 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "publish_evidence"})
 			acted = true
 		}
-		if !acted && eventReady("investigate_dispatch") && svc.agent.ActionPoints >= 15 {
+		if !acted && !publishPending() && eventReady("investigate_dispatch") && svc.agent.ActionPoints >= 15 {
 			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "investigate_dispatch"})
 		}
 		if _, err := svc.PassTime(1); err != nil {
@@ -428,6 +449,12 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 	// forgetting threatens to break it before maturity (18-time-permeation
 	// §3.3/§5). The cap stays an anti-deadlock bound, never a play target.
 	upkeepAttempts := map[string]int{}
+	// 半成品种子续播 (26 §四 D 深填的跨月版)：同一次分享若因目标部门的低
+	// receptivity/同源递减只吸收到地板下方 (裂隙档 IT 的第三槽实测 0.109，
+	// 一次就死)，下个月必须优先把同一事实补过地板，而不是换一条更强的
+	// 事实重新从零开始。换种等于把已投入的渗透窗清零，实测正是 IT 差
+	// 6–24 个月成熟的直接原因。
+	pendingSeed := map[string]string{}
 	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
@@ -488,6 +515,7 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 			continue
 		}
 		circulated := false
+		saveForPriority := false
 		for svc.agent.ActionPoints >= shareCost {
 			// Neediness reads the gate: fewest matured first, then fewest
 			// healthy slots (a department mid-permeation is needier than one
@@ -517,10 +545,31 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 				return informationActiveSlots(&order[i]) < informationActiveSlots(&order[j])
 			})
 			shared := false
+			// AP 存蓄给优先部门 (26 §四 E 排序的配套)：IT/Judicial 在戒备≥0.30
+			// 时分享成本翻倍 (3→6)，而月收入只有 ≈3。若不设保留额，循环会把
+			// 零散 AP 花给便宜的部门，IT 的维护 share 永远差 1–2 AP 付不起，
+			// 已过地板的第三槽就在第 30 月前断流 (实测裂隙档 IT 的 Judicial_5
+			// 0.30→0，差 6 个月成熟)。优先部门本月买不起时整月存蓄，不再
+			// 分给低优先部门。
 			for i := range order {
 				dept := &order[i]
 				if informationMaturedFacts(dept) >= informationGateFactCount {
 					continue
+				}
+				_, endangered := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts)
+				pendingFact, hasPending := pendingSeed[dept.Name]
+				pendingBelowFloor := false
+				if hasPending {
+					if belief := professionBelief(dept, pendingFact); belief == nil ||
+						belief.B < engine.DefaultInformationConfig().QualRumor {
+						pendingBelowFloor = true
+					}
+				}
+				if priority(dept.Name) == 0 &&
+					(informationActiveSlots(dept) < informationGateFactCount || endangered || pendingBelowFloor) &&
+					shareCostFor(dept.Name) > svc.agent.ActionPoints {
+					saveForPriority = true
+					break
 				}
 				// Upkeep FIRST: a running streak about to break is months of
 				// invested calendar — protecting it outranks planting a new
@@ -538,13 +587,19 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 				}
 				// Three healthy slots (matured or mid-permeation): stop
 				// investing here — extra facts would only dilute the AP the
-				// needier departments still need for their first seeds.
+				// needier departments still need for their first seeds. A
+				// half-absorbed seed still pending is the exception: finishing
+				// it is recovering calendar already spent.
 				if informationActiveSlots(dept) >= informationGateFactCount {
-					continue
+					if _, waiting := pendingSeed[dept.Name]; !waiting {
+						continue
+					}
 				}
-				// 播种截止 (26 §四 F)：96 月结算前必须走完 30 月渗透窗，
-				// 第 60 月后新播种已来不及，只做上面的断流维护。
-				if month > 60 {
+				// 播种截止 (26 §四 F)：结算 Y130M1 前必须走完 30 月渗透窗。
+				// 这里必须用日历而非循环序号——一次 share/gather 自带 1 月
+				// 时长，循环 8 次能走掉 12 个月历月，旧的 `month > 60` 实际
+				// 已越过结算，种下去也来不及成熟。
+				if 130*12+1-(svc.silo.CurrentYear*12+svc.silo.CurrentMonth) <= 30 {
 					continue
 				}
 				// 建联是 1 月时长的动作 (4 AP + 整月)：9 部门 × 4 次 = 36 月
@@ -555,7 +610,7 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 				// hold above the floor, skipping capped pairs. The cap stays an
 				// anti-deadlock bound (raised so a broken streak can be
 				// re-seeded once), never a play target.
-				if fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
+				fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
 					if shareAttempts[dept.Name+":"+fact] < 4 {
 						return false
 					}
@@ -565,7 +620,19 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 					belief := professionBelief(dept, fact)
 					return !(belief != nil && belief.B < engine.DefaultInformationConfig().QualRumor &&
 						belief.PermeationCounter == 0)
-				}); ok {
+				})
+				// 半成品优先：同一事实没补过地板前不换种子，否则每次换种都
+				// 把现有渗透计数清零，弱吸收部门 (IT) 永远追不上 30 月窗口。
+				if pending, waiting := pendingSeed[dept.Name]; waiting {
+					belief := professionBelief(dept, pending)
+					if (belief == nil || (belief.B < engine.DefaultInformationConfig().QualRumor && belief.PermeationCounter == 0)) &&
+						shareAttempts[dept.Name+":"+pending] < 8 {
+						fragment, ok = pending, true
+					} else {
+						delete(pendingSeed, dept.Name)
+					}
+				}
+				if ok {
 					// A seed only takes if the agent's own conviction is strong
 					// enough to absorb past the floor at this connection —
 					// otherwise gather the source department first to deepen it
@@ -615,6 +682,13 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 								break
 							}
 						}
+						// 记下仍未过地板的半成品：下月续播同一事实。
+						if belief := professionBelief(dept, fragment); belief == nil ||
+							belief.B < engine.DefaultInformationConfig().QualRumor {
+							pendingSeed[dept.Name] = fragment
+						} else {
+							delete(pendingSeed, dept.Name)
+						}
 						break
 					}
 				}
@@ -625,6 +699,10 @@ func testInformationEndingPlayableFromNewGame(t *testing.T, archetype string) {
 			circulated = true
 		}
 		if circulated {
+			continue
+		}
+		if saveForPriority {
+			// 本月有意不花 AP：存给买不起的优先部门，连兜底 gather 也不做。
 			continue
 		}
 		switch {
@@ -733,12 +811,19 @@ func professionBelief(dept *model.Profession, fact string) *model.FactBelief {
 // Only facts with a running counter qualify; a reset streak restarts through a
 // fresh share instead. The attempts map caps re-shares per pair.
 func endangeredStreakCandidate(agent *model.Agent, dept *model.Profession, attempts map[string]int) (string, bool) {
+	return endangeredStreakCandidateWithin(agent, dept, attempts, 0.12)
+}
+
+// endangeredStreakCandidateWithin is the same rule with an explicit danger
+// margin. 磐石档需要更窄的维护带：0.30–0.42 的宽维护带会让 9 部门 × 2 条核心
+// 事实每月都在排队维护，把 AP 吃光，第三槽直到结算前 30 个月才播下。
+func endangeredStreakCandidateWithin(agent *model.Agent, dept *model.Profession, attempts map[string]int, margin float64) (string, bool) {
 	cfg := engine.DefaultInformationConfig()
 	// Re-circulation carries the same-source repeat penalty (independence 0.25),
 	// so one upkeep share only lifts B ≈0.05 — upkeep must start while the
 	// streak still has a real buffer, and the cap must cover a full window.
 	const maxUpkeepPerPair = 12
-	dangerFloor := cfg.QualRumor + 0.12
+	dangerFloor := cfg.QualRumor + margin
 	best := ""
 	bestCounter := -1
 	bestB := 0.0

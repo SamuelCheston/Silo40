@@ -401,6 +401,18 @@ func testRuleOfLawLinePlayableFromNewGame(t *testing.T, archetype string) {
 	tunnels := 0
 	decisiveFired := false
 	decisivePublishW, decisiveImpactW := 0.0, 0.0
+	// 决定性发布 (−24 large_scale_evidence) 必须落在日常已经把 W 磨到 ≤42 的
+	// 月份：−24 之后还要被 ±12 的日常夹取顶进约章窗 (W≤18)，publishW≈58 的
+	// 冲击只落到 27，窗口一个月都不开。
+	const decisiveWGate = 42.0
+	// 原型分流：压力曝光的次数上限按档拆开。磐石/灾荒的 W 高位平台要 6 次曝光
+	// 才磨进 ≤42 谷底带；裂隙的秩序螺旋最早 (实测 crisis:fracture_point_of_no_return
+	// 在 128-01 点火、128-05 rebellion=1.000 结算 FRACTURE)，第 3 次曝光就得停手，
+	// 把 AP 让给探查、核验与决定性发布 (19 §6.3 重心迁移)。
+	pressureExposes := 6
+	if archetype == engine.ArchetypeRift {
+		pressureExposes = 3
+	}
 	attempt := func(actionID string, cost float64) bool {
 		if svc.agent.ActionPoints < cost {
 			return false
@@ -461,8 +473,17 @@ func testRuleOfLawLinePlayableFromNewGame(t *testing.T, archetype string) {
 		// expose bursts outrank portfolio growth — investigate and the supply
 		// shares only spend the true AP surplus while the expose fund is due.
 		exposeReserve := 0.0
-		if !decisiveFired && exposes < 3 {
+		if !decisiveFired && exposes < pressureExposes {
 			exposeReserve = 25
+		}
+		// Famine retune: the AP income is only ~3/month, so the expose fund must
+		// not starve the investigation — the second belief (>=0.9, a real publish
+		// prerequisite) is what the whole decisive sequence waits for. Let the
+		// investigation spend the fund while that belief is still missing; the
+		// portfolio shares keep waiting for the true surplus.
+		investigateReserve := exposeReserve
+		if archetype == engine.ArchetypeFamine && playerCoreBelief(svc, "Judicial_2") < 0.9 {
+			investigateReserve = 0
 		}
 		gameMonth := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth - startAbs
 		if windowOpenAt == 0 && svc.silo.Authority.W <= 18 &&
@@ -477,8 +498,10 @@ func testRuleOfLawLinePlayableFromNewGame(t *testing.T, archetype string) {
 		// from 40 to the publish cost itself — the final exposure can wait one
 		// month for AP, but the decisive shock cannot wait for the rebellion
 		// spiral, which matures two months earlier than the publish-40 timeline.
+		// −24 必须落在日常磨到谷底带的 W 上 (≤42：−24−12 后落进 ≤18 锁定窗)；
+		// 过早发布被高 W 回升吞掉窗口 (实测 publishW=58 → impactW=27，从未开窗)。
 		secondPublishReady := exposes >= 3 && gameMonth-lastExposeMonth >= 3 &&
-			svc.agent.ActionPoints >= 20
+			svc.agent.ActionPoints >= 20 && svc.silo.Authority.W <= decisiveWGate
 		if playerCoreBelief(svc, "Judicial_1") >= 0.85 && !factVerified(svc.silo, "Judicial_1") &&
 			svc.agent.ActionPoints >= 15 {
 			attempt("verify_evidence", 15)
@@ -501,14 +524,17 @@ func testRuleOfLawLinePlayableFromNewGame(t *testing.T, archetype string) {
 				break
 			}
 		}
-		if svc.agent.ActionPoints >= 15+exposeReserve &&
+		if svc.agent.ActionPoints >= 15+investigateReserve &&
 			(playerCoreBelief(svc, "Judicial_1") < 0.9 || playerCoreBelief(svc, "Judicial_2") < 0.9) &&
 			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
 			attempt("investigate_dispatch", 15)
 		}
 
-		exposeForPressure := !decisiveFired && exposes < 3 && svc.agent.ActionPoints >= 25
-		exposeForDecisive := decisiveFired && decisiveImpactW == 0 && svc.agent.ActionPoints >= 20
+		// 发布后窗口未开就继续补 expose：−24 谷底必须靠后续 2-3 个月的日常磨损
+		// 顶住 (W 半衰 8 月，实测回补轨迹 ≈11→14→16→18)，否则"连续 3 月在窗"
+		// 攒不齐、special:charter_lock_day 不点火。
+		exposeForPressure := !decisiveFired && exposes < pressureExposes && svc.agent.ActionPoints >= 25
+		exposeForDecisive := decisiveFired && windowOpenAt == 0 && svc.agent.ActionPoints >= 20
 		if (exposeForPressure || exposeForDecisive) && gameMonth-lastExposeMonth >= 3 &&
 			(playerCoreBelief(svc, "Judicial_1") >= 0.6 || playerCoreBelief(svc, "Judicial_2") >= 0.6) {
 			if attempt("expose_execution_failure", 20) {
@@ -524,7 +550,7 @@ func testRuleOfLawLinePlayableFromNewGame(t *testing.T, archetype string) {
 		for _, dept := range []string{"Judicial", "Mechanical", "Supply"} {
 			for _, fact := range []string{"Judicial_1", "Judicial_2"} {
 				if playerCoreBelief(svc, fact) < 0.6 || svc.agent.ActionPoints < 25+exposeReserve ||
-					shares[dept+":"+fact] >= 2 || (exposes >= 3 && !decisiveFired) {
+					shares[dept+":"+fact] >= 2 || (exposes >= pressureExposes && !decisiveFired) {
 					continue
 				}
 				outcome, err := svc.ExecuteAction(model.AgentAction{

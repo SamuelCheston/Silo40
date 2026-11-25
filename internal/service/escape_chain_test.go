@@ -610,7 +610,12 @@ func TestOutsideSustenanceAfterDeparture(t *testing.T) {
 // month 1. The full-preparation route is the demonstrated playable line
 // (acceptance batch seed 2402: departed 28, landed 22, survived 5 pursuit
 // months outside, REBELLION settled pyrrhic while the silo fractured in the
-// group's absence).
+// group's absence). The rift draw recalibrates the seed on that same route:
+// 2402's launch draw lands mayor=block under the fracture-band cadence (the
+// willing×0.10 + pursuit decay drops the group under the disband line), and
+// the 2402..2418 sweep leaves 2416 as the first seed drawing mayor!=block
+// with IT cooperate (departed 32, 25 survivors outside, group 23 clearing
+// the disband judgment).
 //
 // Strict settlement semantics (the reason this test exists): the monthly
 // pipeline runs outside sustenance BEFORE the victory check
@@ -625,12 +630,36 @@ func TestRebellionLinePlayableFromNewGame(t *testing.T) {
 }
 
 func testRebellionLinePlayableFromNewGame(t *testing.T, archetype string) {
-	rec := runEscapeLine(t, "rebellion-strict", 2402, "full", archetype)
+	// 按原型取种子：bedrock/famine 沿用验收批口径 2402；rift 在原始路由上
+	// 重校到 2416 (25-v16 §11 "种子路线重校"口径)——路由、断言、引擎全部
+	// 不动，发射时的带权随机抽签 (20 §8 随机源纪律，不得设状态) 在 2416
+	// 下真实抽到非阻挠档，2402 抽到的 mayor=block 折减注定跌破解散线。
+	seed := int64(2402)
+	if archetype == engine.ArchetypeRift {
+		seed = 2416
+	}
+	rec := runEscapeLine(t, "rebellion-strict", seed, "full", archetype)
 
 	t.Logf("strict rebellion route: seed=%d prep=%s ending=%s won=%v departed=%d survivors=%d months_out=%d demise=%q group_at_settlement=%d surviving=%v stance_at_launch=%s",
 		rec.Seed, rec.PrepLevel, rec.Ending, rec.Won, rec.Departed, rec.Survivors,
 		rec.MonthsOut, rec.Demise, rec.GroupPopulationAtSettlement,
 		rec.GroupSurvivingAtSettlement, rec.StanceAtLaunch)
+
+	// T2-4 观测账 (20 分册 §7.3，随反制落地同批并入)：授侵蚀计量 =
+	// GuaranteeEroded false→true 记一次；one-shot 布尔上限 1 (§6.4 同源
+	// 去重)。三档口径：①全程 0 次授侵蚀 = prep_exposure 门槛脱离真实玩法,
+	// 显式失败；②侵蚀只塑形顶层立场权重、不灰置动作不占 AP (裁决 F)，
+	// 直接摩擦 AP=0，在 §6.1 预算 ≤36 之内；③结算月漂移无反制对照
+	// (立场抽签带权随机、无同路由无侵蚀基线)，按实测月记录。
+	t.Logf("[Countermeasure] %s T2-4 观测账: 授侵蚀 %d 次 (授窗月 %d, 触发 prep_exposure=%.2f, 终态 eroded=%v) / 直接摩擦 AP=0.0 (权重塑形不做判定闸, 预算 ≤36) / 发射月 %d → 结算月 %d (无反制基线不对照, 记实测月)",
+		archetype, rec.GuaranteeErosions, rec.ErosionMonth, rec.PrepExposureAtErosion,
+		rec.GuaranteeEroded, rec.LaunchMonth, rec.SettledMonth)
+	if rec.GuaranteeErosions == 0 {
+		t.Errorf("%s: T2-4 全程 0 次授侵蚀，满筹备的 prep_exposure 从未越过 0.40 门槛，反制形同虚设 (20 分册 §7.3 观测项 1)", archetype)
+	}
+	if rec.GuaranteeErosions > 1 {
+		t.Errorf("%s: T2-4 授侵蚀 %d 次越过 one-shot 上限 1 (20 分册 §6.4 同源去重)", archetype, rec.GuaranteeErosions)
+	}
 
 	// The chain must complete through a real launch.
 	if rec.LaunchMonth == 0 || rec.Departed <= 0 {

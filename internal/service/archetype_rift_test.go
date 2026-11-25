@@ -4,6 +4,7 @@ import (
 	"math"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"silo40/internal/engine"
@@ -271,11 +272,11 @@ func contentDefinitionMap(t *testing.T) map[string]engine.ContentEventDefinition
 
 // riftPeaks 裂隙档可达性跑测的叛乱/恐慌峰值记录 (19 §8 失败线挤压量化)。
 type riftPeaks struct {
-	rebellionPeak   float64
-	panicPeak       float64
-	rebellionAtEnd  float64
-	monthsRebGe08   int // 叛乱 ≥0.8 (断层喂大阈值) 的月数
-	monthsRebGe07   int // 叛乱 ≥0.7 (活链路线蛰伏线) 的月数
+	rebellionPeak  float64
+	panicPeak      float64
+	rebellionAtEnd float64
+	monthsRebGe08  int // 叛乱 ≥0.8 (断层喂大阈值) 的月数
+	monthsRebGe07  int // 叛乱 ≥0.7 (活链路线蛰伏线) 的月数
 }
 
 func (p *riftPeaks) observe(svc *GameService) {
@@ -361,6 +362,11 @@ func TestRiftRuleOfLawReachable(t *testing.T) {
 	tunnels := 0
 	decisiveFired := false
 	decisiveImpactDone := false
+	// 决定性发布 (−24 large_scale_evidence) 必须落在日常已经把 W 磨到 ≤42 的
+	// 月份，否则 −24 加 ±12 的日常夹取够不到约章窗 (W≤18)，"连续 3 月在窗"
+	// 永远攒不齐 (实测 W=33 收尾、pact 从不锁定)。压力曝光只做 3 次：裂隙的
+	// 探查与第二条核验要靠曝光基金之后的 AP 抢在螺旋之前落地。
+	const decisiveWGate = 42.0
 	attempt := func(actionID string, cost float64) bool {
 		if svc.agent.ActionPoints < cost {
 			return false
@@ -418,7 +424,7 @@ func TestRiftRuleOfLawReachable(t *testing.T) {
 		}
 		gameMonth := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth - startAbs
 		secondPublishReady := exposes >= 3 && gameMonth-lastExposeMonth >= 3 &&
-			svc.agent.ActionPoints >= 20
+			svc.agent.ActionPoints >= 20 && svc.silo.Authority.W <= decisiveWGate
 		if playerCoreBelief(svc, "Judicial_1") >= 0.85 && !factVerified(svc.silo, "Judicial_1") &&
 			svc.agent.ActionPoints >= 15 {
 			attempt("verify_evidence", 15)
@@ -509,8 +515,106 @@ func TestRiftInformationReachable(t *testing.T) {
 	}
 	peaks := &riftPeaks{}
 	livingChainRebellion := -1.0
+	// 20 §7.3 观测项随批并入 (裂隙信息线复跑)：
+	//  ① 恶化档触发分布——T1-3 关系冷却与 T3-2 联系人监视按月末采样
+	//    (反制 tick 走月度阶段)：窗口 = 部门由无到有的进入次数，月数 =
+	//    部门·月累计，最长单窗受 §6.3 上界纪律 (≤24 月) 约束；任一档
+	//    全程零触发 → 显式失败 (§7.3 第 1 条：阈值脱离真实玩法，回 §6
+	//    重调，而不是放任不观测)。
+	//  ③ 摩擦 AP——T1-2 戒备上浮建联 / T2-3 收紧交接 / T3-2 关系跌落重建
+	//    在执行时点按 resolveActionCost 权威成本记账超出基准的部分，全程
+	//    总额受 §6.1 预算 ≤36 AP 约束。
+	//  ② 结算月漂移随结算行记录，对照账落在 roadmap 第 5 批状态行。
+	// 窗口口径 (20 §4.1/§6.3)：T1-3 每次触发授窗 counterRelationMonths 月，
+	// 到期后部门仍藏泄漏则"再触发一次"另起新窗 (刷新不叠加)。因此按授窗
+	// 计数：剩余月数从 0 转正或回跳 (到期同月重授) = 一个新窗；§6.3 的
+	// "超过 24 月即判过界"上界纪律约束单授窗连续时长。连续受冷却的链长与
+	// 同月受冷却部门数只入观测账 (链长是 §4.1 明示的设计行为)。
+	type cooldownStat struct {
+		grants, months, running, maxGrant int
+	}
+	cooldownStats := map[string]*cooldownStat{}
+	prevCooldown := map[string]int{}
+	cooldownChainMax := 0
+	cooldownChainRunning := map[string]int{}
+	maxSimulCooldown := 0
+	contactWatches := map[string]int{}
+	contactMonths := 0
+	contactRunning := map[string]int{}
+	observeCounters := func() {
+		simul := 0
+		for i := range svc.silo.Professions {
+			dept := &svc.silo.Professions[i]
+			rem := svc.silo.Countermeasure.RelationCooldown[dept.Name]
+			st := cooldownStats[dept.Name]
+			if st == nil {
+				st = &cooldownStat{}
+				cooldownStats[dept.Name] = st
+			}
+			if rem > 0 {
+				simul++
+				if prevCooldown[dept.Name] == 0 || rem >= prevCooldown[dept.Name] {
+					st.grants++
+					st.running = 1
+					cooldownChainRunning[dept.Name] = 1
+				} else {
+					st.running++
+					cooldownChainRunning[dept.Name]++
+				}
+				st.months++
+				if st.running > st.maxGrant {
+					st.maxGrant = st.running
+				}
+				if cooldownChainRunning[dept.Name] > cooldownChainMax {
+					cooldownChainMax = cooldownChainRunning[dept.Name]
+				}
+			} else {
+				st.running = 0
+				cooldownChainRunning[dept.Name] = 0
+			}
+			prevCooldown[dept.Name] = rem
+			if svc.silo.Countermeasure.ContactWatch[dept.Name] > 0 {
+				if contactRunning[dept.Name] == 0 {
+					contactWatches[dept.Name]++
+				}
+				contactRunning[dept.Name]++
+				contactMonths++
+			} else {
+				contactRunning[dept.Name] = 0
+			}
+		}
+		if simul > maxSimulCooldown {
+			maxSimulCooldown = simul
+		}
+	}
+	var frictionBuildAP, frictionShareAP float64
+	accountFriction := func(action model.AgentAction) {
+		var probe model.AgentAction
+		var base float64
+		switch action.Type {
+		case model.ActionBuildConnection:
+			probe = model.AgentAction{Type: model.ActionBuildConnection, TargetDept: action.TargetDept}
+			base = model.ACTION_COSTS[model.ActionBuildConnection]
+		case model.ActionShareInfo:
+			probe = model.AgentAction{Type: model.ActionShareInfo, TargetDept: action.TargetDept, FragmentIds: []string{"probe"}}
+			base = model.ACTION_COSTS[model.ActionShareInfo]
+		default:
+			return
+		}
+		if err := svc.resolveActionCost(&probe); err != nil {
+			return
+		}
+		if over := probe.Cost - base; over > 0 {
+			if action.Type == model.ActionBuildConnection {
+				frictionBuildAP += over
+			} else {
+				frictionShareAP += over
+			}
+		}
+	}
 	execute := func(action model.AgentAction) {
 		t.Helper()
+		accountFriction(action)
 		outcome, err := svc.ExecuteAction(action)
 		if err != nil {
 			t.Fatalf("execute %+v: %v (AP=%v)", action, err, svc.agent.ActionPoints)
@@ -535,6 +639,7 @@ func TestRiftInformationReachable(t *testing.T) {
 			t.Fatalf("advance bailiff evidence at month %d: %v", month, err)
 		}
 		peaks.observe(svc)
+		observeCounters()
 	}
 	publishFloor := engine.DefaultInformationConfig().QualPublish
 	judicialBelief := engine.BeliefFor(svc.agent, "Judicial_2")
@@ -542,7 +647,6 @@ func TestRiftInformationReachable(t *testing.T) {
 		t.Fatalf("real months did not reach the Judicial_2 publish floor %.2f: belief=%+v", publishFloor, judicialBelief)
 	}
 
-	verifyReportFloor := engine.DefaultInformationConfig().QualReport
 	publishedFacts := func() map[string]bool {
 		out := map[string]bool{}
 		for _, record := range svc.silo.PublicEvidence {
@@ -550,52 +654,57 @@ func TestRiftInformationReachable(t *testing.T) {
 		}
 		return out
 	}
-	attempt := func(actionID string, cost float64) bool {
-		t.Helper()
-		if svc.agent.ActionPoints < cost {
-			return false
-		}
-		outcome, err := svc.ExecuteAction(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: actionID})
-		ok := err == nil && outcome.Result.Executed
-		if ok {
-			peaks.observe(svc)
-		}
-		return ok
+	// 双事实发布与待发布存蓄 (与参考路线 26 §四 B 同口径)：Judicial_1 开局
+	// 通常没有信念，investigate_dispatch (15 AP，确定性深挖较弱链) 是把它抬
+	// 到发布地板的现成手段；一旦有事实已核验待发布，AP 必须存给 20 的发布
+	// 而不是继续 15 的调查——否则月收入被调查吃干，第二条事实发布带来的
+	// 全部门免费粘性槽整段丢失 (早期 AP 富余 + Judicial_1 未公开，正是
+	// 124-07 自发 Judicial_1 大海啸、把尾部门预算吃光的来源)。
+	eventReady := func(id string) bool {
+		meta := actionByID(svc.availablePlayerActions(), id)
+		return meta != nil && meta.Enabled
 	}
-	for i := 0; i < 14; i++ {
+	publishPending := func() bool {
+		verified := map[string]bool{}
+		for _, fact := range svc.silo.VerifiedEvidence {
+			verified[fact] = true
+		}
+		published := publishedFacts()
+		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
+			if !verified[fact] || published[fact] {
+				continue
+			}
+			if belief := engine.BeliefFor(svc.agent, fact); belief != nil && belief.B >= publishFloor {
+				return true
+			}
+		}
+		return false
+	}
+	for i := 0; i < 40; i++ {
 		published := publishedFacts()
 		if published["Judicial_1"] && published["Judicial_2"] {
 			break
 		}
-		verifiable, publishable := false, false
-		for _, fact := range []string{"Judicial_1", "Judicial_2"} {
-			belief := engine.BeliefFor(svc.agent, fact)
-			if belief == nil {
-				continue
-			}
-			verified := false
-			for _, v := range svc.silo.VerifiedEvidence {
-				if v == fact {
-					verified = true
-				}
-			}
-			if belief.B >= verifyReportFloor && !verified {
-				verifiable = true
-			}
-			if belief.B >= publishFloor && verified && !published[fact] {
-				publishable = true
-			}
+		if svc.gameOver() {
+			break
 		}
-		if verifiable {
-			attempt("verify_evidence", 15)
+		acted := false
+		if eventReady("verify_evidence") && svc.agent.ActionPoints >= 15 {
+			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "verify_evidence"})
+			acted = true
 		}
-		if publishable {
-			attempt("publish_evidence", 20)
+		if eventReady("publish_evidence") && svc.agent.ActionPoints >= 20 {
+			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "publish_evidence"})
+			acted = true
+		}
+		if !acted && !publishPending() && eventReady("investigate_dispatch") && svc.agent.ActionPoints >= 15 {
+			execute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "investigate_dispatch"})
 		}
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance publication at step %d: %v", i, err)
 		}
 		peaks.observe(svc)
+		observeCounters()
 		progressResetCountermeasureForRoute(t, svc, execute)
 	}
 	if !contentTriggered(svc, "player_action:publish_evidence") {
@@ -621,6 +730,7 @@ func TestRiftInformationReachable(t *testing.T) {
 			t.Fatalf("recover AP for receiver verification: %v", err)
 		}
 		peaks.observe(svc)
+		observeCounters()
 	}
 	if receiver == nil || !receiver.Enabled {
 		t.Fatalf("receiver verification never became available through real gates: %+v", receiver)
@@ -631,6 +741,7 @@ func TestRiftInformationReachable(t *testing.T) {
 	circulationActions := 0
 	attemptCirculation := func(action model.AgentAction) bool {
 		t.Helper()
+		accountFriction(action)
 		outcome, err := svc.ExecuteAction(action)
 		if err != nil {
 			t.Fatalf("circulate with %+v: %v", action, err)
@@ -643,12 +754,17 @@ func TestRiftInformationReachable(t *testing.T) {
 	}
 	shareAttempts := map[string]int{}
 	upkeepAttempts := map[string]int{}
+	// 半成品种子续播 (与参考路线 info_endgame 同一套机制)：同一次分享若因目标
+	// 部门的低 receptivity/同源递减只吸收到地板下方，下个月必须优先把同一事实
+	// 补过地板，而不是换种重来——换种等于把已投入的渗透窗清零。
+	pendingSeed := map[string]string{}
 	rotation := []string{"IT", "Supply", "Mechanical", "Medical", "Judicial", "Mayor", "Police", "Mines", "Agricultural"}
 	for month := 1; month <= 96 && !svc.gameOver(); month++ {
 		if _, err := svc.PassTime(1); err != nil {
 			t.Fatalf("advance INFORMATION line at month %d: %v", month, err)
 		}
 		peaks.observe(svc)
+		observeCounters()
 		if svc.gameOver() {
 			break
 		}
@@ -659,16 +775,55 @@ func TestRiftInformationReachable(t *testing.T) {
 
 		shareCost := model.ACTION_COSTS[model.ActionShareInfo]
 		gatherCost := model.ACTION_COSTS[model.ActionGatherInfo]
-		buildCost := model.ACTION_COSTS[model.ActionBuildConnection]
-		gatherFrom := rotation[month%len(rotation)]
+		// 本部门 gather (参考路线同口径，26 §四 E)：跨部门轮转的加深吃
+		// 同源递减与规范冲突双重折扣，是把新事实抬到可分享强度 (B≥0.80)
+		// 的唯一稳定通道；轮转探查只作空 profession 的兜底。
+		gatherFrom := svc.agent.Profession
+		if gatherFrom == "" {
+			gatherFrom = rotation[month%len(rotation)]
+		}
+		// 服务端权威成本门 (20 分册 T1-2/T2-3/T3-2)：流通摩擦让戒备部门更贵、
+		// 监视期接触直接不可用 (resolveActionCost 报错)。路线按真实成本决定
+		// 此刻付不付得起，避免把尝试打在必被拒的动作上 (attemptCirculation
+		// 对 ExecuteAction 报错是零容忍 fatal)。Inf = 本月该部门接触不可用。
+		shareCostFor := func(dept string) float64 {
+			action := model.AgentAction{Type: model.ActionShareInfo, TargetDept: dept, FragmentIds: []string{"probe"}}
+			if err := svc.resolveActionCost(&action); err != nil {
+				return math.Inf(1)
+			}
+			return action.Cost
+		}
+		buildCostFor := func(dept string) float64 {
+			action := model.AgentAction{Type: model.ActionBuildConnection, TargetDept: dept}
+			if err := svc.resolveActionCost(&action); err != nil {
+				return math.Inf(1)
+			}
+			return action.Cost
+		}
 		if svc.silo.Rebellion >= 0.7 {
 			// 裂隙适配：叛乱过热时蛰伏 (与参考路线同策略)。
 			continue
 		}
+		// 监视者排序 (参考路线同口径)：IT/Judicial 既是目标又是泄漏观察者，
+		// 戒备上浮时最先付不起，优先保它们的槽。
+		priority := func(name string) int {
+			switch name {
+			case "IT", "Judicial":
+				return 0
+			case "Mayor":
+				return 1
+			}
+			return 2
+		}
 		circulated := false
+		saveForPriority := false
 		for svc.agent.ActionPoints >= shareCost {
 			order := append([]model.Profession(nil), svc.silo.Professions...)
 			sort.SliceStable(order, func(i, j int) bool {
+				pi, pj := priority(order[i].Name), priority(order[j].Name)
+				if pi != pj {
+					return pi < pj
+				}
 				mi, mj := informationMaturedFacts(&order[i]), informationMaturedFacts(&order[j])
 				if mi != mj {
 					return mi < mj
@@ -681,7 +836,28 @@ func TestRiftInformationReachable(t *testing.T) {
 				if informationMaturedFacts(dept) >= informationGateFactCount {
 					continue
 				}
-				if fragment, ok := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts); ok {
+				_, endangered := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts)
+				pendingFact, hasPending := pendingSeed[dept.Name]
+				pendingBelowFloor := false
+				if hasPending {
+					if belief := professionBelief(dept, pendingFact); belief == nil ||
+						belief.B < engine.DefaultInformationConfig().QualRumor {
+						pendingBelowFloor = true
+					}
+				}
+				// AP 存蓄给优先部门 (参考路线同机制)：IT/Judicial 买不起时整月
+				// 存蓄，不再把零散 AP 花给便宜部门——否则戒备上浮期的维护
+				// share 永远差 1–2 AP，已过地板的槽就在窗口内断流。
+				if priority(dept.Name) == 0 &&
+					(informationActiveSlots(dept) < informationGateFactCount || endangered || pendingBelowFloor) &&
+					shareCostFor(dept.Name) > svc.agent.ActionPoints {
+					saveForPriority = true
+					break
+				}
+				// Upkeep FIRST：断流风险中的连续渗透是已投入的日历，保护它
+				// 优先于播新槽 (18-time-permeation §3.3 第 2 条)。
+				if fragment, ok := endangeredStreakCandidate(svc.agent, dept, upkeepAttempts); ok &&
+					svc.agent.ActionPoints >= shareCostFor(dept.Name) {
 					upkeepAttempts[dept.Name+":"+fragment]++
 					if attemptCirculation(model.AgentAction{
 						Type: model.ActionShareInfo, TargetDept: dept.Name,
@@ -691,21 +867,67 @@ func TestRiftInformationReachable(t *testing.T) {
 						break
 					}
 				}
+				// 三槽健康即停手；半成品种子未补过地板的除外——补完它是回收
+				// 已花掉的日历。
 				if informationActiveSlots(dept) >= informationGateFactCount {
-					continue
-				}
-				if month <= 30 && svc.pendingOperation == nil &&
-					agentConnectionTo(svc, dept) < 0.3 && svc.agent.ActionPoints >= buildCost {
-					if attemptCirculation(model.AgentAction{
-						Type: model.ActionBuildConnection, TargetDept: dept.Name,
-					}) {
-						shared = true
-						break
+					if _, waiting := pendingSeed[dept.Name]; !waiting {
+						continue
 					}
 				}
-				if fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
-					return shareAttempts[dept.Name+":"+fact] >= 4
-				}); ok {
+				// 播种截止用日历而非循环序号：结算地平线 130-01 前必须走完
+				// 30 月渗透窗，一次 share/gather 自带 1 月时长。
+				if 130*12+1-(svc.silo.CurrentYear*12+svc.silo.CurrentMonth) <= 30 {
+					continue
+				}
+				// 建联是 1 月时长的动作 (参考路线同结论，26 §五)：4 AP + 整月，
+				// 而吸收公式里 B_player(≈0.8) 主导，起始关系 0.2 与 0.5 的单次
+				// 吸收只差 ≈0.1——部门循环内建联预算全部换成分享，否则种子窗口
+				// 被日历吃光；早期建联只保留月末兜底一次。
+				fragment, ok := strongestShareableFactExcluding(svc.agent, dept, func(fact string) bool {
+					deadStreak := func(belief *model.FactBelief) bool {
+						return belief != nil && belief.B < engine.DefaultInformationConfig().QualRumor &&
+							belief.PermeationCounter == 0
+					}
+					if shareAttempts[dept.Name+":"+fact] < 4 {
+						// 陈源不播 (参考路线同策略)：部门对同源仍有活观察
+						// (公告/前轮未跌破地板) 时，同源递减把再吸收压在
+						// ≈0.45——30 月窗内必断流 (实测尾部门 125 波
+						// Judicial_1 全部夭折)。等兜底 gather 把新事实抬到
+						// 可分享强度后播新源 (参考路线建联序幕 + Judicial_5
+						// 波浪同一节奏)。豁免只给"玩家播过的流死了"这一格：
+						// "播过"看观察记录而非 shareAttempts——upkeep 通道
+						// 走的是同一分享动作但计数在 upkeepAttempts，只看后者
+						// 会让维护过的死亡槽永不获豁免 (Mayor 实测死锁)。
+						// 公告夭折条目 (无 share:player 观察) 不豁免——那是
+						// 抢波旧源的入口。
+						for j := range dept.Beliefs {
+							if dept.Beliefs[j].FactID == fact {
+								attempted := false
+								for _, obs := range dept.Beliefs[j].Observations {
+									if strings.HasPrefix(obs, "share:player:") {
+										attempted = true
+										break
+									}
+								}
+								return !(attempted && deadStreak(&dept.Beliefs[j]))
+							}
+						}
+						return false
+					}
+					// 断流重置：槽已跌破地板且计数归零 = 流已死，允许重播。
+					return !deadStreak(professionBelief(dept, fact))
+				})
+				// 半成品优先：同一事实没补过地板前不换种子。
+				if pending, waiting := pendingSeed[dept.Name]; waiting {
+					belief := professionBelief(dept, pending)
+					if (belief == nil || (belief.B < engine.DefaultInformationConfig().QualRumor && belief.PermeationCounter == 0)) &&
+						shareAttempts[dept.Name+":"+pending] < 8 {
+						fragment, ok = pending, true
+					} else {
+						delete(pendingSeed, dept.Name)
+					}
+				}
+				if ok {
 					if agentBelief := engine.BeliefFor(svc.agent, fragment); agentBelief != nil && agentBelief.B < 0.80 &&
 						svc.agent.ActionPoints >= gatherCost {
 						if attemptCirculation(model.AgentAction{
@@ -715,12 +937,36 @@ func TestRiftInformationReachable(t *testing.T) {
 							break
 						}
 					}
-					shareAttempts[dept.Name+":"+fragment]++
-					if attemptCirculation(model.AgentAction{
+					if math.IsInf(shareCostFor(dept.Name), 1) || svc.agent.ActionPoints < shareCostFor(dept.Name) {
+						// 监视中/付不起这一格：换下一个部门试，别放弃整月。
+						continue
+					}
+					shareAction := model.AgentAction{
 						Type: model.ActionShareInfo, TargetDept: dept.Name,
 						FragmentIds: []string{fragment},
-					}) {
+					}
+					shareAttempts[dept.Name+":"+fragment]++
+					if attemptCirculation(shareAction) {
 						shared = true
+						// 深填 (参考路线同机制)：同月连发到 B ≥ 0.45，正好滑行
+						// 整个 30 月渗透窗；浅播会在窗口内断流反而更贵。
+						for shareAttempts[dept.Name+":"+fragment] < 6 &&
+							svc.agent.ActionPoints >= shareCostFor(dept.Name) {
+							belief := professionBelief(dept, fragment)
+							if belief == nil || belief.B >= 0.45 {
+								break
+							}
+							shareAttempts[dept.Name+":"+fragment]++
+							if !attemptCirculation(shareAction) {
+								break
+							}
+						}
+						if belief := professionBelief(dept, fragment); belief == nil ||
+							belief.B < engine.DefaultInformationConfig().QualRumor {
+							pendingSeed[dept.Name] = fragment
+						} else {
+							delete(pendingSeed, dept.Name)
+						}
 						break
 					}
 				}
@@ -733,8 +979,12 @@ func TestRiftInformationReachable(t *testing.T) {
 		if circulated {
 			continue
 		}
+		if saveForPriority {
+			// 本月有意不花 AP：存给买不起的优先部门，连兜底动作也不做。
+			continue
+		}
 		switch {
-		case svc.agent.ActionPoints >= buildCost && month < 12:
+		case svc.agent.ActionPoints >= buildCostFor("Judicial") && month < 12:
 			attemptCirculation(model.AgentAction{Type: model.ActionBuildConnection, TargetDept: "Judicial"})
 		case svc.agent.ActionPoints >= gatherCost:
 			attemptCirculation(model.AgentAction{Type: model.ActionGatherInfo, TargetDept: gatherFrom})
@@ -757,13 +1007,50 @@ func TestRiftInformationReachable(t *testing.T) {
 	}
 	if svc.silo.VictoryStatus == nil || svc.silo.VictoryStatus.Decision == nil ||
 		svc.silo.VictoryStatus.Decision.Selected != endingInformation {
-		t.Fatalf("rift route did not settle as INFORMATION at %d-%02d: status=%+v",
-			svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.silo.VictoryStatus)
+		excluded := ""
+		if svc.silo.VictoryStatus != nil && svc.silo.VictoryStatus.Decision != nil {
+			excluded = svc.silo.VictoryStatus.Decision.Excluded[endingInformation]
+		}
+		t.Fatalf("rift route did not settle as INFORMATION at %d-%02d: excluded=%q status=%+v",
+			svc.silo.CurrentYear, svc.silo.CurrentMonth, excluded, svc.silo.VictoryStatus)
 	}
 	settledMonths := svc.silo.CurrentYear*12 + svc.silo.CurrentMonth - startAbs
 	t.Logf("rift 《共证》 reachable: seed=2401 Judicial settled=%d-%02d (%d circulation months, %d actions) rebellion peak=%.3f (≥0.7: %d months, ≥0.8: %d months) living-chain rebellion=%.3f (cap 0.8, fracture feed 0.9) panic peak=%.3f",
 		svc.silo.CurrentYear, svc.silo.CurrentMonth, settledMonths, circulationActions,
 		peaks.rebellionPeak, peaks.monthsRebGe07, peaks.monthsRebGe08, livingChainRebellion, peaks.panicPeak)
+
+	// §7.3 观测账 (20 §7.3①③)：本线真实玩法必须触发到恶化两档——任一档
+	// 全程零触发即显式失败 (阈值脱离玩法，回 20 §6 重调)；单授窗连续时长
+	// 受 §6.3 上界纪律 (≤24 月) 约束；摩擦 AP 总额受 §6.1 预算 (≤36) 约束。
+	totalCooldownGrants, totalCooldownMonths, maxGrantWindow := 0, 0, 0
+	for _, st := range cooldownStats {
+		totalCooldownGrants += st.grants
+		totalCooldownMonths += st.months
+		if st.maxGrant > maxGrantWindow {
+			maxGrantWindow = st.maxGrant
+		}
+	}
+	totalContactWatches := 0
+	for _, n := range contactWatches {
+		totalContactWatches += n
+	}
+	frictionAP := frictionBuildAP + frictionShareAP
+	t.Logf("[Countermeasure] rift-info 观测账: T1-3 授窗 %d 次 / %d 部门·月 (最长单授窗 %d 月, 上界 24; 最长连续受冷 %d 月; 同月最多 %d 部门在冷却); T3-2 盯防 %d 窗 / %d 部门·月; 摩擦 AP=%.1f (建联 %.1f + 流通 %.1f, 预算 ≤36)",
+		totalCooldownGrants, totalCooldownMonths, maxGrantWindow, cooldownChainMax,
+		maxSimulCooldown, totalContactWatches, contactMonths,
+		frictionAP, frictionBuildAP, frictionShareAP)
+	if totalCooldownGrants == 0 {
+		t.Fatalf("§7.3① T1-3 relation cooldown never fired in the rift information run (thresholds detached from real play)")
+	}
+	if totalContactWatches == 0 {
+		t.Fatalf("§7.3① T3-2 contact watch never fired in the rift information run (thresholds detached from real play)")
+	}
+	if maxGrantWindow > 24 {
+		t.Fatalf("§6.3 upper-bound discipline: T1-3 longest granted window %d months > 24", maxGrantWindow)
+	}
+	if frictionAP > 36 {
+		t.Fatalf("§6.1 friction budget: total friction AP %.1f > 36", frictionAP)
+	}
 }
 
 // TestRiftCompromisedReachable 可达性证据·《除名》：Archetype="rift" 覆写钉档，

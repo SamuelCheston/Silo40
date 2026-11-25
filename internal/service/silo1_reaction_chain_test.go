@@ -354,8 +354,10 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 		return false
 	}
 	deceives, rations := 0, 0
+	var t31b t31bLockLedger
 	for month := 1; month <= 120 && !svc.gameOver(); month++ {
 		progressResetCountermeasureForRoute(t, svc, execute)
+		t31b.observe(svc.silo)
 		observe()
 		if svc.gameOver() {
 			break
@@ -376,6 +378,13 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 			buildupOpen = svc.silo.CurrentYear >= 127
 			rebellionBuildCap = 0.6
 		}
+		if svc.silo.Archetype == engine.ArchetypeBedrock {
+			// 磐石档高 W 让 IT 反击成本更低，月度反查把怀疑度在 126 年前后推过
+			// 0.7——而 >0.7 会关闭 STATION_DECEIVE (identity_erasure_stage)。
+			// 因此把策反窗口提前到档案唤醒后的 123 年，赶在身份抹除准备期前把
+			// 两次真实策反排入队列；阶梯本身由时间戳驱动，不受这次提前影响。
+			buildupOpen = svc.silo.CurrentYear >= 123
+		}
 		buildingRebellion := buildupOpen && svc.silo.Rebellion < rebellionBuildCap
 		pending := deceivePending()
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
@@ -388,8 +397,12 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 		// rebellion-gated guard alone woke up too late on the famine draw.
 		strikeChannelLive := contentTriggered(svc, "special:termination_channel_test") &&
 			!contentTriggered(svc, "special:strike_reconnaissance")
-		energyGuard := (svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500) ||
-			(strikeChannelLive && resourceAmount(svc.silo, "Energy") < 500)
+		energyGuard := svc.silo.Rebellion >= 0.6 && resourceAmount(svc.silo, "Energy") < 1500
+		if svc.silo.Archetype == engine.ArchetypeFamine {
+			// 荒年档的资源枯竭才需要信道维护的额外能量底线 (见上)；磐石/裂隙
+			// 的能量轨迹不靠这条兜底，保留它会长期堵死策反 (磐石实测 deceives=0)。
+			energyGuard = energyGuard || (strikeChannelLive && resourceAmount(svc.silo, "Energy") < 500)
+		}
 		if buildingRebellion && deceives < deceiveCap && !pending && !energyGuard && deceive != nil && deceive.Enabled &&
 			svc.agent.ActionPoints >= float64(deceive.APCost+15) {
 			execute(model.AgentAction{Type: model.ActionStationOperation, ActionID: StationOpDeceive})
@@ -420,9 +433,11 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 			// T3-1b 复查期会把职务动作灰置一个月；像玩家一样等窗口过去，
 			// 不用白盒状态让测试变绿。
 			if err != nil && strings.Contains(err.Error(), "职务暂时交接") {
+				t31b.waitedThroughLock()
 				if _, err := svc.PassTime(1); err != nil {
 					t.Fatalf("advance through profession lock at month %d: %v", month, err)
 				}
+				t31b.observe(svc.silo)
 				observe()
 				continue
 			}
@@ -446,6 +461,9 @@ func testDeathPhysicalStrikePlayableFromNewGame(t *testing.T, archetype string) 
 		observe()
 	}
 
+	// T3-1b 观测账 (20 分册 §7.3)：死亡线结算即远程解脱判定的年月；
+	// 循环若未结算则记录当前年月。
+	t31b.report(t, "寂堡死亡线肉体重击路线", svc.silo.CurrentYear, svc.silo.CurrentMonth)
 	if deceives == 0 || rations == 0 {
 		t.Fatalf("route did not use its real rebellion and survival levers: deceives=%d rations=%d", deceives, rations)
 	}
@@ -520,6 +538,72 @@ func TestTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T) {
 	runPlayableArchetypeMatrix(t, testTerminationChannelCountermeasurePlayableFromNewGame)
 }
 
+// t31bLockLedger —— T3-1b (身份线日常绑定) 观测账，寂堡两条路线共用，
+// 计量风格照抄 archetype_rift_test.go 的 rift-info 观测账 (授窗计量)。口径：
+//   - "授灰" = 对 svc.silo.Countermeasure 的 LocationLockMonths /
+//     ProfessionLockMonths 逐月采样，窗口从 0 变 >0 记一次授灰；T3-1b 为
+//     日常一次性绑定 (IdentityQueryBound/ArchiveReviewBound)，每堡每窗口
+//     上限 1 次，同月并发/连续在档只入日志不重复计数 (采样按时间戳去重)。
+//   - "锁月" = 窗口>0 的采样月数；T3-1b 灰置整堡而非分部门，rift-info 的
+//     "部门·月"在本账退化为月数。
+//   - "摩擦 AP" = 因灰置被挡而额外等待的月数 × 3.0 (路线实测的固定月度
+//     AP 回复，即被灰置动作在该等待月消耗的 AP 机会成本)；全程预算 ≤36
+//     (20 分册 §6.1)。结算月漂移无"无反制基线"数字可对照，按 20 §7.3
+//     观测项 2 的口径只记录实测结算月。
+type t31bLockLedger struct {
+	lastTs        int
+	prevLoc       int
+	prevProf      int
+	locGrants     int
+	profGrants    int
+	locMonths     int
+	profMonths    int
+	frictionWaits int
+}
+
+func (l *t31bLockLedger) observe(silo *model.Silo) {
+	ts := gameTimestamp(silo.CurrentYear, silo.CurrentMonth)
+	if ts == l.lastTs {
+		return
+	}
+	l.lastTs = ts
+	loc, prof := silo.Countermeasure.LocationLockMonths, silo.Countermeasure.ProfessionLockMonths
+	if loc > 0 && l.prevLoc == 0 {
+		l.locGrants++
+	}
+	if prof > 0 && l.prevProf == 0 {
+		l.profGrants++
+	}
+	if loc > 0 {
+		l.locMonths++
+	}
+	if prof > 0 {
+		l.profMonths++
+	}
+	l.prevLoc, l.prevProf = loc, prof
+}
+
+// waitedThroughLock 记录一次"因灰置被挡而等窗口过去"的月份。
+func (l *t31bLockLedger) waitedThroughLock() { l.frictionWaits++ }
+
+func (l *t31bLockLedger) report(t *testing.T, route string, settleYear, settleMonth int) {
+	t.Helper()
+	grants := l.locGrants + l.profGrants
+	frictionAP := float64(l.frictionWaits) * 3.0
+	t.Logf("[Countermeasure] %s T3-1b 观测账: 授灰 %d 次 (地点窗 %d / 职务窗 %d，日常绑定上限各 1 次，触顶=%v) / 锁月 地点 %d、职务 %d / 结算月 %d-%02d (无反制基线数字，按实测月记录) / 摩擦 AP=%.1f (灰置等待 %d 月 × 3.0 AP/月)",
+		route, grants, l.locGrants, l.profGrants, l.locGrants >= 1 && l.profGrants >= 1,
+		l.locMonths, l.profMonths, settleYear, settleMonth, frictionAP, l.frictionWaits)
+	if grants == 0 {
+		t.Errorf("%s: T3-1b 全程 0 次授灰，地点/职务锁从未点火，门槛脱离真实玩法 (20 分册 §7.3 观测项 1)", route)
+	}
+	if grants > 2 || l.locGrants > 1 || l.profGrants > 1 {
+		t.Errorf("%s: T3-1b 授灰 %d 次 (地点 %d / 职务 %d) 越过日常绑定上限 (20 分册 §6.4 同源去重)", route, grants, l.locGrants, l.profGrants)
+	}
+	if frictionAP > 36 {
+		t.Errorf("%s: T3-1b 摩擦 AP %.1f 超出全程预算 36 (20 分册 §6.1)", route, frictionAP)
+	}
+}
+
 func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, archetype string) {
 	svc := newGatedService(t, filepath.Join(t.TempDir(), "termination-jam.db"))
 	req := threeSiloArchetypeRequest(2101, archetype)
@@ -569,8 +653,11 @@ func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, arche
 		return false
 	}
 	jamMonth, deceives, rations := 0, 0, 0
+	jamYear, jamNum := 0, 0
+	var t31b t31bLockLedger
 	for month := 1; month <= 120 && !svc.gameOver(); month++ {
 		progressResetCountermeasureForRoute(t, svc, execute)
+		t31b.observe(svc.silo)
 		if svc.gameOver() {
 			break
 		}
@@ -578,6 +665,7 @@ func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, arche
 			if jam := actionByID(svc.availablePlayerActions(), "TERMINATION_CHANNEL_JAM"); jam != nil && jam.Enabled {
 				if tryExecute(model.AgentAction{Type: model.ActionPlayerEvent, ActionID: "TERMINATION_CHANNEL_JAM"}) {
 					jamMonth = month
+					jamYear, jamNum = svc.silo.CurrentYear, svc.silo.CurrentMonth
 					t.Logf("jammed the termination channel at %d-%02d (AP left %.1f)",
 						svc.silo.CurrentYear, svc.silo.CurrentMonth, svc.agent.ActionPoints)
 				}
@@ -598,9 +686,12 @@ func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, arche
 			// 裂隙的波动放大同样提前自检；在真实自检窗口前先使用既有策反。
 			buildupOpen = svc.silo.CurrentYear >= 127
 		case engine.ArchetypeBedrock:
-			// 磐石档的阶梯轨迹实测把自检推到 126-06 (高 W 改变早期事件时序)，
-			// 积累窗口同荒年前移，保证自检经真实叛乱达到。
-			buildupOpen = svc.silo.CurrentYear >= 126
+			// 磐石档实测 (seed 2101)：高 W 让月度反查脉冲把怀疑度在 124-12
+			// 前后推过 0.7 (identity_erasure_stage>0 从此关闭 STATION_DECEIVE)，
+			// 并在 126-06 前后触顶 1.0 直接《除名》结算——126 才开窗的旧节奏
+			// 一策反都做不了，叛乱推不起来，通牒→ purge_omen→信道自检永不
+			// 点火。窗口须与死亡线磐石档同律提前到抹除锁门之前 (≥123)。
+			buildupOpen = svc.silo.CurrentYear >= 123
 		}
 		buildingRebellion := buildupOpen && svc.silo.Rebellion < 0.82
 		deceive := actionByID(svc.availablePlayerActions(), StationOpDeceive)
@@ -617,9 +708,11 @@ func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, arche
 			})
 			// T3-1b 复查期会把职务动作灰置一个月；像玩家一样等窗口过去。
 			if err != nil && strings.Contains(err.Error(), "职务暂时交接") {
+				t31b.waitedThroughLock()
 				if _, err := svc.PassTime(1); err != nil {
 					t.Fatalf("advance through profession lock at month %d: %v", month, err)
 				}
+				t31b.observe(svc.silo)
 				continue
 			}
 			if err != nil {
@@ -636,6 +729,13 @@ func testTerminationChannelCountermeasurePlayableFromNewGame(t *testing.T, arche
 		}
 	}
 
+	// T3-1b 观测账 (20 分册 §7.3，与反制落地同批)：结算月取日常干扰
+	// 落地的年月；若路线中断则记录当前年月便于对照。
+	settleYear, settleMonth := svc.silo.CurrentYear, svc.silo.CurrentMonth
+	if jamMonth > 0 {
+		settleYear, settleMonth = jamYear, jamNum
+	}
+	t31b.report(t, "寂堡终止信道路线", settleYear, settleMonth)
 	if jamMonth == 0 {
 		t.Fatalf("the everyday jamming action never became available: states=%+v", svc.contentStates[svc.silo.ID]["special:termination_channel_test"])
 	}

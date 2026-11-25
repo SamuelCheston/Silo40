@@ -186,12 +186,19 @@ func TestContentGuardEventTriggerReferencesResolve(t *testing.T) {
 		"player_action": true, // 普通/职务/职业动作完成键（含职业动作）
 		"observation":   true, // 首次本地观察等观察键
 	}
+	// 谈判结局键：由 recordNegotiationOutcomeKeys 经 writeCompletionKey 落账
+	// (negotiation.go)，同样是运行时事实而非内容文件。这里逐键枚举而不开
+	// "negotiation" 整组白名单，保留拼写漂移仍会报错的守卫价值。
+	runtimeKeys := map[string]bool{
+		negotiationCompromiseKey: true,
+		negotiationRuptureKey:    true,
+	}
 
 	var walk func(def engine.ContentEventDefinition, tr engine.ContentTrigger)
 	walk = func(def engine.ContentEventDefinition, tr engine.ContentTrigger) {
 		if tr.Type == "event_triggered" {
 			key := tr.Category + ":" + tr.EventID
-			if _, ok := known[key]; !ok && !runtimeGroups[tr.Category] {
+			if _, ok := known[key]; !ok && !runtimeGroups[tr.Category] && !runtimeKeys[key] {
 				t.Errorf("%s/%s (event %s): event_triggered references unknown key %q",
 					def.SourceGroup, def.SourceFile, def.EventID, key)
 			}
